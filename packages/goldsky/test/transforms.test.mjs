@@ -244,7 +244,8 @@ console.log('Test 11: Hardened-contract events keep Arrow-safe types');
 const newEventRows = [
   ['TokenLaunched', [{ symbol: 'TokenLaunched' }, { address: 'T' }], { map: [{ key: { symbol: 'grants' }, val: { vec: [{ map: [{ key: { symbol: 'allowance' }, val: { u32: 1 } }, { key: { symbol: 'module' }, val: { address: 'M' } }] }] } }] }],
   ['Execute', [{ symbol: 'Execute' }, { address: 'G' }, { address: 'X' }, { bytes: 'ab' }], { map: [{ key: { symbol: 'function' }, val: { symbol: 'f' } }, { key: { symbol: 'index' }, val: { u32: 0 } }] }],
-  ['PrimaryListingPurchased', [{ symbol: 'PrimaryListingPurchased' }, { u64: '1' }, { address: 'B' }], { map: [{ key: { symbol: 'token_id' }, val: { u32: 4 } }] }],
+  ['PoolPurchased', [{ symbol: 'PoolPurchased' }, { u32: 1 }, { address: 'B' }], { map: [{ key: { symbol: 'token_id' }, val: { u32: 4 } }] }],
+  ['seat_assigned', [{ symbol: 'seat_assigned' }, { address: 'M' }], { vec: [{ i128: '5' }] }],
   ['RefundWithdrawn', [{ symbol: 'RefundWithdrawn' }, { address: 'B' }], { map: [{ key: { symbol: 'amount' }, val: { i128: '5' } }] }]
 ];
 const decodedNew = newEventRows.map(([name, topics, data], i) => invokeDecodedEvents({

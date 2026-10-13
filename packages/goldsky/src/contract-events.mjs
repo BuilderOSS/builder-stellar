@@ -32,17 +32,20 @@ export const LIBRARY_EVENTS = {
   Unpaused: { topics: [], data: [] }
 };
 
+// The pipeline role of each contract crate, where it differs from the directory name: the
+// `minter` crate is the per-DAO ClaimMinter, registered under the module kind `claims`
+// (common::modules::KIND_CLAIMS), and the indexer names roles after registry kinds.
+export const CRATE_ROLES = { minter: 'claims' };
+const roleOf = (dir) => CRATE_ROLES[dir] ?? dir;
+
 // Roles that emit the events defined in contracts/common/src/*.rs (admin handoff,
 // upgrades, migrations). The Manager emits its own AdminChanged with the same shape.
-export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
+export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata', 'claims'];
 
-// Common events with their own emitter set: the shared Minter upgrades and migrates through
-// contracts/common too (contracts/minter/src/contract.rs), and the upgrade notice exists only
-// on the platform contracts. AdminChanged stays with the DAO modules (the Minter has no admin handoff).
+// Common events with their own emitter set: the upgrade notice exists only on the Manager (the
+// one platform contract; every DAO module, the ClaimMinter included, upgrades by its own DAO's vote).
 export const COMMON_EVENT_EMITTERS = {
-  Upgraded: [...COMMON_EVENT_ROLES, 'minter'],
-  Migrated: [...COMMON_EVENT_ROLES, 'minter'],
-  UpgradeDelayChanged: ['manager', 'minter']
+  UpgradeDelayChanged: ['manager']
 };
 
 /**
@@ -92,7 +95,7 @@ export function contractEventList() {
         const roles = COMMON_EVENT_EMITTERS[name] ?? COMMON_EVENT_ROLES;
         for (const role of roles) list.push({ contract: role, name, topics, data, source: 'common' });
       } else {
-        list.push({ contract: dir, name, topics, data });
+        list.push({ contract: roleOf(dir), name, topics, data });
       }
     }
   }

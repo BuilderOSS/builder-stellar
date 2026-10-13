@@ -8,6 +8,7 @@ DROP FUNCTION IF EXISTS chain.event_position(bigint, bigint, bigint, bigint);
 DROP FUNCTION IF EXISTS chain.jsonb_safe(text);
 DROP FUNCTION IF EXISTS chain.ledger_closed_at_ts(text);
 DROP SCHEMA IF EXISTS app;
+DROP SCHEMA IF EXISTS claims;
 DROP SCHEMA IF EXISTS marketplace;
 DROP SCHEMA IF EXISTS treasury;
 DROP SCHEMA IF EXISTS metadata;

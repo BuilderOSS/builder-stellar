@@ -18,9 +18,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 test('every module emits its own <Module>Launched event with topic treasury', () => {
-  const launched = contractEventList().filter((e) => /^[A-Z][a-z]+Launched$/.test(e.name) && e.contract !== 'manager');
+  const launched = contractEventList().filter((e) => /^[A-Z][A-Za-z]+Launched$/.test(e.name) && e.contract !== 'manager');
   assert.deepStrictEqual(launched.map((e) => `${e.contract}:${e.name}`).sort(), [
-    'auction:AuctionLaunched', 'governor:GovernorLaunched', 'marketplace:MarketplaceLaunched',
+    'auction:AuctionLaunched', 'claims:ClaimMinterLaunched', 'governor:GovernorLaunched', 'marketplace:MarketplaceLaunched',
     'metadata:MetadataLaunched', 'token:TokenLaunched', 'treasury:TreasuryLaunched'
   ]);
   for (const e of launched) assert.deepStrictEqual(e.topics, ['treasury'], `${e.contract}.${e.name} topics`);
@@ -28,15 +28,15 @@ test('every module emits its own <Module>Launched event with topic treasury', ()
   assert.deepStrictEqual(dataByContract.token, ['grants']);
   assert.deepStrictEqual(dataByContract.auction, ['started']);
   assert.deepStrictEqual(dataByContract.marketplace, ['opened']);
-  for (const c of ['governor', 'treasury', 'metadata']) assert.deepStrictEqual(dataByContract[c], []);
+  for (const c of ['governor', 'treasury', 'metadata', 'claims']) assert.deepStrictEqual(dataByContract[c], []);
 });
 
 test('Upgraded, Migrated and AdminChanged come from contracts/common and are listed once per emitting module', () => {
-  const roles = ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'];
-  // The shared Minter upgrades and migrates through contracts/common as well.
+  // Every DAO module, the ClaimMinter (role claims) included.
+  const roles = ['auction', 'claims', 'governor', 'marketplace', 'metadata', 'token', 'treasury'];
   for (const name of ['Upgraded', 'Migrated']) {
     const found = contractEventList().filter((e) => e.name === name);
-    assert.deepStrictEqual(found.map((e) => e.contract).sort(), [...roles, 'minter'].sort(), name);
+    assert.deepStrictEqual(found.map((e) => e.contract).sort(), [...roles].sort(), name);
     for (const e of found) assert.strictEqual(e.source, 'common');
   }
   const upgraded = contractEventList().find((e) => e.name === 'Upgraded');
@@ -51,9 +51,9 @@ test('Upgraded, Migrated and AdminChanged come from contracts/common and are lis
   for (const e of admin) assert.deepStrictEqual(e.topics, ['old_admin', 'new_admin'], `${e.contract}.AdminChanged`);
 });
 
-test('UpgradeDelayChanged comes from contracts/common and is listed for the Manager and the Minter only', () => {
+test('UpgradeDelayChanged comes from contracts/common and is listed for the Manager only', () => {
   const found = contractEventList().filter((e) => e.name === 'UpgradeDelayChanged');
-  assert.deepStrictEqual(found.map((e) => e.contract).sort(), ['manager', 'minter']);
+  assert.deepStrictEqual(found.map((e) => e.contract), ['manager']);
   for (const e of found) {
     assert.strictEqual(e.source, 'common');
     assert.deepStrictEqual(e.topics, []);

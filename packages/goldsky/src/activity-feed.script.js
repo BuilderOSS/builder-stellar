@@ -108,27 +108,33 @@ function invoke(data) {
     DaoLaunched: true,
     ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
     // Event-only comments (governor/marketplace 0.2.0+).
-    ProposalCommented: true, PrimaryListingCommented: true, ListingCommented: true,
+    ProposalCommented: true, ListingCommented: true,
     DelegateChanged: true,
     // A rename changes how members find the community: public.
     MetadataUpdated: true,
     // So does a new link.
     SlugChanged: true,
     AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
-    PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true, PrimaryListingExpired: true,
     SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true, ListingExpired: true,
-    // The Minter's own row (MintBatchEvent / MerkleClaimEvent) tells the story of a batch;
-    // the token's MintBatchWithMinter in the same call stays admin so a mint is not announced twice.
-    MerkleClaimEvent: true, MintBatchEvent: true,
+    // Quick-buy pools: opening, each sale and closing are news; restocks and sweeps are bookkeeping.
+    PoolOpened: true, PoolPurchased: true, PoolClosed: true,
+    // The ClaimMinter's own rows tell the story of a claim; the token's MintBatchWithMinter in the
+    // same call stays admin so a mint is not announced twice. Refunds are per-claimer side effects.
+    ListOpened: true, Claimed: true, EscrowReleased: true,
+    // An assurance drive opening, and its slug coming back when it fails.
+    AssuranceOpened: true, SlugReleased: true,
     // A module joining or leaving changes who can mint and whose tokens vote: public.
     ModuleRegistered: true, ModuleUnregistered: true,
-    // A new claim round and a profile change are things members act on.
-    MerkleRootSetEvent: true, ProfileUpdated: true,
+    // The membership switches change what every holder can do with their token, and a DAO
+    // transfer moves someone's membership without their signature: public.
+    TransfersLockChanged: true, MembersOnlyDelegationChanged: true, DaoRecoveryChanged: true, TransferAgentChanged: true, DaoTransfer: true,
+    // A profile change is something members act on.
+    ProfileUpdated: true,
     // Contract upgrades are the most security-relevant DAO action: public.
     Upgraded: true,
     // A shorter platform notice narrows the window members have to react: public.
     UpgradeDelayChanged: true,
-    // The Manager's own upgrade changes who can approve the shared Minter's code: public.
+    // The Manager's own upgrade changes the factory and registry every DAO relies on: public.
     ManagerUpgraded: true,
     // A revoked implementation reaches the feed of every DAO running it (app.activity_feed).
     ImplementationRevoked: true
@@ -148,6 +154,12 @@ function invoke(data) {
     Transfer: 'token.transfer',
     DelegateChanged: 'token.delegate_changed',
     DelegateVotesChanged: 'token.delegate_votes_changed',
+    TransfersLockChanged: 'token.transfers_lock_changed',
+    MembersOnlyDelegationChanged: 'token.members_only_delegation_changed',
+    DaoRecoveryChanged: 'token.dao_recovery_changed',
+    TransferAgentChanged: 'token.transfer_agent_changed',
+    AgentTransfer: 'token.agent_transfer',
+    DaoTransfer: 'token.dao_transfer',
     GovernorInitialized: 'governance.initialized',
     ProposalCreated: 'governance.proposal_created',
     ProposalScheduled: 'governance.proposal_scheduled',
@@ -169,6 +181,7 @@ function invoke(data) {
     AuctionLaunched: 'auction.launched',
     MarketplaceLaunched: 'marketplace.launched',
     MetadataLaunched: 'metadata.launched',
+    ClaimMinterLaunched: 'claims.launched',
     Execute: 'treasury.execute',
     AuctionInitialized: 'auction.initialized',
     AuctionCreated: 'auction.created',
@@ -189,7 +202,6 @@ function invoke(data) {
     FactoryUnpaused: 'manager.factory_unpaused',
     AdminProposed: 'manager.admin_proposed',
     AdminChanged: 'manager.admin_changed',
-    PlatformMinterSet: 'manager.platform_minter_set',
     UpgradeApproved: 'manager.upgrade_approved',
     ImplementationRevoked: 'manager.implementation_revoked',
     ImplementationRegistered: 'manager.implementation_registered',
@@ -198,6 +210,9 @@ function invoke(data) {
     PendingSlugUpdated: 'manager.pending_slug_updated',
     SlugClaimed: 'manager.slug_claimed',
     SlugChanged: 'manager.slug_changed',
+    SlugReleased: 'manager.slug_released',
+    ModuleCreated: 'manager.module_created',
+    AssuranceOpened: 'manager.assurance_opened',
     MetadataInitialized: 'metadata.initialized',
     PropertyAdded: 'metadata.property_added',
     SeedGenerated: 'metadata.seed_generated',
@@ -205,20 +220,21 @@ function invoke(data) {
     PropertiesReset: 'metadata.properties_reset',
     ProfileUpdated: 'metadata.profile_updated',
     RendererBaseUpdated: 'metadata.renderer_base_updated',
-    MerkleClaimEvent: 'minter.merkle_claim',
-    MintBatchEvent: 'minter.batch_mint',
-    MerkleRootSetEvent: 'minter.merkle_root_set',
+    ListOpened: 'claims.list_opened',
+    Claimed: 'claims.claimed',
+    EscrowReleased: 'claims.escrow_released',
+    Refunded: 'claims.refunded',
     ManagerInitialized: 'manager.initialized',
     ManagerUpgraded: 'manager.upgraded',
     UpgradeDelayChanged: 'manager.upgrade_delay_changed',
     AdminProposalCancelled: 'manager.admin_proposal_cancelled',
     MarketplaceInitialized: 'marketplace.initialized',
-    PrimaryListingCreated: 'marketplace.primary_listing_created',
-    PrimaryListingCommented: 'marketplace.primary_listing_commented',
     ListingCommented: 'marketplace.listing_commented',
-    PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
-    PrimaryListingCancelled: 'marketplace.primary_listing_cancelled',
-    PrimaryListingExpired: 'marketplace.primary_listing_expired',
+    PoolOpened: 'marketplace.pool_opened',
+    PoolRestocked: 'marketplace.pool_restocked',
+    PoolPurchased: 'marketplace.pool_purchased',
+    PoolClosed: 'marketplace.pool_closed',
+    PoolSwept: 'marketplace.pool_swept',
     SecondaryListingCreated: 'marketplace.secondary_listing_created',
     ListingPurchased: 'marketplace.listing_purchased',
     ListingCancelled: 'marketplace.listing_cancelled',
@@ -243,6 +259,12 @@ function invoke(data) {
     Transfer: 'Token transferred',
     DelegateChanged: 'Delegation changed',
     DelegateVotesChanged: 'Voting power changed',
+    TransfersLockChanged: 'Membership transfer lock changed',
+    MembersOnlyDelegationChanged: 'Delegation rule changed',
+    DaoRecoveryChanged: 'DAO recovery changed',
+    TransferAgentChanged: 'Transfer agent changed',
+    AgentTransfer: 'Membership moved by a module',
+    DaoTransfer: 'Membership moved by the DAO',
     GovernorInitialized: 'Governor initialized',
     ProposalCreated: 'Proposal created',
     ProposalScheduled: 'Proposal voting scheduled',
@@ -264,6 +286,7 @@ function invoke(data) {
     AuctionLaunched: 'Auction launched',
     MarketplaceLaunched: 'Marketplace launched',
     MetadataLaunched: 'Metadata launched',
+    ClaimMinterLaunched: 'Claim minter launched',
     Execute: 'Treasury executed call',
     AuctionInitialized: 'Auction initialized',
     AuctionCreated: 'Auction created',
@@ -284,7 +307,6 @@ function invoke(data) {
     FactoryUnpaused: 'Factory unpaused',
     AdminProposed: 'Manager admin proposed',
     AdminChanged: 'Manager admin changed',
-    PlatformMinterSet: 'Platform minter set',
     UpgradeApproved: 'Upgrade approved',
     ImplementationRevoked: 'Implementation revoked',
     ImplementationRegistered: 'Implementation registered',
@@ -293,6 +315,9 @@ function invoke(data) {
     PendingSlugUpdated: 'Requested slug changed',
     SlugClaimed: 'Slug claimed',
     SlugChanged: 'Community link changed',
+    SlugReleased: 'Slug released',
+    ModuleCreated: 'Module created',
+    AssuranceOpened: 'Assurance drive opened',
     MetadataInitialized: 'Metadata initialized',
     PropertyAdded: 'Property added',
     SeedGenerated: 'Seed generated',
@@ -300,20 +325,21 @@ function invoke(data) {
     PropertiesReset: 'Properties reset',
     ProfileUpdated: 'Community profile updated',
     RendererBaseUpdated: 'Renderer base updated',
-    MerkleClaimEvent: 'Merkle claim completed',
-    MintBatchEvent: 'Batch mint completed',
-    MerkleRootSetEvent: 'Claim round opened',
+    ListOpened: 'Claim list opened',
+    Claimed: 'Tokens claimed',
+    EscrowReleased: 'Assurance escrow released',
+    Refunded: 'Claim refunded',
     ManagerInitialized: 'Manager initialized',
     ManagerUpgraded: 'Manager upgraded',
     UpgradeDelayChanged: 'Manager upgrade notice changed',
     AdminProposalCancelled: 'Manager admin proposal cancelled',
     MarketplaceInitialized: 'Marketplace initialized',
-    PrimaryListingCreated: 'Primary listing created',
-    PrimaryListingCommented: 'Primary listing comment',
     ListingCommented: 'Listing comment',
-    PrimaryListingPurchased: 'Primary sale completed',
-    PrimaryListingCancelled: 'Primary listing cancelled',
-    PrimaryListingExpired: 'Primary listing expired',
+    PoolOpened: 'Quick-buy pool opened',
+    PoolRestocked: 'Pool restocked',
+    PoolPurchased: 'Pool sale',
+    PoolClosed: 'Pool closed',
+    PoolSwept: 'Pool swept',
     SecondaryListingCreated: 'Secondary listing created',
     ListingPurchased: 'Listing purchased',
     ListingCancelled: 'Listing cancelled',
@@ -328,8 +354,9 @@ function invoke(data) {
   // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
   // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
   var emitterRole = ensureString(data.contract_role, '');
-  // The shared Minter emits Upgraded/Migrated too (contracts/minter/src/contract.rs upgrade/migrate).
-  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata', minter: 'Minter' };
+  // Roles are registry kinds: the ClaimMinter is `claims`; a module of any other kind (an external
+  // module, `custom_<name>`) is `module`, and `circle` is reserved for the Circle module.
+  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata', claims: 'Claim minter', circle: 'Circle' };
   // Kind prefixes: the governor's kinds are `governance.*` everywhere (proposal_created, vote_cast, ...).
   var kindPrefixes = { governor: 'governance' };
   var moduleRole = moduleLabels[emitterRole] ? (kindPrefixes[emitterRole] || emitterRole) : 'module';
@@ -340,14 +367,17 @@ function invoke(data) {
     kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
     titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
   }
-  // The shared Minter has its own notice (contracts/common/src/upgrade.rs `set_delay`).
-  if (normalizedEventName === 'UpgradeDelayChanged' && emitterRole === 'minter') {
-    kindMap.UpgradeDelayChanged = 'minter.upgrade_delay_changed';
-    titleMap.UpgradeDelayChanged = 'Minter upgrade notice changed';
-  }
   if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
     kindMap.AdminChanged = moduleRole + '.admin_changed';
     titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
+  }
+  // A module the platform did not write (role `module`) or the reserved Circle role, under a name
+  // no known event owns there: its own events are shown as they come, never under another
+  // contract's kind (a module's `transfer` is not the Token's).
+  var foreignModule = (emitterRole === 'module' || emitterRole === 'circle') && !commonEvents[normalizedEventName] && normalizedEventName !== 'AdminChanged';
+  if (foreignModule) {
+    kindMap[normalizedEventName] = moduleRole + '.' + String(eventName).toLowerCase();
+    titleMap[normalizedEventName] = moduleLabel + ' event';
   }
 
   // Every address field any event carries (contracts/*/src/events.rs and the OpenZeppelin
@@ -362,6 +392,8 @@ function invoke(data) {
     pick(data, ['minter']),
     pick(data, ['authority']),
     pick(data, ['module']),
+    pick(data, ['agent']),
+    pick(data, ['claimer']),
     pick(data, ['current_admin']),
     pick(data, ['proposed_admin']),
     pick(data, ['cancelled_admin']),
@@ -387,6 +419,8 @@ function invoke(data) {
     pick(data, ['token']),
     pick(data, ['payment_token']),
     pick(data, ['payment_asset']),
+    pick(data, ['asset']),
+    pick(data, ['claim_minter']),
     pick(data, ['token_address']),
     pick(data, ['address']),
     pick(data, ['deployer']),
@@ -399,9 +433,11 @@ function invoke(data) {
   ]);
 
   var proposalId = pick(data, ['proposal_id']);
-  // A money amount only (vote weights and token counts have their own fields in args).
-  var amount = pick(data, ['amount', 'total_amount', 'price', 'reserve_price']);
-  var listingId = pick(data, ['listing_id']);
+  // A money amount only (vote weights and token counts have their own fields in args). A claim's
+  // `amount` is a token count: what it cost is `paid`.
+  var amount = normalizedEventName === 'Claimed' ? pick(data, ['paid']) : pick(data, ['amount', 'total_amount', 'price', 'reserve_price']);
+  var poolId = pick(data, ['pool_id']);
+  var listId = pick(data, ['list_id']);
   var callIndex = pick(data, ['index']);
   // Batch events (SeedsGenerated, MintBatchWithMinter) carry the first id of their range.
   var tokenId = pick(data, ['token_id', 'first_token_id']);
@@ -435,7 +471,6 @@ function invoke(data) {
     VoteCast: function() { return 'Vote cast on proposal'; },
     BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown') + (quoted() ? ': "' + quoted() + '"' : ''); },
     ProposalCommented: function() { return 'Comment on proposal: "' + quoted() + '"'; },
-    PrimaryListingCommented: function() { return 'Comment on primary listing ' + (listingId || 'unknown') + ': "' + quoted() + '"'; },
     ListingCommented: function() { return 'Comment on token ' + (tokenId || 'unknown') + ': "' + quoted() + '"'; },
     AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
     AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
@@ -475,7 +510,6 @@ function invoke(data) {
       return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
     },
     ProfileUpdated: function() { return 'Community profile updated (revision ' + (pick(data, ['seq']) || '?') + ')'; },
-    MerkleRootSetEvent: function() { return 'Claim round ' + (pick(data, ['round']) || '?') + ' opened'; },
     AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
@@ -492,14 +526,57 @@ function invoke(data) {
     ModuleUnregistered: function() { return 'Module ' + (pick(data, ['kind']) || 'unknown') + ' removed (' + (pick(data, ['address']) || 'unknown') + ')'; },
     // One event per batch_mint: the range [first_token_id, first_token_id + count).
     MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
-    MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
-    PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
-    PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
-    PrimaryListingCancelled: function() { return 'Primary listing ' + (listingId || 'unknown') + ' cancelled'; },
-    PrimaryListingExpired: function() { return 'Primary listing ' + (listingId || 'unknown') + ' expired'; },
+    PoolOpened: function() {
+      return 'Pool ' + (poolId || '?') + ' opened: ' + (pick(data, ['size']) || '?') + ' tokens at ' + (amount || '?') +
+        ', at most ' + (pick(data, ['max_per_buyer']) || '?') + ' per buyer';
+    },
+    PoolRestocked: function() { return 'Pool ' + (poolId || '?') + ' restocked with ' + describeRange(); },
+    PoolPurchased: function() { return 'Token ' + (tokenId || '?') + ' bought from pool ' + (poolId || '?') + ' for ' + (amount || '?'); },
+    PoolClosed: function() {
+      var released = Number(pick(data, ['released']));
+      return 'Pool ' + (poolId || '?') + ' closed' + (released > 0 ? '; ' + released + ' unminted tokens returned to the allowance' : '');
+    },
+    PoolSwept: function() { return (pick(data, ['count']) || '0') + ' unsold tokens swept from pool ' + (poolId || '?') + ' to the Treasury'; },
+    ListOpened: function() {
+      var assurance = pick(data, ['assurance']);
+      return 'Claim list ' + (listId || '?') + ' opened: ' + (pick(data, ['total']) || '?') + ' tokens' +
+        (Number(amount) > 0 ? ' at ' + amount + ' each' : ', free') + (assurance && assurance !== 'null' ? ', as an assurance drive' : '');
+    },
+    Claimed: function() {
+      var count = pick(data, ['amount']);
+      return (pick(data, ['claimer']) || 'A member') + ' claimed ' + (count || '?') + (count === '1' ? ' token' : ' tokens') +
+        ' from list ' + (listId || '?') + (pick(data, ['escrowed']) === 'true' ? ' (payment held in escrow)' : '');
+    },
+    EscrowReleased: function() { return 'Escrow of ' + (amount || '0') + ' from list ' + (listId || '?') + ' released to the Treasury'; },
+    Refunded: function() { return 'Refund of ' + (amount || '0') + ' from list ' + (listId || '?') + ' to ' + (pick(data, ['claimer']) || 'a claimer'); },
+    ModuleCreated: function() { return 'Module ' + (pick(data, ['kind']) || '?') + ' created at ' + (pick(data, ['address']) || '?'); },
+    AssuranceOpened: function() {
+      return 'Assurance drive opened: claim list ' + (listId || '?') + ' on ' + (pick(data, ['claim_minter']) || '?') +
+        ', deadline ' + (pick(data, ['deadline']) || '?');
+    },
+    SlugReleased: function() { return 'Slug "' + (pick(data, ['slug']) || '?') + '" released by ' + (tokenAddress || '?') + ' (its assurance drive failed)'; },
+    TransfersLockChanged: function() {
+      return pick(data, ['locked']) === 'true'
+        ? 'Memberships locked: tokens move only by sale, gift to the DAO or a DAO vote'
+        : 'Memberships unlocked: holders can transfer and sell their tokens';
+    },
+    MembersOnlyDelegationChanged: function() {
+      return pick(data, ['enabled']) === 'true' ? 'Votes can be delegated to members only' : 'Votes can be delegated to anyone';
+    },
+    DaoRecoveryChanged: function() {
+      return pick(data, ['enabled']) === 'true' ? 'DAO recovery on: a vote can move any membership' : 'DAO recovery off';
+    },
+    TransferAgentChanged: function() {
+      return (pick(data, ['module']) || 'A module') + (pick(data, ['enabled']) === 'true' ? ' can now move memberships' : ' can no longer move memberships');
+    },
+    AgentTransfer: function() {
+      return 'Token ' + (tokenId || '?') + ' moved from ' + (pick(data, ['from']) || '?') + ' to ' + (pick(data, ['to']) || '?') + ' by ' + (pick(data, ['agent']) || '?');
+    },
+    DaoTransfer: function() {
+      return 'Token ' + (tokenId || '?') + ' moved from ' + (pick(data, ['from']) || '?') + ' to ' + (pick(data, ['to']) || '?') + ' by DAO vote';
+    },
     SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
-    MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
     DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
     DaoCreated: function() { return 'DAO created by ' + (deployer || 'unknown') + (pick(data, ['launch_admin']) ? ', launch admin ' + pick(data, ['launch_admin']) : ''); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -510,12 +587,17 @@ function invoke(data) {
     PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
   };
 
-  var summary = summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
+  var summary = foreignModule
+    ? moduleLabel + ' ' + (ensureString(data.contract_id, '') || 'contract') + ' emitted ' + String(eventName)
+    : summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
 
   // The account that acted, first match wins: a person before a contract, a sender before a
   // receiver, the caller (changed_by, admin) before the subject (authority) or a module
-  // (governor, treasury). DaoLaunched names only contracts (token_address, the shared Minter).
-  var actor = normalizedEventName === 'DaoLaunched' ? '' : pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'changed_by', 'cancelled_by', 'authority', 'admin', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin']);
+  // (governor, treasury). DaoLaunched names only contracts (token_address, the modules). A DAO
+  // transfer is the Treasury's act (changed_by), not the holder's.
+  var actor = normalizedEventName === 'DaoLaunched' ? ''
+    : normalizedEventName === 'DaoTransfer' ? pick(data, ['changed_by'])
+    : pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'claimer', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'changed_by', 'cancelled_by', 'authority', 'admin', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin']);
 
   // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
   var topicsValue = topics;
@@ -543,7 +625,7 @@ function invoke(data) {
   }
 
   // Strictly type all fields to ensure no mixed types in Arrow table
-  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  var visibility = foreignModule ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
   // The token self-delegates a holder on their first token: automatic, not a
   // choice anyone made. Only real delegation changes reach the public feed.
   if (normalizedEventName === 'DelegateChanged') {

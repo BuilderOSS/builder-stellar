@@ -14,13 +14,23 @@
 --                           spends allowance silently (the remaining amount is token.mint_allowance())
 --   module_registered       topic kind;               data { address, non_voting }
 --   module_unregistered     topic kind;               data { address }
+--   token_initialized       topic admin;              data { name, symbol, settings {transfers_locked,
+--                                                     members_only_delegation, dao_recovery} }
+--   transfers_lock_changed  no topics;                data { locked, changed_by }
+--   members_only_delegation_changed / dao_recovery_changed   data { enabled, changed_by }
+--   transfer_agent_changed  topic module;             data { enabled, changed_by }
+--                           (also emitted, disabled, when an agent's module is unregistered)
+--   agent_transfer          topic agent;              data { from, to, token_id }
+--   dao_transfer            topics from, to;          data { token_id, changed_by }
+--                           both next to the ordinary transfer event of the same move
 -- Not projected: mint_with_minter / mint_batch_with_minter (who performed a mint;
--- ownership comes from mint and transfer), token_initialized / metadata_updated
--- (manager.daos), token_launched (manager.module_launches).
+-- ownership comes from mint and transfer), metadata_updated (manager.daos),
+-- token_launched (manager.module_launches).
 --
--- Voting supply: tokens held by the DAO's Treasury and by non-voting modules (the
--- Auction and Marketplace) carry no votes (no delegate_votes_changed for the
--- receiver). token.supply splits the minted supply accordingly.
+-- Voting supply: tokens held by the DAO's Treasury and by registered non-voting
+-- modules (the Auction, the Marketplace, any custody module) carry no votes (no
+-- delegate_votes_changed for the receiver). token.supply splits the minted
+-- supply accordingly.
 -- =============================================================================
 
 -- Ownership changes: every mint (from_address NULL) and transfer.
@@ -178,7 +188,7 @@ WHERE NOT EXISTS (
 
 -- Supply per DAO token. Tokens are never burned.
 --   minted_supply       every minted token
---   system_held_supply  held by the DAO's Treasury, Auction or Marketplace
+--   system_held_supply  held by the DAO's Treasury or a registered non-voting module
 --   voting_supply       minted_supply - system_held_supply
 CREATE VIEW token.supply AS
 SELECT
@@ -192,7 +202,11 @@ FROM manager.dao_registry r
 CROSS JOIN LATERAL (
   SELECT
     count(*)::bigint AS minted_supply,
-    (count(*) FILTER (WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS system_held_supply
+    (count(*) FILTER (WHERE inv.owner = r.treasury_contract OR EXISTS (
+      SELECT 1 FROM manager.dao_modules m
+      WHERE m.deployment_id = r.deployment_id AND m.dao_id = r.dao_id
+        AND m.module_contract = inv.owner AND m.registered AND m.non_voting
+    )))::bigint AS system_held_supply
   FROM token.inventory inv
   WHERE inv.deployment_id = r.deployment_id AND inv.contract_id = r.token_contract
 ) s;
@@ -246,3 +260,119 @@ FROM (
   ORDER BY deployment_id, contract_id, topic_0, a ->> 'operator', pos DESC, event_id DESC
 ) ap
 WHERE (ap.a ->> 'live_until_ledger')::bigint > 0;
+
+-- The membership switches in force (docs/designs/locked-tokens.md): the
+-- creation settings (TokenInitialized), each overridden by its latest change.
+CREATE VIEW token.settings AS
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.token_contract AS contract_id,
+  COALESCE((lk.a ->> 'locked')::boolean, (ti.a #>> '{settings,transfers_locked}')::boolean, false) AS transfers_locked,
+  COALESCE((md.a ->> 'enabled')::boolean, (ti.a #>> '{settings,members_only_delegation}')::boolean, false) AS members_only_delegation,
+  COALESCE((rc.a ->> 'enabled')::boolean, (ti.a #>> '{settings,dao_recovery}')::boolean, false) AS dao_recovery,
+  GREATEST(lk.ledger_sequence, md.ledger_sequence, rc.ledger_sequence) AS last_changed_ledger
+FROM manager.dao_registry r
+LEFT JOIN LATERAL (
+  SELECT x.a FROM manager.module_events x
+  WHERE x.deployment_id = r.deployment_id AND x.contract_id = r.token_contract
+    AND x.contract_role = 'token' AND x.event_name = 'token_initialized'
+  ORDER BY x.pos, x.event_id LIMIT 1
+) ti ON true
+LEFT JOIN LATERAL (
+  SELECT x.a, x.ledger_sequence FROM manager.module_events x
+  WHERE x.deployment_id = r.deployment_id AND x.contract_id = r.token_contract
+    AND x.contract_role = 'token' AND x.event_name = 'transfers_lock_changed'
+  ORDER BY x.pos DESC, x.event_id DESC LIMIT 1
+) lk ON true
+LEFT JOIN LATERAL (
+  SELECT x.a, x.ledger_sequence FROM manager.module_events x
+  WHERE x.deployment_id = r.deployment_id AND x.contract_id = r.token_contract
+    AND x.contract_role = 'token' AND x.event_name = 'members_only_delegation_changed'
+  ORDER BY x.pos DESC, x.event_id DESC LIMIT 1
+) md ON true
+LEFT JOIN LATERAL (
+  SELECT x.a, x.ledger_sequence FROM manager.module_events x
+  WHERE x.deployment_id = r.deployment_id AND x.contract_id = r.token_contract
+    AND x.contract_role = 'token' AND x.event_name = 'dao_recovery_changed'
+  ORDER BY x.pos DESC, x.event_id DESC LIMIT 1
+) rc ON true;
+
+-- Transfer agents in force: modules whose latest transfer_agent_changed enabled
+-- them (unregistering an agent's module emits the disabling event).
+CREATE VIEW token.transfer_agents AS
+SELECT
+  h.deployment_id,
+  h.dao_id,
+  h.contract_id,
+  h.topic_0 AS module,
+  h.a ->> 'changed_by' AS changed_by,
+  h.ledger_sequence AS event_ledger,
+  h.closed_at AS event_at,
+  h.transaction_hash
+FROM (
+  SELECT DISTINCT ON (deployment_id, contract_id, topic_0) *
+  FROM manager.module_events
+  WHERE contract_role = 'token' AND event_name = 'transfer_agent_changed'
+  ORDER BY deployment_id, contract_id, topic_0, pos DESC, event_id DESC
+) h
+WHERE (h.a ->> 'enabled')::boolean;
+
+-- Moves the holder did not make alone: a DAO transfer (a proposal moved the
+-- token, recovery) or an agent transfer (a transfer agent moved it with the
+-- holder's signature). The ordinary transfer of the same move is in token.transfers.
+CREATE VIEW token.managed_transfers AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.dao_id,
+  e.contract_id,
+  CASE e.event_name WHEN 'dao_transfer' THEN 'dao' ELSE 'agent' END AS transfer_kind,
+  (e.a ->> 'token_id')::bigint AS token_id,
+  COALESCE(e.t ->> 'from', e.a ->> 'from') AS from_address,
+  COALESCE(e.t ->> 'to', e.a ->> 'to') AS to_address,
+  CASE e.event_name WHEN 'dao_transfer' THEN e.a ->> 'changed_by' ELSE e.t ->> 'agent' END AS moved_by,
+  e.ledger_sequence AS event_ledger,
+  e.closed_at AS event_at,
+  e.transaction_hash
+FROM manager.module_events e
+WHERE e.contract_role = 'token'
+  AND e.event_name IN ('dao_transfer', 'agent_transfer');
+
+-- Delegates as the delegate picker lists them: everyone who holds votes or is
+-- delegated to, how many holders delegate to them, and whether they count as a
+-- member for members-only delegation (the Token's check_delegate: holds a token
+-- and is not custody, i.e. neither the Treasury nor a non-voting module; a
+-- member whose tokens are all escrowed on the Marketplace is not one while listed).
+CREATE VIEW token.delegates AS
+WITH delegators AS (
+  SELECT deployment_id, dao_id, contract_id, delegated_to AS address,
+    count(*) FILTER (WHERE address <> delegated_to)::bigint AS delegator_count
+  FROM token.delegate_state
+  WHERE delegated_to IS NOT NULL
+  GROUP BY deployment_id, dao_id, contract_id, delegated_to
+)
+SELECT
+  m.deployment_id,
+  m.dao_id,
+  m.contract_id,
+  m.address,
+  m.voting_power,
+  COALESCE(d.delegator_count, 0)::bigint AS delegator_count,
+  m.owned_token_count,
+  c.custody,
+  m.owned_token_count > 0 AND NOT c.custody AS is_member
+FROM token.members m
+LEFT JOIN delegators d
+  ON d.deployment_id = m.deployment_id AND d.contract_id = m.contract_id AND d.address = m.address
+CROSS JOIN LATERAL (
+  SELECT EXISTS (
+    SELECT 1 FROM manager.dao_registry r
+    WHERE r.deployment_id = m.deployment_id AND r.dao_id = m.dao_id AND r.treasury_contract = m.address
+  ) OR EXISTS (
+    SELECT 1 FROM manager.dao_modules x
+    WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+      AND x.module_contract = m.address AND x.registered AND x.non_voting
+  ) AS custody
+) c
+WHERE m.voting_power > 0 OR d.delegator_count > 0 OR m.owned_token_count > 0;

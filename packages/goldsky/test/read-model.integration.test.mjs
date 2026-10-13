@@ -53,12 +53,21 @@ const VOID = 'void';
 const dataMap = (obj) => ({ map: Object.entries(obj).map(([key, val]) => ({ key: sym(key), val })) });
 
 const DEPLOYMENT = 'manager:CMANAGER';
+const CORE = ['token', 'metadata', 'governor', 'treasury'];
+const KINDS = ['auction', 'marketplace', 'claims'];
+const NON_VOTING = { auction: true, marketplace: true, claims: false };
+// Hash a<i><n> per DaoAddresses key: token 0, metadata 1, auction 2, governor 3, treasury 4, marketplace 5, claims 6.
+const HASH_INDEX = { token: 0, metadata: 1, auction: 2, governor: 3, treasury: 4, marketplace: 5, claims: 6 };
 const dao = (n) => ({
   token: `CTOK${n}`, metadata: `CMETA${n}`, auction: `CAUC${n}`,
-  governor: `CGOV${n}`, treasury: `CTRE${n}`, marketplace: `CMKT${n}`
+  governor: `CGOV${n}`, treasury: `CTRE${n}`, marketplace: `CMKT${n}`, claims: `CCLM${n}`
 });
-const wasmHashes = (n) => dataMap(Object.fromEntries(['token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'].map((k, i) => [k, bytes(`a${i}${n}`)])));
-const modules = (n) => dataMap(Object.fromEntries(Object.entries(dao(n)).map(([k, v]) => [k, addr(v)])));
+// DaoCreated's modules / wasm_hashes: the core four plus each kind the DAO has (void otherwise).
+const has = (kinds) => (k) => CORE.includes(k) || kinds.includes(k);
+const modules = (n, kinds = KINDS) => dataMap(Object.fromEntries([...CORE, ...KINDS].map((k) => [k, has(kinds)(k) ? addr(dao(n)[k]) : VOID])));
+const wasmHashes = (n, kinds = KINDS) => dataMap(Object.fromEntries([...CORE, ...KINDS].map((k) => [k, has(kinds)(k) ? bytes(`a${HASH_INDEX[k]}${n}`) : VOID])));
+// DaoLaunched.registry: Vec<ModuleEntry { kind, address, non_voting }>.
+const registry = (n, kinds = KINDS) => vec(...kinds.map((kind) => dataMap({ address: addr(dao(n)[kind]), kind: sym(kind), non_voting: bool(NON_VOTING[kind]) })));
 
 const events = [];
 const emitted = new Map(); // `${role}:${event name}` -> { topics, data } as used by the fixtures
@@ -88,9 +97,16 @@ function emit(role, contract, name, { topics = [], data = {}, ledger, tx = 0, ev
   });
 }
 
+// create_dao: the Token registers each module it was created with (ModuleRegistered, in the
+// same transaction as DaoCreated; the registration window starts at the transaction).
+function createDao(n, ledger, { deployer, launch, slug, kinds = KINDS }) {
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr(`CTOK${n}`), addr(deployer), addr(launch)], data: { created_ledger: u64(ledger), modules: modules(n, kinds), wasm_hashes: wasmHashes(n, kinds), slug: str(slug) }, ledger });
+  kinds.forEach((kind, k) => emit('token', `CTOK${n}`, 'module_registered', { topics: [sym(kind)], data: { address: addr(dao(n)[kind]), non_voting: bool(NON_VOTING[kind]) }, ledger, evt: 20 + k }));
+}
+
 function buildScenario() {
   const d1 = dao(1);
-  const MINTER = 'CMINTER';
+  const d2 = dao(2);
 
   // --- manager ---------------------------------------------------------------
   emit('manager', 'CMANAGER', 'manager_initialized', { topics: [addr('GADMIN')], data: { version: str('0.1.0'), deployed_ledger: u64(1) }, ledger: 100 });
@@ -99,14 +115,30 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'latest_implementation_set', { topics: [str('token'), bytes('aa')], data: { version: str('0.1.0') }, ledger: 101, evt: 2 });
   emit('manager', 'CMANAGER', 'implementation_revoked', { topics: [bytes('bb')], data: { revoked_ledger: u64(9) }, ledger: 102 });
   emit('manager', 'CMANAGER', 'current_implementations_updated', {
-    data: { token: bytes('aa'), metadata: bytes('cc'), auction: bytes('dd'), governor: bytes('ee'), treasury: bytes('ff'), marketplace: bytes('11') }, ledger: 103
+    data: { token: bytes('aa'), metadata: bytes('cc'), auction: bytes('dd'), governor: bytes('ee'), treasury: bytes('ff'), marketplace: bytes('11'), claims: bytes('c7') }, ledger: 103
   });
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK1'), addr('GDEPLOYER'), addr('GLAUNCH')], data: { created_ledger: u64(110), modules: modules(1), wasm_hashes: wasmHashes(1), slug: str('dao-one') }, ledger: 110 });
+  createDao(1, 110, { deployer: 'GDEPLOYER', launch: 'GLAUNCH', slug: 'dao-one' });
   // A second pending DAO first requests the same slug (allowed: nothing is claimed
-  // until launch), then renames its request.
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2), wasm_hashes: wasmHashes(2), slug: str('dao-one') }, ledger: 111 });
+  // until launch or an assurance drive), then renames its request.
+  createDao(2, 111, { deployer: 'GDEPLOYER2', launch: 'GLAUNCH2', slug: 'dao-one' });
   emit('manager', 'CMANAGER', 'pending_slug_updated', { topics: [addr('CTOK2')], data: { slug: str('dao-two') }, ledger: 111, evt: 1 });
-  emit('token', d1.token, 'token_initialized', { topics: [addr('GOWNER')], data: { name: str('Alpha'), symbol: str('ALP') }, ledger: 112 });
+  emit('token', d1.token, 'token_initialized', {
+    topics: [addr('GOWNER')],
+    data: { name: str('Alpha'), symbol: str('ALP'), settings: dataMap({ transfers_locked: bool(false), members_only_delegation: bool(false), dao_recovery: bool(false) }) },
+    ledger: 112
+  });
+  // DAO 2 runs an assurance drive: open_assurance reserves its slug and opens the paid list; a
+  // claimant pays into escrow; the drive fails, the slug is released and the claimant refunded.
+  emit('manager', 'CMANAGER', 'assurance_opened', {
+    topics: [addr('CTOK2')], data: { claim_minter: addr(d2.claims), list_id: u32(0), deadline: u64(9000), launch_auction: bool(false), launch_marketplace: bool(true) }, ledger: 112, tx: 1
+  });
+  emit('claims', d2.claims, 'list_opened', {
+    topics: [u32(0)], data: { root: bytes('rd'), tree_uri: str('ipfs://drive'), asset: addr('CXLM'), price: i128(25), expires_at: u64(9500), total: u32(4), assurance: dataMap({ threshold_claimers: u32(3), deadline: u64(9000) }) }, ledger: 112, tx: 1, evt: 1
+  });
+  emit('manager', 'CMANAGER', 'slug_claimed', { topics: [addr('CTOK2'), str('dao-two')], ledger: 112, tx: 1, evt: 2 });
+  emit('claims', d2.claims, 'claimed', { topics: [u32(0), addr('GCAROL')], data: { amount: u32(1), first_token_id: u32(0), paid: i128(25), escrowed: bool(true), claimed: u32(1) }, ledger: 113, tx: 1 });
+  emit('manager', 'CMANAGER', 'slug_released', { topics: [addr('CTOK2'), str('dao-two')], ledger: 260 });
+  emit('claims', d2.claims, 'refunded', { topics: [u32(0), addr('GCAROL')], data: { amount: i128(25) }, ledger: 261 });
   emit('metadata', d1.metadata, 'metadata_initialized', {
     topics: [addr(d1.token)],
     data: { renderer_base: str('https://r/'), admin: addr('GOWNER') },
@@ -123,23 +155,24 @@ function buildScenario() {
   });
   emit('manager', 'CMANAGER', 'dao_launched', {
     topics: [addr('CTOK1')],
-    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true), minter: addr(MINTER) }, ledger: 116
+    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true), registry: registry(1) }, ledger: 116
   });
-  // Every module emits its own `<module>_launched` event (topic treasury) and hands
-  // its admin from the launch admin to the Treasury (admin_changed).
-  emit('token', d1.token, 'token_launched', { topics: [addr(d1.treasury)], data: { grants: vec(dataMap({ module: addr(MINTER), allowance: u32(4294967295) })) }, ledger: 116, evt: 1 });
+  // Every module emits its own launch event (topic treasury; the ClaimMinter's is
+  // claim_minter_launched) and hands its admin from the launch admin to the Treasury
+  // (admin_changed). The auction was not launched, so the Token grants nothing.
+  emit('token', d1.token, 'token_launched', { topics: [addr(d1.treasury)], data: { grants: vec() }, ledger: 116, evt: 1 });
   emit('governor', d1.governor, 'governor_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 2 });
   emit('treasury', d1.treasury, 'treasury_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 3 });
   emit('metadata', d1.metadata, 'metadata_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 4 });
   emit('auction', d1.auction, 'auction_launched', { topics: [addr(d1.treasury)], data: { started: bool(false) }, ledger: 116, evt: 5 });
   emit('marketplace', d1.marketplace, 'marketplace_launched', { topics: [addr(d1.treasury)], data: { opened: bool(true) }, ledger: 116, evt: 6 });
-  // Token launch grants each minter (changed_by = manager) in the same transaction.
-  emit('token', d1.token, 'module_registered', { topics: [sym('claims')], data: { address: addr(MINTER), non_voting: bool(false) }, ledger: 116, evt: 40 });
-  emit('token', d1.token, 'mint_allowance_changed', { topics: [addr(MINTER)], data: { old_allowance: u32(0), allowance: u32(4294967295), changed_by: addr('CMANAGER') }, ledger: 116, evt: 7 });
-  ['token', 'governor', 'treasury', 'metadata', 'auction', 'marketplace'].forEach((role, k) => {
+  emit('claims', d1.claims, 'claim_minter_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 7 });
+  ['token', 'governor', 'treasury', 'metadata', 'auction', 'marketplace', 'claims'].forEach((role, k) => {
     emit(role, d1[role], 'admin_changed', { topics: [addr('GLAUNCH'), addr(d1.treasury)], ledger: 116, evt: 8 + k });
   });
-  emit('manager', 'CMANAGER', 'slug_claimed', { topics: [addr('CTOK1'), str('dao-one')], ledger: 116, evt: 14 });
+  emit('manager', 'CMANAGER', 'slug_claimed', { topics: [addr('CTOK1'), str('dao-one')], ledger: 116, evt: 15 });
+  // Governance grants the ClaimMinter ten mints.
+  emit('token', d1.token, 'mint_allowance_changed', { topics: [addr(d1.claims)], data: { old_allowance: u32(0), allowance: u32(10), changed_by: addr(d1.treasury) }, ledger: 118 });
   emit('manager', 'CMANAGER', 'admin_proposed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 104 });
   emit('manager', 'CMANAGER', 'admin_changed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 105 });
   // Fixtures for the post-hardening events (assertions on the matching views are reconciled separately).
@@ -150,28 +183,33 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('a01')], data: { name: str('Token'), version: str('0.1.0'), published_ledger: u64(100) }, ledger: 100, evt: 1 });
   emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('a31')], data: { name: str('Governor'), version: str('0.1.0'), published_ledger: u64(100) }, ledger: 100, evt: 2 });
   emit('auction', d1.auction, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 119 });
-  emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   // Platform events (no DAO of their own): fanned out to every DAO's feed by app.activity_feed (0015).
   emit('manager', 'CMANAGER', 'upgrade_delay_changed', { data: { from_ledgers: u32(720), to_ledgers: u32(120), effective_ledger: u32(880) }, ledger: 200 });
   emit('manager', 'CMANAGER', 'manager_upgraded', { topics: [bytes('mg1'), bytes('mg2')], data: { from_version: str('0.1.0'), to_version: str('0.2.0'), upgraded_ledger: u64(201) }, ledger: 201 });
-  emit('minter', MINTER, 'upgraded', { topics: [bytes('mi1'), bytes('mi2')], data: { version: str('0.2.0') }, ledger: 202 });
-  emit('minter', MINTER, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 202, evt: 1 });
-  emit('minter', MINTER, 'upgrade_delay_changed', { data: { from_ledgers: u32(120), to_ledgers: u32(720), effective_ledger: u32(203) }, ledger: 203 });
+  // The ClaimMinter is a DAO module: its upgrade is its DAO's news, not the platform's.
+  emit('claims', d1.claims, 'upgraded', { topics: [bytes('a61'), bytes('c72')], data: { version: str('0.2.0') }, ledger: 202 });
+  emit('claims', d1.claims, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 202, evt: 1 });
   // A revoked implementation reaches only the DAOs running it (CTOK1's governor runs a31).
   emit('manager', 'CMANAGER', 'implementation_revoked', { topics: [bytes('a31')], data: { revoked_ledger: u64(204) }, ledger: 204 });
   // The factory pause has no getter on chain; manager.settings carries it.
   emit('manager', 'CMANAGER', 'factory_paused', { ledger: 205 });
   emit('manager', 'CMANAGER', 'factory_unpaused', { ledger: 206 });
   emit('manager', 'CMANAGER', 'factory_paused', { ledger: 207 });
-  // A third DAO created after the platform events: it must not inherit them.
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK3'), addr('GDEPLOYER3'), addr('GLAUNCH3')], data: { created_ledger: u64(208), modules: modules(3), wasm_hashes: wasmHashes(3), slug: str('dao-three') }, ledger: 208 });
+  // A third DAO created after the platform events (it must not inherit them) with no
+  // modules at all, then given a ClaimMinter in Setup by create_module (deployed from the
+  // Manager's current implementation for the kind).
+  createDao(3, 208, { deployer: 'GDEPLOYER3', launch: 'GLAUNCH3', slug: 'dao-three', kinds: [] });
+  emit('manager', 'CMANAGER', 'module_created', { topics: [addr('CTOK3'), sym('claims')], data: { n: u32(1), address: addr('CCLM3') }, ledger: 209 });
+  emit('token', 'CTOK3', 'module_registered', { topics: [sym('claims')], data: { address: addr('CCLM3'), non_voting: bool(false) }, ledger: 209, evt: 1 });
   // A fourth DAO launched with the auction started (the auction's own `unpaused`
   // lands in the launch transaction, before DaoLaunched), then paused by vote;
   // its marketplace closed and reopened by vote.
   const d4 = dao(4);
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK4'), addr('GDEPLOYER4'), addr('GLAUNCH4')], data: { created_ledger: u64(300), modules: modules(4), wasm_hashes: wasmHashes(4), slug: str('dao-four') }, ledger: 300 });
+  createDao(4, 300, { deployer: 'GDEPLOYER4', launch: 'GLAUNCH4', slug: 'dao-four', kinds: ['auction', 'marketplace'] });
   emit('auction', d4.auction, 'unpaused', { ledger: 301, evt: 0 });
-  emit('manager', 'CMANAGER', 'dao_launched', { topics: [addr('CTOK4')], data: { launched_ledger: u64(301), modules: modules(4), launch_auction: bool(true), launch_marketplace: bool(true), minter: addr(MINTER) }, ledger: 301, evt: 1 });
+  emit('manager', 'CMANAGER', 'dao_launched', {
+    topics: [addr('CTOK4')], data: { launched_ledger: u64(301), modules: modules(4, ['auction', 'marketplace']), launch_auction: bool(true), launch_marketplace: bool(true), registry: registry(4, ['auction', 'marketplace']) }, ledger: 301, evt: 1
+  });
   emit('auction', d4.auction, 'paused', { ledger: 310 });
   emit('marketplace', d4.marketplace, 'marketplace_paused', { topics: [addr(d4.treasury)], ledger: 311 });
   emit('marketplace', d4.marketplace, 'marketplace_unpaused', { topics: [addr(d4.treasury)], ledger: 312 });
@@ -192,7 +230,7 @@ function buildScenario() {
     emit('token', d1.token, 'mint', { topics: [addr('GALICE')], data: { token_id: u32(k + 1) }, ledger: 120, tx: 3, evt: 2 * k });
     emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(k), new_votes: u128(k + 1) }, ledger: 120, tx: 3, evt: 2 * k + 1 });
   }
-  emit('token', d1.token, 'mint_batch_with_minter', { topics: [addr(MINTER)], data: { first_token_id: u32(1), count: u32(6) }, ledger: 120, tx: 3, evt: 12 });
+  emit('token', d1.token, 'mint_batch_with_minter', { topics: [addr(d1.claims)], data: { first_token_id: u32(1), count: u32(6) }, ledger: 120, tx: 3, evt: 12 });
   emit('token', d1.token, 'transfer', { topics: [addr('GALICE'), addr('GBOB')], data: { token_id: u32(1) }, ledger: 121, evt: 0 });
   emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(6), new_votes: u128(5) }, ledger: 121, evt: 1 });
   emit('token', d1.token, 'delegate_changed', { topics: [addr('GBOB')], data: { from_delegate: VOID, to_delegate: addr('GBOB') }, ledger: 121, evt: 2 });
@@ -315,21 +353,23 @@ function buildScenario() {
   });
 
   // --- marketplace -------------------------------------------------------------
-  // Primary listings are keyed by listing_id (u64 topic); the token is minted to the buyer on purchase.
-  const primary = (id, ledger) => emit('marketplace', d1.marketplace, 'primary_listing_created', {
-    topics: [u64(id)], data: { price: i128(100), expires_at: u64(5000), payment_asset: addr('CXLM') }, ledger
+  // Quick-buy pools: pool 0 for three tokens; a restock mints them into Marketplace custody
+  // (non-voting); one sells, the pool is closed and one unsold token swept to the Treasury.
+  const poolOpened = (id, ledger, size) => emit('marketplace', d1.marketplace, 'pool_opened', {
+    topics: [u32(id)], data: { price: i128(100), asset: addr('CXLM'), expires_at: u64(5000), size: u32(size), max_per_buyer: u32(1), max_sold_per_period: u32(5), period_secs: u64(3600) }, ledger
   });
-  primary(1, 180);
-  emit('marketplace', d1.marketplace, 'primary_listing_purchased', {
-    topics: [u64(1), addr('GBUYER')], data: { token_id: u32(9), price: i128(100), payment_asset: addr('CXLM') }, ledger: 181
-  });
-  // Comments (marketplace 0.2.0) outlive the listing they are about.
-  emit('marketplace', d1.marketplace, 'primary_listing_commented', { topics: [u64(1), addr('GBUYER')], data: { body: str('Got one!') }, ledger: 181, evt: 1 });
-  primary(2, 187);
-  emit('marketplace', d1.marketplace, 'primary_listing_cancelled', { topics: [u64(2)], ledger: 188 });
-  primary(3, 189);
-  emit('marketplace', d1.marketplace, 'primary_listing_expired', { topics: [u64(3)], ledger: 189, evt: 1 });
-  primary(4, 196); // still open
+  poolOpened(0, 180, 3);
+  for (let k = 0; k < 3; k += 1) emit('token', d1.token, 'mint', { topics: [addr(d1.marketplace)], data: { token_id: u32(20 + k) }, ledger: 180, tx: 1, evt: k });
+  emit('marketplace', d1.marketplace, 'pool_restocked', { topics: [u32(0)], data: { first_token_id: u32(20), count: u32(3), stocked: u32(3) }, ledger: 180, tx: 1, evt: 3 });
+  emit('token', d1.token, 'transfer', { topics: [addr(d1.marketplace), addr('GBUYER')], data: { token_id: u32(21) }, ledger: 181, evt: 0 });
+  emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GBUYER')], data: { previous_votes: u128(0), new_votes: u128(1) }, ledger: 181, evt: 1 });
+  emit('marketplace', d1.marketplace, 'pool_purchased', { topics: [u32(0), addr('GBUYER')], data: { token_id: u32(21), price: i128(100), asset: addr('CXLM') }, ledger: 181, evt: 2 });
+  poolOpened(1, 187, 5);
+  emit('marketplace', d1.marketplace, 'pool_closed', { topics: [u32(1)], data: { released: u32(5) }, ledger: 188 });
+  emit('marketplace', d1.marketplace, 'pool_closed', { topics: [u32(0)], data: { released: u32(0) }, ledger: 189 });
+  emit('token', d1.token, 'transfer', { topics: [addr(d1.marketplace), addr(d1.treasury)], data: { token_id: u32(22) }, ledger: 189, evt: 1 });
+  emit('marketplace', d1.marketplace, 'pool_swept', { topics: [u32(0)], data: { count: u32(1), pages_left: u32(1) }, ledger: 189, evt: 2 });
+  poolOpened(2, 196, 2); // still open, nothing stocked
   const secondary = (id, ledger) => emit('marketplace', d1.marketplace, 'secondary_listing_created', {
     topics: [u32(id)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(5000), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger
   });
@@ -342,13 +382,40 @@ function buildScenario() {
     topics: [u32(12), addr('GBUYER')], data: { seller: addr('GSELLER'), price: i128(100), fee: i128(2), payment_asset: addr('CXLM') }, ledger: 186
   });
 
-  // --- minter (shared contract; tenant = token_id topic) --------------------------
-  const claim = (name, token, who, amount, ledger) => emit('minter', MINTER, name, { topics: [addr(token), addr(who)], data: { amount: u128(amount) }, ledger });
-  claim('merkle_claim_event', 'CTOK1', 'GALICE', 3, 190);
-  claim('merkle_claim_event', 'CTOKFOREIGN', 'GMALLORY', 99, 192);
-  emit('minter', MINTER, 'mint_batch_event', { topics: [addr('CTOK1')], data: { recipient_count: u32(4), total_amount: u128(8), first_token_id: u32(7) }, ledger: 193 });
-  emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], data: { root: bytes('r1'), round: u32(1), tree_uri: str('ipfs://tree1') }, ledger: 194 });
-  emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], data: { root: bytes('r2'), round: u32(2), tree_uri: str('ipfs://tree2') }, ledger: 195 });
+  // --- claims (DAO 1's ClaimMinter) ---------------------------------------------
+  emit('claims', d1.claims, 'list_opened', {
+    topics: [u32(0)], data: { root: bytes('r1'), tree_uri: str('ipfs://tree1'), asset: addr('CXLM'), price: i128(50), expires_at: u64(9000), total: u32(10), assurance: VOID }, ledger: 190
+  });
+  emit('claims', d1.claims, 'claimed', { topics: [u32(0), addr('GALICE')], data: { amount: u32(2), first_token_id: u32(30), paid: i128(100), escrowed: bool(false), claimed: u32(2) }, ledger: 191 });
+  emit('claims', d1.claims, 'claimed', { topics: [u32(0), addr('GALICE')], data: { amount: u32(1), first_token_id: u32(33), paid: i128(50), escrowed: bool(false), claimed: u32(3) }, ledger: 192 });
+  emit('claims', d1.claims, 'claimed', { topics: [u32(0), addr('GBOB')], data: { amount: u32(1), first_token_id: u32(32), paid: i128(50), escrowed: bool(false), claimed: u32(1) }, ledger: 192, evt: 1 });
+  emit('claims', d1.claims, 'list_opened', {
+    topics: [u32(1)], data: { root: bytes('r2'), tree_uri: str('ipfs://tree2'), asset: addr('CXLM'), price: i128(0), expires_at: u64(9000), total: u32(5), assurance: VOID }, ledger: 195
+  });
+
+  // --- an external module (kind custom_vault, role module) ----------------------
+  // Registered by vote and made a transfer agent, it moves a membership with the holder's
+  // signature, then is unregistered (which revokes the agent): its later events leave the DAO.
+  emit('token', d1.token, 'module_registered', { topics: [sym('custom_vault')], data: { address: addr('CVAULT'), non_voting: bool(true) }, ledger: 230 });
+  emit('token', d1.token, 'transfer_agent_changed', { topics: [addr('CVAULT')], data: { enabled: bool(true), changed_by: addr(d1.treasury) }, ledger: 230, evt: 1 });
+  emit('module', 'CVAULT', 'vault_opened', { topics: [addr('GALICE')], data: { seats: u32(3) }, ledger: 231 });
+  emit('token', d1.token, 'transfer', { topics: [addr('GALICE'), addr('GBOB')], data: { token_id: u32(6) }, ledger: 231, tx: 1, evt: 0 });
+  emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(3), new_votes: u128(2) }, ledger: 231, tx: 1, evt: 1 });
+  emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GBOB')], data: { previous_votes: u128(1), new_votes: u128(2) }, ledger: 231, tx: 1, evt: 2 });
+  emit('token', d1.token, 'agent_transfer', { topics: [addr('CVAULT')], data: { from: addr('GALICE'), to: addr('GBOB'), token_id: u32(6) }, ledger: 231, tx: 1, evt: 3 });
+  emit('token', d1.token, 'module_unregistered', { topics: [sym('custom_vault')], data: { address: addr('CVAULT') }, ledger: 232 });
+  emit('token', d1.token, 'transfer_agent_changed', { topics: [addr('CVAULT')], data: { enabled: bool(false), changed_by: addr(d1.treasury) }, ledger: 232, evt: 1 });
+  emit('module', 'CVAULT', 'vault_closed', { topics: [addr('GALICE')], data: { seats: u32(0) }, ledger: 233 });
+
+  // --- membership switches (docs/designs/locked-tokens.md) ----------------------
+  // Locked by vote, recovery turned on and a lost-key member's token moved by proposal;
+  // members-only delegation turned on and off again.
+  emit('token', d1.token, 'transfers_lock_changed', { data: { locked: bool(true), changed_by: addr(d1.treasury) }, ledger: 240 });
+  emit('token', d1.token, 'dao_recovery_changed', { data: { enabled: bool(true), changed_by: addr(d1.treasury) }, ledger: 241 });
+  emit('token', d1.token, 'transfer', { topics: [addr('GCAROL'), addr('GERIN')], data: { token_id: u32(5) }, ledger: 242, evt: 0 });
+  emit('token', d1.token, 'dao_transfer', { topics: [addr('GCAROL'), addr('GERIN')], data: { token_id: u32(5), changed_by: addr(d1.treasury) }, ledger: 242, evt: 1 });
+  emit('token', d1.token, 'members_only_delegation_changed', { data: { enabled: bool(true), changed_by: addr(d1.treasury) }, ledger: 243 });
+  emit('token', d1.token, 'members_only_delegation_changed', { data: { enabled: bool(false), changed_by: addr(d1.treasury) }, ledger: 244 });
 }
 
 // Event ids must be unique (raw_events_pkey); fail loudly in the fixture, not in Postgres.
@@ -379,6 +446,8 @@ test('fixtures use exactly the topics and data fields the contracts emit', () =>
   const drift = [];
   for (const [key, used] of emitted) {
     const [role, name] = [key.split(':')[0], key.slice(key.indexOf(':') + 1)];
+    // An external module's own events are not the platform's contracts' (positional decoding).
+    if (role === 'module') continue;
     // Same-named events (Launched) are looked up by (contract, name); library events by name.
     const expected = byContract[`${role}:${canonical(name)}`] ?? truth[canonical(name)];
     if (!expected) { drift.push(`${name}: not a contract or library event`); continue; }
@@ -444,21 +513,30 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
   assert.equal(a.slug, 'alpha-club', 'the latest slug_changed wins, ordered by event position');
   assert.deepEqual([a.slug_claimed, a.requested_slug, a.claimed_slug], [true, 'dao-one', 'alpha-club']);
   assert.equal(b.slug, 'dao-two', 'a pending DAO shows its latest requested slug');
-  assert.deepEqual([b.slug_claimed, b.requested_slug, b.claimed_slug], [false, 'dao-two', null]);
+  assert.deepEqual([b.slug_claimed, b.requested_slug, b.claimed_slug], [false, 'dao-two', null], 'the failed drive released its reservation');
+  assert.equal(b.assurance_outcome, 'released');
+  assert.equal(a.assurance_outcome, null);
   assert.equal(c.slug, 'dao-three');
   assert.equal(one(`SELECT created_slug FROM manager.dao_registry WHERE dao_id = 'CTOK2'`).created_slug, 'dao-one');
-  assert.equal(one(`SELECT count(*)::int AS n FROM manager.daos WHERE claimed_slug = 'dao-one'`).n, 0, 'a released slug is nobody\'s claimed slug');
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.daos WHERE claimed_slug IN ('dao-one', 'dao-two')`).n, 0, 'a released slug is nobody\'s claimed slug');
   assert.deepEqual(
     rows(`SELECT dao_id, slug, ledger_sequence, event_index FROM manager.dao_previous_slugs ORDER BY ledger_sequence, event_index`),
     [{ dao_id: 'CTOK1', slug: 'dao-one', ledger_sequence: 152, event_index: 0 }, { dao_id: 'CTOK1', slug: 'dao-uno', ledger_sequence: 152, event_index: 1 }]
   );
   assert.deepEqual(
-    [a.token_contract, a.governor_contract, a.auction_contract, a.treasury_contract, a.metadata_contract, a.marketplace_contract],
-    ['CTOK1', 'CGOV1', 'CAUC1', 'CTRE1', 'CMETA1', 'CMKT1']
+    [a.token_contract, a.governor_contract, a.auction_contract, a.treasury_contract, a.metadata_contract, a.marketplace_contract, a.claims_contract],
+    ['CTOK1', 'CGOV1', 'CAUC1', 'CTRE1', 'CMETA1', 'CMKT1', 'CCLM1']
+  );
+  // Every module is optional: DAO 3 was created without any and given a ClaimMinter in Setup.
+  assert.deepEqual([c.auction_contract, c.marketplace_contract, c.claims_contract], [null, null, 'CCLM3']);
+  assert.deepEqual([d.auction_contract, d.marketplace_contract, d.claims_contract], ['CAUC4', 'CMKT4', null]);
+  assert.deepEqual(
+    one(`SELECT auction_contract, marketplace_contract, claims_contract, claims_wasm_hash FROM manager.dao_registry WHERE dao_id = 'CTOK3'`),
+    { auction_contract: null, marketplace_contract: null, claims_contract: null, claims_wasm_hash: null },
+    'the registry row is what create_dao deployed'
   );
   assert.equal(a.token_name, 'Alpha Club', 'name follows the latest MetadataUpdated');
   assert.equal(a.token_symbol, 'ALPHA');
-  assert.equal(a.minter_contract, 'CMINTER', 'the shared Minter pinned at launch');
   assert.equal(a.admin_address, 'CTRE1', 'the current admin: the Treasury after the launch handoff');
   assert.equal(b.admin_address, 'GLAUNCH2', 'a pending DAO keeps its launch admin');
   assert.equal(a.profile, '{"v":1,"description":"Alpha DAO v2","image":"img1"}', 'the profile follows the highest seq');
@@ -476,22 +554,43 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
   assert.deepEqual([d.dao_id, d.auction_enabled, d.auction_paused, d.marketplace_enabled], ['CTOK4', true, true, true]);
 
   assert.deepEqual(
-    rows(`SELECT module_role, created_wasm_hash FROM manager.dao_modules WHERE dao_id = 'CTOK1' ORDER BY module_role`).map((r) => [r.module_role, r.created_wasm_hash]),
-    [['auction', 'a21'], ['governor', 'a31'], ['marketplace', 'a51'], ['metadata', 'a11'], ['token', 'a01'], ['treasury', 'a41']]
+    rows(`SELECT module_role, kind, module_contract, created_wasm_hash, non_voting, registered FROM manager.dao_modules WHERE dao_id = 'CTOK1' ORDER BY module_role`)
+      .map((r) => [r.module_role, r.kind, r.module_contract, r.created_wasm_hash, r.non_voting, r.registered]),
+    [
+      ['auction', 'auction', 'CAUC1', 'a21', true, true], ['claims', 'claims', 'CCLM1', 'a61', false, true],
+      ['governor', 'governor', 'CGOV1', 'a31', false, true], ['marketplace', 'marketplace', 'CMKT1', 'a51', true, true],
+      ['metadata', 'metadata', 'CMETA1', 'a11', false, true], ['module', 'custom_vault', 'CVAULT', null, true, false],
+      ['token', 'token', 'CTOK1', 'a01', false, true], ['treasury', 'treasury', 'CTRE1', 'a41', false, true]
+    ],
+    'the core four, each registered module (an external one has no known creation hash) and the unregistered vault'
   );
-  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 24);
+  assert.equal(one(`SELECT created_wasm_hash FROM manager.dao_modules WHERE module_contract = 'CCLM3'`).created_wasm_hash, 'c7',
+    'create_module deploys the Manager\'s current implementation for the kind');
+  // Core four x 4 DAOs, plus each registration window: DAO 1 four (with the vault), DAO 2 three, DAO 3 one, DAO 4 two.
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 26);
   assert.deepEqual(
-    one(`SELECT launch_auction, launch_marketplace, minter, launched_ledger FROM manager.dao_launches WHERE dao_id = 'CTOK1'`),
-    { launch_auction: false, launch_marketplace: true, minter: 'CMINTER', launched_ledger: 116 }
+    one(`SELECT module_role, until_pos IS NOT NULL AS closed FROM manager.event_identity WHERE contract_id = 'CVAULT'`),
+    { module_role: 'module', closed: true }
   );
+  const launch = one(`SELECT launch_auction, launch_marketplace, registry, launched_ledger FROM manager.dao_launches WHERE dao_id = 'CTOK1'`);
+  assert.deepEqual([launch.launch_auction, launch.launch_marketplace, launch.launched_ledger], [false, true, 116]);
+  assert.deepEqual(launch.registry, [
+    { address: 'CAUC1', kind: 'auction', non_voting: true },
+    { address: 'CMKT1', kind: 'marketplace', non_voting: true },
+    { address: 'CCLM1', kind: 'claims', non_voting: false }
+  ]);
   assert.deepEqual(
-    rows(`SELECT module_role, module_contract, is_live, treasury, started, opened FROM manager.module_launches WHERE dao_id = 'CTOK1' ORDER BY module_role`),
-    ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'].map((role) => ({
-      module_role: role, module_contract: { auction: 'CAUC1', governor: 'CGOV1', marketplace: 'CMKT1', metadata: 'CMETA1', token: 'CTOK1', treasury: 'CTRE1' }[role],
+    rows(`SELECT module_role, module_contract, is_live, treasury, started, opened FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role <> 'module' ORDER BY module_role`),
+    ['auction', 'claims', 'governor', 'marketplace', 'metadata', 'token', 'treasury'].map((role) => ({
+      module_role: role, module_contract: { auction: 'CAUC1', claims: 'CCLM1', governor: 'CGOV1', marketplace: 'CMKT1', metadata: 'CMETA1', token: 'CTOK1', treasury: 'CTRE1' }[role],
       is_live: true, treasury: 'CTRE1', started: role === 'auction' ? false : null, opened: role === 'marketplace' ? true : null
     }))
   );
-  assert.deepEqual(one(`SELECT grants FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).grants, [{ module: 'CMINTER', allowance: 4294967295 }]);
+  assert.deepEqual(one(`SELECT grants FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).grants, [], 'no auction launched, no grant');
+  assert.deepEqual(
+    rows(`SELECT dao_id, claim_minter, list_id, deadline, launch_auction, launch_marketplace, outcome FROM manager.assurance_drives`).map((r) => ({ ...r, list_id: Number(r.list_id), deadline: Number(r.deadline) })),
+    [{ dao_id: 'CTOK2', claim_minter: 'CCLM2', list_id: 0, deadline: 9000, launch_auction: false, launch_marketplace: true, outcome: 'released' }]
+  );
   assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_launches WHERE dao_id = 'CTOK2' AND is_live`).n, 0);
 
   const impls = rows(`SELECT wasm_hash, name, published_ledger, revoked, revoked_ledger FROM manager.implementations ORDER BY wasm_hash`);
@@ -502,40 +601,81 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
     { wasm_hash: 'b20', name: 'Auction', published_ledger: 117, revoked: false, revoked_ledger: null },
     { wasm_hash: 'bb', name: 'auction', published_ledger: 6, revoked: true, revoked_ledger: 9 }
   ]);
-  const settings = one(`SELECT admin, platform_minter, pending_admin, factory_paused FROM manager.settings`);
-  assert.deepEqual(settings, { admin: 'GADMIN2', platform_minter: 'CMINTER', pending_admin: null, factory_paused: true }, 'the latest factory event wins');
+  const settings = one(`SELECT admin, pending_admin, factory_paused FROM manager.settings`);
+  assert.deepEqual(settings, { admin: 'GADMIN2', pending_admin: null, factory_paused: true }, 'the latest factory event wins');
 });
 
-test('token: ownership, members, voting power, authorities and approvals', { skip }, () => {
+test('token: ownership, members, voting power, allowances, switches and approvals', { skip }, () => {
   const inventory = rows(`SELECT token_id, owner FROM token.inventory WHERE dao_id = 'CTOK1' ORDER BY token_id`);
-  assert.equal(inventory.length, 6, 'a mint is counted once although a minter event accompanies it');
-  assert.deepEqual(inventory.map((r) => r.owner), ['GBOB', 'CTRE1', 'GALICE', 'GALICE', 'GCAROL', 'GALICE']);
-  assert.equal(one(`SELECT count(*)::int AS n FROM token.transfers WHERE transfer_type = 'transfer'`).n, 3);
+  assert.equal(inventory.length, 9, 'a mint is counted once although a minter event accompanies it');
+  assert.deepEqual(inventory.map((r) => [Number(r.token_id), r.owner]), [
+    [1, 'GBOB'], [2, 'CTRE1'], [3, 'GALICE'], [4, 'GALICE'], [5, 'GERIN'], [6, 'GBOB'], [20, 'CMKT1'], [21, 'GBUYER'], [22, 'CTRE1']
+  ]);
+  assert.equal(one(`SELECT count(*)::int AS n FROM token.transfers WHERE transfer_type = 'transfer'`).n, 7);
 
   const members = rows(`SELECT address, owned_token_count, voting_power, delegated_to, last_activity_ledger FROM token.members ORDER BY address`);
   assert.deepEqual(members, [
-    { address: 'CTRE1', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 122 },
-    { address: 'GALICE', owned_token_count: 3, voting_power: 3, delegated_to: null, last_activity_ledger: 120 },
-    { address: 'GBOB', owned_token_count: 1, voting_power: 1, delegated_to: 'GBOB', last_activity_ledger: 121 },
-    { address: 'GCAROL', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 124 },
-    { address: 'GDAVE', owned_token_count: 0, voting_power: 12, delegated_to: null, last_activity_ledger: null }
+    { address: 'CMKT1', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 180 },
+    { address: 'CTRE1', owned_token_count: 2, voting_power: 0, delegated_to: null, last_activity_ledger: 189 },
+    { address: 'GALICE', owned_token_count: 2, voting_power: 2, delegated_to: null, last_activity_ledger: 120 },
+    { address: 'GBOB', owned_token_count: 2, voting_power: 2, delegated_to: 'GBOB', last_activity_ledger: 231 },
+    { address: 'GBUYER', owned_token_count: 1, voting_power: 1, delegated_to: null, last_activity_ledger: 181 },
+    { address: 'GDAVE', owned_token_count: 0, voting_power: 12, delegated_to: null, last_activity_ledger: null },
+    { address: 'GERIN', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 242 }
   ]);
+  // The Treasury's tokens and the Marketplace's pool stock carry no votes.
   assert.deepEqual(
     one(`SELECT minted_supply, system_held_supply, voting_supply FROM token.supply WHERE dao_id = 'CTOK1'`),
-    { minted_supply: 6, system_held_supply: 1, voting_supply: 5 }
+    { minted_supply: 9, system_held_supply: 3, voting_supply: 6 }
   );
   assert.deepEqual(
     one(`SELECT minted_supply, system_held_supply, voting_supply FROM token.supply WHERE dao_id = 'CTOK2'`),
     { minted_supply: 0, system_held_supply: 0, voting_supply: 0 }
   );
-  assert.deepEqual(rows(`SELECT authority, enabled, changed_by FROM token.mint_authorities`), [{ authority: 'CMINTER', enabled: true, changed_by: 'CMANAGER' }]);
-  assert.deepEqual(rows(`SELECT module, allowance FROM token.mint_allowances`), [{ module: 'CMINTER', allowance: 4294967295 }]);
-  assert.deepEqual(rows(`SELECT kind, module, non_voting FROM token.modules WHERE dao_id = 'CTOK1'`), [{ kind: 'claims', module: 'CMINTER', non_voting: false }]);
+  assert.deepEqual(rows(`SELECT authority, enabled, changed_by FROM token.mint_authorities`), [{ authority: 'CCLM1', enabled: true, changed_by: 'CTRE1' }]);
+  assert.deepEqual(rows(`SELECT module, allowance FROM token.mint_allowances`), [{ module: 'CCLM1', allowance: 10 }]);
+  assert.deepEqual(rows(`SELECT kind, module, non_voting FROM token.modules WHERE dao_id = 'CTOK1' ORDER BY kind`), [
+    { kind: 'auction', module: 'CAUC1', non_voting: true },
+    { kind: 'claims', module: 'CCLM1', non_voting: false },
+    { kind: 'marketplace', module: 'CMKT1', non_voting: true }
+  ], 'the unregistered vault is gone');
   // Token 4's approval was cleared (live_until_ledger 0); token 5 moved after it was approved.
   assert.deepEqual(rows(`SELECT token_id, owner, approved, live_until_ledger FROM token.approvals ORDER BY token_id`), [
     { token_id: 3, owner: 'GALICE', approved: 'GOPER', live_until_ledger: 900000 }
   ]);
   assert.deepEqual(rows(`SELECT owner, operator FROM token.operator_approvals`), [{ owner: 'GBOB', operator: 'GOPER' }]);
+
+  // Membership switches: the creation settings overridden by their latest changes.
+  assert.deepEqual(
+    rows(`SELECT dao_id, transfers_locked, members_only_delegation, dao_recovery, last_changed_ledger FROM token.settings ORDER BY dao_id`),
+    [
+      { dao_id: 'CTOK1', transfers_locked: true, members_only_delegation: false, dao_recovery: true, last_changed_ledger: 244 },
+      { dao_id: 'CTOK2', transfers_locked: false, members_only_delegation: false, dao_recovery: false, last_changed_ledger: null },
+      { dao_id: 'CTOK3', transfers_locked: false, members_only_delegation: false, dao_recovery: false, last_changed_ledger: null },
+      { dao_id: 'CTOK4', transfers_locked: false, members_only_delegation: false, dao_recovery: false, last_changed_ledger: null }
+    ]
+  );
+  assert.deepEqual(rows(`SELECT module FROM token.transfer_agents`), [], 'unregistering the vault revoked it as an agent');
+  assert.deepEqual(
+    rows(`SELECT transfer_kind, token_id, from_address, to_address, moved_by FROM token.managed_transfers ORDER BY event_ledger`).map((r) => ({ ...r, token_id: Number(r.token_id) })),
+    [
+      { transfer_kind: 'agent', token_id: 6, from_address: 'GALICE', to_address: 'GBOB', moved_by: 'CVAULT' },
+      { transfer_kind: 'dao', token_id: 5, from_address: 'GCAROL', to_address: 'GERIN', moved_by: 'CTRE1' }
+    ]
+  );
+  // The delegate picker: custody holders (the Treasury, non-voting modules) are never members.
+  assert.deepEqual(
+    rows(`SELECT address, voting_power, delegator_count, custody, is_member FROM token.delegates WHERE dao_id = 'CTOK1' ORDER BY address`),
+    [
+      { address: 'CMKT1', voting_power: 0, delegator_count: 0, custody: true, is_member: false },
+      { address: 'CTRE1', voting_power: 0, delegator_count: 0, custody: true, is_member: false },
+      { address: 'GALICE', voting_power: 2, delegator_count: 0, custody: false, is_member: true },
+      { address: 'GBOB', voting_power: 2, delegator_count: 0, custody: false, is_member: true },
+      { address: 'GBUYER', voting_power: 1, delegator_count: 0, custody: false, is_member: true },
+      { address: 'GDAVE', voting_power: 12, delegator_count: 0, custody: false, is_member: false },
+      { address: 'GERIN', voting_power: 0, delegator_count: 0, custody: false, is_member: true }
+    ]
+  );
 });
 
 test('governance: proposals, votes, state, settings and comments', { skip }, () => {
@@ -618,10 +758,20 @@ test('metadata: seeds', { skip }, () => {
   assert.equal(one(`SELECT to_regclass('metadata.profiles') AS v`).v, null, 'the profile is a column of manager.daos');
 });
 
-test('marketplace: primary listings by listing_id, secondary by token_id, sales', { skip }, () => {
+test('marketplace: pools by pool_id, secondary listings by token_id, sales', { skip }, () => {
   assert.deepEqual(
-    rows(`SELECT listing_id, status, token_id, buyer, payment_asset, closed_transaction_hash FROM marketplace.primary_listings ORDER BY listing_id`).map((r) => [Number(r.listing_id), r.status, r.token_id, r.buyer, r.payment_asset, r.closed_transaction_hash]),
-    [[1, 'purchased', 9, 'GBUYER', 'CXLM', 'tx181-0'], [2, 'cancelled', null, null, 'CXLM', 'tx188-0'], [3, 'expired', null, null, 'CXLM', 'tx189-0'], [4, 'open', null, null, 'CXLM', null]]
+    rows(`SELECT pool_id, price, asset, size, stocked, sold, swept, in_stock, status, released FROM marketplace.pools ORDER BY pool_id`)
+      .map((r) => [Number(r.pool_id), Number(r.price), r.asset, r.size, r.stocked, r.sold, r.swept, r.in_stock, r.status, r.released]),
+    [
+      [0, 100, 'CXLM', 3, 3, 1, 1, 1, 'closed', 0],
+      [1, 100, 'CXLM', 5, 0, 0, 0, 0, 'closed', 5],
+      [2, 100, 'CXLM', 2, 0, 0, 0, 0, 'open', null]
+    ]
+  );
+  assert.deepEqual(
+    rows(`SELECT pool_id, token_id FROM marketplace.pool_stock ORDER BY token_id`).map((r) => [Number(r.pool_id), Number(r.token_id)]),
+    [[0, 20]],
+    'the sold token went to its buyer and the swept one to the Treasury'
   );
   assert.deepEqual(
     rows(`SELECT token_id, status, buyer, seller, payment_asset, closed_transaction_hash FROM marketplace.secondary_listings ORDER BY token_id`),
@@ -632,14 +782,11 @@ test('marketplace: primary listings by listing_id, secondary by token_id, sales'
     ]
   );
   assert.deepEqual(
-    rows(`SELECT sale_type, listing_id, token_id, buyer, seller, price, fee FROM marketplace.sales ORDER BY event_ledger`).map((r) => [r.sale_type, r.listing_id === null ? null : Number(r.listing_id), r.token_id, r.buyer, r.seller, Number(r.price), r.fee === null ? null : Number(r.fee)]),
-    [['primary', 1, 9, 'GBUYER', null, 100, null], ['secondary', null, 12, 'GBUYER', 'GSELLER', 100, 2]]
+    rows(`SELECT sale_type, pool_id, token_id, buyer, seller, price, fee, payment_asset FROM marketplace.sales ORDER BY event_ledger`)
+      .map((r) => [r.sale_type, r.pool_id === null ? null : Number(r.pool_id), r.token_id, r.buyer, r.seller, Number(r.price), r.fee === null ? null : Number(r.fee), r.payment_asset]),
+    [['pool', 0, 21, 'GBUYER', null, 100, null, 'CXLM'], ['secondary', null, 12, 'GBUYER', 'GSELLER', 100, 2, 'CXLM']]
   );
-  assert.deepEqual(
-    rows(`SELECT listing_id, author, body FROM marketplace.primary_listing_comments`).map((r) => [Number(r.listing_id), r.author, r.body]),
-    [[1, 'GBUYER', 'Got one!']],
-    'a comment outlives its (purchased) listing'
-  );
+  assert.equal(one(`SELECT to_regclass('marketplace.primary_listings') AS v`).v, null, 'primary listings are gone');
   assert.deepEqual(
     rows(`SELECT token_id, author, body FROM marketplace.listing_comments`).map((r) => [Number(r.token_id), r.author, r.body]),
     [[11, 'GBUYER', 'Would you take 80?']]
@@ -649,15 +796,36 @@ test('marketplace: primary listings by listing_id, secondary by token_id, sales'
     ['governance.proposal_commented', 'governance', 'GBOB'],
     ['governance.proposal_commented', 'governance', 'GALICE'],
     ['governance.proposal_commented', 'governance', 'GCAROL'],
-    ['marketplace.primary_listing_commented', 'public', 'GBUYER'],
     ['marketplace.listing_commented', 'public', 'GBUYER']
   ]);
 });
 
+test('claims: lists, claims and claimers per ClaimMinter, including a failed assurance drive', { skip }, () => {
+  assert.deepEqual(
+    rows(`SELECT dao_id, contract_id, list_id, price, total, is_assurance, threshold_claimers, deadline, claimed, claimers, paid, escrowed, released, refunded FROM claims.lists ORDER BY dao_id, list_id`)
+      .map((r) => ({ ...r, list_id: Number(r.list_id), price: Number(r.price), paid: Number(r.paid), escrowed: Number(r.escrowed), refunded: Number(r.refunded) })),
+    [
+      { dao_id: 'CTOK1', contract_id: 'CCLM1', list_id: 0, price: 50, total: 10, is_assurance: false, threshold_claimers: null, deadline: null, claimed: 4, claimers: 2, paid: 200, escrowed: 0, released: null, refunded: 0 },
+      { dao_id: 'CTOK1', contract_id: 'CCLM1', list_id: 1, price: 0, total: 5, is_assurance: false, threshold_claimers: null, deadline: null, claimed: 0, claimers: 0, paid: 0, escrowed: 0, released: null, refunded: 0 },
+      { dao_id: 'CTOK2', contract_id: 'CCLM2', list_id: 0, price: 25, total: 4, is_assurance: true, threshold_claimers: 3, deadline: 9000, claimed: 1, claimers: 1, paid: 25, escrowed: 25, released: null, refunded: 25 }
+    ]
+  );
+  assert.deepEqual(
+    rows(`SELECT claimer, amount, first_token_id, paid, escrowed, claimer_total FROM claims.claims WHERE dao_id = 'CTOK1' ORDER BY event_ledger, event_index`)
+      .map((r) => [r.claimer, Number(r.amount), Number(r.first_token_id), Number(r.paid), r.escrowed, Number(r.claimer_total)]),
+    [['GALICE', 2, 30, 100, false, 2], ['GALICE', 1, 33, 50, false, 3], ['GBOB', 1, 32, 50, false, 1]]
+  );
+  assert.deepEqual(
+    rows(`SELECT dao_id, claimer, claimed, paid, escrowed, refunded FROM claims.claimers ORDER BY dao_id, claimer`)
+      .map((r) => [r.dao_id, r.claimer, Number(r.claimed), Number(r.paid), Number(r.escrowed), Number(r.refunded)]),
+    [['CTOK1', 'GALICE', 3, 150, 0, 0], ['CTOK1', 'GBOB', 1, 50, 0, 0], ['CTOK2', 'GCAROL', 1, 25, 25, 25]]
+  );
+});
+
 test('module versions: the code each module runs, mirroring version()', { skip }, () => {
   assert.deepEqual(
-    one(`SELECT token_wasm_hash, governor_wasm_hash, auction_wasm_hash, treasury_wasm_hash, metadata_wasm_hash, marketplace_wasm_hash FROM manager.dao_registry WHERE dao_id = 'CTOK1'`),
-    { token_wasm_hash: 'a01', metadata_wasm_hash: 'a11', auction_wasm_hash: 'a21', governor_wasm_hash: 'a31', treasury_wasm_hash: 'a41', marketplace_wasm_hash: 'a51' }
+    one(`SELECT token_wasm_hash, governor_wasm_hash, auction_wasm_hash, treasury_wasm_hash, metadata_wasm_hash, marketplace_wasm_hash, claims_wasm_hash FROM manager.dao_registry WHERE dao_id = 'CTOK1'`),
+    { token_wasm_hash: 'a01', metadata_wasm_hash: 'a11', auction_wasm_hash: 'a21', governor_wasm_hash: 'a31', treasury_wasm_hash: 'a41', marketplace_wasm_hash: 'a51', claims_wasm_hash: 'a61' }
   );
   assert.deepEqual(
     one(`SELECT current_hash, current_version, storage_version, upgrade_count, last_upgraded_from_hash, last_upgraded_ledger, last_upgraded_tx_hash FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'auction'`),
@@ -669,28 +837,54 @@ test('module versions: the code each module runs, mirroring version()', { skip }
   );
   assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'governor'`).current_version, '0.1.0');
   assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'treasury'`).current_version, null, 'an unregistered hash has no version (on chain: ImplementationNotFound)');
-  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_versions WHERE dao_id = 'CTOK2'`).n, 6);
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_versions WHERE dao_id = 'CTOK2'`).n, 7, 'the core four and three modules');
+  assert.deepEqual(
+    one(`SELECT current_hash, current_version, storage_version, upgrade_count FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'claims'`),
+    { current_hash: 'c72', current_version: null, storage_version: 2, upgrade_count: 1 },
+    'the ClaimMinter upgrades as a DAO module'
+  );
+  assert.deepEqual(
+    one(`SELECT current_hash, registered FROM manager.module_versions WHERE module_contract = 'CVAULT'`),
+    { current_hash: null, registered: false }
+  );
 });
 
 test('activity feed: tenant resolution, platform fan-out and kinds', { skip }, () => {
   const feed = (where) => rows(`SELECT * FROM app.activity_feed WHERE ${where} ORDER BY ledger_sequence, event_index`);
-  const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed'];
+  const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed', 'slug_released', 'module_created', 'assurance_opened'];
   const platform = ['upgrade_delay_changed', 'manager_upgraded', 'implementation_revoked'];
   assert.ok(
     feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) || platform.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
     'per-DAO manager events resolve to their DAO, platform ones to every DAO; deployment-wide ones have none'
   );
   assert.deepEqual(rows(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'dao_launched' ORDER BY ledger_sequence`).map((r) => r.dao_id), ['CTOK1', 'CTOK4'], 'launch rows belong to their DAO feed');
+  assert.deepEqual(
+    rows(`SELECT event_name, dao_id FROM app.activity_feed WHERE event_name IN ('assurance_opened', 'slug_released', 'module_created') ORDER BY ledger_sequence`).map((r) => [r.event_name, r.dao_id]),
+    [['assurance_opened', 'CTOK2'], ['module_created', 'CTOK3'], ['slug_released', 'CTOK2']]
+  );
   assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).dao_id, null, 'deployment-wide Manager events have no DAO');
   assert.ok(feed(`contract_role = 'governor'`).every((r) => r.dao_id === 'CTOK1'));
-  assert.ok(feed(`contract_role = 'minter' AND event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')`).every((r) => r.dao_id === 'CTOK1'));
-  assert.equal(feed(`contract_role = 'minter' AND event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')`).length, 4, 'the foreign-token claim is not visible to any DAO');
-  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'minter'`).n, 8);
+  // ClaimMinter rows resolve through the registry, each to its own DAO (DAO 2's while still pending).
+  assert.deepEqual(
+    rows(`SELECT contract_id, dao_id, count(*)::int AS n FROM app.activity_feed WHERE contract_role = 'claims' GROUP BY contract_id, dao_id ORDER BY contract_id`),
+    [{ contract_id: 'CCLM1', dao_id: 'CTOK1', n: 9 }, { contract_id: 'CCLM2', dao_id: 'CTOK2', n: 3 }]
+  );
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'claims'`).n, 12);
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed WHERE dao_id IS NULL AND contract_role = 'claims'`).n, 0, 'no ClaimMinter row is left without a DAO');
+
+  // An external module's events belong to its DAO only while it is registered.
+  assert.deepEqual(
+    rows(`SELECT event_name, dao_id, kind, title, visibility FROM app.activity_feed WHERE contract_id = 'CVAULT'`),
+    [{ event_name: 'vault_opened', dao_id: 'CTOK1', kind: 'module.vault_opened', title: 'Module event', visibility: 'admin' }],
+    'vault_closed came after the unregistration'
+  );
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_id = 'CVAULT'`).n, 2, 'the append-only stream still carries both');
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_events WHERE contract_id = 'CVAULT'`).n, 1);
 
   // Platform events: one row per DAO that existed at the time (CTOK3 came later), unique activity ids.
   assert.deepEqual(
-    rows(`SELECT dao_id, count(*)::int AS n FROM app.activity_feed WHERE event_name IN ('upgrade_delay_changed', 'manager_upgraded') OR (contract_role = 'minter' AND event_name IN ('upgraded', 'migrated')) GROUP BY dao_id ORDER BY dao_id`),
-    [{ dao_id: 'CTOK1', n: 5 }, { dao_id: 'CTOK2', n: 5 }]
+    rows(`SELECT dao_id, count(*)::int AS n FROM app.activity_feed WHERE event_name IN ('upgrade_delay_changed', 'manager_upgraded') GROUP BY dao_id ORDER BY dao_id`),
+    [{ dao_id: 'CTOK1', n: 2 }, { dao_id: 'CTOK2', n: 2 }]
   );
   assert.deepEqual(
     rows(`SELECT dao_id, kind, visibility FROM app.activity_feed WHERE event_name = 'implementation_revoked' ORDER BY dao_id`),
@@ -700,34 +894,45 @@ test('activity feed: tenant resolution, platform fan-out and kinds', { skip }, (
   assert.equal(one(`SELECT (count(*) = count(DISTINCT activity_id)) AS unique_ids FROM app.activity_feed`).unique_ids, true);
   assert.deepEqual(
     rows(`SELECT DISTINCT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgrade_delay_changed' ORDER BY kind`),
-    [
-      { kind: 'manager.upgrade_delay_changed', visibility: 'public', summary: 'Upgrade notice shortened from 720 to 120 ledgers, in force from ledger 880' },
-      { kind: 'minter.upgrade_delay_changed', visibility: 'public', summary: 'Upgrade notice lengthened from 120 to 720 ledgers' }
-    ]
+    [{ kind: 'manager.upgrade_delay_changed', visibility: 'public', summary: 'Upgrade notice shortened from 720 to 120 ledgers, in force from ledger 880' }]
   );
   assert.deepEqual(
     one(`SELECT DISTINCT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'manager_upgraded'`),
     { kind: 'manager.upgraded', visibility: 'public', summary: 'Manager upgraded to version 0.2.0 (was 0.1.0)' }
   );
-  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed WHERE dao_id IS NULL AND contract_role = 'minter'`).n, 0, 'no Minter row is left without a DAO');
 
-  const kinds = rows(`SELECT kind, count(*)::int AS n FROM app.activity_feed WHERE contract_role = 'minter' GROUP BY kind ORDER BY kind`);
-  assert.deepEqual(kinds.map((k) => k.kind), ['minter.batch_mint', 'minter.merkle_claim', 'minter.merkle_root_set', 'minter.migrated', 'minter.upgrade_delay_changed', 'minter.upgraded']);
-  const merkle = one(`SELECT actor, amount, token_id FROM app.activity_feed WHERE kind = 'minter.merkle_claim'`);
-  assert.deepEqual([merkle.actor, merkle.amount, merkle.token_id], ['GALICE', '3', 'CTOK1']);
-  assert.equal(one(`SELECT amount FROM app.activity_feed WHERE kind = 'minter.batch_mint'`).amount, '8');
+  const kinds = rows(`SELECT DISTINCT kind FROM app.activity_feed WHERE contract_role = 'claims' ORDER BY kind`);
+  assert.deepEqual(kinds.map((k) => k.kind), ['claims.admin_changed', 'claims.claimed', 'claims.launched', 'claims.list_opened', 'claims.migrated', 'claims.refunded', 'claims.upgraded']);
+  const claim = rows(`SELECT actor, amount, token_id, visibility FROM app.activity_feed WHERE kind = 'claims.claimed' AND dao_id = 'CTOK1' ORDER BY ledger_sequence, event_index`)[0];
+  assert.deepEqual([claim.actor, claim.amount, claim.token_id, claim.visibility], ['GALICE', '100', '30', 'public']);
   const upgradedFeed = one(`SELECT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgraded' AND contract_role = 'auction'`);
   assert.deepEqual(upgradedFeed, { kind: 'auction.upgraded', visibility: 'public', summary: 'Contract upgraded to version 0.2.0 (a20 -> b20)' });
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'migrated' AND contract_role = 'auction'`).kind, 'auction.migrated');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).kind, 'manager.admin_changed');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'token'`).kind, 'token.admin_changed');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_proposal_cancelled'`).kind, 'manager.admin_proposal_cancelled');
-  assert.equal(one(`SELECT visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`).visibility, 'admin', 'the launch row tells the story; the slug claim is bookkeeping');
+  assert.deepEqual(rows(`SELECT DISTINCT visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`), [{ visibility: 'admin' }], 'the launch row tells the story; the slug claim is bookkeeping');
   const renamed = rows(`SELECT dao_id, visibility, summary FROM app.activity_feed WHERE event_name = 'slug_changed' ORDER BY event_index`);
   assert.deepEqual(renamed.map((r) => [r.dao_id, r.visibility]), [['CTOK1', 'public'], ['CTOK1', 'public']]);
   assert.equal(renamed[1].summary, 'Link changed to /dao/alpha-club (was /dao/dao-uno)');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'proposal_cancelled'`).kind, 'governance.proposal_cancelled');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'listing_purchased'`).kind, 'marketplace.listing_purchased');
+  assert.deepEqual(
+    rows(`SELECT kind, visibility FROM app.activity_feed WHERE contract_role = 'marketplace' AND kind LIKE 'marketplace.pool_%' ORDER BY ledger_sequence, event_index`).map((r) => [r.kind, r.visibility]),
+    [
+      ['marketplace.pool_opened', 'public'], ['marketplace.pool_restocked', 'admin'], ['marketplace.pool_purchased', 'public'],
+      ['marketplace.pool_opened', 'public'], ['marketplace.pool_closed', 'public'], ['marketplace.pool_closed', 'public'],
+      ['marketplace.pool_swept', 'admin'], ['marketplace.pool_opened', 'public']
+    ]
+  );
+  assert.deepEqual(
+    rows(`SELECT kind, visibility, actor FROM app.activity_feed WHERE dao_id = 'CTOK1' AND kind IN ('token.transfers_lock_changed', 'token.dao_recovery_changed', 'token.dao_transfer', 'token.agent_transfer') ORDER BY ledger_sequence, event_index`)
+      .map((r) => [r.kind, r.visibility, r.actor]),
+    [
+      ['token.agent_transfer', 'admin', 'GALICE'], ['token.transfers_lock_changed', 'public', 'CTRE1'],
+      ['token.dao_recovery_changed', 'public', 'CTRE1'], ['token.dao_transfer', 'public', 'CTRE1']
+    ]
+  );
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'unpaused' AND dao_id = 'CTOK1'`).kind, 'auction.unpaused');
   assert.deepEqual(rows(`SELECT DISTINCT kind FROM app.activity_feed WHERE kind LIKE 'contract.%'`), [], 'every event has a module- or contract-specific kind');
   // Feed rows keep their position inside a ledger (filled by the trigger from the id).

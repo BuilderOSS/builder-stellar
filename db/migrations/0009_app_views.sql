@@ -7,24 +7,22 @@
 -- =============================================================================
 
 -- dao_id resolution, one branch per source so a per-DAO filter pushes down:
---   module events      by contract address (manager.event_identity)
---   Minter claims      by the DAO token in the token_id column
+--   DAO contracts      by contract address inside its registration window
+--                      (manager.event_identity: the core four, every registered
+--                      module, the ClaimMinter and external modules included)
 --   per-DAO Manager    dao_created, dao_launched, slug_claimed, pending_slug_updated,
---   events             slug_changed, by their token_address topic
---   platform events    the upgrade notice, the Manager's and the shared Minter's own
---                      upgrades and migrations: one row for every DAO that existed
---                      when the event happened (the Minter mints for all of them,
---                      the Manager approves the Minter's upgrades); a revoked
+--   events             slug_changed, slug_released, module_created, assurance_opened,
+--                      by their token_address topic
+--   platform events    the upgrade notice and the Manager's own upgrades: one row
+--                      for every DAO that existed when the event happened; a revoked
 --                      implementation: one row for every DAO running that hash
 --   other Manager      no DAO (dao_id NULL): registry and admin bookkeeping
--- Minter claims for tokens that are not DAOs of this deployment are dropped.
 -- Fanned-out rows suffix activity_id with the DAO so it stays unique.
 CREATE VIEW app.activity_feed AS
 WITH platform AS (
   SELECT e.*
   FROM app.activity_feed_events e
-  WHERE (e.contract_role = 'manager' AND e.event_name IN ('upgrade_delay_changed', 'manager_upgraded'))
-     OR (e.contract_role = 'minter' AND e.event_name IN ('upgraded', 'migrated', 'upgrade_delay_changed'))
+  WHERE e.contract_role = 'manager' AND e.event_name IN ('upgrade_delay_changed', 'manager_upgraded')
 )
 SELECT
   e.activity_id, e.deployment_id, i.dao_id, e.contract_id, e.contract_role, e.event_name, e.topics, e.args,
@@ -33,15 +31,8 @@ SELECT
 FROM app.activity_feed_events e
 JOIN manager.event_identity i
   ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id AND i.module_role = e.contract_role
-UNION ALL
-SELECT
-  e.activity_id, e.deployment_id, r.dao_id, e.contract_id, e.contract_role, e.event_name, e.topics, e.args,
-  e.kind, e.title, e.summary, e.actor, e.addresses, e.proposal_id, e.token_id, e.amount, e.visibility,
-  e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index, e.ledger_closed_at, e.transaction_hash
-FROM app.activity_feed_events e
-JOIN manager.dao_registry r ON r.deployment_id = e.deployment_id AND r.token_address = e.token_id
-WHERE e.contract_role = 'minter'
-  AND e.event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')
+ AND chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) >= i.from_pos
+ AND (i.until_pos IS NULL OR chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) < i.until_pos)
 UNION ALL
 SELECT
   e.activity_id, e.deployment_id, r.dao_id, e.contract_id, e.contract_role, e.event_name, e.topics, e.args,
@@ -51,7 +42,8 @@ FROM app.activity_feed_events e
 JOIN manager.dao_registry r
   ON r.deployment_id = e.deployment_id AND r.token_address = e.topics::jsonb ->> 'token_address'
 WHERE e.contract_role = 'manager'
-  AND e.event_name IN ('dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed')
+  AND e.event_name IN ('dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed',
+    'slug_released', 'module_created', 'assurance_opened')
 UNION ALL
 SELECT
   e.activity_id, e.deployment_id, NULL::text, e.contract_id, e.contract_role, e.event_name, e.topics, e.args,
@@ -60,7 +52,7 @@ SELECT
 FROM app.activity_feed_events e
 WHERE e.contract_role = 'manager'
   AND e.event_name NOT IN ('dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed',
-    'upgrade_delay_changed', 'manager_upgraded', 'implementation_revoked')
+    'slug_released', 'module_created', 'assurance_opened', 'upgrade_delay_changed', 'manager_upgraded', 'implementation_revoked')
 UNION ALL
 SELECT
   p.activity_id || ':' || d.dao_id, p.deployment_id, d.dao_id, p.contract_id, p.contract_role, p.event_name, p.topics, p.args,

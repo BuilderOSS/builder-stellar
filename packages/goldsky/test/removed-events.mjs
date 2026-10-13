@@ -18,5 +18,14 @@ export const REMOVED_EVENTS = [
   'AllowlistClaimEvent',        // Minter is merkle-only
   'AllowlistSetEvent',          // ditto
   // Membership models (docs/designs/membership-models.md): mint allowances replace mint authority.
-  'MintAuthorityChanged'        // replaced by MintAllowanceChanged
+  'MintAuthorityChanged',       // replaced by MintAllowanceChanged
+  'PlatformMinterSet',          // the shared Minter is retired: each DAO has its own ClaimMinter
+  'MerkleClaimEvent',           // ClaimMinter Claimed
+  'MintBatchEvent',             // ClaimMinter has no admin batch mint (founders mint in Setup)
+  'MerkleRootSetEvent',         // ClaimMinter ListOpened
+  'PrimaryListingCreated',      // quick-buy pools replace primary listings (PoolOpened)
+  'PrimaryListingPurchased',    // PoolPurchased
+  'PrimaryListingCancelled',    // PoolClosed
+  'PrimaryListingExpired',      // ditto
+  'PrimaryListingCommented'     // pools carry no comments
 ];

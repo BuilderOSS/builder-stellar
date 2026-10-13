@@ -20,6 +20,7 @@ CREATE SCHEMA auction;
 CREATE SCHEMA metadata;
 CREATE SCHEMA treasury;
 CREATE SCHEMA marketplace;
+CREATE SCHEMA claims;
 CREATE SCHEMA app;
 
 -- -----------------------------------------------------------------------------
@@ -231,10 +232,6 @@ CREATE INDEX idx_activity_feed_contract_order
     transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);
 CREATE INDEX idx_activity_feed_role_kind
   ON app.activity_feed_events (deployment_id, contract_role, kind, ledger_sequence DESC, activity_id DESC);
--- Minter events are shared by every DAO; token_id is the only tenant key.
-CREATE INDEX idx_activity_feed_minter_tenant
-  ON app.activity_feed_events (deployment_id, token_id, kind, ledger_sequence DESC, activity_id DESC)
-  WHERE contract_role = 'minter';
 
 -- -----------------------------------------------------------------------------
 -- Triggers

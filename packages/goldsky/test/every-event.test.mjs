@@ -5,6 +5,7 @@
  * decoded (every topic lands under its name), classified (a module-specific kind
  * and a title, never the contract.* / module.* fallback) and summarised without
  * holes. It replaces eyeballing the kind, title and summary maps event by event.
+ * An external module's own events take the positional path, checked once at the end.
  */
 import test from 'node:test';
 import { loadInvoke } from './load-script.mjs';
@@ -34,7 +35,8 @@ const ADDRESS_FIELDS = new Set([
   'recipient', 'deployer', 'launch_admin', 'approver', 'owner', 'operator', 'delegator', 'delegate',
   'from_delegate', 'to_delegate', 'changed_by', 'cancelled_by', 'governor', 'target', 'token', 'token_address',
   'current_admin', 'proposed_admin', 'cancelled_admin', 'old_admin', 'new_admin', 'from', 'to', 'winner',
-  'payment_asset', 'payment_token', 'token_contract', 'treasury_contract'
+  'payment_asset', 'payment_token', 'token_contract', 'treasury_contract',
+  'module', 'address', 'agent', 'claimer', 'claim_minter', 'asset'
 ]);
 const BYTES_FIELDS = new Set(['proposal_id', 'wasm_hash', 'from_hash', 'to_hash', 'root', 'hash']);
 const STRING_FIELDS = new Set([
@@ -44,13 +46,12 @@ const STRING_FIELDS = new Set([
 
 /** A plausible XDR-JSON value for a field, from its name and the emitting role. */
 function valueFor(field, role, position) {
-  if (field === 'token_id' && role === 'minter') return { address: 'CTOKEN' };
   if (ADDRESS_FIELDS.has(field)) return { address: `G${field.toUpperCase().replace(/_/g, '')}` };
   if (BYTES_FIELDS.has(field)) return { bytes: 'abcdef0123456789' };
   if (STRING_FIELDS.has(field)) return { string: `${field}-value` };
   if (/^(modules|wasm_hashes)$/.test(field)) return { map: [{ key: { symbol: 'token' }, val: { address: 'CTOKEN' } }] };
   if (/^(minters|targets|functions|args|selections|recipients|amounts)$/.test(field)) return { vec: [] };
-  if (/^(started|opened|enabled|old_enabled|launch_auction|launch_marketplace|is_live)$/.test(field)) return { bool: true };
+  if (/^(started|opened|enabled|old_enabled|launch_auction|launch_marketplace|is_live|locked|non_voting|escrowed)$/.test(field)) return { bool: true };
   if (/amount|price|weight|votes|fee|quorum|threshold|increment/.test(field)) return { i128: String(100 + position) };
   return { u32: 1 + position };
 }
@@ -121,3 +122,40 @@ for (const c of cases) {
     else if (fields.includes('admin')) assert.equal(row.actor, value('admin'), `${c.name}: admin is the actor`);
   });
 }
+
+test('an external module event is decoded positionally and shown as a module event', () => {
+  const decoded = decode({
+    event_id: 'manager:CMANAGER:2-tx-op-0-event-0',
+    deployment_id: 'manager:CMANAGER',
+    contract_id: 'CEXTERNAL',
+    contract_role: 'module',
+    topics: JSON.stringify([{ symbol: 'seat_assigned' }, { address: 'GMEMBER' }, { u32: 7 }]),
+    data: JSON.stringify({ vec: [{ i128: '5' }, { bool: true }] }),
+    transaction_hash: 'tx',
+    transaction_successful: true,
+    ledger_sequence: 2,
+    transaction_index: 0,
+    operation_index: null,
+    event_index: null,
+    ledger_closed_at: '1791475282000'
+  });
+  assert.equal(decoded.event_name, 'seat_assigned');
+  assert.equal(decoded.contract_role, 'module');
+  assert.deepEqual(JSON.parse(decoded.topics), { topic_0: 'GMEMBER', topic_1: 7 });
+  assert.deepEqual(JSON.parse(decoded.args), { arg_0: '5', arg_1: true });
+  const row = feed(decoded);
+  assert.equal(row.kind, 'module.seat_assigned');
+  assert.equal(row.title, 'Module event');
+  assert.equal(row.visibility, 'admin');
+  assert.equal(row.summary, 'Module CEXTERNAL emitted seat_assigned');
+
+  // A module's event that shares a known name is still the module's, not the Token's.
+  const transfer = feed(decode({ ...decoded, event_id: 'manager:CMANAGER:2-tx-op-0-event-1', contract_role: 'module',
+    topics: JSON.stringify([{ symbol: 'transfer' }, { address: 'GA' }, { address: 'GB' }]), data: JSON.stringify({ u32: 1 }) }));
+  assert.equal(transfer.kind, 'module.transfer');
+  // Its upgrades keep the common kinds under the module role.
+  const upgraded = feed(decode({ ...decoded, event_id: 'manager:CMANAGER:2-tx-op-0-event-2', contract_role: 'module',
+    topics: JSON.stringify([{ symbol: 'upgraded' }, { bytes: 'aa' }, { bytes: 'bb' }]), data: JSON.stringify({ map: [{ key: { symbol: 'version' }, val: { string: '1.0.0' } }] }) }));
+  assert.equal(upgraded.kind, 'module.upgraded');
+  assert.equal(upgraded.title, 'Module upgraded');
+});

@@ -1,3 +1,7 @@
+DROP VIEW IF EXISTS token.delegates;
+DROP VIEW IF EXISTS token.managed_transfers;
+DROP VIEW IF EXISTS token.transfer_agents;
+DROP VIEW IF EXISTS token.settings;
 DROP VIEW IF EXISTS token.operator_approvals;
 DROP VIEW IF EXISTS token.approvals;
 DROP VIEW IF EXISTS token.supply;

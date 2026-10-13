@@ -1,31 +1,50 @@
 -- =============================================================================
--- MANAGER VIEWS: the DAO registry, tenant resolution, launch state, slugs,
--- the implementation registry and the Manager's own settings.
+-- MANAGER VIEWS: the DAO registry, its module registry, tenant resolution,
+-- launch and assurance state, slugs, the implementation registry and the
+-- Manager's own settings.
 --
 -- Manager events (contracts/manager/src/events.rs):
 --   dao_created                 topics token_address, deployer, launch_admin;
---                               data { created_ledger, modules {6 addresses}, wasm_hashes {6 hashes}, slug }
+--                               data { created_ledger, modules {token, metadata, governor, treasury,
+--                               auction?, marketplace?, claims?}, wasm_hashes {same keys}, slug }
 --   dao_launched                topic token_address; data { launched_ledger, modules, launch_auction,
---                               launch_marketplace, minter }
+--                               launch_marketplace, registry [{kind, address, non_voting}] }
+--   module_created              topics token_address, kind; data { n, address }   (create_module)
+--   assurance_opened            topic token_address; data { claim_minter, list_id, deadline,
+--                               launch_auction, launch_marketplace }
 --   pending_slug_updated        topic token_address; data { slug }
---   slug_claimed                topics token_address, slug          (launch_dao)
+--   slug_claimed                topics token_address, slug          (launch_dao, open_assurance)
 --   slug_changed                topics token_address, new_slug; data { old_slug }
+--   slug_released               topics token_address, slug          (a failed assurance drive)
 --   implementation_registered   topic wasm_hash; data { name, version, published_ledger }
 --   implementation_revoked      topic wasm_hash; data { revoked_ledger }
+--   current_implementations_updated   data { token, metadata, auction, governor, treasury, marketplace, claims }
 --   manager_initialized         topic admin; data { version, deployed_ledger }
 --   admin_proposed / admin_proposal_cancelled / admin_changed   topics (current|old)_admin, (proposed|cancelled|new)_admin
---   platform_minter_set         topic minter
 --   factory_paused / factory_unpaused   no fields
 -- Not projected (read from chain, or only a feed row): latest_implementation_set,
--- current_implementations_updated, upgrade_approved, manager_upgraded, upgrade_delay_changed.
+-- upgrade_approved, manager_upgraded, upgrade_delay_changed.
 --
+-- Token events read here: module_registered (topic kind; data address, non_voting)
+-- and module_unregistered (topic kind; data address): the module registry.
 -- Module events read here: <role>_launched (topic treasury; each module's own
--- events.rs) and, from contracts/common, admin_changed (topics old_admin,
--- new_admin), upgraded (topics from_hash, to_hash; data version), migrated
--- (data from_storage_version, to_storage_version).
+-- events.rs; the ClaimMinter's is claim_minter_launched) and, from contracts/common,
+-- admin_changed (topics old_admin, new_admin), upgraded (topics from_hash,
+-- to_hash; data version), migrated (data from_storage_version, to_storage_version).
+--
+-- Roles: the pipeline names a module's events after its registry kind when the
+-- kind is known (auction, marketplace, claims, circle) and `module` otherwise
+-- (external modules, custom_<name>); manager.module_role() is the same rule.
 -- =============================================================================
 
+CREATE FUNCTION manager.module_role(kind text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$ SELECT CASE WHEN kind IN ('auction', 'marketplace', 'claims', 'circle') THEN kind ELSE 'module' END $$;
+
 -- One row per DAO. DaoCreated.slug is only the slug *requested* at creation.
+-- The module columns are what create_dao deployed (NULL for a kind it did not);
+-- manager.daos reports the modules registered now.
 CREATE VIEW manager.dao_registry AS
 SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.deployment_id,
@@ -41,12 +60,14 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.a #>> '{modules,treasury}'     AS treasury_contract,
   e.a #>> '{modules,metadata}'     AS metadata_contract,
   e.a #>> '{modules,marketplace}'  AS marketplace_contract,
+  e.a #>> '{modules,claims}'       AS claims_contract,
   e.a #>> '{wasm_hashes,token}'       AS token_wasm_hash,
   e.a #>> '{wasm_hashes,governor}'    AS governor_wasm_hash,
   e.a #>> '{wasm_hashes,auction}'     AS auction_wasm_hash,
   e.a #>> '{wasm_hashes,treasury}'    AS treasury_wasm_hash,
   e.a #>> '{wasm_hashes,metadata}'    AS metadata_wasm_hash,
   e.a #>> '{wasm_hashes,marketplace}' AS marketplace_wasm_hash,
+  e.a #>> '{wasm_hashes,claims}'      AS claims_wasm_hash,
   e.ledger_sequence                AS created_ledger,
   e.pos                            AS created_pos,
   e.closed_at                      AS created_at,
@@ -57,36 +78,116 @@ WHERE e.contract_role = 'manager'
   AND e.event_name = 'dao_created'
 ORDER BY e.deployment_id, e.topic_0, e.pos, e.event_id;
 
--- One row per DAO module, with the hash it was deployed from.
+-- One row per registration window of a module in a DAO's Token registry:
+-- ModuleRegistered opens it, the next ModuleUnregistered of the same address
+-- closes it. The window starts at the registering transaction, so the module's
+-- constructor events (emitted before its registration in that call) are in it.
+-- created_wasm_hash: what create_dao deployed (DaoCreated.wasm_hashes), else
+-- the Manager's current implementation for the kind when create_module deployed
+-- it (the latest current_implementations_updated before its ModuleCreated),
+-- else NULL (a module deployed outside the Manager).
+CREATE VIEW manager.module_registrations AS
+SELECT
+  rg.deployment_id,
+  r.dao_id,
+  rg.t ->> 'kind' AS kind,
+  manager.module_role(rg.t ->> 'kind') AS module_role,
+  rg.a ->> 'address' AS module_contract,
+  COALESCE((rg.a ->> 'non_voting')::boolean, false) AS non_voting,
+  ARRAY[rg.ledger_sequence, COALESCE(rg.transaction_index, -1), -1, -1]::bigint[] AS from_pos,
+  ur.pos AS until_pos,
+  rg.pos AS registered_pos,
+  rg.ledger_sequence AS registered_ledger,
+  rg.closed_at AS registered_at,
+  rg.transaction_hash AS registered_tx_hash,
+  ur.ledger_sequence AS unregistered_ledger,
+  ur.closed_at AS unregistered_at,
+  COALESCE(
+    CASE rg.a ->> 'address'
+      WHEN r.auction_contract THEN r.auction_wasm_hash
+      WHEN r.marketplace_contract THEN r.marketplace_wasm_hash
+      WHEN r.claims_contract THEN r.claims_wasm_hash
+    END,
+    ci.hash
+  ) AS created_wasm_hash
+FROM chain.events rg
+JOIN manager.dao_registry r
+  ON r.deployment_id = rg.deployment_id AND r.token_contract = rg.contract_id
+LEFT JOIN LATERAL (
+  SELECT x.pos, x.ledger_sequence, x.closed_at FROM chain.events x
+  WHERE x.deployment_id = rg.deployment_id AND x.contract_id = rg.contract_id
+    AND x.contract_role = 'token' AND x.event_name = 'module_unregistered'
+    AND x.a ->> 'address' = rg.a ->> 'address' AND x.pos > rg.pos
+  ORDER BY x.pos, x.event_id LIMIT 1
+) ur ON true
+LEFT JOIN LATERAL (
+  SELECT cu.a ->> (rg.t ->> 'kind') AS hash
+  FROM chain.events mc
+  JOIN LATERAL (
+    SELECT u.a FROM chain.events u
+    WHERE u.deployment_id = mc.deployment_id AND u.contract_role = 'manager'
+      AND u.event_name = 'current_implementations_updated' AND u.pos < mc.pos
+    ORDER BY u.pos DESC, u.event_id DESC LIMIT 1
+  ) cu ON true
+  WHERE mc.deployment_id = rg.deployment_id AND mc.contract_role = 'manager'
+    AND mc.event_name = 'module_created' AND mc.topic_0 = r.dao_id
+    AND mc.a ->> 'address' = rg.a ->> 'address'
+  ORDER BY mc.pos LIMIT 1
+) ci ON true
+WHERE rg.contract_role = 'token'
+  AND rg.event_name = 'module_registered';
+
+-- One row per DAO contract: the core four from DaoCreated (live for good) and
+-- every module ever registered, at its latest registration (`registered` is
+-- false once unregistered). The base of module_launches and module_versions.
 CREATE VIEW manager.dao_modules AS
-SELECT r.deployment_id, r.dao_id, m.module_role, m.module_contract, m.created_wasm_hash
+SELECT r.deployment_id, r.dao_id, m.module_role, m.module_role AS kind, m.module_contract, m.created_wasm_hash,
+  false AS non_voting, true AS registered, r.created_pos AS registered_pos
 FROM manager.dao_registry r
 CROSS JOIN LATERAL (VALUES
-  ('token',       r.token_contract,       r.token_wasm_hash),
-  ('metadata',    r.metadata_contract,    r.metadata_wasm_hash),
-  ('auction',     r.auction_contract,     r.auction_wasm_hash),
-  ('governor',    r.governor_contract,    r.governor_wasm_hash),
-  ('treasury',    r.treasury_contract,    r.treasury_wasm_hash),
-  ('marketplace', r.marketplace_contract, r.marketplace_wasm_hash)
+  ('token',    r.token_contract,    r.token_wasm_hash),
+  ('metadata', r.metadata_contract, r.metadata_wasm_hash),
+  ('governor', r.governor_contract, r.governor_wasm_hash),
+  ('treasury', r.treasury_contract, r.treasury_wasm_hash)
 ) AS m(module_role, module_contract, created_wasm_hash)
-WHERE m.module_contract IS NOT NULL;
+WHERE m.module_contract IS NOT NULL
+UNION ALL
+(SELECT DISTINCT ON (g.deployment_id, g.dao_id, g.module_contract)
+  g.deployment_id, g.dao_id, g.module_role, g.kind, g.module_contract, g.created_wasm_hash,
+  g.non_voting, g.until_pos IS NULL AS registered, g.registered_pos
+FROM manager.module_registrations g
+ORDER BY g.deployment_id, g.dao_id, g.module_contract, g.registered_pos DESC);
 
--- Tenant resolution: module contract -> DAO. The Manager and the shared Minter
--- are not modules (Minter events carry the DAO token as their token_id topic).
+-- Tenant resolution: contract -> DAO, with the window its events belong to the
+-- DAO (the core four: from DaoCreated on; a module: its registration window).
+-- The Manager is not a module. A module registered by two DAOs belongs to both.
 CREATE VIEW manager.event_identity AS
-SELECT deployment_id, dao_id, module_role, module_contract AS contract_id
-FROM manager.dao_modules;
+SELECT r.deployment_id, r.dao_id, m.module_role, m.contract_id,
+  ARRAY[r.created_ledger, -1, -1, -1]::bigint[] AS from_pos, NULL::bigint[] AS until_pos
+FROM manager.dao_registry r
+CROSS JOIN LATERAL (VALUES
+  ('token', r.token_contract), ('metadata', r.metadata_contract),
+  ('governor', r.governor_contract), ('treasury', r.treasury_contract)
+) AS m(module_role, contract_id)
+WHERE m.contract_id IS NOT NULL
+UNION ALL
+SELECT g.deployment_id, g.dao_id, g.module_role, g.module_contract, g.from_pos, g.until_pos
+FROM manager.module_registrations g;
 
--- Every event a DAO module emitted, with its DAO. The base of every domain view.
+-- Every event a DAO contract emitted inside its window, with its DAO. The base
+-- of every domain view: an unregistered module's later events are dropped here
+-- (the pipeline's allowlists are append-only and still pass them).
 CREATE VIEW manager.module_events AS
 SELECT e.*, i.dao_id
 FROM chain.events e
 JOIN manager.event_identity i
   ON i.deployment_id = e.deployment_id
  AND i.contract_id = e.contract_id
- AND i.module_role = e.contract_role;
+ AND i.module_role = e.contract_role
+ AND e.pos >= i.from_pos
+ AND (i.until_pos IS NULL OR e.pos < i.until_pos);
 
--- One row per launched DAO (DaoLaunched).
+-- One row per launched DAO (DaoLaunched), with the registry at launch.
 CREATE VIEW manager.dao_launches AS
 SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.deployment_id,
@@ -97,10 +198,40 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.transaction_hash AS launched_tx_hash,
   (e.a ->> 'launch_auction')::boolean AS launch_auction,
   (e.a ->> 'launch_marketplace')::boolean AS launch_marketplace,
-  e.a ->> 'minter' AS minter
+  COALESCE(e.a -> 'registry', '[]'::jsonb) AS registry
 FROM chain.events e
 WHERE e.contract_role = 'manager'
   AND e.event_name = 'dao_launched'
+ORDER BY e.deployment_id, e.topic_0, e.pos DESC, e.event_id DESC;
+
+-- Assurance drives (open_assurance): the claim list a pending DAO opened, its
+-- deadline and the launch flags. Its outcome: launched (DaoLaunched after it),
+-- released (SlugReleased: failed, the slug back in the pool) or open. Whether
+-- the threshold was reached is ClaimMinter state (claims.lists).
+CREATE VIEW manager.assurance_drives AS
+SELECT DISTINCT ON (e.deployment_id, e.topic_0)
+  e.deployment_id,
+  e.topic_0 AS dao_id,
+  e.a ->> 'claim_minter' AS claim_minter,
+  (e.a ->> 'list_id')::bigint AS list_id,
+  (e.a ->> 'deadline')::numeric AS deadline,
+  (e.a ->> 'launch_auction')::boolean AS launch_auction,
+  (e.a ->> 'launch_marketplace')::boolean AS launch_marketplace,
+  e.ledger_sequence AS opened_ledger,
+  e.closed_at AS opened_at,
+  e.transaction_hash AS opened_tx_hash,
+  CASE WHEN l.dao_id IS NOT NULL THEN 'launched' WHEN sr.event_id IS NOT NULL THEN 'released' ELSE 'open' END AS outcome,
+  sr.closed_at AS released_at
+FROM chain.events e
+LEFT JOIN manager.dao_launches l ON l.deployment_id = e.deployment_id AND l.dao_id = e.topic_0
+LEFT JOIN LATERAL (
+  SELECT x.event_id, x.closed_at FROM chain.events x
+  WHERE x.deployment_id = e.deployment_id AND x.contract_role = 'manager'
+    AND x.event_name = 'slug_released' AND x.topic_0 = e.topic_0 AND x.pos > e.pos
+  ORDER BY x.pos LIMIT 1
+) sr ON true
+WHERE e.contract_role = 'manager'
+  AND e.event_name = 'assurance_opened'
 ORDER BY e.deployment_id, e.topic_0, e.pos DESC, e.event_id DESC;
 
 -- Slugs a DAO moved away from (one row per change). Not reserved: another DAO
@@ -121,7 +252,8 @@ WHERE e.contract_role = 'manager'
 
 -- Each module's own launch event: is_live, the Treasury it was handed to,
 -- and the launch flags (auction `started`, marketplace `opened`, token `grants`:
--- the initial mint allowances, [{module, allowance}]).
+-- the initial mint allowances, [{module, allowance}]). An external module has
+-- no launch event the platform knows (is_live false here; read it on chain).
 CREATE VIEW manager.module_launches AS
 SELECT
   m.deployment_id,
@@ -142,7 +274,7 @@ LEFT JOIN LATERAL (
   WHERE x.deployment_id = m.deployment_id
     AND x.contract_id = m.module_contract
     AND x.contract_role = m.module_role
-    AND x.event_name = m.module_role || '_launched'
+    AND x.event_name = CASE m.module_role WHEN 'claims' THEN 'claim_minter_launched' ELSE m.module_role || '_launched' END
   ORDER BY x.pos, x.event_id
   LIMIT 1
 ) l ON true;
@@ -150,8 +282,9 @@ LEFT JOIN LATERAL (
 -- The DAO as the app lists it: registry, slug, launch state, token name and
 -- symbol (constructor, then the latest rename), the current profile JSON
 -- (highest ProfileUpdated seq; the app hashes it against the chain before
--- showing it), the current admin (launch admin, then the Treasury), and the
--- auction/marketplace state after launch.
+-- showing it), the current admin (launch admin, then the Treasury), the
+-- registered auction/marketplace/ClaimMinter (NULL for a kind the DAO does not
+-- have), their state after launch, and an assurance drive's outcome.
 CREATE VIEW manager.daos AS
 SELECT
   r.deployment_id,
@@ -166,11 +299,11 @@ SELECT
   r.manager_contract,
   r.token_contract,
   r.governor_contract,
-  r.auction_contract,
+  mk.auction_contract,
   r.treasury_contract,
   r.metadata_contract,
-  r.marketplace_contract,
-  l.minter AS minter_contract,
+  mk.marketplace_contract,
+  mk.claims_contract,
   tm.a ->> 'name' AS token_name,
   tm.a ->> 'symbol' AS token_symbol,
   pf.a ->> 'profile' AS profile,
@@ -178,11 +311,12 @@ SELECT
   (pf.t ->> 'seq')::bigint AS profile_seq,
   COALESCE(ta.t ->> 'new_admin', r.launch_admin) AS admin_address,
   CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
-  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+  ad.outcome AS assurance_outcome,
+  CASE WHEN l.dao_id IS NULL THEN NULL::boolean WHEN mk.auction_contract IS NULL THEN false
     ELSE l.launch_auction OR COALESCE(st.auction_reactivated, false) END AS auction_enabled,
-  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+  CASE WHEN l.dao_id IS NULL THEN NULL::boolean WHEN mk.marketplace_contract IS NULL THEN false
     ELSE COALESCE(NOT st.marketplace_paused, l.launch_marketplace) END AS marketplace_enabled,
-  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+  CASE WHEN l.dao_id IS NULL OR mk.auction_contract IS NULL THEN NULL::boolean
     ELSE COALESCE(st.auction_paused, NOT l.launch_auction) END AS auction_paused,
   r.created_ledger,
   r.created_at,
@@ -193,6 +327,16 @@ SELECT
   r.indexed_at
 FROM manager.dao_registry r
 LEFT JOIN manager.dao_launches l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
+LEFT JOIN manager.assurance_drives ad ON ad.deployment_id = r.deployment_id AND ad.dao_id = r.dao_id
+-- The registered module of each built-in kind (the latest registration still in force).
+LEFT JOIN LATERAL (
+  SELECT
+    (array_agg(m.module_contract ORDER BY m.registered_pos DESC) FILTER (WHERE m.module_role = 'auction'))[1] AS auction_contract,
+    (array_agg(m.module_contract ORDER BY m.registered_pos DESC) FILTER (WHERE m.module_role = 'marketplace'))[1] AS marketplace_contract,
+    (array_agg(m.module_contract ORDER BY m.registered_pos DESC) FILTER (WHERE m.module_role = 'claims'))[1] AS claims_contract
+  FROM manager.dao_modules m
+  WHERE m.deployment_id = r.deployment_id AND m.dao_id = r.dao_id AND m.registered
+) mk ON true
 -- The latest slug request (DaoCreated, then PendingSlugUpdated).
 LEFT JOIN LATERAL (
   SELECT x.a FROM chain.events x
@@ -200,11 +344,12 @@ LEFT JOIN LATERAL (
     AND x.event_name IN ('dao_created', 'pending_slug_updated') AND x.topic_0 = r.dao_id
   ORDER BY x.pos DESC, x.event_id DESC LIMIT 1
 ) rq ON true
--- The slug held now: the launch claim, then the latest change (topic_1 in both).
+-- The slug held now: the claim (launch or an assurance drive's reservation),
+-- then the latest change (topic_1 in both); none once a failed drive released it.
 LEFT JOIN LATERAL (
-  SELECT x.topic_1 FROM chain.events x
+  SELECT CASE WHEN x.event_name = 'slug_released' THEN NULL ELSE x.topic_1 END AS topic_1 FROM chain.events x
   WHERE x.deployment_id = r.deployment_id AND x.contract_role = 'manager'
-    AND x.event_name IN ('slug_claimed', 'slug_changed') AND x.topic_0 = r.dao_id
+    AND x.event_name IN ('slug_claimed', 'slug_changed', 'slug_released') AND x.topic_0 = r.dao_id
   ORDER BY x.pos DESC, x.event_id DESC LIMIT 1
 ) cs ON true
 -- Name and symbol: TokenInitialized, then the latest MetadataUpdated.
@@ -232,14 +377,14 @@ LEFT JOIN LATERAL (
 -- marketplace's own marketplace_paused/unpaused, latest wins.
 LEFT JOIN LATERAL (
   SELECT
-    bool_or(x.event_name = 'unpaused') FILTER (WHERE x.contract_id = r.auction_contract) AS auction_reactivated,
+    bool_or(x.event_name = 'unpaused') FILTER (WHERE x.contract_id = mk.auction_contract) AS auction_reactivated,
     (array_agg(x.event_name = 'paused' ORDER BY x.pos DESC, x.event_id DESC)
-      FILTER (WHERE x.contract_id = r.auction_contract))[1] AS auction_paused,
+      FILTER (WHERE x.contract_id = mk.auction_contract))[1] AS auction_paused,
     (array_agg(x.event_name = 'marketplace_paused' ORDER BY x.pos DESC, x.event_id DESC)
-      FILTER (WHERE x.contract_id = r.marketplace_contract))[1] AS marketplace_paused
+      FILTER (WHERE x.contract_id = mk.marketplace_contract))[1] AS marketplace_paused
   FROM chain.events x
   WHERE x.deployment_id = r.deployment_id
-    AND x.contract_id IN (r.auction_contract, r.marketplace_contract)
+    AND x.contract_id IN (mk.auction_contract, mk.marketplace_contract)
     AND x.event_name IN ('paused', 'unpaused', 'marketplace_paused', 'marketplace_unpaused')
     AND x.pos > l.launched_pos
 ) st ON l.dao_id IS NOT NULL;
@@ -270,7 +415,8 @@ WHERE e.contract_role = 'manager'
   AND e.event_name = 'implementation_registered';
 
 -- The code every DAO module runs, mirroring on-chain version():
---   current_hash     the latest upgraded.to_hash, else the hash from DaoCreated
+--   current_hash     the latest upgraded.to_hash, else the hash it was created from
+--                    (NULL for a module deployed outside the Manager that never upgraded)
 --   current_version  the registry version of current_hash (what version() returns)
 --   storage_version  the latest migrated.to_storage_version, else 1
 CREATE VIEW manager.module_versions AS
@@ -293,7 +439,9 @@ SELECT
   m.deployment_id,
   m.dao_id,
   m.module_role,
+  m.kind,
   m.module_contract,
+  m.registered,
   COALESCE(up.to_hash, m.created_wasm_hash) AS current_hash,
   i.version AS current_version,
   COALESCE(up.storage_version, 1) AS storage_version,
@@ -310,8 +458,8 @@ LEFT JOIN manager.implementations i
 
 -- The Manager's own settings, one row per deployment: admin (ManagerInitialized,
 -- then AdminChanged), the pending admin (an AdminProposed newer than the last
--- AdminChanged and the last AdminProposalCancelled), the platform Minter and
--- whether the factory is paused (the contract has no getter for it; a pause
+-- AdminChanged and the last AdminProposalCancelled) and whether the factory is
+-- paused (the contract has no getter for it; a pause
 -- blocks create_dao, launch_dao and change_slug for every DAO).
 CREATE VIEW manager.settings AS
 WITH latest AS (
@@ -324,13 +472,12 @@ WITH latest AS (
         WHEN 'admin_changed' THEN 'admin'
         WHEN 'admin_proposed' THEN 'proposal'
         WHEN 'admin_proposal_cancelled' THEN 'cancel'
-        WHEN 'platform_minter_set' THEN 'minter'
         ELSE 'factory'
       END AS kind
     FROM chain.events e
     WHERE e.contract_role = 'manager'
       AND e.event_name IN ('manager_initialized', 'admin_changed', 'admin_proposed', 'admin_proposal_cancelled',
-        'platform_minter_set', 'factory_paused', 'factory_unpaused')
+        'factory_paused', 'factory_unpaused')
   ) k
   ORDER BY deployment_id, kind, pos DESC, event_id DESC
 )
@@ -338,11 +485,9 @@ SELECT
   a.deployment_id,
   COALESCE(a.t ->> 'new_admin', a.t ->> 'admin') AS admin,
   CASE WHEN p.pos > a.pos AND (c.pos IS NULL OR p.pos > c.pos) THEN p.t ->> 'proposed_admin' END AS pending_admin,
-  m.t ->> 'minter' AS platform_minter,
   COALESCE(f.event_name = 'factory_paused', false) AS factory_paused
 FROM latest a
 LEFT JOIN latest p ON p.deployment_id = a.deployment_id AND p.kind = 'proposal'
 LEFT JOIN latest c ON c.deployment_id = a.deployment_id AND c.kind = 'cancel'
-LEFT JOIN latest m ON m.deployment_id = a.deployment_id AND m.kind = 'minter'
 LEFT JOIN latest f ON f.deployment_id = a.deployment_id AND f.kind = 'factory'
 WHERE a.kind = 'admin';

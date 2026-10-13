@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("APP_DATABASE_URL")
-  schemas  = ["app", "auction", "governance", "manager", "marketplace", "metadata", "token"]
+  schemas  = ["app", "auction", "claims", "governance", "manager", "marketplace", "metadata", "token"]
 }
 
 view ManagerDao {
@@ -23,12 +23,12 @@ view ManagerDao {
   managerContract     String    @map("manager_contract")
   tokenContract       String    @map("token_contract")
   governorContract    String    @map("governor_contract")
+  /** The registered Auction, Marketplace and ClaimMinter; null for a kind the DAO does not have. */
   auctionContract     String?   @map("auction_contract")
   treasuryContract    String?   @map("treasury_contract")
   metadataContract    String?   @map("metadata_contract")
   marketplaceContract String?   @map("marketplace_contract")
-  /** The shared Minter pinned at launch (null while pending). */
-  minterContract      String?   @map("minter_contract")
+  claimsContract      String?   @map("claims_contract")
   tokenName           String?   @map("token_name")
   tokenSymbol         String?   @map("token_symbol")
   /** Latest ProfileUpdated JSON, byte-for-byte; verify against metadata.profile_hash() before use. */
@@ -38,6 +38,8 @@ view ManagerDao {
   /** Current admin: the launch admin during setup, the Treasury (a contract) after launch. */
   adminAddress        String?   @map("admin_address")
   status              String
+  /** An assurance drive's outcome: open, launched or released (failed); null without one. */
+  assuranceOutcome    String?   @map("assurance_outcome")
   auctionEnabled      Boolean?  @map("auction_enabled")
   marketplaceEnabled  Boolean?  @map("marketplace_enabled")
   auctionPaused       Boolean?  @map("auction_paused")
@@ -67,26 +69,46 @@ view MarketplaceModuleLaunch {
   @@schema("manager")
 }
 
-view MarketplacePrimaryListing {
-  eventId                String    @map("event_id")
-  deploymentId           String    @map("deployment_id")
-  daoId                  String    @map("dao_id")
-  contractId             String    @map("contract_id")
-  listingId              BigInt    @map("listing_id")
-  price                  Decimal   @db.Decimal(78, 0)
-  expiresAt              BigInt    @map("expires_at")
-  paymentAsset           String    @map("payment_asset")
-  status                 String
-  tokenId                BigInt?   @map("token_id")
-  buyer                  String?
-  createdLedger          BigInt    @map("created_ledger")
-  createdAt              DateTime? @map("created_at")
-  createdTransactionHash String    @map("created_transaction_hash")
-  closedLedger           BigInt?   @map("closed_ledger")
-  closedAt               DateTime? @map("closed_at")
-  closedTransactionHash  String?   @map("closed_transaction_hash")
+view MarketplacePool {
+  eventId               String    @map("event_id")
+  deploymentId          String    @map("deployment_id")
+  daoId                 String    @map("dao_id")
+  contractId            String    @map("contract_id")
+  poolId                BigInt    @map("pool_id")
+  price                 Decimal   @db.Decimal(78, 0)
+  asset                 String
+  expiresAt             BigInt    @map("expires_at")
+  size                  BigInt
+  maxPerBuyer           BigInt    @map("max_per_buyer")
+  maxSoldPerPeriod      BigInt    @map("max_sold_per_period")
+  periodSecs            BigInt    @map("period_secs")
+  stocked               BigInt
+  sold                  BigInt
+  swept                 BigInt
+  inStock               BigInt    @map("in_stock")
+  /** open or closed; an expired pool stays open until closed: compare expiresAt. */
+  status                String
+  released              BigInt?
+  openedLedger          BigInt    @map("opened_ledger")
+  openedAt              DateTime? @map("opened_at")
+  openedTransactionHash String    @map("opened_transaction_hash")
+  closedLedger          BigInt?   @map("closed_ledger")
+  closedAt              DateTime? @map("closed_at")
 
-  @@map("primary_listings")
+  @@map("pools")
+  @@schema("marketplace")
+}
+
+/** Token ids a pool still holds; the stock page is read on chain before buying. */
+view MarketplacePoolStock {
+  deploymentId    String @map("deployment_id")
+  daoId           String @map("dao_id")
+  contractId      String @map("contract_id")
+  poolId          BigInt @map("pool_id")
+  tokenId         BigInt @map("token_id")
+  restockedLedger BigInt @map("restocked_ledger")
+
+  @@map("pool_stock")
   @@schema("marketplace")
 }
 
@@ -114,25 +136,6 @@ view MarketplaceSecondaryListing {
   @@schema("marketplace")
 }
 
-view MarketplacePrimaryListingComment {
-  commentEventId   String    @map("comment_event_id")
-  deploymentId     String    @map("deployment_id")
-  daoId            String    @map("dao_id")
-  contractId       String    @map("contract_id")
-  listingId        BigInt    @map("listing_id")
-  author           String
-  body             String
-  eventLedger      BigInt    @map("event_ledger")
-  transactionIndex BigInt?   @map("transaction_index")
-  operationIndex   BigInt?   @map("operation_index")
-  eventIndex       BigInt?   @map("event_index")
-  eventAt          DateTime? @map("event_at")
-  transactionHash  String    @map("transaction_hash")
-
-  @@map("primary_listing_comments")
-  @@schema("marketplace")
-}
-
 view MarketplaceListingComment {
   commentEventId   String    @map("comment_event_id")
   deploymentId     String    @map("deployment_id")
@@ -157,8 +160,9 @@ view MarketplaceSale {
   deploymentId    String    @map("deployment_id")
   daoId           String    @map("dao_id")
   contractId      String    @map("contract_id")
+  /** pool (a quick-buy sale; poolId set) or secondary. */
   saleType        String    @map("sale_type")
-  listingId       BigInt?   @map("listing_id")
+  poolId          BigInt?   @map("pool_id")
   tokenId         BigInt    @map("token_id")
   buyer           String
   seller          String?
@@ -369,30 +373,30 @@ view TokenMintAuthority {
 }
 
 view AuctionAuction {
-  eventId           String  @map("event_id")
-  deploymentId      String  @map("deployment_id")
-  daoId             String  @map("dao_id")
-  contractId        String  @map("contract_id")
-  tokenId           BigInt  @map("token_id")
-  startSeconds      BigInt  @map("start_seconds")
-  endSeconds        BigInt  @map("end_seconds")
-  durationSeconds   BigInt? @map("duration_seconds")
-  reservePrice      Decimal @map("reserve_price")
-  paymentToken      String? @map("payment_token")
+  eventId               String    @map("event_id")
+  deploymentId          String    @map("deployment_id")
+  daoId                 String    @map("dao_id")
+  contractId            String    @map("contract_id")
+  tokenId               BigInt    @map("token_id")
+  startSeconds          BigInt    @map("start_seconds")
+  endSeconds            BigInt    @map("end_seconds")
+  durationSeconds       BigInt?   @map("duration_seconds")
+  reservePrice          Decimal   @map("reserve_price")
+  paymentToken          String?   @map("payment_token")
   /** The latest bid is the highest and carries the current end (bids only grow, ends only extend). */
-  highestBidder     String?   @map("highest_bidder")
-  highestBid        Decimal?  @map("highest_bid")
-  currentEndSeconds BigInt    @map("current_end_seconds")
-  extensionCount    Int       @map("extension_count")
-  settled           Boolean
-  cancelled         Boolean
+  highestBidder         String?   @map("highest_bidder")
+  highestBid            Decimal?  @map("highest_bid")
+  currentEndSeconds     BigInt    @map("current_end_seconds")
+  extensionCount        Int       @map("extension_count")
+  settled               Boolean
+  cancelled             Boolean
   /** Settlement outcome: winner NULL when unsold; settledAmount 0 then. */
-  winner            String?
-  settledAmount     Decimal?  @map("settled_amount")
-  closedAt          DateTime? @map("closed_at")
-  closedTransactionHash String? @map("closed_transaction_hash")
-  createdLedger     BigInt  @map("created_ledger")
-  transactionHash   String  @map("transaction_hash")
+  winner                String?
+  settledAmount         Decimal?  @map("settled_amount")
+  closedAt              DateTime? @map("closed_at")
+  closedTransactionHash String?   @map("closed_transaction_hash")
+  createdLedger         BigInt    @map("created_ledger")
+  transactionHash       String    @map("transaction_hash")
 
   @@map("auctions")
   @@schema("auction")
@@ -400,30 +404,30 @@ view AuctionAuction {
 
 /// The newest auction per auction contract (the one that can be live).
 view AuctionCurrentAuction {
-  eventId           String  @map("event_id")
-  deploymentId      String  @map("deployment_id")
-  daoId             String  @map("dao_id")
-  contractId        String  @map("contract_id")
-  tokenId           BigInt  @map("token_id")
-  startSeconds      BigInt  @map("start_seconds")
-  endSeconds        BigInt  @map("end_seconds")
-  durationSeconds   BigInt? @map("duration_seconds")
-  reservePrice      Decimal @map("reserve_price")
-  paymentToken      String? @map("payment_token")
+  eventId               String    @map("event_id")
+  deploymentId          String    @map("deployment_id")
+  daoId                 String    @map("dao_id")
+  contractId            String    @map("contract_id")
+  tokenId               BigInt    @map("token_id")
+  startSeconds          BigInt    @map("start_seconds")
+  endSeconds            BigInt    @map("end_seconds")
+  durationSeconds       BigInt?   @map("duration_seconds")
+  reservePrice          Decimal   @map("reserve_price")
+  paymentToken          String?   @map("payment_token")
   /** The latest bid is the highest and carries the current end (bids only grow, ends only extend). */
-  highestBidder     String?   @map("highest_bidder")
-  highestBid        Decimal?  @map("highest_bid")
-  currentEndSeconds BigInt    @map("current_end_seconds")
-  extensionCount    Int       @map("extension_count")
-  settled           Boolean
-  cancelled         Boolean
+  highestBidder         String?   @map("highest_bidder")
+  highestBid            Decimal?  @map("highest_bid")
+  currentEndSeconds     BigInt    @map("current_end_seconds")
+  extensionCount        Int       @map("extension_count")
+  settled               Boolean
+  cancelled             Boolean
   /** Settlement outcome: winner NULL when unsold; settledAmount 0 then. */
-  winner            String?
-  settledAmount     Decimal?  @map("settled_amount")
-  closedAt          DateTime? @map("closed_at")
-  closedTransactionHash String? @map("closed_transaction_hash")
-  createdLedger     BigInt  @map("created_ledger")
-  transactionHash   String  @map("transaction_hash")
+  winner                String?
+  settledAmount         Decimal?  @map("settled_amount")
+  closedAt              DateTime? @map("closed_at")
+  closedTransactionHash String?   @map("closed_transaction_hash")
+  createdLedger         BigInt    @map("created_ledger")
+  transactionHash       String    @map("transaction_hash")
 
   @@map("current_auctions")
   @@schema("auction")
@@ -491,4 +495,163 @@ view GovernanceSettings {
 
   @@map("settings")
   @@schema("governance")
+}
+
+view ManagerDaoModule {
+  deploymentId    String  @map("deployment_id")
+  daoId           String  @map("dao_id")
+  /** The pipeline role: token, metadata, governor, treasury, a known kind, or module. */
+  moduleRole      String  @map("module_role")
+  /** The registry kind as registered (custom_<name> for an external module). */
+  kind            String
+  moduleContract  String  @map("module_contract")
+  createdWasmHash String? @map("created_wasm_hash")
+  nonVoting       Boolean @map("non_voting")
+  registered      Boolean
+
+  @@map("dao_modules")
+  @@schema("manager")
+}
+
+view ManagerAssuranceDrive {
+  deploymentId      String    @map("deployment_id")
+  daoId             String    @map("dao_id")
+  claimMinter       String    @map("claim_minter")
+  listId            BigInt    @map("list_id")
+  deadline          Decimal
+  launchAuction     Boolean   @map("launch_auction")
+  launchMarketplace Boolean   @map("launch_marketplace")
+  openedLedger      BigInt    @map("opened_ledger")
+  openedAt          DateTime? @map("opened_at")
+  /** open, launched or released (failed: the slug is free again). */
+  outcome           String
+  releasedAt        DateTime? @map("released_at")
+
+  @@map("assurance_drives")
+  @@schema("manager")
+}
+
+view TokenSettings {
+  deploymentId          String  @map("deployment_id")
+  daoId                 String  @map("dao_id")
+  contractId            String  @map("contract_id")
+  transfersLocked       Boolean @map("transfers_locked")
+  membersOnlyDelegation Boolean @map("members_only_delegation")
+  daoRecovery           Boolean @map("dao_recovery")
+  lastChangedLedger     BigInt? @map("last_changed_ledger")
+
+  @@map("settings")
+  @@schema("token")
+}
+
+view TokenTransferAgent {
+  deploymentId String  @map("deployment_id")
+  daoId        String  @map("dao_id")
+  contractId   String  @map("contract_id")
+  module       String
+  changedBy    String? @map("changed_by")
+  eventLedger  BigInt  @map("event_ledger")
+
+  @@map("transfer_agents")
+  @@schema("token")
+}
+
+/** Delegate picker rows; isMember is the members-only rule (holds a token). */
+view TokenDelegate {
+  deploymentId    String  @map("deployment_id")
+  daoId           String  @map("dao_id")
+  contractId      String  @map("contract_id")
+  address         String
+  votingPower     BigInt  @map("voting_power")
+  delegatorCount  BigInt  @map("delegator_count")
+  ownedTokenCount BigInt  @map("owned_token_count")
+  /** The Treasury or a non-voting module: holds tokens but is never a member. */
+  custody         Boolean
+  isMember        Boolean @map("is_member")
+
+  @@map("delegates")
+  @@schema("token")
+}
+
+view TokenManagedTransfer {
+  eventId         String    @map("event_id")
+  deploymentId    String    @map("deployment_id")
+  daoId           String    @map("dao_id")
+  contractId      String    @map("contract_id")
+  /** dao (a proposal moved it) or agent (a transfer agent moved it with the holder's signature). */
+  transferKind    String    @map("transfer_kind")
+  tokenId         BigInt    @map("token_id")
+  fromAddress     String    @map("from_address")
+  toAddress       String    @map("to_address")
+  movedBy         String?   @map("moved_by")
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String    @map("transaction_hash")
+
+  @@map("managed_transfers")
+  @@schema("token")
+}
+
+view ClaimsList {
+  eventId               String    @map("event_id")
+  deploymentId          String    @map("deployment_id")
+  daoId                 String    @map("dao_id")
+  contractId            String    @map("contract_id")
+  listId                BigInt    @map("list_id")
+  root                  String
+  treeUri               String    @map("tree_uri")
+  asset                 String
+  price                 Decimal   @db.Decimal(78, 0)
+  expiresAt             BigInt    @map("expires_at")
+  total                 BigInt
+  isAssurance           Boolean   @map("is_assurance")
+  thresholdClaimers     BigInt?   @map("threshold_claimers")
+  deadline              BigInt?
+  claimed               BigInt
+  claimers              BigInt
+  paid                  Decimal   @db.Decimal(78, 0)
+  escrowed              Decimal   @db.Decimal(78, 0)
+  released              Decimal?
+  refunded              Decimal   @db.Decimal(78, 0)
+  openedLedger          BigInt    @map("opened_ledger")
+  openedAt              DateTime? @map("opened_at")
+  openedTransactionHash String    @map("opened_transaction_hash")
+
+  @@map("lists")
+  @@schema("claims")
+}
+
+view ClaimsClaim {
+  eventId         String    @map("event_id")
+  deploymentId    String    @map("deployment_id")
+  daoId           String    @map("dao_id")
+  contractId      String    @map("contract_id")
+  listId          BigInt    @map("list_id")
+  claimer         String
+  amount          BigInt
+  firstTokenId    BigInt    @map("first_token_id")
+  paid            Decimal   @db.Decimal(78, 0)
+  escrowed        Boolean
+  claimerTotal    BigInt    @map("claimer_total")
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String    @map("transaction_hash")
+
+  @@map("claims")
+  @@schema("claims")
+}
+
+view ClaimsClaimer {
+  deploymentId String  @map("deployment_id")
+  daoId        String  @map("dao_id")
+  contractId   String  @map("contract_id")
+  listId       BigInt  @map("list_id")
+  claimer      String
+  claimed      BigInt
+  paid         Decimal @db.Decimal(78, 0)
+  escrowed     Decimal @db.Decimal(78, 0)
+  refunded     Decimal @db.Decimal(78, 0)
+
+  @@map("claimers")
+  @@schema("claims")
 }

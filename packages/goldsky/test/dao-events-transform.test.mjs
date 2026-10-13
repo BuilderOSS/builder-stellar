@@ -467,17 +467,18 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /CAST\(NULL AS BIGINT\) AS operation_index/);
   assert.match(yaml, /CAST\(NULL AS BIGINT\) AS event_index/);
   assert.match(yaml, /contract_role/);
-  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries', 'dao_marketplaces']) {
+  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries', 'dao_marketplaces', 'dao_claims', 'dao_circles', 'dao_modules']) {
     assert.match(yaml, new RegExp(`${table}:`));
     assert.match(yaml, new RegExp(`dynamic_table_check\\('${table}', contract_id\\)`));
   }
-  for (const role of ['manager', 'minter', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace']) {
+  assert.ok(!/MINTER_CONTRACT_ID|THEN 'minter'/.test(yaml), 'no shared Minter role');
+  for (const role of ['manager', 'claims', 'circle', 'module', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace']) {
     assert.match(yaml, new RegExp(`THEN '${role}'`));
   }
   // System events (executable_update) and diagnostics are not contract events, and a
   // failed call's events are not state.
   assert.match(yaml, /AND type = 'contract'\n\s+AND in_successful_contract_call\n\s+AND \(/);
-  assert.equal((yaml.match(/AND in_successful_contract_call/g) || []).length, 7, 'the six allowlists and dao_events');
+  assert.equal((yaml.match(/AND in_successful_contract_call/g) || []).length, 10, 'the four core allowlists, the five module allowlists and dao_events');
   assert.match(yaml, /topics LIKE '%dao_created%'/);
   assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);
   assert.match(yaml, /function invoke\(data\)/);
@@ -803,24 +804,42 @@ test('decodes TreasuryInitialized event', () => {
   assert.equal(argsOf(decoded).governor, 'GOVERNOR_ADDR');
 });
 
-test('decodes the Minter events with the exact events.rs topics and payloads', () => {
-  const cases = [
-    ['MerkleClaimEvent', [{ symbol: 'MerkleClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
-    ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [{ key: { symbol: 'recipient_count' }, val: { u32: 3 } }, { key: { symbol: 'total_amount' }, val: { u128: '9' } }, { key: { symbol: 'first_token_id' }, val: { u32: 7 } }] }, { token_id: 'TOKEN_CONTRACT' }],
-    ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [{ key: { symbol: 'root' }, val: { bytes: 'ab' } }, { key: { symbol: 'round' }, val: { u32: 2 } }, { key: { symbol: 'tree_uri' }, val: { string: 'ipfs://bafytree' } }] }, { token_id: 'TOKEN_CONTRACT' }]
-  ];
-  for (const [name, topics, data, expectedTopics] of cases) {
-    const decoded = decodeEvent({ event_id: name, contract_role: 'minter', topics: JSON.stringify(topics), data: JSON.stringify(data) });
-    assert.deepEqual(topicsOf(decoded), expectedTopics);
-    assert.equal(decoded.contract_role, 'minter');
-  }
-  assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '5' });
-  const root = decodeEvent({ contract_role: 'minter', topics: JSON.stringify(cases[2][1]), data: JSON.stringify(cases[2][2]) });
-  assert.deepEqual(argsOf(root), { root: 'ab', round: 2, tree_uri: 'ipfs://bafytree' });
-  const activity = buildActivityFeed(root);
-  assert.equal(activity.kind, 'minter.merkle_root_set');
-  assert.equal(activity.visibility, 'public');
-  assert.equal(activity.summary, 'Claim round 2 opened');
+test('decodes the ClaimMinter events with the exact events.rs topics and payloads (role claims)', () => {
+  const root = { bytes: 'ab' };
+  const opened = decodeEvent({ event_id: 'lo', contract_role: 'claims', topics: JSON.stringify([{ symbol: 'list_opened' }, { u32: 2 }]),
+    data: JSON.stringify(dm({ root, tree_uri: { string: 'ipfs://bafytree' }, asset: A('XLM'), price: { i128: '50' }, expires_at: { u64: '9000' }, total: { u32: 10 }, assurance: 'void' })) });
+  assert.deepEqual(topicsOf(opened), { list_id: 2 });
+  assert.deepEqual(argsOf(opened), { root: 'ab', tree_uri: 'ipfs://bafytree', asset: 'XLM', price: '50', expires_at: '9000', total: 10, assurance: null });
+  assert.equal(opened.contract_role, 'claims');
+  const openedRow = buildActivityFeed(opened);
+  assert.equal(openedRow.kind, 'claims.list_opened');
+  assert.equal(openedRow.visibility, 'public');
+  assert.equal(openedRow.summary, 'Claim list 2 opened: 10 tokens at 50 each');
+
+  const drive = buildActivityFeed(decodeEvent({ event_id: 'lo2', contract_role: 'claims', topics: JSON.stringify([{ symbol: 'list_opened' }, { u32: 3 }]),
+    data: JSON.stringify(dm({ root, tree_uri: { string: 'ipfs://t' }, asset: A('XLM'), price: { i128: '0' }, expires_at: { u64: '9000' }, total: { u32: 4 },
+      assurance: dm({ threshold_claimers: { u32: 3 }, deadline: { u64: '8000' } }) })) }));
+  assert.equal(drive.summary, 'Claim list 3 opened: 4 tokens, free, as an assurance drive');
+
+  const claimed = decodeEvent({ event_id: 'cl', contract_role: 'claims', topics: JSON.stringify([{ symbol: 'claimed' }, { u32: 2 }, A('GCLAIMER')]),
+    data: JSON.stringify(dm({ amount: { u32: 2 }, first_token_id: { u32: 40 }, paid: { i128: '100' }, escrowed: { bool: true }, claimed: { u32: 2 } })) });
+  assert.deepEqual(topicsOf(claimed), { list_id: 2, claimer: 'GCLAIMER' });
+  const claimedRow = buildActivityFeed(claimed);
+  assert.equal(claimedRow.kind, 'claims.claimed');
+  assert.equal(claimedRow.actor, 'GCLAIMER');
+  assert.equal(claimedRow.amount, '100', 'the money paid, not the token count');
+  assert.equal(claimedRow.token_id, '40');
+  assert.equal(claimedRow.summary, 'GCLAIMER claimed 2 tokens from list 2 (payment held in escrow)');
+
+  const released = buildActivityFeed(decodeEvent({ event_id: 'er', contract_role: 'claims', topics: JSON.stringify([{ symbol: 'escrow_released' }, { u32: 2 }]),
+    data: JSON.stringify(dm({ treasury: A('CTRE'), amount: { i128: '300' } })) }));
+  assert.equal(released.kind, 'claims.escrow_released');
+  assert.equal(released.summary, 'Escrow of 300 from list 2 released to the Treasury');
+  const refunded = buildActivityFeed(decodeEvent({ event_id: 'rf', contract_role: 'claims', topics: JSON.stringify([{ symbol: 'refunded' }, { u32: 2 }, A('GCLAIMER')]),
+    data: JSON.stringify(dm({ amount: { i128: '100' } })) }));
+  assert.equal(refunded.kind, 'claims.refunded');
+  assert.equal(refunded.visibility, 'admin', 'a refund is a per-claimer side effect');
+  assert.equal(refunded.actor, 'GCLAIMER');
 });
 
 test('ProfileUpdated decodes seq/hash/profile; the creation profile (seq 0) stays out of the public feed', () => {
@@ -838,23 +857,6 @@ test('ProfileUpdated decodes seq/hash/profile; the creation profile (seq 0) stay
   assert.equal(updated.kind, 'metadata.profile_updated');
   assert.equal(updated.visibility, 'public');
   assert.equal(updated.summary, 'Community profile updated (revision 3)');
-});
-
-test('builds distinct activity kinds for Minter claim events', () => {
-  for (const [name, kind] of [['MerkleClaimEvent', 'minter.merkle_claim']]) {
-    const decoded = decodeEvent({
-      event_id: name,
-      contract_role: 'minter',
-      topics: JSON.stringify([{ symbol: name }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }]),
-      data: JSON.stringify({ map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] })
-    });
-    const activity = buildActivityFeed(decoded);
-    assert.equal(activity.kind, kind);
-    assert.equal(activity.token_id, 'TOKEN_CONTRACT');
-    assert.equal(activity.actor, 'RECIPIENT');
-    assert.equal(activity.amount, '5');
-    assert.equal(activity.visibility, 'public');
-  }
 });
 
 // ---------------------------------------------------------------------------
@@ -908,17 +910,23 @@ test('token MintAllowanceChanged at launch is emitted per grant with changed_by 
   assert.equal(activity.summary, 'Mint allowance of MINTER changed from 0 to unlimited');
 });
 
-test('DaoLaunched activity row keeps token identity; flags and the pinned Minter stay in args', () => {
+test('DaoLaunched activity row keeps token identity; flags and the registry stay in args', () => {
+  const entry = (kind, address, nonVoting) => dm({ address: A(address), kind: S(kind), non_voting: { bool: nonVoting } });
   const { decoded, activity } = run('manager', 'CMANAGER', 'DaoLaunched', [A('TOKEN')], {
-    launched_ledger: { u64: '9' }, modules: dm({ token: A('TOKEN') }), launch_auction: { bool: true }, launch_marketplace: { bool: true }, minter: A('CMINTER')
+    launched_ledger: { u64: '9' }, modules: dm({ token: A('TOKEN') }), launch_auction: { bool: true }, launch_marketplace: { bool: true },
+    registry: { vec: [entry('auction', 'CAUC', true), entry('claims', 'CCLAIMS', false)] }
   });
-  assert.equal(argsOf(decoded).minter, 'CMINTER');
+  assert.deepEqual(argsOf(decoded).registry, [
+    { address: 'CAUC', kind: 'auction', non_voting: true },
+    { address: 'CCLAIMS', kind: 'claims', non_voting: false }
+  ]);
+  assert.equal(activity.actor, '');
   assert.equal(activity.kind, 'manager.dao_launched');
   assert.equal(activity.summary, 'DAO launched for token TOKEN');
   assert.equal(activity.visibility, 'public');
 });
 
-test('manager admin and platform minter events', () => {
+test('manager admin events', () => {
   const proposed = run('manager', 'CMANAGER', 'AdminProposed', [A('CURRENT'), A('NEXT')]);
   assert.deepEqual(topicsOf(proposed.decoded), { current_admin: 'CURRENT', proposed_admin: 'NEXT' });
   assert.equal(proposed.activity.kind, 'manager.admin_proposed');
@@ -928,14 +936,65 @@ test('manager admin and platform minter events', () => {
   assert.deepEqual(topicsOf(changed.decoded), { old_admin: 'OLD', new_admin: 'NEW' });
   assert.equal(changed.activity.kind, 'manager.admin_changed');
   assert.equal(changed.activity.visibility, 'admin');
-  const minter = run('manager', 'CMANAGER', 'PlatformMinterSet', [A('PLATFORM_MINTER')]);
-  assert.deepEqual(topicsOf(minter.decoded), { minter: 'PLATFORM_MINTER' });
-  assert.equal(minter.activity.kind, 'manager.platform_minter_set');
 });
 
-test('Upgraded decodes for every module role and the shared Minter; identifiers in topics, version in args', () => {
-  // Kind prefix: the governor's kinds are governance.*; the Minter is a platform contract with its own prefix.
-  const roles = [['token', 'TOKEN'], ['governor', 'GOV', 'governance'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META'], ['minter', 'CMINTER']];
+test('manager membership-model events: module created, assurance drive opened, slug released', () => {
+  const created = run('manager', 'CMANAGER', 'ModuleCreated', [A('TOKEN'), S('claims')], { n: { u32: 3 }, address: A('CCLAIMS') });
+  assert.deepEqual(topicsOf(created.decoded), { token_address: 'TOKEN', kind: 'claims' });
+  assert.equal(created.activity.kind, 'manager.module_created');
+  assert.equal(created.activity.visibility, 'admin', 'the Token\'s ModuleRegistered is the public row');
+  assert.equal(created.activity.summary, 'Module claims created at CCLAIMS');
+
+  const drive = run('manager', 'CMANAGER', 'AssuranceOpened', [A('TOKEN')],
+    { claim_minter: A('CCLAIMS'), list_id: { u32: 0 }, deadline: { u64: '9000' }, launch_auction: { bool: false }, launch_marketplace: { bool: true } });
+  assert.deepEqual(topicsOf(drive.decoded), { token_address: 'TOKEN' });
+  assert.equal(drive.activity.kind, 'manager.assurance_opened');
+  assert.equal(drive.activity.visibility, 'public');
+  assert.equal(drive.activity.summary, 'Assurance drive opened: claim list 0 on CCLAIMS, deadline 9000');
+  assert.ok(JSON.parse(drive.activity.addresses).includes('CCLAIMS'));
+
+  const released = run('manager', 'CMANAGER', 'SlugReleased', [A('TOKEN'), { string: 'my-dao' }]);
+  assert.deepEqual(topicsOf(released.decoded), { token_address: 'TOKEN', slug: 'my-dao' });
+  assert.equal(released.activity.kind, 'manager.slug_released');
+  assert.equal(released.activity.summary, 'Slug "my-dao" released by TOKEN (its assurance drive failed)');
+});
+
+test('token membership switches, transfer agents and DAO transfers', () => {
+  const lock = run('token', 'TOKEN', 'TransfersLockChanged', [], { locked: { bool: true }, changed_by: A('CTRE') });
+  assert.equal(lock.activity.kind, 'token.transfers_lock_changed');
+  assert.equal(lock.activity.visibility, 'public');
+  assert.equal(lock.activity.actor, 'CTRE');
+  assert.equal(lock.activity.summary, 'Memberships locked: tokens move only by sale, gift to the DAO or a DAO vote');
+  assert.equal(run('token', 'TOKEN', 'TransfersLockChanged', [], { locked: { bool: false }, changed_by: A('CTRE') }).activity.summary,
+    'Memberships unlocked: holders can transfer and sell their tokens');
+  assert.equal(run('token', 'TOKEN', 'MembersOnlyDelegationChanged', [], { enabled: { bool: true }, changed_by: A('CTRE') }).activity.summary,
+    'Votes can be delegated to members only');
+  const recovery = run('token', 'TOKEN', 'DaoRecoveryChanged', [], { enabled: { bool: true }, changed_by: A('CTRE') });
+  assert.equal(recovery.activity.summary, 'DAO recovery on: a vote can move any membership');
+  assert.equal(recovery.activity.visibility, 'public');
+
+  const agent = run('token', 'TOKEN', 'TransferAgentChanged', [A('CCIRCLE')], { enabled: { bool: true }, changed_by: A('CTRE') });
+  assert.deepEqual(topicsOf(agent.decoded), { module: 'CCIRCLE' });
+  assert.equal(agent.activity.summary, 'CCIRCLE can now move memberships');
+
+  const moved = run('token', 'TOKEN', 'AgentTransfer', [A('CCIRCLE')], { from: A('GA'), to: A('GB'), token_id: { u32: 5 } });
+  assert.deepEqual(topicsOf(moved.decoded), { agent: 'CCIRCLE' });
+  assert.equal(moved.activity.kind, 'token.agent_transfer');
+  assert.equal(moved.activity.visibility, 'admin');
+  assert.equal(moved.activity.token_id, '5');
+  assert.equal(moved.activity.actor, 'GA', 'the holder signed the move');
+
+  const recovered = run('token', 'TOKEN', 'DaoTransfer', [A('GLOST'), A('GNEW')], { token_id: { u32: 1 }, changed_by: A('CTRE') });
+  assert.deepEqual(topicsOf(recovered.decoded), { from: 'GLOST', to: 'GNEW' });
+  assert.equal(recovered.activity.kind, 'token.dao_transfer');
+  assert.equal(recovered.activity.visibility, 'public');
+  assert.equal(recovered.activity.actor, 'CTRE', 'the DAO acted, not the holder');
+  assert.equal(recovered.activity.summary, 'Token 1 moved from GLOST to GNEW by DAO vote');
+});
+
+test('Upgraded decodes for every module role, the ClaimMinter and external modules; identifiers in topics, version in args', () => {
+  // Kind prefix: the governor's kinds are governance.*; the ClaimMinter's role is its registry kind.
+  const roles = [['token', 'TOKEN'], ['governor', 'GOV', 'governance'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META'], ['claims', 'CCLAIMS'], ['module', 'CEXT']];
   for (const [role, contract, prefix = role] of roles) {
     const up = run(role, contract, 'Upgraded', [{ bytes: 'aaaaaaaa11' }, { bytes: 'bbbbbbbb22' }], { version: { string: '1.1.0' } });
     assert.deepEqual(topicsOf(up.decoded), { from_hash: 'aaaaaaaa11', to_hash: 'bbbbbbbb22' });
@@ -984,16 +1043,17 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
 });
 
 test('role fallback classifies new events when contract_role is unknown', () => {
-  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'],
-    ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
-    ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
+  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['Upgraded', 'unknown'],
+    ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PoolPurchased', 'marketplace'], ['PoolOpened', 'marketplace'],
+    ['ListOpened', 'claims'], ['Claimed', 'claims'], ['ClaimMinterLaunched', 'claims'], ['ModuleCreated', 'manager'], ['AssuranceOpened', 'manager'], ['SlugReleased', 'manager'],
+    ['DaoTransfer', 'token'], ['DaoRecoveryChanged', 'token'], ['TransfersLockChanged', 'token'], ['AgentTransfer', 'token'], ['ModuleRegistered', 'token'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
     ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown'], ['UpgradeDelayChanged', 'unknown']]) {
     const decoded = decodeEvent({ topics: JSON.stringify([S(name)]), data: JSON.stringify(dm({})) });
     assert.equal(decoded.contract_role, role, name);
   }
 });
 
-test('UpgradeDelayChanged is public, keyed by the platform contract that emitted it, and says when a reduction applies', () => {
+test('UpgradeDelayChanged is public, emitted by the Manager, and says when a reduction applies', () => {
   const shorter = { from_ledgers: { u32: 720 }, to_ledgers: { u32: 120 }, effective_ledger: { u32: 5000 } };
   const manager = run('manager', 'CMANAGER', 'UpgradeDelayChanged', [], shorter);
   assert.deepEqual(argsOf(manager.decoded), { from_ledgers: 720, to_ledgers: 120, effective_ledger: 5000 });
@@ -1003,10 +1063,7 @@ test('UpgradeDelayChanged is public, keyed by the platform contract that emitted
   assert.equal(manager.activity.visibility, 'public');
 
   const longer = { from_ledgers: { u32: 120 }, to_ledgers: { u32: 720 }, effective_ledger: { u32: 4280 } };
-  const minter = run('minter', 'CMINTER', 'UpgradeDelayChanged', [], longer);
-  assert.equal(minter.activity.kind, 'minter.upgrade_delay_changed');
-  assert.equal(minter.activity.title, 'Minter upgrade notice changed');
-  assert.equal(minter.activity.summary, 'Upgrade notice lengthened from 120 to 720 ledgers');
+  assert.equal(run('manager', 'CMANAGER', 'UpgradeDelayChanged', [], longer).activity.summary, 'Upgrade notice lengthened from 120 to 720 ledgers');
 });
 
 test('treasury Execute: one event per call, proposal_id is a topic, activity carries call index', () => {
@@ -1043,9 +1100,10 @@ test('governor setters carry the admin as the changed_by topic', () => {
 });
 
 test('removed events no longer have topic names and fall back to generic activity kinds', () => {
-  for (const name of ['TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated']) {
-    const { decoded, activity } = run('governor', 'GOV', name, [A('X'), A('Y')]);
-    assert.deepEqual(topicsOf(decoded), {}, name);
+  for (const [role, name] of [['governor', 'TreasuryChanged'], ['governor', 'TokenContractChanged'], ['governor', 'GovernorAuthorityChanged'], ['governor', 'GovernorChanged'],
+    ['auction', 'TreasuryUpdated'], ['manager', 'PlatformMinterSet'], ['marketplace', 'PrimaryListingCreated'], ['marketplace', 'PrimaryListingPurchased']]) {
+    const { decoded, activity } = run(role, 'C', name, [A('X'), A('Y')]);
+    assert.deepEqual(topicsOf(decoded), { topic_0: 'X', topic_1: 'Y' }, `${name} decodes positionally`);
     assert.equal(activity.kind, `contract.${name.toLowerCase()}`);
   }
 });
@@ -1073,33 +1131,37 @@ test('auction RefundDeferred / RefundWithdrawn / BidRefunded', () => {
   assert.equal(refunded.activity.kind, 'auction.bid_refunded');
 });
 
-test('marketplace primary listing lifecycle is keyed by listing_id; token_id only arrives with the purchase', () => {
-  const created = run('marketplace', 'MKT', 'PrimaryListingCreated', [{ u64: '4' }], { price: { i128: '100' }, expires_at: { u64: '5000' }, payment_asset: A('XLM') });
-  assert.deepEqual(topicsOf(created.decoded), { listing_id: '4' });
-  assert.deepEqual(argsOf(created.decoded), { price: '100', expires_at: '5000', payment_asset: 'XLM' });
-  assert.equal(created.activity.kind, 'marketplace.primary_listing_created');
-  assert.equal(created.activity.token_id, '');
-  assert.equal(created.activity.amount, '100');
-  assert.equal(created.activity.summary, 'Primary listing 4 created at 100');
+test('marketplace quick-buy pool lifecycle is keyed by pool_id; token ids arrive with restocks and sales', () => {
+  const opened = run('marketplace', 'MKT', 'PoolOpened', [{ u32: 4 }], { price: { i128: '100' }, asset: A('XLM'), expires_at: { u64: '5000' }, size: { u32: 10 },
+    max_per_buyer: { u32: 2 }, max_sold_per_period: { u32: 5 }, period_secs: { u64: '3600' } });
+  assert.deepEqual(topicsOf(opened.decoded), { pool_id: 4 });
+  assert.equal(opened.activity.kind, 'marketplace.pool_opened');
+  assert.equal(opened.activity.visibility, 'public');
+  assert.equal(opened.activity.token_id, '');
+  assert.equal(opened.activity.amount, '100');
+  assert.equal(opened.activity.summary, 'Pool 4 opened: 10 tokens at 100, at most 2 per buyer');
 
-  const purchased = run('marketplace', 'MKT', 'PrimaryListingPurchased', [{ u64: '4' }, A('BUYER')], { token_id: { u32: 12 }, price: { i128: '100' }, payment_asset: A('XLM') });
-  assert.deepEqual(topicsOf(purchased.decoded), { listing_id: '4', buyer: 'BUYER' });
-  assert.deepEqual(argsOf(purchased.decoded), { token_id: 12, price: '100', payment_asset: 'XLM' });
-  assert.equal(purchased.activity.kind, 'marketplace.primary_listing_purchased');
+  const restocked = run('marketplace', 'MKT', 'PoolRestocked', [{ u32: 4 }], { first_token_id: { u32: 30 }, count: { u32: 10 }, stocked: { u32: 10 } });
+  assert.equal(restocked.activity.kind, 'marketplace.pool_restocked');
+  assert.equal(restocked.activity.visibility, 'admin');
+  assert.equal(restocked.activity.token_id, '30');
+  assert.equal(restocked.activity.summary, 'Pool 4 restocked with 10 tokens (30-39)');
+
+  const purchased = run('marketplace', 'MKT', 'PoolPurchased', [{ u32: 4 }, A('BUYER')], { token_id: { u32: 32 }, price: { i128: '100' }, asset: A('XLM') });
+  assert.deepEqual(topicsOf(purchased.decoded), { pool_id: 4, buyer: 'BUYER' });
+  assert.equal(purchased.activity.kind, 'marketplace.pool_purchased');
   assert.equal(purchased.activity.visibility, 'public');
-  assert.equal(purchased.activity.token_id, '12');
+  assert.equal(purchased.activity.token_id, '32');
   assert.equal(purchased.activity.actor, 'BUYER');
-  assert.equal(purchased.activity.summary, 'Primary sale: token 12 bought for 100 (listing 4)');
+  assert.equal(purchased.activity.summary, 'Token 32 bought from pool 4 for 100');
 
-  const cancelled = run('marketplace', 'MKT', 'PrimaryListingCancelled', [{ u64: '4' }]);
-  assert.deepEqual(topicsOf(cancelled.decoded), { listing_id: '4' });
-  assert.deepEqual(argsOf(cancelled.decoded), {});
-  assert.equal(cancelled.activity.kind, 'marketplace.primary_listing_cancelled');
-  assert.equal(cancelled.activity.summary, 'Primary listing 4 cancelled');
-  const expired = run('marketplace', 'MKT', 'PrimaryListingExpired', [{ u64: '4' }]);
-  assert.deepEqual(topicsOf(expired.decoded), { listing_id: '4' });
-  assert.equal(expired.activity.kind, 'marketplace.primary_listing_expired');
-  assert.equal(expired.activity.visibility, 'public');
+  const closed = run('marketplace', 'MKT', 'PoolClosed', [{ u32: 4 }], { released: { u32: 3 } });
+  assert.equal(closed.activity.kind, 'marketplace.pool_closed');
+  assert.equal(closed.activity.visibility, 'public');
+  assert.equal(closed.activity.summary, 'Pool 4 closed; 3 unminted tokens returned to the allowance');
+  const swept = run('marketplace', 'MKT', 'PoolSwept', [{ u32: 4 }], { count: { u32: 6 }, pages_left: { u32: 0 } });
+  assert.equal(swept.activity.kind, 'marketplace.pool_swept');
+  assert.equal(swept.activity.summary, '6 unsold tokens swept from pool 4 to the Treasury');
 });
 
 test('marketplace secondary listings: payment_asset on create, ListingPurchased is secondary-only', () => {
@@ -1134,11 +1196,11 @@ test('activity feed picks token identifiers from topics even when args is an emp
   assert.equal(activity.token_id, '7');
   assert.equal(activity.actor, 'B');
   const purchase = buildActivityFeed({
-    event_id: 'args-only', event_name: 'PrimaryListingPurchased', deployment_id: 'd', contract_id: 'MKT', contract_role: 'marketplace',
-    topics: JSON.stringify({ listing_id: '4', buyer: 'B' }), args: JSON.stringify({ token_id: 3, price: '10' })
+    event_id: 'args-only', event_name: 'PoolPurchased', deployment_id: 'd', contract_id: 'MKT', contract_role: 'marketplace',
+    topics: JSON.stringify({ pool_id: '4', buyer: 'B' }), args: JSON.stringify({ token_id: 3, price: '10' })
   });
   assert.equal(purchase.token_id, '3');
-  assert.match(purchase.summary, /listing 4/);
+  assert.match(purchase.summary, /pool 4/);
 });
 
 test('automatic self-delegation stays off the public feed; real delegation is governance news', () => {
@@ -1153,11 +1215,13 @@ test('automatic self-delegation stays off the public feed; real delegation is go
 test('public feed carries the story events, not their side effects', () => {
   const visibility = (event_name, extra = {}) =>
     buildActivityFeed({ event_id: event_name, deployment_id: 'test', contract_id: 'C', event_name, ledger_sequence: 1, transaction_hash: 'tx', topics: '{}', args: '{}', ...extra }).visibility;
-  // mint_batch_with_minter is the token's side of a batch; the Minter's own row is the public one.
-  for (const name of ['mint', 'mint_with_minter', 'mint_batch_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized', 'refund_withdrawn'])
+  // mint_batch_with_minter is the token's side of a claim; the ClaimMinter's own row is the public one.
+  for (const name of ['mint', 'mint_with_minter', 'mint_batch_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized',
+    'refund_withdrawn', 'pool_restocked', 'pool_swept', 'refunded', 'module_created', 'agent_transfer', 'claim_minter_launched'])
     assert.notEqual(visibility(name), 'public', name);
-  // A listing that closes is news like a listing that opens.
-  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'mint_batch_event', 'merkle_claim_event', 'listing_purchased', 'listing_cancelled', 'listing_expired', 'primary_listing_purchased', 'primary_listing_cancelled', 'primary_listing_expired', 'upgraded'])
+  // A listing or pool that closes is news like one that opens.
+  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'claimed', 'list_opened', 'escrow_released', 'listing_purchased', 'listing_cancelled',
+    'listing_expired', 'pool_opened', 'pool_purchased', 'pool_closed', 'assurance_opened', 'slug_released', 'transfers_lock_changed', 'dao_recovery_changed', 'dao_transfer', 'upgraded'])
     assert.equal(visibility(name), 'public', name);
   for (const name of ['proposal_created', 'vote_cast', 'proposal_executed']) assert.equal(visibility(name), 'governance', name);
 });

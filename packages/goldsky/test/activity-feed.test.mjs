@@ -214,7 +214,7 @@ const batchMint = invoke({
   topics: JSON.stringify({ minter: 'GMINTER' }), args: JSON.stringify({ first_token_id: 30, count: 5 })
 });
 assert.strictEqual(batchMint.kind, 'token.batch_mint');
-// The Minter's own MintBatchEvent / MerkleClaimEvent in the same call is the public row.
+// The ClaimMinter's own Claimed row in the same call is the public one.
 assert.strictEqual(batchMint.visibility, 'admin');
 assert.strictEqual(batchMint.summary, 'Minted 5 tokens (30-34) by GMINTER');
 const seeds = invoke({
@@ -278,7 +278,7 @@ assert.strictEqual(adminResult.actor, 'GADMIN', 'the caller is the actor, not th
 assert.deepStrictEqual(JSON.parse(adminResult.addresses), ['CAUCTION', 'GADMIN', 'test']);
 
 // The actor is the account that acted: admin before the module contracts an init event names,
-// and no actor for DaoLaunched (it names only the token and the shared Minter).
+// and no actor for DaoLaunched (it names only the token and its modules).
 const auctionInit = invoke({
   event_id: '8a', event_name: 'auction_initialized', contract_role: 'auction', deployment_id: 'test', contract_id: 'CAUCTION',
   topics: JSON.stringify({ admin: 'GADMIN' }),
@@ -301,10 +301,10 @@ assert.strictEqual(treasuryInit.actor, 'GADMIN');
 const launched = invoke({
   event_id: '8d', event_name: 'dao_launched', contract_role: 'manager', deployment_id: 'test', contract_id: 'CMANAGER',
   topics: JSON.stringify({ token_address: 'CTOKEN' }),
-  args: JSON.stringify({ launched_ledger: '5', modules: { token: 'CTOKEN' }, launch_auction: true, launch_marketplace: false, minter: 'CMINTER' })
+  args: JSON.stringify({ launched_ledger: '5', modules: { token: 'CTOKEN' }, launch_auction: true, launch_marketplace: false, registry: [] })
 });
 assert.strictEqual(launched.actor, '');
-assert.deepStrictEqual(JSON.parse(launched.addresses), ['CMINTER', 'CTOKEN', 'CMANAGER']);
+assert.deepStrictEqual(JSON.parse(launched.addresses), ['CTOKEN', 'CMANAGER']);
 console.log('✅ Passed\n');
 
 // Test 13: Addresses array handling
@@ -371,9 +371,17 @@ console.log('✅ Passed\n');
 // Test 16: hardened-contract events map to kinds, titles and visibility
 console.log('Test 16: New and changed event kinds, titles and visibility');
 const newEventCases = [
-  ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
-  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
-  ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'public'],
+  ['PoolOpened', 'marketplace', 'marketplace.pool_opened', 'Quick-buy pool opened', 'public'],
+  ['PoolPurchased', 'marketplace', 'marketplace.pool_purchased', 'Pool sale', 'public'],
+  ['PoolClosed', 'marketplace', 'marketplace.pool_closed', 'Pool closed', 'public'],
+  ['PoolRestocked', 'marketplace', 'marketplace.pool_restocked', 'Pool restocked', 'admin'],
+  ['ListOpened', 'claims', 'claims.list_opened', 'Claim list opened', 'public'],
+  ['Claimed', 'claims', 'claims.claimed', 'Tokens claimed', 'public'],
+  ['Refunded', 'claims', 'claims.refunded', 'Claim refunded', 'admin'],
+  ['ClaimMinterLaunched', 'claims', 'claims.launched', 'Claim minter launched', 'admin'],
+  ['AdminChanged', 'claims', 'claims.admin_changed', 'Claim minter admin handed to the Treasury', 'admin'],
+  ['AssuranceOpened', 'manager', 'manager.assurance_opened', 'Assurance drive opened', 'public'],
+  ['DaoTransfer', 'token', 'token.dao_transfer', 'Membership moved by the DAO', 'public'],
   ['ListingCancelled', 'marketplace', 'marketplace.listing_cancelled', 'Listing cancelled', 'public'],
   ['ListingExpired', 'marketplace', 'marketplace.listing_expired', 'Listing expired', 'public'],
   ['MintBatchWithMinter', 'token', 'token.batch_mint', 'Tokens batch minted', 'admin'],
@@ -381,33 +389,32 @@ const newEventCases = [
   ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'admin'],
   ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],
   ['AdminChanged', 'manager', 'manager.admin_changed', 'Manager admin changed', 'admin'],
-  ['PlatformMinterSet', 'manager', 'manager.platform_minter_set', 'Platform minter set', 'admin'],
   ['TokenLaunched', 'token', 'token.launched', 'Token launched', 'admin'],
   ['AuctionLaunched', 'auction', 'auction.launched', 'Auction launched', 'admin'],
   ['MarketplaceLaunched', 'marketplace', 'marketplace.launched', 'Marketplace launched', 'admin'],
   ['AdminChanged', 'token', 'token.admin_changed', 'Token admin handed to the Treasury', 'admin'],
   ['AdminChanged', 'treasury', 'treasury.admin_changed', 'Treasury admin handed to the Treasury', 'admin'],
   ['Migrated', 'governor', 'governance.migrated', 'Governor storage migrated', 'admin'],
-  ['Migrated', 'minter', 'minter.migrated', 'Minter storage migrated', 'admin'],
+  ['Migrated', 'claims', 'claims.migrated', 'Claim minter storage migrated', 'admin'],
   ['ProposalScheduled', 'governor', 'governance.proposal_scheduled', 'Proposal voting scheduled', 'admin'],
   ['SlugClaimed', 'manager', 'manager.slug_claimed', 'Slug claimed', 'admin'],
   ['SlugChanged', 'manager', 'manager.slug_changed', 'Community link changed', 'public'],
   ['PendingSlugUpdated', 'manager', 'manager.pending_slug_updated', 'Requested slug changed', 'admin'],
   ['LatestImplementationSet', 'manager', 'manager.latest_implementation_set', 'Latest implementation set', 'admin'],
   ['UpgradeDelayChanged', 'manager', 'manager.upgrade_delay_changed', 'Manager upgrade notice changed', 'public'],
-  ['UpgradeDelayChanged', 'minter', 'minter.upgrade_delay_changed', 'Minter upgrade notice changed', 'public'],
   ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],
   ['AdminProposalCancelled', 'manager', 'manager.admin_proposal_cancelled', 'Manager admin proposal cancelled', 'admin'],
   ['Upgraded', 'token', 'token.upgraded', 'Token upgraded', 'public'],
   ['Upgraded', 'governor', 'governance.upgraded', 'Governor upgraded', 'public'],
-  ['Upgraded', 'minter', 'minter.upgraded', 'Minter upgraded', 'public'],
+  ['Upgraded', 'claims', 'claims.upgraded', 'Claim minter upgraded', 'public'],
+  ['Upgraded', 'module', 'module.upgraded', 'Module upgraded', 'public'],
+  ['SeatAssigned', 'module', 'module.seatassigned', 'Module event', 'admin'],
   ['Upgraded', 'treasury', 'treasury.upgraded', 'Treasury upgraded', 'public'],
   ['Upgraded', 'auction', 'auction.upgraded', 'Auction upgraded', 'public'],
   ['Upgraded', 'marketplace', 'marketplace.upgraded', 'Marketplace upgraded', 'public'],
   ['Upgraded', 'metadata', 'metadata.upgraded', 'Metadata upgraded', 'public'],
   ['Upgraded', '', 'module.upgraded', 'Module upgraded', 'public'],
-  ['ProfileUpdated', 'metadata', 'metadata.profile_updated', 'Community profile updated', 'public'],
-  ['MerkleRootSetEvent', 'minter', 'minter.merkle_root_set', 'Claim round opened', 'public']
+  ['ProfileUpdated', 'metadata', 'metadata.profile_updated', 'Community profile updated', 'public']
 ];
 for (const [eventName, role, kind, title, visibility] of newEventCases) {
   const row = invoke({ event_id: 'n', event_name: eventName, contract_role: role, deployment_id: 'test', contract_id: 'test' });
@@ -415,7 +422,8 @@ for (const [eventName, role, kind, title, visibility] of newEventCases) {
   assert.strictEqual(row.title, title, `${eventName}/${role} title`);
   assert.strictEqual(row.visibility, visibility, `${eventName}/${role} visibility`);
 }
-for (const removed of ['MarketplaceUpgraded', 'TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated', 'VersionSynced', 'AllowlistSetEvent', 'DescriptionUpdated']) {
+for (const removed of ['MarketplaceUpgraded', 'TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated', 'VersionSynced', 'AllowlistSetEvent', 'DescriptionUpdated',
+  'PlatformMinterSet', 'MerkleRootSetEvent', 'MerkleClaimEvent', 'PrimaryListingCreated', 'PrimaryListingPurchased', 'PrimaryListingCommented']) {
   assert.strictEqual(invoke({ event_id: 'r', event_name: removed, deployment_id: 'test', contract_id: 'test' }).kind, 'contract.' + removed.toLowerCase(), `${removed} must be unmapped`);
 }
 console.log('✅ Passed\n');
@@ -472,13 +480,6 @@ assert.strictEqual(listingComment.kind, 'marketplace.listing_commented');
 assert.strictEqual(listingComment.visibility, 'public');
 assert.strictEqual(listingComment.token_id, '7');
 assert.strictEqual(listingComment.summary, 'Comment on token 7: "' + 'x'.repeat(117) + '..."');
-
-const primaryComment = invoke({
-  event_id: 'c3', event_name: 'PrimaryListingCommented', deployment_id: 'test', contract_id: 'MKT', contract_role: 'marketplace',
-  topics: JSON.stringify({ listing_id: 2, author: 'GAUTHOR' }), args: JSON.stringify({ body: 'hi' })
-});
-assert.strictEqual(primaryComment.kind, 'marketplace.primary_listing_commented');
-assert.strictEqual(primaryComment.summary, 'Comment on primary listing 2: "hi"');
 
 const bidWithComment = invoke({
   event_id: 'c4', event_name: 'BidPlaced', deployment_id: 'test', contract_id: 'AUC', contract_role: 'auction',

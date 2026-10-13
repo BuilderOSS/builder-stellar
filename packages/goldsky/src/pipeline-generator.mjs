@@ -90,12 +90,8 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   const decodedScript = readFileSync(defaultDecodedScriptPath, 'utf8');
   const script = scriptSource ?? readFileSync(defaultScriptPath, 'utf8');
   const managerContract = deployment.manager;
-  const minterContract = deployment.minter;
   if (!managerContract) {
     throw new Error('Deployment artifact must define manager');
-  }
-  if (!minterContract) {
-    throw new Error('Deployment artifact must define minter');
   }
   const resolvedStartAt = startAt ?? resolveStartAt(deployment);
 
@@ -107,7 +103,6 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
     START_AT: resolvedStartAt,
     DATASET_NAME: `stellar_${deployment.network}.events`,
     MANAGER_CONTRACT_ID: managerContract,
-    MINTER_CONTRACT_ID: minterContract,
     RAW_EVENTS_SCRIPT: indentBlock(rawScript, 6),
     DECODED_EVENTS_SCRIPT: indentBlock(decodedScript, 6),
     ACTIVITY_SCRIPT: indentBlock(script, 6),

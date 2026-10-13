@@ -11,16 +11,22 @@ sources:
     start_at: {{START_AT}}
 
 transforms:
-  # Each DaoCreated event carries the six newly deployed module addresses. The six dynamic
-  # tables below (Postgres, schema `streamling`) are the stream's allowlist: the only lookup a
-  # Goldsky SQL transform can make outside the stream is dynamic_table_check(table, value),
-  # which answers membership of one key column and nothing else (no joins, no reading our own
-  # views: manager.daos is built from this pipeline's output, one hop later). One table per
-  # module because the role has to be encoded by which table holds the address; the
-  # contract_role it yields drives every Manager view, app.activity_feed's DAO assignment and
-  # the kinds of the common events (Upgraded, Migrated, AdminChanged, Paused, UpgradeDelayChanged).
-  # The tables persist across redeploys and are append-only; a Manager change needs
-  # `DROP SCHEMA streamling CASCADE` (db/README.md).
+  # Allowlists. The only lookup a Goldsky SQL transform can make outside the stream is
+  # dynamic_table_check(table, value), which answers membership of one key column and nothing
+  # else (no joins, no reading our own views: manager.daos is built from this pipeline's output,
+  # one hop later). So the role is encoded by which table holds an address
+  # (docs/designs/membership-models.md § 7):
+  #   - the core four (token, metadata, governor, treasury) come from DaoCreated, one table each;
+  #   - modules come from the Token's ModuleRegistered: one table per known kind plus the
+  #     catch-all `dao_modules`, each admitting only registrations a known DAO Token emitted
+  #     (dynamic_table_check('dao_tokens') inside the table's own SQL). Goldsky's validator
+  #     refuses a dynamic table that reads an intermediate SQL transform, so the tables read
+  #     the source directly (docs/designs/membership-models.md § 7, review 2 B8).
+  # The role drives every Manager view, app.activity_feed's DAO assignment and the kinds of the
+  # common events. Tables are append-only, so an unregistered module stays allowlisted: the
+  # views drop its later events by registration window (manager.module_events). The tables
+  # persist across redeploys; a Manager change needs `DROP SCHEMA streamling CASCADE`
+  # (db/README.md).
   dao_tokens:
     type: dynamic_table
     backend_type: Postgres
@@ -45,21 +51,6 @@ transforms:
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
-      FROM stellar_events
-      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
-        AND type = 'contract'
-        AND in_successful_contract_call
-        AND topics LIKE '%dao_created%'
-
-  dao_auctions:
-    type: dynamic_table
-    backend_type: Postgres
-    backend_entity_name: dao_auctions
-    secret_name: {{POSTGRES_SECRET_NAME}}
-    schema: streamling
-    column: contract_id
-    sql: |
-      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
@@ -96,6 +87,24 @@ transforms:
         AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
+  # Module tables: ModuleRegistered (topics: module_registered, kind; data: address, non_voting)
+  # from a known DAO Token. Kind symbols are quoted in `topics`, so `"claims"` matches only the kind.
+  dao_auctions:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_auctions
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
+        AND topics LIKE '%"auction"%'
+
   dao_marketplaces:
     type: dynamic_table
     backend_type: Postgres
@@ -104,12 +113,61 @@ transforms:
     schema: streamling
     column: contract_id
     sql: |
-      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
-        AND type = 'contract'
+      WHERE type = 'contract'
         AND in_successful_contract_call
-        AND topics LIKE '%dao_created%'
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
+        AND topics LIKE '%"marketplace"%'
+
+  dao_claims:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_claims
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
+        AND topics LIKE '%"claims"%'
+
+  dao_circles:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_circles
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
+        AND topics LIKE '%"circle"%'
+
+  # Every registered module of any kind, built-in, `custom_<name>` or an unknown future kind.
+  dao_modules:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_modules
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
 
   dao_events:
     type: sql
@@ -121,13 +179,15 @@ transforms:
         contract_id,
         CASE
           WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager'
-          WHEN contract_id = '{{MINTER_CONTRACT_ID}}' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
-          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
           WHEN dynamic_table_check('dao_governors', contract_id) THEN 'governor'
           WHEN dynamic_table_check('dao_treasuries', contract_id) THEN 'treasury'
+          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
           WHEN dynamic_table_check('dao_marketplaces', contract_id) THEN 'marketplace'
+          WHEN dynamic_table_check('dao_claims', contract_id) THEN 'claims'
+          WHEN dynamic_table_check('dao_circles', contract_id) THEN 'circle'
+          WHEN dynamic_table_check('dao_modules', contract_id) THEN 'module'
           ELSE 'unknown'
         END AS contract_role,
         type,
@@ -156,13 +216,11 @@ transforms:
          AND in_successful_contract_call
          AND (
            contract_id = '{{MANAGER_CONTRACT_ID}}'
-           OR contract_id = '{{MINTER_CONTRACT_ID}}'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
-           OR dynamic_table_check('dao_auctions', contract_id)
            OR dynamic_table_check('dao_governors', contract_id)
            OR dynamic_table_check('dao_treasuries', contract_id)
-           OR dynamic_table_check('dao_marketplaces', contract_id)
+           OR dynamic_table_check('dao_modules', contract_id)
          )
 
   raw_events:

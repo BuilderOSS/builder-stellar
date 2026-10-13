@@ -16,10 +16,10 @@ ROLLBACK_DIR="$DB_DIR/rollback"
 
 # Every schema owned by the migrations (landing tables first). Reset and grants
 # iterate this list so a new schema only needs to be added here.
-SCHEMAS=(chain manager token governance auction metadata treasury marketplace app)
+SCHEMAS=(chain manager token governance auction metadata treasury marketplace claims app)
 # Schemas the web app may read. chain holds raw landing payloads and is never
 # exposed; app/manager/... views read it with owner privileges.
-APP_SCHEMAS=(manager token governance auction metadata treasury marketplace app)
+APP_SCHEMAS=(manager token governance auction metadata treasury marketplace claims app)
 
 # Comma-separated, quoted list for SQL IN (...) clauses.
 sql_schema_list() {
