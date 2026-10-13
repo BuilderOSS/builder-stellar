@@ -5766,3 +5766,6 @@ fn dao_module_chains_two_upgrades_in_one_proposal() {
     assert_eq!(auction.wasm_hash(), v3);
     assert_eq!(auction.version(), String::from_str(e, "0.5.0"));
 }
+
+#[path = "membership.rs"]
+mod membership;

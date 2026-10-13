@@ -45,8 +45,8 @@ mod test;
 pub use contract::*;
 pub use error::*;
 pub use storage::{
-    ArtworkIpfsGroup, AuctionConfig, ClaimsConfig, CurrentImplementations, DaoAddresses,
-    DaoCreationParams, DaoWasmHashes, GovernanceConfig, ImplementationVersion,
-    InitialDaoConfigValues, LaunchConfig, MarketplaceConfig, ModuleSpec, PendingDao,
-    UpgradeApproval,
+    ArtworkIpfsGroup, Assurance, AssuranceListParams, AuctionConfig, ClaimsConfig,
+    CurrentImplementations, DaoAddresses, DaoCreationParams, DaoWasmHashes, GovernanceConfig,
+    ImplementationVersion, InitialDaoConfigValues, LaunchConfig, MarketplaceConfig, ModuleSpec,
+    PendingDao, UpgradeApproval,
 };

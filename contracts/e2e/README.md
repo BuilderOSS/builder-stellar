@@ -17,6 +17,13 @@ Coverage includes mint hooks, voting snapshots, ordered Treasury execution, fail
 - `system_held_tokens_and_votes_through_a_real_proposal`: voting supply, quorum, delegation and system contracts never voting.
 - `error_codes_are_unique_per_crate_block`.
 - `voting_units_match_balances_and_checkpoints_add_up` (`src/voting_invariant.rs`): fixed-seed random mints, batch mints, transfers between wallets and the Treasury/Auction/Marketplace, and delegations. After every step: voting units equal balance (zero for non-voting holders), `TotalSupply` equals the units, and the account checkpoints add up to `TotalSupply`. It is the gate for the module registry in `docs/designs/membership-models.md` ("The Assignment").
+- Membership models (`src/membership.rs`, [design](../../docs/designs/membership-models.md) Next Steps 6), on the built WASMs:
+  - an assurance drive over a 1,000-leaf tree: a frozen DAO, partial claims counting once, refusals until `Met`, then anyone launches and the escrow reaches the Treasury in the launch transaction (resources measured);
+  - a failed drive: both launch paths refused, refunds, the launch admin's `recover_claims` upgrade of the ClaimMinter, then the slug freed for another DAO;
+  - a 100-token quick-buy pool: restocks at the event-budget edge against 16-trait artwork, buyer caps, close and sweep, with the renewal inventory checked against a ledger scan;
+  - a ClaimMinter stopping at its allowance.
+
+  Not covered here: an escrow balance archived during a quiet drive and restored by the launch (review 2 B6). The test host has no hot archive, so that path needs a testnet run.
 
 Some tests use mocks; consult [test.rs](src/test.rs) for each fixture.
 
