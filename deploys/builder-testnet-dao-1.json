@@ -1,0 +1,168 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 1,
+  "manager": "CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "c20c822aaa4647a7892ee7a63009d5a438fece29",
+  "addresses": {
+    "token": "CBSX3LRRSKZZAH2IYGDR6QYMY2PFR5X427RPUH64HYZUAPCOICRZ5EI3",
+    "metadata": "CBYI7PMX72IV7YPFLXN7AVFWVD7IR7VQRIG7WSI5L5X6VG6VDQLVTLUR",
+    "governor": "CBMZHCHIKKW4HBU75A3U2UB7WIJ4XJHNR6I6FM6GW3S57SEUKB5E6GWV",
+    "treasury": "CDCAYZ3NFLTAFUWNIXFTSS3WERPDZLUKT4U6GR3EL7QNK35LQGKU26UG",
+    "auction": "CC7FVQ2N4NJL7BJRM2CZ4URUYNDAB6CB6VWANVQYP3DQQHFBAVQEJG4L",
+    "marketplace": "CCAJM6FBBFWSVSQSINVTIYRTO42FTW3A3XEY5SBYCHZQ55YMRJCQ2NEI",
+    "claims": null
+  },
+  "config": {
+    "$comment": "Builder Auctions: Daily auctions fund the treasury; members can resell on the market. Fresh testnet deployment (membership models 0.4.0).",
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 1,
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "slug": "builder-auctions",
+    "token": {
+      "name": "Builder Auctions",
+      "symbol": "BAUC"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Daily auctions fund the treasury; members can resell on the market.",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://test-dao-stellar-web.vercel.app"
+          }
+        ],
+        "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+      },
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launch": {
+      "launchAuction": true,
+      "launchMarketplace": true
+    },
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": false,
+      "daoRecovery": false
+    }
+  },
+  "updatedAt": "2026-10-13T12:37:54.470Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "3f1f9b18bb5997f7961f414da75a0b777f701818dcf55eb4f3fd70a8150fb179",
+      "ledger": 5174288
+    },
+    "artworkBatches": [
+      {
+        "txHash": "d5aa6f16125576d5be1b4ea0f178504835ac436690caa7ddc5b91d784cffb46f",
+        "batch": 1,
+        "items": 14,
+        "ledger": 5174291
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "a1962645bf13aef56809e51cc799f839c16e8b2877061cc6219ae0d4304864bd",
+        "batch": 1,
+        "tokens": 30,
+        "ledger": 5174294
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "16b81a9ce05eabdf252880d1ef17444bf53bb0b5abc12cda74a9f980531d18ce",
+      "ledger": 5174297
+    }
+  },
+  "deploymentLedger": 5174288
+}

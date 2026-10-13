@@ -3,8 +3,8 @@
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-  "nonce": 0,
-  "manager": "CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE",
+  "nonce": 3,
+  "manager": "CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD",
   "versions": {
     "manager": "0.4.0",
     "token": "0.4.0",
@@ -15,29 +15,29 @@
     "marketplace": "0.4.0",
     "minter": "0.4.0"
   },
-  "sourceCommit": "8ba7cfe526eadb0c6ac960b62925307fd4cb3cc9",
+  "sourceCommit": "c20c822aaa4647a7892ee7a63009d5a438fece29",
   "addresses": {
-    "token": "CA5D7RQSIHNCUMM4R5WEMHBQH76QTXA7GEMAGMG4PP3ZVVOHYDYCU476",
-    "metadata": "CC3TIRQHXADOYZBEQFP5VATGYRKLDYQZA7EZSTBANA7IGB3WG4BKPQZD",
-    "governor": "CBLQW3ZSCFSA4DUI26GLCVAZQR2KUBL3FLIPLYZF4PKKUB53RUUB76KU",
-    "treasury": "CALHA26D7QWROJU4TGLDYO4AWUV6WNCKQMZXOR44MSHR5J3V4BCY5G3P",
-    "auction": "CBRNE6APTLG7ZKQPLCCNJYBKMZ7QFL4MRD34VGXP4VDKNKUZCHMAIQN5",
-    "marketplace": "CAJXLNIH4NYUOPMY4RFSV4UZFNW55RABD64R4BTKKVN4BACKFJR2YY3W",
-    "claims": "CADXNVESBAX3DCMYKGG4TIPE3Y6K4HNPBBJ3SM7KJW42YEVX45ZKVOB5"
+    "token": "CCQVCVUVITXX4TDM5VO3OEOIIJ2MEL5KNUQGOSD7QEVFJMR45MYNXAQ2",
+    "metadata": "CBMYJUC5WIWE2B2V4IIQB2Y5DVIPEK2JAAK7GNCOQBHA5WHKLOXML3I6",
+    "governor": "CCEZZQXDZN7LHKLNZIM4EZM34MRM5VNRFRFVWNDX73QJMF64HFRPGPJY",
+    "treasury": "CDSUNO2NTCJTLNLEFPYAYDM3ELJDOFE6A4AO4AT6SHOLXVDLRQ6PYPLL",
+    "auction": null,
+    "marketplace": "CAQUS32ZMB4WVBVKO3FHDA65UY4B5G4W4GX6S6SW2N5IVA54YBQAIVIA",
+    "claims": "CDNVUHXVUOOSZ2NQCSDMPTIEIUXXP4PUQH4ZX7OU2GLRSIKEGHLUXAR4"
   },
   "config": {
-    "$comment": "Seconds bounds: votingDelay/votingPeriod/queueDelay 300..=2592000; auction.timeBuffer 1..=86400; quorumBps 1..=10000; proposalThreshold is an ABSOLUTE number of votes (>= 1, not bps) and must not exceed the founder supply; reservePrice >= 1000 (stroops). Modules are optional: omit the auction, marketplace or claims section (or set enabled: false) for a DAO without that module; add claims: { paymentAsset } for a per-DAO ClaimMinter. Payment assets are fixed at create_dao and asserted at launch. tokenSettings { transfersLocked, membersOnlyDelegation, daoRecovery } (default all false, an open DAO) and transferAgents (kinds this config creates) are optional. metadata.profile is the community profile ({ description, links, image }, at most 4,096 bytes serialized). Founders are minted by the launch admin via token.batch_mint during setup. Primary sales are quick-buy pools opened by governance after launch.",
+    "$comment": "Builder Market: New memberships sell from quick-buy pools and claim lists; only members can be delegates. Fresh testnet deployment (membership models 0.4.0).",
     "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-    "nonce": 0,
+    "nonce": 3,
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-    "slug": "builder",
+    "slug": "builder-market",
     "token": {
-      "name": "Builder DAO",
-      "symbol": "BUILD"
+      "name": "Builder Market",
+      "symbol": "BMKT"
     },
     "metadata": {
       "profile": {
-        "description": "Unlock the possibilities of collective creation",
+        "description": "New memberships sell from quick-buy pools and claim lists; only members can be delegates.",
         "links": [
           {
             "label": "Website",
@@ -95,12 +95,6 @@
         ]
       }
     },
-    "auction": {
-      "duration": 300,
-      "reservePrice": "1000000000",
-      "timeBuffer": 300,
-      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
-    },
     "marketplace": {
       "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
       "secondaryFeeBps": 250
@@ -130,37 +124,42 @@
       }
     ],
     "launch": {
-      "launchAuction": true,
+      "launchAuction": false,
       "launchMarketplace": true
+    },
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": true,
+      "daoRecovery": false
     }
   },
-  "updatedAt": "2026-10-13T10:22:05.583Z",
+  "updatedAt": "2026-10-13T12:39:49.375Z",
   "transactions": {
     "createDao": {
-      "txHash": "b458692083660e131f45915e3b446cb53a4cd8e075c9aceee073bccd4237532a",
-      "ledger": 5172656
+      "txHash": "bbb60b98133f690fd8c4c3441cc449d45908e3ce15e31883ecdbcf7a1fb7a245",
+      "ledger": 5174311
     },
     "artworkBatches": [
       {
-        "txHash": "6aefb779a52e60f4e4b75f2f91f81655fbbabf7f9857f3faa053310e376aa0e0",
+        "txHash": "7929a4313330aa163686310c3b7d255626bcec9da8af22fd3213bdbfbc9f578c",
         "batch": 1,
         "items": 14,
-        "ledger": 5172660
+        "ledger": 5174314
       }
     ],
     "founderMintBatches": [
       {
-        "txHash": "d92229f79555112cf5731ace35945b544b89925412af325c77b1e24d7042911f",
+        "txHash": "170459be779b0b44764d4f3ed2e5a3cfd038e96ce8662fd64c0a75304ff1008d",
         "batch": 1,
         "tokens": 30,
-        "ledger": 5172663
+        "ledger": 5174317
       }
     ],
     "regenerated": [],
     "launchDao": {
-      "txHash": "386ee0775d224709fb175b6ee6ed5fc03caa45b531ab34636b8831bb73105b82",
-      "ledger": 5172667
+      "txHash": "b51b474268c14737388dbb9f9f45c8a5c549061456deea00bf55dddb32dbfbba",
+      "ledger": 5174320
     }
   },
-  "deploymentLedger": 5172656
+  "deploymentLedger": 5174311
 }
