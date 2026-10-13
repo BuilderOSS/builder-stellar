@@ -3,7 +3,7 @@
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { RefreshCw, Upload } from 'lucide-react';
 import type { Route } from 'next';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
@@ -81,6 +81,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   const [message, setMessage] = useState('');
   const [hash, setHash] = useState('');
   const lock = useRef(false);
+  const reviewHeading = useRef<HTMLHeadingElement>(null);
   const data = current.data;
   const signedIn = Boolean(
     !current.error &&
@@ -91,6 +92,14 @@ export function Claims({ admin = false }: { admin?: boolean }) {
     session.walletNetworkPassphrase === config.passphrase
   );
   const canClaim = signedIn && Boolean(data?.claimsContractId);
+  const wrongNetwork = Boolean(
+    data?.authenticated && (session.walletNetworkIssue || session.walletNetworkPassphrase !== config.passphrase)
+  );
+
+  // The review replaces the card's button: bring it into view, and to keyboard and screen reader users.
+  useEffect(() => {
+    if (review) reviewHeading.current?.focus();
+  }, [review]);
   const base = `/dao/${encodeURIComponent(routeId)}`;
   const api = `/api/dao/${encodeURIComponent(config.tokenContractId)}/claims`;
 
@@ -110,7 +119,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
     lock.current = true;
     setBusy(true);
     setReview(null);
-    setMessage('Checking the list and simulating your claim…');
+    setMessage('Checking the list and preparing your claim…');
     try {
       if (listPhase(list) !== 'open') throw new Error('This list is not taking claims.');
       if (!verifyClaimProof(address, entry.amount, entry.proof, list.root))
@@ -192,7 +201,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         again.claimed !== list.claimed ||
         listPhase(again) !== 'open'
       )
-        throw new Error('The list or your claims changed. Refresh and simulate again.');
+        throw new Error('The list or your claims changed. Refresh and try again.');
       const unsigned = TransactionBuilder.fromXDR(prepared.xdr, config.passphrase);
       assertClaimEnvelope(unsigned, prepared, action);
       setMessage('Waiting for your wallet signature…');
@@ -299,7 +308,14 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         ) : null}
         {data && !data.claimsContractId ? <Callout variant="info" title="This community has no claims module" /> : null}
         {data && !data.authenticated && !admin ? (
-          <p>Connect the wallet that is on a claim list to see your tokens.</p>
+          <p>Connect the wallet that is on a claim list to see your tokens, or to take back a payment.</p>
+        ) : null}
+        {wrongNetwork ? (
+          <Callout
+            variant="warning"
+            title="Switch your wallet to this community's network"
+            description={session.walletNetworkIssue || 'Claims, launch and refunds sign on that network.'}
+          />
         ) : null}
         {data ? (
           <Disclosure title="Technical details">
@@ -345,6 +361,66 @@ export function Claims({ admin = false }: { admin?: boolean }) {
             <p>No claim lists yet.</p>
           </section>
         )
+      ) : null}
+
+      {review ? (
+        <section className={`${styles.panel} ${styles.review}`} aria-label="Claim transaction review">
+          <h2 ref={reviewHeading} tabIndex={-1} className={css({ outline: 'none' })}>
+            Claim {review.prepared.mintNow} {review.prepared.mintNow === 1 ? 'token' : 'tokens'} from{' '}
+            {review.list.assurance ? 'the launch drive' : `claim list ${review.list.listId + 1}`}
+          </h2>
+          <p>
+            {BigInt(review.prepared.cost) === 0n
+              ? 'The tokens are free.'
+              : `You pay ${claimAmountLabel(config.name, review.prepared.asset, review.prepared.cost)}${
+                  review.prepared.mintNow > 1
+                    ? ` (${review.prepared.mintNow} × ${claimAmountLabel(config.name, review.prepared.asset, review.list.price)})`
+                    : ''
+                }${
+                  review.list.assurance && !data?.live
+                    ? ', held by the claims module until the community launches. If the drive fails, you can take it back.'
+                    : ', sent to the community Treasury.'
+                }`}{' '}
+            Network fee: {formatStroops(review.prepared.fee)} XLM.
+          </p>
+          {BigInt(review.prepared.leafAmount) - BigInt(review.list.claimed ?? 0) > BigInt(review.prepared.mintNow) ? (
+            <p>
+              Your allocation is {review.prepared.leafAmount} tokens. One claim mints at most {MAX_CLAIM_PER_CALL};
+              claim again for the rest.
+            </p>
+          ) : null}
+          <Disclosure title="Technical details">
+            <p>
+              {listName(review.list)}. Signing authorizes the claim, its payment and its mint; smart-account signing
+              isn&apos;t supported.
+            </p>
+            <Address value={review.prepared.address} label="Recipient and signer" />
+            <Address value={review.prepared.tokenContractId} label="Token" />
+            <Address value={review.prepared.claimsContractId} label="Claims module" />
+          </Disclosure>
+          <div className={styles.row}>
+            <Button variant="ghost" disabled={busy} onClick={() => setReview(null)}>
+              Cancel
+            </Button>
+            <Button disabled={!canClaim} loading={busy} onClick={sign}>
+              Sign and claim
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {message || hash ? (
+        <section className={styles.panel}>
+          <p role="status" aria-live="polite">
+            {message}
+          </p>
+          {hash ? (
+            <>
+              <Address value={hash} label="Transaction" />
+              <p>Don&apos;t claim again while this is confirming. Check the transaction before trying again.</p>
+            </>
+          ) : null}
+        </section>
       ) : null}
 
       {admin && data?.claimsContractId ? (
@@ -422,61 +498,6 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               </Button>
             </div>
           </Disclosure>
-        </section>
-      ) : null}
-
-      {review ? (
-        <section className={`${styles.panel} ${styles.review}`} aria-label="Claim transaction review">
-          <h2>
-            Claim {review.prepared.mintNow} {review.prepared.mintNow === 1 ? 'token' : 'tokens'}
-          </h2>
-          <p>
-            {BigInt(review.prepared.cost) === 0n
-              ? 'The tokens are free.'
-              : `You pay ${claimAmountLabel(config.name, review.prepared.asset, review.prepared.cost)}${
-                  review.list.assurance && !data?.live
-                    ? ', held by the claims module until the community launches. If the drive fails, you can take it back.'
-                    : ', sent to the community Treasury.'
-                }`}{' '}
-            Network fee: {formatStroops(review.prepared.fee)} XLM.
-          </p>
-          {BigInt(review.prepared.leafAmount) - BigInt(review.list.claimed ?? 0) > BigInt(review.prepared.mintNow) ? (
-            <p>
-              Your allocation is {review.prepared.leafAmount} tokens. One claim mints at most {MAX_CLAIM_PER_CALL};
-              claim again for the rest.
-            </p>
-          ) : null}
-          <Disclosure title="Technical details">
-            <p>
-              {listName(review.list)}. Signing authorizes the claim, its payment and its mint; smart-account signing
-              isn&apos;t supported.
-            </p>
-            <Address value={review.prepared.address} label="Recipient and signer" />
-            <Address value={review.prepared.tokenContractId} label="Token" />
-            <Address value={review.prepared.claimsContractId} label="Claims module" />
-          </Disclosure>
-          <div className={styles.row}>
-            <Button variant="ghost" disabled={busy} onClick={() => setReview(null)}>
-              Cancel
-            </Button>
-            <Button disabled={!canClaim} loading={busy} onClick={sign}>
-              Sign and claim
-            </Button>
-          </div>
-        </section>
-      ) : null}
-
-      {message || hash ? (
-        <section className={styles.panel}>
-          <p role="status" aria-live="polite">
-            {message}
-          </p>
-          {hash ? (
-            <>
-              <Address value={hash} label="Transaction" />
-              <p>Don&apos;t claim again while this is confirming. Check the transaction before trying again.</p>
-            </>
-          ) : null}
         </section>
       ) : null}
 
@@ -579,11 +600,18 @@ function ClaimListCard({
                 : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed by ${formatClaimDate(drive.deadline)}. Payments are held until launch.`}
           </p>
           {drive.state === 'met' && !state.live ? (
-            <div>
-              <Button disabled={!state.authenticated || disabled} onClick={onLaunch}>
-                Launch the community
-              </Button>
-            </div>
+            <>
+              <p>
+                Launching starts the community with the choices its launch admin made, and moves the held payments to
+                its treasury. It costs only the network fee.
+              </p>
+              <div>
+                <Button disabled={!state.authenticated || disabled} onClick={onLaunch}>
+                  Launch the community
+                </Button>
+              </div>
+              {!state.authenticated ? <p className={styles.muted}>Connect a wallet to launch it.</p> : null}
+            </>
           ) : null}
         </>
       ) : null}
@@ -623,6 +651,8 @@ function ClaimListCard({
             Take back {claimAmountLabel(config.name, list.asset, escrowed)}
           </Button>
         </div>
+      ) : !admin && phase === 'failed' && BigInt(list.price) > 0n && (list.claimed ?? 0) > 0 ? (
+        <p className={styles.muted}>Your payment has been returned.</p>
       ) : null}
       <Disclosure title="List details">
         <p className={styles.address}>Root: {list.root}</p>
