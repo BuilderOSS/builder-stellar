@@ -131,7 +131,7 @@ describe('holder binding actions', () => {
     );
     await expect(
       prepareHolderAction('dao-a', actor, { action: 'approve', tokenId: '0', destination, expirationLedger: '1000' })
-    ).rejects.toThrow('future ledger');
+    ).rejects.toThrow('end in the future');
     expect(mocks.approve).toHaveBeenCalledTimes(1);
   });
   it('revokes using pinned approval semantics without a nonexistent getter or revoke method', async () => {
