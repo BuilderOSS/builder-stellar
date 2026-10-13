@@ -8,12 +8,12 @@ import { formatMarketplaceAmount } from './amount';
 export const MARKETPLACE_LOCAL_XLM_SAC = 'CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4';
 
 export function marketplaceAssetLabel(network: NetworkName, id: string) {
-  // Never label an unknown or local testnet-placeholder SAC as USD.
+  // Never label an unknown or local testnet-placeholder asset as USD.
   return network === 'local'
     ? id === MARKETPLACE_LOCAL_XLM_SAC
       ? 'XLM'
-      : 'Unknown SAC'
-    : (getTreasuryAssets(network).find((a) => a.contractId === id)?.code ?? 'Unknown SAC');
+      : 'Unknown asset'
+    : (getTreasuryAssets(network).find((a) => a.contractId === id)?.code ?? 'Unknown asset');
 }
 
 export function marketplaceDisplayAmount(network: NetworkName, assetId: string, amount: string | bigint) {

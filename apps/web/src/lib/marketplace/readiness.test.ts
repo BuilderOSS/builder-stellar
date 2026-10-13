@@ -14,7 +14,7 @@ describe('marketplace SAC and account readiness', () => {
   it('never assumes an unknown payment contract is USD or has seven decimals', () => {
     expect(marketplaceAssetLabel('testnet', usdc.contractId!)).toBe('USDC');
     expect(marketplaceDisplayAmount('testnet', usdc.contractId!, '10000001')).toBe('1.0000001');
-    expect(marketplaceAssetLabel('public', usdc.contractId!)).toBe('Unknown SAC');
+    expect(marketplaceAssetLabel('public', usdc.contractId!)).toBe('Unknown asset');
     expect(marketplaceDisplayAmount('public', usdc.contractId!, '10000001')).toBe('10000001 base units');
   });
   it('verifies known XLM/USDC SAC ids against their network and issuer', () => {

@@ -5,7 +5,7 @@ import { Stack } from 'styled-system/jsx';
 import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
-import { FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
+import { Callout, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
 import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
@@ -220,6 +220,11 @@ export function OpenPoolForm({
         The pool mints its tokens into the marketplace and sells them at this price. Give the marketplace a mint
         allowance of at least this many tokens earlier in the same proposal.
       </FieldHelperText>
+      <Callout
+        variant="warning"
+        title="Each token sold adds a vote"
+        description="A pool larger than today's voting supply could let buyers outvote the members who approve it. Keep pools small and the per-wallet limit low. Manage → Market shows the largest share one wallet could buy."
+      />
     </Stack>
   );
 }

@@ -41,7 +41,9 @@ export function ListingCard({
     expanded && trading && listing.status === 'open'
   );
   const asset = marketplaceAssetLabel(network, listing.paymentAsset);
-  const status = listing.status.replaceAll('-', ' ');
+  // A pool past its closing time stops selling at once, even before anyone closes it on chain.
+  const status =
+    listing.kind === 'pool' && listing.status === 'awaiting-expiry' ? 'ended' : listing.status.replaceAll('-', ' ');
   let sellerProceeds: string | null = null;
   if (listing.kind === 'secondary') {
     try {
@@ -84,7 +86,7 @@ export function ListingCard({
       </p>
       <p className={styles.muted}>
         {pool
-          ? `${pool.inStock.toLocaleString()} ready · ${(pool.size - pool.sold).toLocaleString()} of ${pool.size.toLocaleString()} left · at most ${pool.maxPerBuyer.toLocaleString()} per wallet · the money goes to the treasury`
+          ? `${pool.inStock.toLocaleString()} ready · ${(pool.size - pool.sold).toLocaleString()} of ${pool.size.toLocaleString()} left · at most ${pool.maxPerBuyer.toLocaleString()} per wallet · payments go to the treasury`
           : `${(listing.feeBps / 100).toLocaleString()}% market fee, paid by the seller`}
       </p>
       {trading ? (
@@ -176,6 +178,7 @@ export function ListingCard({
               <Button variant="secondary" onClick={restock} disabled={!purchasesEnabled}>
                 Stock this pool
               </Button>
+              {!purchasesEnabled ? <p className={styles.muted}>The market is paused or not open yet.</p> : null}
             </>
           ) : null}
           {listing.status === 'open' && !needsStock ? (
@@ -193,7 +196,7 @@ export function ListingCard({
                     (listing.kind === 'secondary' && sellerProceeds === null)
                   }
                 >
-                  Buy
+                  Buy for {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} {asset}
                 </Button>
                 {listing.kind === 'secondary' && listing.seller === address ? (
                   <Button variant="danger" onClick={() => trade('cancel')}>
@@ -201,10 +204,13 @@ export function ListingCard({
                   </Button>
                 ) : null}
               </div>
+              {!purchasesEnabled ? <p className={styles.muted}>The market is paused or not open yet.</p> : null}
             </>
           ) : null}
           {listing.status === 'sold-out' ? <p>This pool sold every token it was opened with.</p> : null}
-          {listing.status === 'awaiting-expiry' && pool ? <p>This pool has closed for sales.</p> : null}
+          {listing.status === 'awaiting-expiry' && pool ? (
+            <p>This pool has ended and no longer sells. Unsold tokens go back to the treasury once it is swept.</p>
+          ) : null}
           {listing.status === 'awaiting-expiry' && !pool ? (
             <>
               <p>This listing has ended but hasn't been cleared. Clearing returns the token to its seller.</p>
