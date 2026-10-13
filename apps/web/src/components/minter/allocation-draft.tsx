@@ -11,6 +11,7 @@ import {
   Button,
   Callout,
   Checkbox,
+  Dialog,
   Field,
   FieldHelperText,
   FieldLabel,
@@ -25,7 +26,7 @@ import { parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { claimListQueueActions } from '@/lib/minter/allocation-proposal';
 import { claimMinterClient } from '@/lib/minter/client';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
-import { claimAssetCode } from '@/lib/minter/display';
+import { claimAmountLabel, claimAssetCode, formatClaimDate } from '@/lib/minter/display';
 import { claimFetch } from '@/lib/minter/hooks';
 import { type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 import { buildClaimTree, type ClaimEntry, claimTreeJson, MAX_TREE_CLAIMS } from '@/lib/minter/tree';
@@ -38,6 +39,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import styles from './claims-styles';
 
 const DAY = 86_400;
+const terms = css({ m: '0', pl: '5', display: 'grid', gap: '1.5', textStyle: 'body', color: 'ink' });
 /** The Manager refuses a drive deadline further out than this (MAX_ASSURANCE_WINDOW). */
 const MAX_DRIVE_DAYS = 90;
 
@@ -89,7 +91,10 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
   const [launchMarketplace, setLaunchMarketplace] = useState(Boolean(config.marketplaceContractId));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [confirmDrive, setConfirmDrive] = useState<DriveSummary | null>(null);
   const asset = state?.paymentAsset ?? '';
+  // Once a drive opens, the Treasury holds every module and nothing else opens until launch.
+  const driveOpen = Boolean(state && !state.live && state.lists.some((list) => list.assurance));
   const ready = Boolean(
     state?.claimsContractId &&
     state.claimsContractId === config.claimsContractId &&
@@ -174,6 +179,38 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
     tx.success('Launch drive open', hash);
   }
 
+  /** Check the drive's terms here, before anything is published, so the confirm can say exactly what opens. */
+  function reviewDrive() {
+    setMessage('');
+    try {
+      const entries = parseAllocationLines(text);
+      if (!entries.length) throw new Error('Add at least one person.');
+      const people = new Set(entries.map((entry) => entry.address)).size;
+      const needed = Number(threshold);
+      if (!Number.isInteger(needed) || needed < 1) throw new Error('Say how many people must claim before launch.');
+      if (needed > people)
+        throw new Error(
+          `The list has ${people} ${people === 1 ? 'person' : 'people'}, so at most ${people} can claim.`
+        );
+      const priceUnits = parseMarketplaceAmount(price.trim() || '0', true);
+      // Builds the same tree the publish step does, so a bad line fails here with its own message.
+      const tokens = BigInt(
+        buildClaimTree(entries, {
+          network: config.passphrase,
+          token: config.tokenContractId,
+          list: state?.nextListId ?? 0
+        }).tokenTotal
+      );
+      const now = Math.floor(Date.now() / 1000);
+      const closes = now + wholeDays(days, 365, 'Claims stay open') * DAY;
+      const deadline = now + wholeDays(driveDays, MAX_DRIVE_DAYS, 'The drive') * DAY;
+      if (deadline > closes) throw new Error('Claims must stay open at least until the drive ends.');
+      setConfirmDrive({ people, needed, tokens, price: priceUnits, deadline });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Check the list and the drive terms.');
+    }
+  }
+
   async function submit() {
     if (!ready || !state || busy) return;
     setBusy(true);
@@ -222,6 +259,17 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
     }
   }
 
+  if (driveOpen)
+    return (
+      <div className={styles.review}>
+        <h2>Open a claim list</h2>
+        <p>
+          The launch drive is open, so no other list can open now. Once the community launches, new lists go through a
+          proposal.
+        </p>
+      </div>
+    );
+
   const priced = mode !== 'free';
   const code = asset ? claimAssetCode(config.name, asset) : null;
   const priceHint = `Per token, in ${code ?? 'the community payment asset'}, up to 7 decimal places. Use 0 for a free list.`;
@@ -255,7 +303,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         <Callout
           variant="warning"
           title="Opening a drive hands the community to its Treasury now"
-          description="You can't change settings, artwork or modules after this. The community launches once enough people claim, with the launch choices below, or it never launches and refunds everyone."
+          description="Add your artwork and mint founder tokens first: after this you can't change settings, artwork, founder tokens or modules. The community launches once enough people claim, with the launch choices below, or it never launches and everyone who paid can take it back."
         />
       ) : null}
       <Field>
@@ -344,11 +392,15 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         </p>
       ) : null}
       <div>
-        <Button disabled={!ready || !!proposal.pending} loading={busy} onClick={() => void submit()}>
+        <Button
+          disabled={!ready || !!proposal.pending}
+          loading={busy}
+          onClick={() => (mode === 'drive' ? reviewDrive() : void submit())}
+        >
           {mode === 'proposal'
             ? 'Publish the list and add to a proposal'
             : mode === 'drive'
-              ? 'Publish the list and open the drive'
+              ? 'Review the launch drive'
               : 'Publish the list and open it'}
         </Button>
       </div>
@@ -358,6 +410,56 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         </p>
       ) : null}
       <AdminProposalDraftDialog pending={proposal.pending} onCancel={proposal.cancel} onResolve={proposal.resolve} />
+      <Dialog
+        open={Boolean(confirmDrive)}
+        onOpenChange={(open) => (open ? null : setConfirmDrive(null))}
+        role="alertdialog"
+        title="Open the launch drive?"
+        description="This can't be undone. You won't be able to change anything about the community after you sign."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDrive(null)}>
+              Not yet
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmDrive(null);
+                void submit();
+              }}
+            >
+              Publish and open the drive
+            </Button>
+          </>
+        }
+      >
+        {confirmDrive ? (
+          <ul className={terms}>
+            <li>
+              {confirmDrive.people.toLocaleString()} {confirmDrive.people === 1 ? 'person' : 'people'} can claim{' '}
+              {confirmDrive.tokens.toLocaleString()} {confirmDrive.tokens === 1n ? 'token' : 'tokens'},{' '}
+              {confirmDrive.price === 0n
+                ? 'for free'
+                : `paying ${claimAmountLabel(config.name, asset, confirmDrive.price)} per token`}
+              .
+            </li>
+            <li>
+              The community launches once {confirmDrive.needed.toLocaleString()} of them claim, by{' '}
+              {formatClaimDate(confirmDrive.deadline)}
+              {launchAuction || launchMarketplace
+                ? `, and then ${[launchAuction ? 'auctions start' : null, launchMarketplace ? 'the market opens' : null].filter(Boolean).join(' and ')}`
+                : ''}
+              .
+            </li>
+            <li>
+              If that many don&apos;t claim in time, it never launches
+              {confirmDrive.price === 0n ? '.' : ' and everyone who paid can take their payment back.'}
+            </li>
+            <li>The community, its settings and its modules pass to its Treasury now. You sign one transaction.</li>
+          </ul>
+        ) : null}
+      </Dialog>
     </div>
   );
 }
+
+type DriveSummary = { people: number; needed: number; tokens: bigint; price: bigint; deadline: number };
