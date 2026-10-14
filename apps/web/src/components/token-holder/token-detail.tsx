@@ -6,6 +6,7 @@ import NextLink from 'next/link';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
+import { GlossaryTerm } from '@/components/help/glossary';
 import { PageSection } from '@/components/page-section';
 import { Avatar, ButtonLink, Callout, Chip, IconButton, Skeleton } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
@@ -137,7 +138,8 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
                 </p>
               )}
               <p className={muted}>
-                Each token is one vote. Holders can delegate that vote without giving up the token.
+                Each token is one vote. Holders can <GlossaryTerm term="delegate">delegate</GlossaryTerm> that vote
+                without giving up the token.
               </p>
             </section>
 

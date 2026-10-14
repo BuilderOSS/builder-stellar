@@ -7,6 +7,7 @@ import { css } from 'styled-system/css';
 import { ActivityList } from '@/components/activity/activity-list';
 import { CommunityCard, type CommunitySummary } from '@/components/community/community-card';
 import { communityGrid, toCommunitySummary } from '@/components/community/community-grid';
+import { WhatsATribe } from '@/components/help/whats-a-tribe';
 import { BuilderDaoCredit } from '@/components/shell/brand-mark';
 import { useWalletSession } from '@/components/shell/wallet-session';
 import { Button, ButtonLink, Callout, EmptyState, Section, Skeleton } from '@/components/ui';
@@ -86,7 +87,16 @@ const credit = css({
   textStyle: 'caption',
   color: 'ink.muted',
   m: '0',
-  '& a': { color: 'ink', _hover: { color: 'signal' } }
+  '& a, & button': {
+    p: '0',
+    bg: 'transparent',
+    border: '0',
+    font: 'inherit',
+    color: 'ink',
+    cursor: 'pointer',
+    _hover: { color: 'signal' },
+    _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
+  }
 });
 
 function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
@@ -108,6 +118,15 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
           <ButtonLink href="/discover" variant="secondary" size="lg">
             Find a tribe
           </ButtonLink>
+        </div>
+        <div>
+          <WhatsATribe
+            trigger={
+              <Button variant="link" size="sm" className={css({ px: '0' })}>
+                What&apos;s a tribe?
+              </Button>
+            }
+          />
         </div>
       </section>
 
@@ -194,7 +213,8 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       </Section>
 
       <p className={credit}>
-        Tribes Builder · DAOs on Stellar · <BuilderDaoCredit />
+        Tribes Builder · DAOs on Stellar · <BuilderDaoCredit /> ·{' '}
+        <WhatsATribe trigger={<button type="button">What&apos;s a tribe?</button>} />
       </p>
     </div>
   );

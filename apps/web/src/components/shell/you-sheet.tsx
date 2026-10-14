@@ -15,6 +15,7 @@ import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
 import { BuilderDaoCredit } from './brand-mark';
@@ -49,6 +50,8 @@ const networkStatus = css({
   color: 'ink.muted'
 });
 // One line where it fits; wraps on narrow screens, each separator travelling with the link after it.
+// Link buttons line up with the text above them.
+const flushLink = css({ px: '0' });
 const footerLinks = css({
   display: 'flex',
   flexWrap: 'wrap',
@@ -141,6 +144,10 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
 export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   useCloseOnNavigate(() => onOpenChange(false));
   const wallet = useWalletSession();
+  const openIntro = () => {
+    onOpenChange(false);
+    wallet.openWalletIntro();
+  };
   const dao = useOptionalDaoContext();
   const preference = useThemePreference();
   const { home, setHome } = useHomeDao();
@@ -220,6 +227,11 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               Disconnect
             </Button>
           </div>
+          <div>
+            <Button variant="link" size="sm" className={flushLink} onClick={openIntro}>
+              How wallets work
+            </Button>
+          </div>
         </section>
       ) : (
         <section className={block} aria-label="Wallet">
@@ -228,13 +240,26 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             Your wallet is how you vote, bid and hold membership. Tribes Builder never holds your funds and can&apos;t
             move them without your signature.
           </Text>
-          <Button onClick={() => void wallet.connect()} loading={wallet.isAuthBusy} block>
+          <Button
+            onClick={() => {
+              // The first Connect opens the wallet intro; it shouldn't stack on this sheet.
+              if (!hasSeenWalletIntro()) onOpenChange(false);
+              void wallet.connect();
+            }}
+            loading={wallet.isAuthBusy}
+            block
+          >
             <Wallet aria-hidden="true" />
             {wallet.isAuthBusy ? 'Check your wallet' : 'Connect wallet'}
           </Button>
           <div className={networkStatus}>
             <span className={dot} aria-hidden="true" />
             Tribes Builder is on {wallet.network.label}
+          </div>
+          <div>
+            <Button variant="link" size="sm" className={flushLink} onClick={openIntro}>
+              How wallets work
+            </Button>
           </div>
         </section>
       )}

@@ -13,6 +13,7 @@ import { DaoContractList } from '@/components/dao-contract-list';
 import { HomePool } from '@/components/dao-home/home-pool';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
+import { GlossaryTerm } from '@/components/help/glossary';
 import { ProposalRow } from '@/components/proposal/proposal-row';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
@@ -178,7 +179,7 @@ export default function Page() {
         <CommunityProfileView profile={config.profile} status={config.profileStatus} />
         {isLaunchSetup ? (
           <div>
-            <Chip tone="yours">You are the launch admin</Chip>
+            <Chip tone="yours">You are the launch admin</Chip> <GlossaryTerm term="launch-admin" />
           </div>
         ) : null}
       </header>

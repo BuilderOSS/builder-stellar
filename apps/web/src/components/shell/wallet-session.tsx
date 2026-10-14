@@ -19,8 +19,11 @@ import {
 } from '@/lib/auth/client';
 import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
+import { hasSeenWalletIntro, markWalletIntroSeen } from '@/lib/wallet-intro';
 import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
+
+import { WalletIntro } from './wallet-intro';
 
 export type WalletNetwork = {
   name: NetworkName;
@@ -37,8 +40,11 @@ type WalletSession = {
   networkIssue: string;
   balance: string | null | undefined;
   balanceLoading: boolean;
+  /** Connect and sign in. The first time in this browser, the wallet intro comes first. */
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  /** Reopen the wallet intro (from the You sheet). */
+  openWalletIntro: () => void;
 };
 
 const WalletSessionContext = createContext<WalletSession | null>(null);
@@ -102,6 +108,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const { data: authSession, mutate: mutateAuthSession } = useAuthSession();
   const [walletAddress, setWalletAddress] = useState<string | null | undefined>(undefined);
   const lastErrorRef = useRef('');
+  const [introOpen, setIntroOpen] = useState(false);
 
   const invalidateAuth = useCallback(async () => {
     try {
@@ -177,7 +184,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
     toaster.error({ title: "Couldn't connect your wallet", description: session.authError, duration: 8000 });
   }, [session.authError, session.authStatus]);
 
-  const connect = useCallback(async () => {
+  const connectWallet = useCallback(async () => {
     lastErrorRef.current = '';
     try {
       setAuthStatus('connecting-wallet');
@@ -249,6 +256,22 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [mutateAuthSession, network, resetAuth, setAuthStatus, setAuthenticatedAddress, updateSession]);
 
+  const connect = useCallback(async () => {
+    if (!hasSeenWalletIntro()) {
+      setIntroOpen(true);
+      return;
+    }
+    await connectWallet();
+  }, [connectWallet]);
+
+  const openWalletIntro = useCallback(() => setIntroOpen(true), []);
+
+  const continueFromIntro = useCallback(() => {
+    markWalletIntroSeen();
+    setIntroOpen(false);
+    void connectWallet();
+  }, [connectWallet]);
+
   const disconnect = useCallback(async () => {
     try {
       await logoutAuth();
@@ -270,13 +293,15 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
       balance: isAuthenticated ? balance : null,
       balanceLoading,
       connect,
-      disconnect
+      disconnect,
+      openWalletIntro
     }),
     [
       balance,
       balanceLoading,
       connect,
       disconnect,
+      openWalletIntro,
       isAuthBusy,
       isAuthenticated,
       network,
@@ -286,7 +311,21 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <WalletSessionContext.Provider value={value}>{children}</WalletSessionContext.Provider>;
+  return (
+    <WalletSessionContext.Provider value={value}>
+      {children}
+      <WalletIntro
+        open={introOpen}
+        onOpenChange={(open) => {
+          // Closing it any way counts as seen; Connect is always one tap away.
+          if (!open) markWalletIntroSeen();
+          setIntroOpen(open);
+        }}
+        networkLabel={network.label}
+        onContinue={isAuthenticated ? undefined : continueFromIntro}
+      />
+    </WalletSessionContext.Provider>
+  );
 }
 
 export function useWalletSession(): WalletSession {
