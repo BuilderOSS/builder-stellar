@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { moduleAddressKeys } from '@/lib/admin-module-versions';
+
 import {
   classifyModule,
+  MODULE_LABELS,
+  MODULE_ORDER,
   moduleLabelInSentence,
   type ModuleUpdate,
   type ModuleVersionState,
@@ -61,6 +65,25 @@ describe('moduleLabelInSentence', () => {
     expect(moduleLabelInSentence('governor')).toBe('proposals and votes');
     expect(moduleLabelInSentence('auction')).toBe('the auction');
     expect(moduleLabelInSentence('token')).toBe('the membership token');
+    expect(moduleLabelInSentence('claims')).toBe('the claims module');
+  });
+});
+
+describe('every upgradeable module', () => {
+  it('is ordered and labelled, the ClaimMinter included', () => {
+    const modules = Object.keys(moduleAddressKeys).sort();
+    expect(modules).toContain('claims');
+    expect([...MODULE_ORDER].sort()).toEqual(modules);
+    for (const name of MODULE_ORDER) {
+      expect(MODULE_LABELS[name]).toBeTruthy();
+      expect(moduleLabelInSentence(name)).toBeTruthy();
+    }
+  });
+
+  it('upgrades the claims module in the batch, not on its own', () => {
+    const plan = planModuleUpdates([classifyModule(state({ module: 'claims' }))]);
+    expect(plan.batch.map((u) => u.module)).toEqual(['claims']);
+    expect(plan.separate).toEqual([]);
   });
 });
 
@@ -79,6 +102,12 @@ describe('upgradeProposalMetadata', () => {
     expect(meta.description).toContain('Proposals and votes 0.1.0 → 0.2.0: Members can comment on proposals');
     expect(meta.description).toContain('Auction 0.1.0 → 0.2.0: Bidders can add a short comment');
     expect(meta.description).toContain('Market 0.1.0 → 0.2.0:');
+  });
+
+  it('names the claims module and has no release notes for it yet', () => {
+    const meta = upgradeProposalMetadata([update('claims')]);
+    expect(meta.title).toBe('Upgrade the claims module to 0.2.0');
+    expect(meta.description).toBe('No release notes for this version yet.');
   });
 
   it('keeps a single upgrade plain', () => {

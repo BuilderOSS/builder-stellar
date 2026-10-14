@@ -1,6 +1,7 @@
 'use client';
 
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
+import { Client as ClaimMinterClient } from '@builder-stellar/claim-minter-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
@@ -56,7 +57,8 @@ const CLIENTS = {
   auction: AuctionClient,
   treasury: TreasuryClient,
   marketplace: MarketplaceClient,
-  metadata: MetadataClient
+  metadata: MetadataClient,
+  claims: ClaimMinterClient
 };
 
 /** During setup the launch admin owns every module and upgrades it directly (one signature). */

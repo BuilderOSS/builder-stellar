@@ -1,4 +1,5 @@
 import { CodeBlock, Text } from '@/components/ui';
+import { moduleAddressKeys, type UpgradeModule } from '@/lib/admin-module-versions';
 import type { ActionFormProps, ActionHandler } from '@/lib/proposal-actions/types';
 import { type AuthNodeDraft, describeAuthNodes, validateAuthNodes } from '@/lib/treasury-authorize';
 
@@ -102,15 +103,7 @@ export const regenerateTokenHandler: ActionHandler<RegenerateTokenDraft> = {
   })
 };
 
-const moduleKeys = {
-  token: 'tokenContractId',
-  governor: 'governorContractId',
-  auction: 'auctionContractId',
-  treasury: 'treasuryContractId',
-  marketplace: 'marketplaceContractId',
-  metadata: 'metadataContractId'
-} as const;
-export type MigrateModuleDraft = { module: keyof typeof moduleKeys | '' };
+export type MigrateModuleDraft = { module: UpgradeModule | '' };
 /** module.migrate(): advances the storage version after an upgrade that changed storage. */
 export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
   type: 'migrate-dao-module',
@@ -121,7 +114,10 @@ export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
     <Readonly lines={[`Module: ${value.module || 'none'}`]} />
   ),
   getDefaultValues: () => ({ module: '' }),
-  validate: (data) => (data.module && data.module in moduleKeys ? valid() : invalid('Choose a DAO module.')),
+  validate: (data, context) =>
+    data.module && data.module in moduleAddressKeys && context.config[moduleAddressKeys[data.module]]
+      ? valid()
+      : invalid('Choose a DAO module.'),
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'migrate-dao-module',
@@ -132,7 +128,7 @@ export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
   deserialize: (action) => ({ module: action.module || '' }),
   buildCallVector: (data, context) => {
     if (!data.module) throw new Error('Choose a DAO module.');
-    return { target: context.config[moduleKeys[data.module]], function: 'migrate', args: [] };
+    return { target: context.config[moduleAddressKeys[data.module]], function: 'migrate', args: [] };
   }
 };
 

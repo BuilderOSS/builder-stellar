@@ -36,7 +36,8 @@ export const MODULE_LABELS: Record<UpgradeModule, string> = {
   treasury: 'Treasury',
   auction: 'Auction',
   marketplace: 'Market',
-  metadata: 'Artwork and profile'
+  metadata: 'Artwork and profile',
+  claims: 'Claims'
 };
 
 const IN_SENTENCE: Record<UpgradeModule, string> = {
@@ -45,7 +46,8 @@ const IN_SENTENCE: Record<UpgradeModule, string> = {
   treasury: 'the treasury',
   auction: 'the auction',
   marketplace: 'the market',
-  metadata: 'artwork and profile'
+  metadata: 'artwork and profile',
+  claims: 'the claims module'
 };
 
 /** A module named inside a sentence, in sentence case: "Upgrade the auction to 0.2.0". */
@@ -54,7 +56,15 @@ export function moduleLabelInSentence(module: UpgradeModule) {
 }
 
 /** Order modules appear in, most member-facing first. */
-export const MODULE_ORDER: UpgradeModule[] = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
+export const MODULE_ORDER: UpgradeModule[] = [
+  'token',
+  'governor',
+  'treasury',
+  'auction',
+  'marketplace',
+  'metadata',
+  'claims'
+];
 
 /**
  * The Treasury runs every proposal's calls, so an upgrade of itself only takes effect after the run

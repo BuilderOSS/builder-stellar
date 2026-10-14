@@ -82,6 +82,8 @@ const supported = {
     'open_pool',
     'close_pool',
     'sweep_pool',
+    // The Treasury buys an escrowed listing; it follows a Treasury `authorize` action.
+    'buy',
     'set_payment_asset',
     'set_secondary_fee_bps',
     'pause',

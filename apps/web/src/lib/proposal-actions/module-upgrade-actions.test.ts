@@ -24,6 +24,19 @@ describe('module upgrade exact hashes', () => {
       args: [fromHash, toHash]
     });
   });
+  it('upgrades the ClaimMinter only on a DAO that has one', () => {
+    const withClaims = {
+      config: { ...context.config, claimsContractId: 'claims' }
+    } as FormContext & BuildContext;
+    const values = { module: 'claims' as const, fromHash, toHash };
+    expect(moduleUpgradeHandler.validate(values, withClaims).valid).toBe(true);
+    expect(moduleUpgradeHandler.buildCallVector(values, withClaims)).toEqual({
+      target: 'claims',
+      function: 'upgrade',
+      args: [fromHash, toHash]
+    });
+    expect(moduleUpgradeHandler.validate(values, context).valid).toBe(false);
+  });
   it('rejects missing modules, unchanged hashes and malformed hashes', () => {
     expect(moduleUpgradeHandler.validate({ module: 'auction', fromHash, toHash }, context).valid).toBe(false);
     expect(moduleUpgradeHandler.validate({ module: 'token', fromHash, toHash: fromHash }, context).valid).toBe(false);

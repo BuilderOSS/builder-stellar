@@ -1,4 +1,5 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
+import { Client as ClaimMinterClient } from '@builder-stellar/claim-minter-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
@@ -17,7 +18,8 @@ export const moduleAddressKeys = {
   auction: 'auctionContractId',
   treasury: 'treasuryContractId',
   marketplace: 'marketplaceContractId',
-  metadata: 'metadataContractId'
+  metadata: 'metadataContractId',
+  claims: 'claimsContractId'
 } as const;
 export type UpgradeModule = keyof typeof moduleAddressKeys;
 export function hashToHex(hash: Uint8Array) {
@@ -45,7 +47,8 @@ export async function readAdminModuleVersion(
     auction: AuctionClient,
     treasury: TreasuryClient,
     marketplace: MarketplaceClient,
-    metadata: MetadataClient
+    metadata: MetadataClient,
+    claims: ClaimMinterClient
   };
   const client = new Clients[module](adminReadOptions(config, contractId, address));
   const manager = new ManagerClient(adminReadOptions(config, deployment.managerAddress, address));
