@@ -14,12 +14,12 @@
       "links": [
         {
           "label": "Website",
-          "url": "https://test-dao-stellar-web.vercel.app"
+          "url": "https://tribes.build"
         }
       ],
-      "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+      "image": "https://tribes.build/images/dao-logo.png"
     },
-    "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+    "rendererBase": "https://tribes.build/api/render",
     "artwork": {
       "ipfs": {
         "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",

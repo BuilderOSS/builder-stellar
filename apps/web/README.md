@@ -18,7 +18,7 @@ Configure the copied file before starting:
 - `NEXT_PUBLIC_NETWORK`: `testnet`, `public`, or `local`, matching the selected artifact.
 - `APP_DATABASE_URL`: read-only `app_server` connection to the migrated/indexed database.
 - `APP_URL`: authentication origin; required in production.
-- `NEXT_PUBLIC_SITE_URL`: public origin for absolute metadata URLs such as share images (`metadataBase`). Defaults to `https://tribes.build`.
+- `NEXT_PUBLIC_SITE_URL`: the public origin. It sets `metadataBase` for share images and the default profile image and `rendererBase` of new drafts. Defaults to `https://tribes.build`; set it to a preview's own origin if that preview creates test tribes. The old host `builder-stellar-web.vercel.app` keeps serving `/api` and `/images` for tribes created before the rename, and its pages redirect to tribes.build (`next.config.mjs`).
 - `IRON_PASSWORD`: private session secret, at least 32 characters.
 - `STELLAR_WEB_AUTH_SECRET`, `STELLAR_HOME_DOMAIN`, `STELLAR_WEB_AUTH_DOMAIN`: SEP-10 server/domain configuration. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` enables WalletConnect wallets.
 - Optional Pinata upload flag/credentials: see [.env.example](.env.example). Server credentials must not have a `NEXT_PUBLIC_` prefix. AI image generation and `/api/artwork/generate` have been removed; images use saved URLs or upload.

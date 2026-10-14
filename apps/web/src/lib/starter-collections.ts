@@ -1,3 +1,4 @@
+import { siteHref } from '@/lib/site';
 import { ArtworkProperty } from '@/stores/create-dao-store';
 
 /**
@@ -84,7 +85,7 @@ export function getTokenPreviewUrl(
   daoId: string,
   collectionId: string,
   tokenId: number,
-  rendererBase: string = 'https://builder-stellar-web.vercel.app/api/render/'
+  rendererBase: string = siteHref('/api/render/')
 ): string {
   return `${rendererBase}${daoId}/${tokenId}`;
 }
