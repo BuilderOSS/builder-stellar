@@ -1,6 +1,6 @@
 # Design: add and remove modules in the web app
 
-Status: design for review. No app code yet. Preview: `docs/design/module-attach-preview.html` (open it in a browser; dark and light, with a clickable Add flow).
+Status: shipped in PR #57; § 12 records what changed during the build and what was proven on testnet. The clickable design preview was removed once the build landed; it is in git at `431e9b6:docs/design/module-attach-preview.html`.
 
 Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events and the `manager.daos` view that resolves auction, marketplace and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
 
@@ -129,7 +129,7 @@ Sentence case, contractions, no em dashes, plain words first with the DAO term o
 
 ## 8. Motion and polish
 
-Summary; the table in the preview is the spec.
+Summary. The full table was in the design preview (see the status line); the shipped code is now the reference.
 
 - No new authored moment. The sheet, press scale (.96, 160ms), menu (150ms from its trigger) and callouts are the primitives.
 - The check line's icon swaps with scale .25 to 1, opacity and blur 4px to 0, `cubic-bezier(.2,0,0,1)`, 160ms. Its words change with it.

@@ -88,7 +88,7 @@ components:
 
 **Lineage:** Tribe Builder is built on Nouns Builder. Give it a subtle nod (the Nouns lens is the table in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme.
 
-**Reference:** `docs/design/builder-dusk-preview.html` renders the system on real screens in both themes.
+**Reference:** the app itself renders the system in both themes. Tokens live in `apps/web/panda.config.ts` and primitives in `apps/web/src/components/ui`. The early static preview is in git at `431e9b6:docs/design/builder-dusk-preview.html`; its dark values predate the 2026-10-12 change.
 
 ## Brand and Logo
 

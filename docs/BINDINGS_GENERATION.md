@@ -1,6 +1,4 @@
-# Bindings generation (resolved)
-
-Status: resolved. Kept as a short runbook.
+# Bindings generation
 
 This is the canonical authored regeneration reference. The SDK's `--overwrite`
 replaces generic package documentation, but the current repository wrapper saves
@@ -31,9 +29,9 @@ calls assemble/simulate transactions; mutations need a signing wallet and
 receipt. Large integers use `bigint`; binary hashes use byte arrays, not lossy
 JavaScript numbers or guessed argument types.
 
-The web predev/prebuild hooks build all seven clients. Proposal arguments are
+The web predev/prebuild hooks build all eight clients. Proposal arguments are
 encoded by target ABI in
-[`proposal-supported-calls.ts`](apps/web/src/lib/proposal-supported-calls.ts);
+[`proposal-supported-calls.ts`](../apps/web/src/lib/proposal-supported-calls.ts);
 unsupported calls are not submitted. Token `batch_mint` uses recipient/amount
 vectors and each call must fit the event budget (`300 × tokens + 450 × recipients
 ≤ 13,500`: 43 tokens to one recipient, 18 recipients with one token each).
@@ -42,7 +40,7 @@ Every module exposes `admin()` (no `owner()` / `get_owner()`), `migrate()` and
 `buy` / `buy_primary` take `max_price`. Governor's generated `execute` remains present for compatibility but
 always rejects; use Treasury's four-argument vector execution method.
 
-See [contract references](docs/README.md) and [web behavior](apps/web/README.md).
+See [contract references](README.md) and [web behavior](../apps/web/README.md).
 
 ## Root cause of the old compile errors
 

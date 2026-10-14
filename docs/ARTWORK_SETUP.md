@@ -45,7 +45,7 @@ through the same module-upgrade proposals as other modules. See
 ## Source and tests
 
 - [ArtworkSetup](../apps/web/src/components/create-dao/ArtworkSetup.tsx), [directory upload](../apps/web/src/components/create-dao/ArtworkDirectoryUpload.tsx), [preview](../apps/web/src/components/create-dao/ArtworkPreviewCanvas.tsx)
-- [Batch tests](../apps/web/src/components/create-dao/artwork-configuration.test.ts), [local artwork store tests](../apps/web/src/stores/local-artwork-store.test.ts), [artwork order tests](../apps/web/src/lib/artwork-order.test.ts)
+- [Batch tests](../apps/web/src/components/create-dao/artwork-configuration.test.ts), [local artwork store tests](../apps/web/src/stores/local-artwork-store.test.ts)
 - [TTL maintenance](TTL_ECONOMICS.md)
 
 The [old playground integration](archive/ARTWORK_PLAYGROUND_INTEGRATION.md) names removed components and a removed automatic deployment sequence. It is historical, not a current tutorial.

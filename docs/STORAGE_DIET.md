@@ -1,6 +1,6 @@
 # Storage diet: chain-complete operation, smaller hot state, one-sweep renewal
 
-Status: **APPROVED 2026-10-12 (design), engineering review 2026-10-12 applied; implemented on `feat/markdown-text`; testnet redeploy pending.** Revised 2026-10-12. Supersedes the two earlier drafts (the
+Status: **APPROVED 2026-10-12 (design), engineering review 2026-10-12 applied; implemented in PR #44 (`feat/markdown-text`); testnet redeployed 2026-10-13 at 0.4.0 (`deploys/builder-testnet-manager.json`).** Revised 2026-10-12. Supersedes the two earlier drafts (the
 event-only diet and the compaction rewrite) and their ledgers. It does not authorize a deployment or a database
 reset; the testnet redeploy needs its own go-ahead.
 

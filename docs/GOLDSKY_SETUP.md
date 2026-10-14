@@ -39,7 +39,7 @@ Why allowlists when `manager.daos` already lists every module: `manager.daos` is
 
 ## Validation and deployment boundary
 
-`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` and `scripts/deploy.sh` use the Turbo CLI (`goldsky turbo validate|apply|list|logs|delete`, global `goldsky`, `goldsky login`); the legacy `goldsky pipeline ...` commands do not see Turbo pipelines. The script reads the pipeline name from the generated YAML.
+`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` and `packages/goldsky/scripts/deploy.sh` use the Turbo CLI (`goldsky turbo validate|apply|list|logs|delete`, global `goldsky`, `goldsky login`); the legacy `goldsky pipeline ...` commands do not see Turbo pipelines. The script reads the pipeline name from the generated YAML.
 
 The pipeline name is `builder-stellar-<network>` from the Manager artifact (`GOLDSKY_PIPELINE_NAME` overrides it), so the generated `pipelines/builder-stellar-events.yaml` is applied as is; the testnet pipeline is `builder-stellar-testnet`. A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`; the checklist is in `packages/goldsky/README.md`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
 

@@ -58,4 +58,4 @@ Authority language is correctness, not style, and stays exact:
 
 The newcomer help explains these ideas; it is not a guided tour, and there is no cross-device collaboration. Document such capabilities only when they're implemented.
 
-A rendered reference of the system lives at [design/builder-dusk-preview.html](design/builder-dusk-preview.html). The [earlier dark/blue design](archive/BRAND_AND_FRONTEND_DIRECTION.md) preserves historical rationale only.
+The app is the rendered reference; its tokens are in `apps/web/panda.config.ts`. The [earlier dark/blue design](archive/BRAND_AND_FRONTEND_DIRECTION.md) preserves historical rationale only.
