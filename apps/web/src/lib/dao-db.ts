@@ -415,6 +415,15 @@ export const OPEN_TOKEN_SETTINGS: TokenSettings = {
   daoRecovery: false
 };
 
+/** The deadline (unix seconds) of a DAO's launch drive from manager.assurance_drives; null without one. */
+export async function getAssuranceDeadlineFromDatabase(daoId: string): Promise<number | null> {
+  const row = await prisma.managerAssuranceDrive.findFirst({
+    where: { deploymentId: DEPLOYMENT_ID, daoId },
+    select: { deadline: true }
+  });
+  return row ? Number(row.deadline.toString()) : null;
+}
+
 /** token.settings from the index; all off (an open DAO) until the Token's first event is indexed. */
 export async function getTokenSettingsFromDatabase(daoId: string): Promise<TokenSettings> {
   const row = await prisma.tokenSettings.findFirst({ where: { deploymentId: DEPLOYMENT_ID, daoId } });

@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { getTreasuryAssets } from '@/lib/assets-config';
 
 import { MARKETPLACE_LOCAL_XLM_SAC, marketplaceAssetLabel, marketplaceDisplayAmount } from './asset-label';
-import { accountReadiness, marketplaceAsset, type ReadinessAccount } from './readiness';
+import {
+  accountReadiness,
+  marketplaceAsset,
+  marketplaceAssetCodes,
+  marketplaceAssets,
+  type ReadinessAccount
+} from './readiness';
 
 const xlm = Asset.native().contractId(Networks.TESTNET);
 const usdc = getTreasuryAssets('testnet').find((a) => a.code === 'USDC')!;
@@ -35,6 +41,15 @@ describe('marketplace SAC and account readiness', () => {
     expect(
       marketplaceAsset('testnet', getTreasuryAssets('testnet').find((a) => a.code === 'EURC')!.contractId!)
     ).toBeUndefined();
+  });
+  it('lists only the XLM and USDC the market can take on each network', () => {
+    expect(marketplaceAssets('testnet').map((asset) => asset.code)).toEqual(['XLM', 'USDC']);
+    expect(marketplaceAssets('public').map((asset) => asset.code)).toEqual(['XLM', 'USDC']);
+    expect(marketplaceAssets('local').map((asset) => asset.contractId)).toEqual([
+      Asset.native().contractId(Networks.STANDALONE)
+    ]);
+    expect(marketplaceAssetCodes('testnet')).toBe('XLM or USDC');
+    expect(marketplaceAssetCodes('local')).toBe('XLM');
   });
   it('deducts reserve, sponsorship and selling liabilities exactly', () => {
     const account: ReadinessAccount = { subentry_count: 3, num_sponsoring: 1, num_sponsored: 2, balances: [native] };

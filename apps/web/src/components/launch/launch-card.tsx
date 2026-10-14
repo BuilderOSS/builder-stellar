@@ -17,6 +17,7 @@ import { parseContractErrorCode } from '@/lib/contract-errors';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { getDeploymentConfig } from '@/lib/deployment-config';
+import { launchDriveEnded } from '@/lib/launch-drive';
 import type { LaunchPlan } from '@/lib/launch-steps';
 import { formatClaimDate } from '@/lib/minter/display';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
@@ -56,9 +57,9 @@ export function LaunchDriveCard({
   name: string;
 }) {
   const { routeId } = useDaoContext();
-  const [now] = useState(() => Date.now());
+  const [now] = useState(() => Date.now() / 1000);
   const deadline = Number(assurance.deadline);
-  const ended = deadline * 1000 <= now;
+  const ended = launchDriveEnded(deadline, now);
   const { launch_auction: auction, launch_marketplace: market } = assurance.launch_config;
   return (
     <section className={card} aria-labelledby="launch-title">

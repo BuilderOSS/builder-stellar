@@ -7,7 +7,13 @@
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
-import { getDaoConfigFromDatabase, getTokenSettingsFromDatabase, resolveDaoId, type TokenSettings } from './dao-db';
+import {
+  getAssuranceDeadlineFromDatabase,
+  getDaoConfigFromDatabase,
+  getTokenSettingsFromDatabase,
+  resolveDaoId,
+  type TokenSettings
+} from './dao-db';
 import type { DaoProfile } from './dao-profile';
 import { cached } from './server-cache';
 
@@ -52,6 +58,11 @@ export type DaoNetworkConfig = {
   tokenSettings: TokenSettings;
   /** An assurance drive's outcome; null when the DAO never opened one. */
   assuranceOutcome: 'open' | 'launched' | 'released' | null;
+  /**
+   * The drive's deadline (unix seconds); null without one. `released` only appears once someone
+   * frees the slug after a failed drive, so decide "ended" from this (`launchDriveState`).
+   */
+  assuranceDeadline: number | null;
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
   /** Indexed launch choice; null while pending or unknown. */
@@ -111,7 +122,10 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
 
   // Get network configuration from static config
   const networkConfig = getNetworkConfig(daoConfig.network);
-  const tokenSettings = await getTokenSettingsFromDatabase(daoConfig.dao_id);
+  const [tokenSettings, assuranceDeadline] = await Promise.all([
+    getTokenSettingsFromDatabase(daoConfig.dao_id),
+    daoConfig.assurance_outcome ? getAssuranceDeadlineFromDatabase(daoConfig.dao_id) : null
+  ]);
 
   return {
     name: daoConfig.network,
@@ -138,6 +152,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     claimsContractId: daoConfig.claims_contract ?? '',
     tokenSettings,
     assuranceOutcome: daoConfig.assurance_outcome,
+    assuranceDeadline,
     auctionEnabled: daoConfig.auction_enabled,
     auctionPaused: daoConfig.auction_paused,
     marketplaceEnabled: daoConfig.marketplace_enabled,

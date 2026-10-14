@@ -1,5 +1,3 @@
-import { StrKey } from '@stellar/stellar-sdk';
-
 import {
   type AdminPaymentTokenDraft,
   AdminPaymentTokenForm,
@@ -7,11 +5,14 @@ import {
   AdminReservePriceForm,
   type AdminValueDraft,
   adminValueFormWithHint,
+  MarketPaymentAssetForm,
   type OpenPoolDraft,
   OpenPoolForm,
   type PoolIdDraft,
-  PoolIdForm
+  PoolIdForm,
+  ResaleFeeForm
 } from '@/components/admin/admin-action-forms';
+import type { NetworkName } from '@/config/networks';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
 import {
   MAX_MARKETPLACE_FEE_BPS,
@@ -22,6 +23,8 @@ import {
   validateVotingDelay,
   validateVotingPeriod
 } from '@/lib/governance-limits';
+import { feeBpsFromPercent, feePercentText } from '@/lib/marketplace/amount';
+import { marketplaceAsset, marketplaceAssetCodes } from '@/lib/marketplace/readiness';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 
 import type { ActionHandler, ValidationResult } from './types';
@@ -337,23 +340,21 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
   })
 };
 
+/** The market can only take XLM or USDC, so a price in anything else could never be paid. */
+function marketAssetResult(network: NetworkName, asset: string, field: string): ValidationResult {
+  if (marketplaceAsset(network, asset.trim())) return valid();
+  const message = `Choose the asset buyers pay in: ${marketplaceAssetCodes(network)}.`;
+  return { valid: false, message, fields: { [field]: message } };
+}
+
 // Registry action IDs describe the UI intent; method names must match the current spec.
 export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   ...setAuctionPaymentTokenHandler,
   type: 'set-marketplace-payment-token',
   label: 'Change the market payment asset',
   description: 'Change the asset buyers pay in. Open listings keep the asset they were listed in.',
-  validate: (data, context) => {
-    const result = setAuctionPaymentTokenHandler.validate(data, context);
-    if (!result.valid) return result;
-    return StrKey.isValidContract(data.paymentToken.trim())
-      ? valid()
-      : {
-          valid: false,
-          message: 'Payment asset must be a contract address.',
-          fields: { paymentToken: 'Payment asset must be a contract address.' }
-        };
-  },
+  FormComponent: MarketPaymentAssetForm,
+  validate: (data, context) => marketAssetResult(context.config.name, data.paymentToken, 'paymentToken'),
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'set-marketplace-payment-token',
@@ -410,17 +411,44 @@ function boundedModuleValueHandler(
   };
 }
 
-export const setMarketplaceSecondaryFeeHandler = boundedModuleValueHandler(
+const resaleFeeBpsHandler = boundedModuleValueHandler(
   'set-marketplace-secondary-fee',
   {
     label: 'Change the resale fee',
     field: 'Resale fee',
     description: 'Change the fee on each resale in the market',
-    hint: 'In basis points: 100 is 1%.'
+    // ResaleFeeForm replaces the base form, so the field takes a percent, not basis points.
+    hint: `In percent, up to ${feePercentText(MAX_MARKETPLACE_FEE_BPS)}%.`
   },
   0,
   MAX_MARKETPLACE_FEE_BPS
 );
+const RESALE_FEE_ERROR = `Enter a fee from 0% to ${feePercentText(MAX_MARKETPLACE_FEE_BPS)}%, with at most two decimals.`;
+
+/** The percent typed in the form as the basis-point draft the call and the queued action use. */
+function resaleFeeBpsDraft(data: AdminValueDraft): AdminValueDraft {
+  // An empty draft still names its target, which is how the market finds its setting handlers.
+  if (!data.value.trim()) return { value: '' };
+  const bps = feeBpsFromPercent(data.value);
+  if (bps === null) throw new Error(RESALE_FEE_ERROR);
+  return { value: String(bps) };
+}
+
+// The market shows its fee as a percent, so the form takes one; the call and the queued action keep basis points.
+export const setMarketplaceSecondaryFeeHandler: ActionHandler<AdminValueDraft> = {
+  ...resaleFeeBpsHandler,
+  FormComponent: ResaleFeeForm,
+  validate: (data) =>
+    feeBpsFromPercent(data.value) === null
+      ? { valid: false, message: RESALE_FEE_ERROR, fields: { value: RESALE_FEE_ERROR } }
+      : valid(),
+  serialize: (data, context) => resaleFeeBpsHandler.serialize(resaleFeeBpsDraft(data), context),
+  deserialize: (action) => {
+    const bps = resaleFeeBpsHandler.deserialize(action).value.trim();
+    return { value: /^\d+$/.test(bps) ? feePercentText(Number(bps)) : '' };
+  },
+  buildCallVector: (data, context) => resaleFeeBpsHandler.buildCallVector(resaleFeeBpsDraft(data), context)
+};
 export const setAuctionMinBidIncrementHandler = boundedModuleValueHandler(
   'set-auction-min-bid-increment',
   {
@@ -502,13 +530,11 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
     periodHours: '24',
     expiresAt: ''
   }),
-  validate: (data) => {
+  validate: (data, context) => {
     const priceError = validateReservePrice(data.price);
     if (priceError) return { valid: false, message: priceError, fields: { price: priceError } };
-    if (!StrKey.isValidContract(data.asset.trim())) {
-      const message = 'Choose the asset buyers pay in.';
-      return { valid: false, message, fields: { asset: message } };
-    }
+    const asset = marketAssetResult(context.config.name, data.asset, 'asset');
+    if (!asset.valid) return asset;
     const counts =
       positiveCount(data.size, 'size', 'Pool size') ??
       positiveCount(data.maxPerBuyer, 'maxPerBuyer', 'Per-wallet limit') ??

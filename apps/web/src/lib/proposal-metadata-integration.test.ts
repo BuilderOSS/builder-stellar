@@ -36,6 +36,7 @@ const config: DaoNetworkConfig = {
   claimsContractId: contract(7),
   tokenSettings: { transfersLocked: false, membersOnlyDelegation: false, daoRecovery: false },
   assuranceOutcome: null,
+  assuranceDeadline: null,
   label: '',
   tokenName: '',
   tokenSymbol: '',

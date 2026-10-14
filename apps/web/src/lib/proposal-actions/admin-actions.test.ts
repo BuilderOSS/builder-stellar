@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { getTreasuryAssets } from '@/lib/assets-config';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { getProposalActionSummary } from '@/lib/proposal-call';
 
 import { getActionHandler } from './registry';
 import type { BuildContext, FormContext } from './types';
@@ -15,8 +17,13 @@ const openPoolHandler = getActionHandler('open-pool');
 const closePoolHandler = getActionHandler('close-pool');
 const sweepPoolHandler = getActionHandler('sweep-pool');
 const ASSET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+const testnetAsset = (code: string) => getTreasuryAssets('testnet').find((asset) => asset.code === code)!.contractId!;
 
-const config = { marketplaceContractId: 'CMARKET', auctionContractId: 'CAUCTION' } as DaoNetworkConfig;
+const config = {
+  name: 'testnet',
+  marketplaceContractId: 'CMARKET',
+  auctionContractId: 'CAUCTION'
+} as DaoNetworkConfig;
 const buildContext: BuildContext = {
   config,
   governorContractId: 'CGOV',
@@ -97,6 +104,28 @@ describe('quick-buy pool proposal actions', () => {
       expect(openPoolHandler.validate({ ...base, ...change }, formContext).valid).toBe(false);
   });
 
+  it('prices a pool only in XLM or USDC, the assets the market can take', () => {
+    const base = {
+      price: '1',
+      asset: ASSET,
+      size: '1',
+      maxPerBuyer: '1',
+      maxSoldPerPeriod: '1',
+      periodHours: '1',
+      expiresAt: '2030-01-01T00:00'
+    };
+    expect(openPoolHandler.validate({ ...base, asset: testnetAsset('XLM') }, formContext).valid).toBe(true);
+    expect(openPoolHandler.validate({ ...base, asset: testnetAsset('USDC') }, formContext).valid).toBe(true);
+    // EURC is a treasury asset, and the contract would accept it, but nobody could buy from the pool.
+    const eurc = openPoolHandler.validate({ ...base, asset: testnetAsset('EURC') }, formContext);
+    expect(eurc).toMatchObject({ valid: false, fields: { asset: 'Choose the asset buyers pay in: XLM or USDC.' } });
+    const custom = `C${'A'.repeat(55)}`;
+    expect(openPoolHandler.validate({ ...base, asset: custom }, formContext).valid).toBe(false);
+    // Each network has its own asset contracts: testnet USDC means nothing on mainnet.
+    const mainnet = { ...formContext, config: { ...config, name: 'public' } } as FormContext;
+    expect(openPoolHandler.validate({ ...base, asset: testnetAsset('USDC') }, mainnet).valid).toBe(false);
+  });
+
   it('builds close_pool and sweep_pool by pool id', () => {
     expect(closePoolHandler.validate({ poolId: '3' }, formContext).valid).toBe(true);
     expect(closePoolHandler.validate({ poolId: 'x' }, formContext).valid).toBe(false);
@@ -118,7 +147,7 @@ describe('current marketplace/governor/auction administration registry', () => {
     expect(
       getActionHandler('set-marketplace-payment-token').buildCallVector({ paymentToken: 'CSAC' }, buildContext)
     ).toEqual({ target: 'CMARKET', function: 'set_payment_asset', args: ['CSAC'] });
-    expect(getActionHandler('set-marketplace-secondary-fee').buildCallVector({ value: '250' }, buildContext)).toEqual({
+    expect(getActionHandler('set-marketplace-secondary-fee').buildCallVector({ value: '2.5' }, buildContext)).toEqual({
       target: 'CMARKET',
       function: 'set_secondary_fee_bps',
       args: [250]
@@ -159,13 +188,48 @@ describe('current marketplace/governor/auction administration registry', () => {
     });
     expect(getActionHandler('set-auction-duration').validate({ value: '2592001' }, formContext).valid).toBe(false);
   });
-  it('accepts fee 0..2500 bps (25% cap) and rejects invalid marketplace contract IDs', () => {
+  it('takes the resale fee as a percent from 0% to 25% (the 2500 bps cap) and rejects invalid marketplace contract IDs', () => {
     const fee = getActionHandler('set-marketplace-secondary-fee');
-    for (const value of ['0', '2500']) expect(fee.validate({ value }, formContext).valid).toBe(true);
-    for (const value of ['-1', '2501', '10000', '2.5', '9007199254740993'])
+    for (const value of ['0', '0.01', '2.5', '2.50', '25'])
+      expect(fee.validate({ value }, formContext).valid).toBe(true);
+    for (const value of ['', '-1', '25.01', '250', '2.505', '.5', 'abc', '9007199254740993'])
       expect(fee.validate({ value }, formContext).valid).toBe(false);
     expect(
       getActionHandler('set-marketplace-payment-token').validate({ paymentToken: 'invalid' }, formContext).valid
     ).toBe(false);
+  });
+
+  it('limits the market payment asset to XLM or USDC, like quick-buy pools', () => {
+    const asset = getActionHandler('set-marketplace-payment-token');
+    expect(asset.FormComponent).not.toBe(getActionHandler('set-auction-payment-token').FormComponent);
+    for (const code of ['XLM', 'USDC'])
+      expect(asset.validate({ paymentToken: testnetAsset(code) }, formContext).valid).toBe(true);
+    for (const paymentToken of [testnetAsset('EURC'), `C${'A'.repeat(55)}`, 'invalid', ''])
+      expect(asset.validate({ paymentToken }, formContext)).toMatchObject({
+        valid: false,
+        fields: { paymentToken: 'Choose the asset buyers pay in: XLM or USDC.' }
+      });
+    // The auction can still take any token.
+    expect(
+      getActionHandler('set-auction-payment-token').validate({ paymentToken: testnetAsset('EURC') }, formContext).valid
+    ).toBe(true);
+  });
+
+  it('stores and calls the resale fee in basis points, and shows a queued one as a percent again', () => {
+    const fee = getActionHandler('set-marketplace-secondary-fee');
+    const action = fee.serialize({ value: '2.5' }, formContext);
+    expect(action).toMatchObject({ type: 'set-marketplace-secondary-fee', value: '250', amount: '250' });
+    expect(fee.deserialize(action)).toEqual({ value: '2.5' });
+    expect(fee.buildCallVector(fee.deserialize(action), buildContext).args).toEqual([250]);
+    for (const [bps, percent] of [
+      ['0', '0'],
+      ['1', '0.01'],
+      ['7', '0.07'],
+      ['2499', '24.99'],
+      ['2500', '25']
+    ])
+      expect(fee.deserialize({ ...action, value: bps, amount: bps })).toEqual({ value: percent });
+    expect(() => fee.buildCallVector({ value: '30' }, buildContext)).toThrow(/0% to 25%/);
+    expect(getProposalActionSummary(action)).toBe('Change the resale fee to 2.5%');
   });
 });
