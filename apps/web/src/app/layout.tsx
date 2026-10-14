@@ -10,6 +10,7 @@ import { AppToaster } from '@/components/app-toaster';
 import { GlobalShell } from '@/components/shell/app-shell';
 import { WalletSessionProvider } from '@/components/shell/wallet-session';
 import { WarmInkThemeRuntime } from '@/components/warm-ink-theme';
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from '@/lib/site';
 import { warmInkBootScript } from '@/lib/warm-ink-theme';
 
 // Fetched by Next at build time and self-hosted; no runtime font CDN.
@@ -23,13 +24,14 @@ const ui = Figtree({ subsets: ['latin'], display: 'swap', variable: '--font-ui' 
 const mono = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-mono' });
 
 export const metadata: Metadata = {
-  title: { default: 'Builder', template: '%s · Builder' },
-  description: 'Start a community with your people, vote on what happens next, and see where the shared treasury goes.',
-  applicationName: 'Builder',
+  metadataBase: siteUrl(),
+  title: { default: SITE_NAME, template: `%s · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: 'Builder',
-    description: 'Your community. Your rules. Your treasury.',
-    siteName: 'Builder',
+    title: SITE_NAME,
+    description: 'Your people. Your rules. Your treasury.',
+    siteName: SITE_NAME,
     type: 'website'
   }
 };

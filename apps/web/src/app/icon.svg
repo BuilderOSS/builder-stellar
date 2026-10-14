@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Builder">
-  <!-- Mirrors BrandMark in components/shell/brand-mark.tsx; colours are colors.primary (light) and primary.fg. -->
-  <rect width="32" height="32" rx="9" fill="#0068D6"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="2.25" stroke-linejoin="round">
-    <rect x="7" y="11.5" width="8" height="8" rx="1.5"/>
-    <rect x="17.5" y="11.5" width="8" height="8" rx="1.5"/>
-    <path d="M15 15.5h2.5M7 15.5H4.5v3.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Tribes Builder">
+  <!-- Dedicated 16px drawing of BrandMark (components/shell/brand-mark.tsx): flat, empty seat. -->
+  <!-- Heads and seat sit on whole pixels so they stay crisp; blue is colors.signal (#0068D6 light, #0085FF dark). -->
+  <style>
+    .m { fill: #0068D6; stroke: #0068D6; }
+    @media (prefers-color-scheme: dark) { .m { fill: #0085FF; stroke: #0085FF; } }
+  </style>
+  <g class="m">
+    <path stroke="none" fill-rule="evenodd" d="M5 5h6v6H5zM6 6v4h2V6z"/>
+    <circle stroke="none" cx="8" cy="2" r="2"/>
+    <circle stroke="none" cx="14" cy="8" r="2"/>
+    <circle stroke="none" cx="2" cy="8" r="2"/>
+    <circle fill="none" cx="8" cy="14" r="1.5" stroke-width="1"/>
   </g>
-  <rect x="11" y="13.5" width="3" height="4" rx="0.75" fill="#FFFFFF"/>
-  <rect x="21.5" y="13.5" width="3" height="4" rx="0.75" fill="#FFFFFF"/>
 </svg>

@@ -18,6 +18,7 @@ Configure the copied file before starting:
 - `NEXT_PUBLIC_NETWORK`: `testnet`, `public`, or `local`, matching the selected artifact.
 - `APP_DATABASE_URL`: read-only `app_server` connection to the migrated/indexed database.
 - `APP_URL`: authentication origin; required in production.
+- `NEXT_PUBLIC_SITE_URL`: public origin for absolute metadata URLs such as share images (`metadataBase`). Defaults to `https://tribes.build`.
 - `IRON_PASSWORD`: private session secret, at least 32 characters.
 - `STELLAR_WEB_AUTH_SECRET`, `STELLAR_HOME_DOMAIN`, `STELLAR_WEB_AUTH_DOMAIN`: SEP-10 server/domain configuration. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` enables WalletConnect wallets.
 - Optional Pinata upload flag/credentials: see [.env.example](.env.example). Server credentials must not have a `NEXT_PUBLIC_` prefix. AI image generation and `/api/artwork/generate` have been removed; images use saved URLs or upload.
@@ -26,7 +27,7 @@ The root `.env.example` contains legacy selection variables; use this app's exam
 
 `pnpm --dir apps/web codegen` generates `src/config/deployments.generated.ts` from the newest `deploys/*-manager.json` by `deployedAt`, generates Prisma, builds all seven bindings, and generates Panda CSS. Predev/prebuild run this command. These hooks write generated files but Prisma generation does not connect to the database. The network is selected separately, so check artifact/network consistency. The dev server uses **http://localhost:4242**; `start` has no explicit 4242-port flag.
 
-Warm Ink fonts are loaded as Instrument Serif and Inter in `src/app/layout.tsx`; a build may need access to fetch those font assets. This README does not claim an offline production build.
+Warm Ink · Dusk fonts (Bricolage Grotesque, Figtree, JetBrains Mono) are loaded with `next/font` in `src/app/layout.tsx`; a build may need access to fetch those font assets. This README does not claim an offline production build.
 
 ## Routes
 

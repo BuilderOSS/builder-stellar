@@ -1,6 +1,7 @@
 import { css, cx } from 'styled-system/css';
 
-const mark = css({ display: 'block', flexShrink: '0', color: 'primary' });
+const mark = css({ display: 'block', flexShrink: '0', color: 'signal' });
+const joinedSeat = css({ fill: 'brass' });
 const lockup = css({
   display: 'inline-flex',
   alignItems: 'center',
@@ -12,12 +13,22 @@ const lockup = css({
   fontSize: '1.125rem',
   letterSpacing: '-0.01em'
 });
+const wordmarkMuted = css({ fontWeight: '500', color: 'ink.muted' });
 
 /**
- * Builder's mark: a rounded tile with two square lenses joined by a bridge.
- * A quiet nod to the Nouns noggles that Builder grew from.
+ * Tribes Builder's mark, "the lens is the table": three people around a single Nouns lens,
+ * with the seat nearest you left empty. When `joined`, that seat fills in brass ("yours").
+ * Flat only: below 32px the favicon uses its own 16px drawing (app/icon.svg).
  */
-export function BrandMark({ size = 32, className }: { size?: number; className?: string }) {
+export function BrandMark({
+  size = 32,
+  joined = false,
+  className
+}: {
+  size?: number;
+  joined?: boolean;
+  className?: string;
+}) {
   return (
     <svg
       className={cx(mark, className)}
@@ -27,15 +38,27 @@ export function BrandMark({ size = 32, className }: { size?: number; className?:
       aria-hidden="true"
       focusable="false"
     >
-      <rect width="32" height="32" rx="9" fill="currentColor" />
-      <g fill="none" stroke="var(--colors-primary-fg)" strokeWidth="2.25" strokeLinejoin="round">
-        <rect x="7" y="11.5" width="8" height="8" rx="1.5" />
-        <rect x="17.5" y="11.5" width="8" height="8" rx="1.5" />
-        <path d="M15 15.5h2.5M7 15.5H4.5v3.5" strokeLinecap="round" />
+      <path fill="currentColor" fillRule="evenodd" d="M9 9h14v14H9zM11 11v10h5V11z" />
+      <g fill="currentColor">
+        <circle cx="16" cy="3.75" r="3.25" />
+        <circle cx="28.25" cy="16" r="3.25" />
+        <circle cx="3.75" cy="16" r="3.25" />
       </g>
-      <rect x="11" y="13.5" width="3" height="4" rx="0.75" fill="var(--colors-primary-fg)" />
-      <rect x="21.5" y="13.5" width="3" height="4" rx="0.75" fill="var(--colors-primary-fg)" />
+      {joined ? (
+        <circle className={joinedSeat} cx="16" cy="28.25" r="3.75" />
+      ) : (
+        <circle cx="16" cy="28.25" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      )}
     </svg>
+  );
+}
+
+/** "Tribes" bold with a muted "Builder", in the display face. Inherits size from its parent. */
+export function BrandWordmark() {
+  return (
+    <span>
+      Tribes <span className={wordmarkMuted}>Builder</span>
+    </span>
   );
 }
 
@@ -43,7 +66,7 @@ export function BrandLockup({ className }: { className?: string }) {
   return (
     <span className={cx(lockup, className)}>
       <BrandMark size={30} />
-      Builder
+      <BrandWordmark />
     </span>
   );
 }

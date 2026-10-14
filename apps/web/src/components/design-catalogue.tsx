@@ -130,6 +130,7 @@ export function DesignCatalogue() {
             <BrandMark size={48} />
             <BrandMark size={32} />
             <BrandMark size={20} />
+            <BrandMark size={48} joined />
             <BrandLockup />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icon.svg" alt="Favicon" width={32} height={32} />
@@ -256,7 +257,7 @@ export function DesignCatalogue() {
         <Section title="Fields">
           <div className={two}>
             <Field>
-              <FieldLabel htmlFor="demo-name">Community name</FieldLabel>
+              <FieldLabel htmlFor="demo-name">Tribe name</FieldLabel>
               <Input id="demo-name" placeholder="Lantern Club" />
               <FieldHelperText>Shown on your crest and everywhere people find you.</FieldHelperText>
             </Field>
@@ -269,7 +270,7 @@ export function DesignCatalogue() {
               </Select>
             </Field>
           </div>
-          <SearchInput label="Search communities" value={query} onValueChange={setQuery} placeholder="Search" />
+          <SearchInput label="Search tribes" value={query} onValueChange={setQuery} placeholder="Search" />
         </Section>
 
         <Section title="Markdown">
