@@ -19,8 +19,7 @@ The contract rules that shape the design:
 | After launch, adding a module is several actions that run together: `create_module`, then `register_module`, then optionally an allowance and an opening call. Nothing is registered by `create_module` alone once Live. | One review that reads as plain steps, added to the proposal as a batch. |
 | The module is deployed at an address that is a pure function of tribe, kind and a module number, and `create_module` must be given that number (`StaleModuleIndex` if another module of the kind was added first). | Read the number and the predicted address from the Manager while drafting. Show the address up front. Re-check before submit and again when the proposal is queued. |
 | A module created after launch starts closed: the market is paused, the auction has not started, a claims module has no list. | "Open it when this passes" is a choice, and a closed module shows a row-level nudge. |
-| Each built-in kind appears at most once; 16 modules at most; custom kinds are `custom_<name>`, 1 to 25 characters of letters, numbers and underscores. | Tiles disable with their reason. The name field shows the saved id and a counter. |
-| `register_module` refuses anything that is not a deployed Wasm contract. | Custom address check: "That is a wallet, not a contract." |
+| Each built-in kind appears at most once; 16 modules at most. | Tiles disable with their reason. |
 | Removing a module zeroes its allowance and its transfer-agent flag. Tokens it still holds become that contract's own votes. Removal is deliberately not blockable (anyone could send the module a token). | A readiness checklist that warns and offers the clean-up as steps, but never blocks. |
 | Before launch only the Manager can register or unregister. | Add works directly for the launch admin (one signed transaction). Remove is disabled with its reason. |
 
@@ -71,9 +70,9 @@ Where: the existing Modules card in Manage → Membership. Heading stays "Module
 
 ### Add (a sheet, two screens)
 
-1. **Choose.** Four tiles in a radio group: Daily auction, Market, Invite lists, Your own contract. Plain goal first, module term one line beneath. A tile that cannot be chosen says why under its text and stays focusable.
+1. **Choose.** Three tiles in a radio group: Daily auction, Market, Invite lists. Plain goal first, module term one line beneath. A tile that cannot be chosen says why under its text and stays focusable.
 2. **Set up and review**, one screen with a sticky action bar:
-   - Fields by kind: auction (price asset, starting price, how long each runs, open it when this passes); market (price asset, resale fee in percent, open it when this passes); invite lists (price asset); your own contract (address, name, "holds memberships without votes", optional mint allowance).
+   - Fields by kind: auction (price asset, starting price, how long each runs, open it when this passes); market (price asset, resale fee in percent, open it when this passes); invite lists (price asset).
    - "When this passes, in order", numbered, rewriting as fields change, with the address the module will have.
    - A check line (checking, ok, or why it would not run) that runs on its own when the fields are valid.
    - The primary button names its outcome and counts: "Add 3 actions to your proposal". It stays disabled until the check passes.
@@ -105,7 +104,6 @@ Order matters; all run in one execution, so either all succeed or none do.
 | Daily auction | `manager.create_module(token, Auction{…}, n)`; `token.register_module("auction", predicted, true)`; `token.increase_mint_allowance(predicted, 4294967295)`; optionally `auction.unpause(treasury)` | `manager.create_module` |
 | Market | `create_module(Marketplace{…}, n)`; `register_module("marketplace", predicted, true)`; optionally `marketplace.unpause()` | `create_module` |
 | Invite lists | `create_module(Claims{…}, n)`; `register_module("claims", predicted, false)` | `create_module` |
-| Your own contract | `register_module("custom_<name>", address, nonVoting)`; optionally `increase_mint_allowance(address, N)` | not possible |
 | Remove | optional `close_pool` and `sweep_pool` per pool, or `pause` and `cancel_auction`; then `unregister_module(address)` | not possible |
 
 The built-in "holds without votes" flag follows the contract (`builtin_non_voting`): true for auction and market, false for claims.
@@ -122,9 +120,6 @@ The built-in "holds without votes" flag follows the contract (`builtin_non_votin
 | 16 modules | All tiles disabled: "Your tribe already has the most modules it can hold." |
 | Manager paused | Check fails: "New modules can't be created right now. The platform has paused it." |
 | Stale module number | Check fails: "Another market was added while you were drafting. Reload this list, then add it again." |
-| Custom: wallet or token contract | Field error: "That is a wallet, not a contract. A module has to be a smart contract." |
-| Custom: bad name | Field error with the rule and a counter. |
-| Custom: admin is not the treasury, or no renewal keys | Amber rows with consequences, never a block. |
 | Added to the draft | Existing "added to the proposal draft" callout. |
 
 ## 7. Copy rules applied
@@ -158,13 +153,13 @@ Summary; the table in the preview is the spec.
 | The predicted address is not where the contract deploys. | Never compute it locally: always read `predict_module_address`. |
 | A module was added after drafting, so the vote passes and then reverts. | Check on submit, again when the proposal is queued, and say so before anyone pays fees. |
 | Someone removed a market with open listings and sellers were confused. | Amber rows, repeated on the proposal review that voters read. |
-| "Checked" was read as "safe". | The check line says "should run as planned" and names what it did and did not simulate. For custom contracts the copy says "what it says about itself", never "verified". |
+| "Checked" was read as "safe". | The check line says "should run as planned" and names what it did and did not simulate. |
 | The index does not show a module added after launch, so the tribe's page never gets its market. | The views already resolve `module_created` and `module_registered` into the tribe's config, and the market opens through `marketplace_unpaused`. This is argued from the SQL, not yet seen live. |
 | The proposal page cannot rebuild an attach proposal from indexed data. | Item 3 above, proved first. |
 
-## 11. Questions for you
+## 11. Decisions (made with the owner)
 
-1. **Home.** The Modules card in Manage → Membership (recommended), or its own Manage page?
-2. **Name.** Keep "Modules" with a plain line, or say "Add-ons" in the heading too?
-3. **Custom contracts in the first version?** The contracts allow them and the warnings are designed, but it is the one place where the tribe trusts code nobody here reviewed. Recommended: include it, behind "Your own contract".
-4. **Defaults.** "Open it when this passes" on, and a custom module "holds memberships without votes" on.
+1. **Home:** the Modules card in Manage → Membership stays the one place to add and remove. Once a tribe has an auction or a market, that module's own settings live on its own Manage page (Auction, Market), as today.
+2. **Name:** "Modules", with the plain supporting line.
+3. **Custom contracts:** not in this version. The contracts allow them; the web will not offer them, so there is no external-contract trust surface to design.
+4. **Default:** "Open it when this passes" is on for an auction or market, and a proposer can turn it off.

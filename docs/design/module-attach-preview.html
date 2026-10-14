@@ -261,7 +261,7 @@ p{margin:0}
   <!-- 1. The Modules card -->
   <section class="section" id="card">
     <h2>1. The Modules card</h2>
-    <p class="lede">Today it lists modules and their allowance. It gains one action to add, a menu per module, and a row-level nudge when a module is attached but not open yet. State is always a chip with a word, never colour alone.</p>
+    <p class="lede">Today it lists modules and their allowance. It gains one action to add, a menu per module, and a row-level nudge when a module is attached but not open yet. State is always a chip with a word, never colour alone. This card stays the one place to add and remove; once a tribe has an auction or a market, that module's own settings live on its own Manage page.</p>
     <div class="stage">
       <div>
         <p class="cap">375px</p>
@@ -336,7 +336,6 @@ p{margin:0}
                   <button class="tile" role="radio" aria-checked="false" data-kind="auction"><svg class="ico"><use href="#i-timer"/></svg><span><span class="t">Daily auction</span><span class="d">A new membership goes to the highest bidder, over and over.</span><span class="dao">Auction module · one token per auction, paid to the treasury</span></span></button>
                   <button class="tile" role="radio" aria-checked="true" data-kind="marketplace"><svg class="ico"><use href="#i-store"/></svg><span><span class="t">Market</span><span class="d">Members resell memberships, and the tribe sells new ones at a fixed price.</span><span class="dao">Marketplace module · resale listings and quick-buy pools</span></span></button>
                   <button class="tile" role="radio" aria-checked="false" aria-disabled="true" data-kind="claims"><svg class="ico"><use href="#i-ticket"/></svg><span><span class="t">Invite lists</span><span class="d">Hand out memberships to a list of wallets, free or for a price.</span><span class="dao">Claims module · lists published for anyone to check</span><span class="why">This tribe already has one. Remove it first to replace it.</span></span></button>
-                  <button class="tile" role="radio" aria-checked="false" data-kind="custom"><svg class="ico"><use href="#i-plug"/></svg><span><span class="t">Your own contract</span><span class="d">Plug in a contract your tribe wrote or trusts.</span><span class="dao">Custom module · registered by vote, not built by Tribes Builder</span></span></button>
                 </div>
               </div>
 
@@ -382,7 +381,7 @@ p{margin:0}
   <!-- 3b. Static states -->
   <section class="section" id="states">
     <h2>3. The other module types, and a check that fails</h2>
-    <p class="lede">Each type asks for its own few fields, nothing more. Custom contracts get a plain report of what the contract says about itself, and a standing warning that cannot be dismissed.</p>
+    <p class="lede">Each type asks for its own few fields, nothing more. A check that cannot pass says why in words, and the button stays off.</p>
     <div class="stage two">
       <div>
         <p class="cap">Daily auction</p>
@@ -418,34 +417,7 @@ p{margin:0}
         </div></div>
       </div>
     </div>
-    <div class="stage two" style="margin-top:28px">
-      <div>
-        <p class="cap">Your own contract: valid</p>
-        <div class="desk"><div class="page" style="padding:16px;min-height:0">
-          <div class="field"><label>Contract address</label><input class="input mono" value="CB7KZ4ENTRUSTEDCIRCLEQ2A…"/><span class="help">The address of a deployed contract on this network.</span></div>
-          <div class="field"><label>Name</label><input class="input" value="Circle of friends"/><span class="help">Saved as <span class="mono">custom_circle_of_friends</span> · 17 of 25</span></div>
-          <div class="switchrow"><div class="txt"><b>It holds memberships without votes</b><span>Right for escrow. Leave off if it should vote like a member.</span></div><button class="switch" role="switch" aria-checked="true" aria-label="Holds memberships without votes"></button></div>
-          <div class="field"><label>Let it mint up to</label><input class="input" value="10"/><span class="help">Memberships. Zero is fine; raise it later by vote.</span></div>
-          <div class="callout warn"><svg class="ico"><use href="#i-alert"/></svg><div><b>Tribes Builder did not deploy this contract.</b><span class="sm">Your vote and its mint allowance are the only safeguards. Read what it says about itself before you propose.</span></div></div>
-          <div class="review"><h4>What it says about itself</h4>
-            <ol class="seq"><li><span class="n"><svg class="ico sm" style="color:var(--positive)"><use href="#i-check"/></svg></span><div><div class="t">It is a smart contract</div><div class="m">Not a wallet or a token, so it can be registered.</div></div></li>
-            <li><span class="n"><svg class="ico sm" style="color:var(--warning)"><use href="#i-alert"/></svg></span><div><div class="t">Its admin is not your treasury</div><div class="m">After this passes, someone other than your tribe could still change it.</div></div></li>
-            <li><span class="n"><svg class="ico sm" style="color:var(--warning)"><use href="#i-alert"/></svg></span><div><div class="t">Not covered by one-click renewal</div><div class="m">Its storage is not listed, so it can expire unless someone renews it by hand.</div></div></li></ol>
-            <details class="disc"><summary>Technical details</summary><dl><dt>Version</dt><dd>0.1.0</dd><dt>Code hash</dt><dd class="mono">9a3d5aa4577d8058485826810…</dd><dt>Admin</dt><dd class="mono">GAB7…K2L</dd></dl></details>
-          </div>
-        </div></div>
-      </div>
-      <div>
-        <p class="cap">Your own contract: not a module</p>
-        <div class="desk"><div class="page" style="padding:16px;min-height:0">
-          <div class="field"><label>Contract address</label><input class="input mono bad" value="GBCHDAHPSQH6OLWFTV5HEEDKATZ3ITBB…"/><span class="help bad" role="alert">That is a wallet, not a contract. A module has to be a smart contract.</span></div>
-          <div class="field"><label>Name</label><input class="input bad" value="Café ☕"/><span class="help bad" role="alert">Use letters, numbers and underscores, up to 25.</span></div>
-          <button class="btn btn-primary" disabled>Add to your proposal</button>
-        </div></div>
-        <p class="note"><b>No blocking review.</b> The checks only stop what the contract itself would refuse: a wallet, a token contract, a taken name, a full list. Everything else is a warning with a reason, because the tribe's vote is the safeguard and the web should inform it, not replace it.</p>
-      </div>
-    </div>
-  </section>
+    </section>
 
   <!-- 4. Remove -->
   <section class="section" id="remove">
@@ -491,7 +463,6 @@ p{margin:0}
           <div><b>Nothing in the way.</b> <span class="muted">A claims module with no tokens and no lists collapses the checklist to two green rows, and the button reads "Add 1 action to your proposal".</span></div>
           <div><b>An auction mid-sale.</b> <span class="muted">The checklist offers "Pause and cancel the running auction first", which refunds the top bid and sends the token to the treasury. Without it, the token stays with the auction.</span></div>
           <div><b>An open claim list.</b> <span class="muted">One amber row: unclaimed allocations stop being claimable. No clean-up step exists, so there is no toggle, only the words.</span></div>
-          <div><b>A custom module.</b> <span class="muted">It reads the token's balance and votes for the address and shows those two rows. It cannot know more, and says so: "We can only see what the token knows about it."</span></div>
           <div><b>Before launch.</b> <span class="muted">The menu item is disabled with its reason: "Only a vote can remove a module, so this works after launch."</span></div>
         </div>
         <div class="callout warn" style="margin-top:14px"><svg class="ico"><use href="#i-alert"/></svg><div><b>Warnings never block.</b><span class="sm">Every amber row can be ignored, and the review that members see on the proposal page repeats them.</span></div></div>
@@ -594,18 +565,6 @@ p{margin:0}
       ],
       next: 'number 0'
     },
-    custom: {
-      title: 'Add your own contract',
-      lead: 'Paste the contract, name it, and read what it says about itself.',
-      fields: `
-        <div class="field"><label>Contract address</label><input class="input mono" placeholder="C…"/><span class="help">The address of a deployed contract on this network.</span></div>
-        <div class="field"><label>Name</label><input class="input" placeholder="Circle of friends"/><span class="help">Saved as <span class="mono">custom_…</span>, up to 25 characters.</span></div>
-        <div class="switchrow"><div class="txt"><b>It holds memberships without votes</b><span>Right for escrow. Leave off if it should vote like a member.</span></div><button class="switch" role="switch" aria-checked="true" aria-label="Holds memberships without votes"></button></div>
-        <div class="callout warn"><svg class="ico"><use href="#i-alert"/></svg><div><b>Tribes Builder did not deploy this contract.</b><span class="sm">Your vote and its mint allowance are the only safeguards.</span></div></div>`,
-      steps: () => [['Register it as your tribe’s custom module', 'Its mint allowance starts at 0.']],
-      next: 'number 1',
-      needsInput: true
-    }
   };
 
   const sheet = document.getElementById('sheet');
