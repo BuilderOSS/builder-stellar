@@ -47,7 +47,7 @@ export function PlanList({ steps, label }: { steps: PlanStep[]; label: string })
             <div className={stepTitle}>{entry.title}</div>
             <div className={stepDetail}>
               <span>{entry.detail}</span>
-              {entry.address ? <Address value={entry.address} label="Contract" compact /> : null}
+              {entry.address ? <Address value={entry.address} compact /> : null}
             </div>
           </div>
         </li>
@@ -131,9 +131,9 @@ export function useSafetyDelay(daoId: string) {
   return data ?? null;
 }
 
-/** "After the vote and a 5 minutes safety delay." */
+/** "After the vote, and a safety delay of 5 minutes." */
 export function afterTheVote(seconds: number | null) {
   return seconds
-    ? `After the vote and a ${formatDuration(seconds, { style: 'long' })} safety delay.`
+    ? `After the vote, and a safety delay of ${formatDuration(seconds, { style: 'long' })}.`
     : 'After the vote and the safety delay.';
 }

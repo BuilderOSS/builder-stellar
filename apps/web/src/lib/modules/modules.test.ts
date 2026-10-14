@@ -10,6 +10,7 @@ import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSumm
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
 import {
+  attachAvailability,
   holdsWithoutVotes,
   kindFromSpecTag,
   type ModuleKind,
@@ -79,6 +80,15 @@ describe('module configs', () => {
     expect(holdsWithoutVotes('claims')).toBe(false);
     expect(specArg('marketplace', market)).toEqual(['Marketplace', { payment_asset: ASSET, secondary_fee_bps: 250 }]);
     expect(specValue('claims', claims)).toEqual({ tag: 'Claims', values: [{ payment_asset: ASSET }] });
+  });
+});
+
+describe('what the Add sheet can offer', () => {
+  it('turns a kind off with its reason, and everything off at the registry limit', () => {
+    const present = new Set<ModuleKind>(['claims']);
+    expect(attachAvailability('auction', present, 3)).toBeNull();
+    expect(attachAvailability('claims', present, 3)).toBe('This tribe already has one. Remove it first to replace it.');
+    expect(attachAvailability('auction', present, 16)).toMatch(/most modules it can hold/);
   });
 });
 

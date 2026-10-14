@@ -30,8 +30,8 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 import { feeBpsFromPercent } from '@/lib/marketplace/amount';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
 import {
+  attachAvailability,
   isModuleKind,
-  MAX_MODULES,
   MODULE_COPY,
   MODULE_KINDS,
   type ModuleConfigs,
@@ -54,18 +54,13 @@ const ICONS: Record<ModuleKind, React.ReactNode> = {
 };
 
 const stack = css({ display: 'grid', gap: '4' });
+// The tile centres its icon; it belongs beside the first line of the title.
+const iconTop = css({ alignSelf: 'flex-start', display: 'inline-flex', mt: '0.5' });
 const term = css({ display: 'block', textStyle: 'caption', color: 'ink.faint', mt: '1.5' });
 const why = css({ display: 'block', textStyle: 'caption', color: 'warning', fontWeight: '500', mt: '1.5' });
 const review = css({ display: 'grid', gap: '1' });
 const delay = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const backRow = css({ display: 'flex' });
-
-/** The kinds the Add sheet can offer, and why a tile is off. */
-export function attachAvailability(kind: ModuleKind, present: ReadonlySet<ModuleKind>, registered: number) {
-  if (registered >= MAX_MODULES) return 'This tribe already has the most modules it can hold.';
-  if (present.has(kind)) return 'This tribe already has one. Remove it first to replace it.';
-  return null;
-}
 
 export function AddModuleSheet({
   open,
@@ -206,7 +201,7 @@ export function AddModuleSheet({
     return {
       value: entry,
       label: copy.title,
-      icon: ICONS[entry],
+      icon: <span className={iconTop}>{ICONS[entry]}</span>,
       disabled: Boolean(reason),
       description: (
         <>

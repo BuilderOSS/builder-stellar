@@ -66,7 +66,7 @@ Where: the existing Modules card in Manage → Membership. Heading stays "Module
 
 - A secondary "Add a module" button in the card header.
 - Each row keeps its title, address, chips and allowance chip, and gains an overflow menu (44px target): "Change allowance" (the form that sits under the list today moves here) and "Remove from tribe…".
-- A module that is attached but closed shows "Not open yet" and, for the auction and the market, a "Propose opening" button using the existing resume and reopen actions.
+- A module that is attached but closed shows a "Closed" chip and, for the auction and the market, a "Propose opening" (market) or "Propose starting auctions" (auction) button using the existing resume and reopen actions.
 
 ### Add (a sheet, two screens)
 
@@ -121,6 +121,7 @@ The built-in "holds without votes" flag follows the contract (`builtin_non_votin
 | Manager paused | Check fails: "New modules can't be created right now. The platform has paused it." |
 | Stale module number | Check fails: "Another market was added while you were drafting. Reload this list, then add it again." |
 | Added to the draft | Existing "added to the proposal draft" callout. |
+| Not one of ours | Row says "Not deployed by Tribes Builder" and its "Remove from tribe…" stays disabled with the reason. |
 
 ## 7. Copy rules applied
 
@@ -163,3 +164,17 @@ Summary; the table in the preview is the spec.
 2. **Name:** "Modules", with the plain supporting line.
 3. **Custom contracts:** not in this version. The contracts allow them; the web will not offer them, so there is no external-contract trust surface to design.
 4. **Default:** "Open it when this passes" is on for an auction or market, and a proposer can turn it off.
+
+## 12. As built
+
+- The sheets use the app's existing `Sheet`: a bottom sheet on phones and a 420px side panel from `md`. The centred 560px sheet in the preview is a drawing convenience, not a new surface.
+- A module that is attached but closed shows "Closed" (the preview's "Not open yet" was replaced during build).
+- "Checked just now. This should run as planned." replaces any claim that every step will run: only the first step is simulated, the rest are checked against live reads, and later steps depend on earlier ones in the same execution.
+- The action list is built once (`lib/modules/plans.ts`) and fed to the composer's own handlers (`lib/modules/requests.ts`), so a proposal made here and one made in the composer are identical on chain.
+- The proposal page and the composer resolve a pending module's address from the Manager's `predict_module_address`, never from a local computation.
+
+### Proven live (testnet, tribe `drive-launch`)
+
+- Attach: a Market was added by proposal (create, register, open) at the predicted address with `non_voting` set, unpaused, version 0.4.0; the index showed the contract and `marketplace_enabled`.
+- Detach: see the notes folder for the removal proposal; the kind becomes free again once it executes.
+- Not exercised live: the launch-setup path (`create_module` signed directly by the launch admin), pool and auction clean-up steps, removing a claims module.

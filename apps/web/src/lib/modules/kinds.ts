@@ -156,3 +156,10 @@ export function specValue<K extends ModuleKind>(kind: K, config: ModuleConfigs[K
   }
   return { tag: 'Claims' as const, values: [{ payment_asset: (config as ClaimsModuleConfig).paymentAsset }] as const };
 }
+
+/** Why the Add sheet cannot offer a kind right now, in words; null when it can. */
+export function attachAvailability(kind: ModuleKind, present: ReadonlySet<ModuleKind>, registered: number) {
+  if (registered >= MAX_MODULES) return 'This tribe already has the most modules it can hold.';
+  if (present.has(kind)) return 'This tribe already has one. Remove it first to replace it.';
+  return null;
+}
