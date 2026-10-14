@@ -31,11 +31,11 @@ export function useAllDrafts() {
     const map = new Map<string, CommunityRef>();
     for (const dao of data?.myDaos ?? [])
       map.set(dao.dao_id, {
-        name: dao.token_name || dao.token_symbol || 'Unnamed community',
+        name: dao.token_name || dao.token_symbol || 'Unnamed tribe',
         routeId: daoRouteId({ daoId: dao.dao_id, slug: dao.slug })
       });
     if (current)
-      map.set(current.daoId, { name: current.daoConfig.tokenName || 'This community', routeId: current.routeId });
+      map.set(current.daoId, { name: current.daoConfig.tokenName || 'This tribe', routeId: current.routeId });
     return map;
   }, [data, current]);
 

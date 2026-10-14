@@ -105,7 +105,7 @@ export async function prepareHolderAction(
     const giveBack = action.destination === treasury;
     if (settings.transfers_locked && !giveBack)
       throw new HolderError(
-        'Memberships in this community are locked. You can give your token back to the community, or approve the community to move it by a vote.',
+        'Memberships in this tribe are locked. You can give your token back to the tribe, or approve the tribe to move it by a vote.',
         409
       );
     tx = await client.transfer(
@@ -113,12 +113,12 @@ export async function prepareHolderAction(
       options
     );
     summary = giveBack
-      ? `Give token #${tokenId} back to the community Treasury ${treasury}. You will no longer own it, and it carries no vote while the Treasury holds it.`
+      ? `Give token #${tokenId} back to the tribe Treasury ${treasury}. You will no longer own it, and it carries no vote while the Treasury holds it.`
       : `Transfer token #${tokenId} to ${action.destination}. You will no longer own it. Its voting unit moves to the recipient’s delegate.`;
   } else if (action.action === 'approve') {
     if (settings.transfers_locked && action.destination !== treasury)
       throw new HolderError(
-        'Memberships in this community are locked. You can only approve the community Treasury, so a proposal can move this token.',
+        'Memberships in this tribe are locked. You can only approve the tribe Treasury, so a proposal can move this token.',
         409
       );
     const expiration = holderTokenId(action.expirationLedger);
@@ -136,7 +136,7 @@ export async function prepareHolderAction(
     );
     summary =
       action.destination === treasury
-        ? `Allow the community Treasury ${treasury} to transfer only token #${tokenId} until network position ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
+        ? `Allow the tribe Treasury ${treasury} to transfer only token #${tokenId} until network position ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
         : `Allow ${action.destination} to transfer only token #${tokenId} until network position ${expiration}. This replaces its single-token approval; ownership does not change.`;
   } else if (action.action === 'revoke') {
     // The pinned NFT Base removes the single-token approval at expiration ledger 0.
@@ -162,7 +162,7 @@ export async function prepareHolderAction(
         delegatee === treasury || modules.some((entry) => entry.non_voting && entry.address === delegatee);
       if (held === 0 || custody)
         throw new HolderError(
-          'This community only lets you delegate to members: someone who holds a token. Tokens listed for sale don’t count.',
+          'This tribe only lets you delegate to members: someone who holds a token. Tokens listed for sale don’t count.',
           409
         );
     }

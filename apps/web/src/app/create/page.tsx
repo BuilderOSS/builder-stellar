@@ -143,7 +143,7 @@ export default function CreateDaoPage() {
           const response = await fetch(`/api/slugs/${encodeURIComponent(slug)}`, { cache: 'no-store' });
           const status = (await response.json()) as { claimedBy?: string | null };
           if (status.claimedBy)
-            extra.push({ key: 'slug', message: 'A launched community already uses this link. Pick another.' });
+            extra.push({ key: 'slug', message: 'A launched tribe already uses this link. Pick another.' });
         } catch {
           // If the check can't run, Create still fails safely on a taken slug; don't block on a network blip.
         } finally {
@@ -180,7 +180,7 @@ export default function CreateDaoPage() {
     indexingRequest.current?.abort();
     const controller = new AbortController();
     indexingRequest.current = controller;
-    setIndexingMessage('Waiting for your community to show up in the directory…');
+    setIndexingMessage('Waiting for your tribe to show up in the directory…');
     try {
       const indexed = await pollCreatedDao(token, controller.signal);
       if (controller.signal.aborted) return;
@@ -194,7 +194,7 @@ export default function CreateDaoPage() {
       setIndexingMessage(
         e instanceof Error
           ? e.message
-          : "We couldn't reach the directory. Your community is created and its record is saved."
+          : "We couldn't reach the directory. Your tribe is created and its record is saved."
       );
     }
   };
@@ -224,7 +224,7 @@ export default function CreateDaoPage() {
       const addresses = await deployDao({ ...parsed.data, launchAdmin: session.address }, draft.id, { rebroadcast });
       if (useAuthSessionStore.getState().address === session.address) await openSetup(addresses.token);
     } catch (e) {
-      setPageError(e instanceof Error ? e.message : 'Creating your community needs attention');
+      setPageError(e instanceof Error ? e.message : 'Creating your tribe needs attention');
     } finally {
       setBusy(false);
       operation.current = false;
@@ -249,7 +249,7 @@ export default function CreateDaoPage() {
     <div className={styles.createPage}>
       <DiscardDraftDialog
         open={discardOpen}
-        title={store.basicInfo.tokenName.trim() || 'Untitled community'}
+        title={store.basicInfo.tokenName.trim() || 'Untitled tribe'}
         onCancel={() => setDiscardOpen(false)}
         onDiscard={() => {
           setDiscardOpen(false);
@@ -264,7 +264,7 @@ export default function CreateDaoPage() {
       />
       <div>
         <PageHeader
-          title="Start a DAO"
+          title="Build a tribe"
           meta={
             creationStorageError() ||
             (ready ? `Saved on this browser as you go · ${getNetworkConfig(network).label}` : 'Opening your draft…')
@@ -396,7 +396,7 @@ export default function CreateDaoPage() {
                             Boolean(creationStorageError())
                           }
                         >
-                          {busy ? 'Creating…' : 'Create community'}
+                          {busy ? 'Creating…' : 'Create tribe'}
                         </Button>
                       </div>
                       <p className={styles.muted}>

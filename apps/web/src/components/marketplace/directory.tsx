@@ -97,7 +97,7 @@ export function MarketplaceDirectoryView() {
     <div className={styles.root}>
       <PageSection
         title="Market"
-        description="Buy a new token to support a community's treasury, or trade with another member."
+        description="Buy a new token to support a tribe's treasury, or trade with another member."
       >
         <div className={viewRow}>
           <SegmentedControl
@@ -108,7 +108,7 @@ export function MarketplaceDirectoryView() {
               setPage(0);
             }}
             options={[
-              { value: 'communities', label: 'Communities' },
+              { value: 'communities', label: 'Tribes' },
               { value: 'offers', label: 'For sale' }
             ]}
           />
@@ -121,7 +121,7 @@ export function MarketplaceDirectoryView() {
 
         <div className={toolbar}>
           <SearchInput
-            label="Search communities"
+            label="Search tribes"
             placeholder="Name, symbol or description"
             maxLength={120}
             value={search}
@@ -131,7 +131,7 @@ export function MarketplaceDirectoryView() {
             }}
           />
           <Select
-            aria-label="Filter by what a community runs"
+            aria-label="Filter by what a tribe runs"
             value={capability}
             onChange={(e) => {
               setCapability(e.target.value);
@@ -152,7 +152,7 @@ export function MarketplaceDirectoryView() {
               }}
             >
               <option value="all">New and resale</option>
-              <option value="pool">New from the community</option>
+              <option value="pool">New from the tribe</option>
               <option value="secondary">Resale from members</option>
             </Select>
           ) : (
@@ -182,7 +182,7 @@ export function MarketplaceDirectoryView() {
         ) : null}
 
         {view === 'communities' ? (
-          <section className={cardGrid} aria-label="Communities">
+          <section className={cardGrid} aria-label="Tribes">
             {communities.map((community) => {
               const saved = preferences.favorites.includes(community.daoId);
               return (
@@ -191,7 +191,7 @@ export function MarketplaceDirectoryView() {
                     <Crest name={community.name} seed={community.tokenContract || community.daoId} size="lg" />
                     <div className={css({ minW: '0', flex: '1' })}>
                       <h2 className={cardName}>{community.name}</h2>
-                      <p className={note}>{community.symbol || 'Community'}</p>
+                      <p className={note}>{community.symbol || 'Tribe'}</p>
                     </div>
                     <IconButton
                       label={`${saved ? 'Unsave' : 'Save'} ${community.name}`}
@@ -256,7 +256,7 @@ export function MarketplaceDirectoryView() {
               ) : undefined
             }
           >
-            Tokens show up once a community lists new ones by vote, or a member puts one up for sale.
+            Tokens show up once a tribe lists new ones by vote, or a member puts one up for sale.
           </EmptyState>
         ) : null}
 
@@ -270,10 +270,10 @@ export function MarketplaceDirectoryView() {
           disabled={result.isLoading}
         />
         <p className={note}>
-          Only communities with something to buy right now show here. Saved communities and your market view stay on
-          this device. Every trade checks the live chain before you sign, so a listing shown here may already be gone.{' '}
+          Only tribes with something to buy right now show here. Saved tribes and your market view stay on this device.
+          Every trade checks the live chain before you sign, so a listing shown here may already be gone.{' '}
           <NextLink href="/discover" className={css({ color: 'signal' })}>
-            Discover communities
+            Discover tribes
           </NextLink>
         </p>
       </PageSection>

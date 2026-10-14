@@ -80,7 +80,7 @@ export function collectDrafts({
       return {
         kind: 'dao',
         id: draft.id,
-        title: draft.configuration.basicInfo.tokenName.trim() || 'Untitled community',
+        title: draft.configuration.basicInfo.tokenName.trim() || 'Untitled tribe',
         meta: [daoDraftStatus(draft), saved(draft.updatedAt, now)].filter(Boolean).join(' · '),
         href: token ? daoRoute(token, 'setup') : `/create?draft=${encodeURIComponent(draft.id)}`,
         updatedAt: draft.updatedAt,

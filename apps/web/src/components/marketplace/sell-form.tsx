@@ -160,8 +160,8 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
         ) : null}
         <p className={styles.muted}>
           Market fee: <strong>{(config.feeBps / 100).toLocaleString()}%</strong>
-          {proceeds ? ` · you receive ${proceeds} ${asset}` : ''}. If the community changes the fee or price asset
-          before your listing confirms, it fails safely and you can review the new terms.
+          {proceeds ? ` · you receive ${proceeds} ${asset}` : ''}. If the tribe changes the fee or price asset before
+          your listing confirms, it fails safely and you can review the new terms.
         </p>
         <Disclosure>
           <Address value={config.paymentAsset} label="Price asset contract" compact />

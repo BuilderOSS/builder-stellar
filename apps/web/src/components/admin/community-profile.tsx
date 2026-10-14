@@ -358,7 +358,7 @@ export function CommunityProfileEditor() {
       <section className={card} aria-labelledby="profile-title">
         <div>
           <h2 id="profile-title" className={title}>
-            How people see {config.tokenName || 'your community'}
+            How people see {config.tokenName || 'your tribe'}
           </h2>
           <p className={muted}>
             {direct
@@ -535,7 +535,7 @@ export function CommunityProfileEditor() {
           ) : null}
           {direct && linkStep ? (
             <p className={planNote}>
-              The new link is yours once you launch. If another community launches first with it, pick another.
+              The new link is yours once you launch. If another tribe launches first with it, pick another.
             </p>
           ) : null}
           {preview ? <p className={hint}>Upload the new image to include it.</p> : null}
@@ -544,9 +544,9 @@ export function CommunityProfileEditor() {
               <span className={stepTitle}>In its own proposal: change the link</span>
               <span className={stepDetail}>{linkStep.detail}</span>
               <p className={planNote}>
-                /dao/{currentLink} is freed when it passes. Old links lead here until another community takes it, which
-                can happen right away. If /dao/{nextLink} is taken before the vote, that proposal fails and you can
-                propose another link.
+                /dao/{currentLink} is freed when it passes. Old links lead here until another tribe takes it, which can
+                happen right away. If /dao/{nextLink} is taken before the vote, that proposal fails and you can propose
+                another link.
               </p>
               <div>
                 <Button variant={steps.length ? 'secondary' : 'primary'} disabled={busy} onClick={proposeLink}>

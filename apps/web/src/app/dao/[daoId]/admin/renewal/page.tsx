@@ -9,7 +9,7 @@ export default function RenewalPage() {
   return (
     <PageSection
       title="Storage renewal"
-      description="When your community's data expires, and one transaction that renews all of it."
+      description="When your tribe's data expires, and one transaction that renews all of it."
     >
       <RenewalPanel config={config} />
     </PageSection>

@@ -76,7 +76,7 @@ export function LaunchDriveCard({
         <div className={group}>
           <h3 className={subTitle}>While the drive runs</h3>
           <ul className={consequences}>
-            <li>The community belongs to its treasury. Settings, artwork and founder tokens can&apos;t change.</li>
+            <li>The tribe belongs to its treasury. Settings, artwork and founder tokens can&apos;t change.</li>
             <li>Payments are held until launch, then go to the treasury.</li>
             <li>
               At launch:{' '}
@@ -158,7 +158,7 @@ export function LaunchCard({
   const recover = Boolean(choice.hash && !['failed', 'rejected', 'expired'].includes(choice.status ?? ''));
   const confirmed = choice.status === 'confirmed';
   const admin = session.address === config.launchAdmin && session.authStatus === 'authenticated';
-  const name = config.tokenName || 'this community';
+  const name = config.tokenName || 'this tribe';
   const slug = readiness?.pending?.slug;
 
   const change = (patch: Partial<typeof choice>) => {
@@ -196,7 +196,7 @@ export function LaunchCard({
     } catch (e) {
       setError(
         parseContractErrorCode(e) === 7123
-          ? 'Another community launched first with your link. Pick a new link above, then launch.'
+          ? 'Another tribe launched first with your link. Pick a new link above, then launch.'
           : e instanceof Error
             ? e.message
             : 'Launch needs attention'
@@ -212,11 +212,11 @@ export function LaunchCard({
     return (
       <section className={card} aria-labelledby="launch-title">
         <h2 id="launch-title" className={title}>
-          {config.tokenName || 'Your community'} is live
+          {config.tokenName || 'Your tribe'} is live
         </h2>
         <p className={muted}>The launch went through. The directory takes a moment to catch up.</p>
         <div>
-          <Button onClick={() => router.push(daoRoute(routeId))}>Go to the community</Button>
+          <Button onClick={() => router.push(daoRoute(routeId))}>Go to the tribe</Button>
         </div>
       </section>
     );
@@ -263,7 +263,7 @@ export function LaunchCard({
           <div className={group}>
             <h3 className={subTitle}>What launching does</h3>
             <ul className={consequences}>
-              <li>Your setup admin rights pass to the community treasury.</li>
+              <li>Your setup admin rights pass to the tribe treasury.</li>
               <li>After this, changes go through proposals that members vote on.</li>
               {config.auctionContractId && choice.auction ? (
                 <li>The auction can mint one token per auction for as long as it runs.</li>
@@ -318,7 +318,7 @@ export function LaunchCard({
               onClick={() => setConfirming(true)}
             >
               <Rocket aria-hidden="true" />
-              Launch {config.tokenName || 'community'}
+              Launch {config.tokenName || 'tribe'}
             </Button>
           )}
         </div>
@@ -327,7 +327,7 @@ export function LaunchCard({
       <Dialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Launch ${config.tokenName || 'this community'}?`}
+        title={`Launch ${config.tokenName || 'this tribe'}?`}
         description="This can't be undone."
         footer={
           <>
@@ -346,7 +346,7 @@ export function LaunchCard({
         }
       >
         <ul className={consequences}>
-          <li>Your setup admin rights pass to the community treasury.</li>
+          <li>Your setup admin rights pass to the tribe treasury.</li>
           <li>After this, changes go through proposals.</li>
           {choice.auction ? <li>The first auction starts right away.</li> : null}
           {choice.marketplace ? <li>The market opens.</li> : null}

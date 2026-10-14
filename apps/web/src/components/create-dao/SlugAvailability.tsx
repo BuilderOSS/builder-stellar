@@ -20,13 +20,13 @@ export function SlugAvailability({ slug }: { slug: string }) {
     fetch(url, { cache: 'no-store' }).then((response) => response.json())
   );
   if (!isValidSlug(slug) || !data || data.message) return null;
-  if (data.claimedBy) return <p role="alert">/dao/{slug} is taken by another community. Pick another link.</p>;
+  if (data.claimedBy) return <p role="alert">/dao/{slug} is taken by another tribe. Pick another link.</p>;
   return (
     <p role="status">
-      /dao/{slug} is available. It becomes yours when you launch; another community that launches first with the same
-      link takes it.
+      /dao/{slug} is available. It becomes yours when you launch; another tribe that launches first with the same link
+      takes it.
       {data.pendingRequests
-        ? ` ${data.pendingRequests} ${data.pendingRequests === 1 ? 'community in setup has' : 'communities in setup have'} asked for it too.`
+        ? ` ${data.pendingRequests} ${data.pendingRequests === 1 ? 'tribe in setup has' : 'tribes in setup have'} asked for it too.`
         : ''}
     </p>
   );

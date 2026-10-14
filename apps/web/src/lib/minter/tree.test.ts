@@ -44,7 +44,7 @@ describe('published claim trees', () => {
     const inflated = structuredClone(tree);
     inflated.claims[list[0]!.address]!.amount = '2';
     expect(() => verifyClaimTree(inflated, scope)).toThrow('does not match the root');
-    expect(() => verifyClaimTree({ ...tree, token: 'CX' }, scope)).toThrow('different community');
+    expect(() => verifyClaimTree({ ...tree, token: 'CX' }, scope)).toThrow('different tribe');
     expect(() => verifyClaimTree({ ...tree, format: 'uniswap' }, scope)).toThrow('unknown format');
   });
 

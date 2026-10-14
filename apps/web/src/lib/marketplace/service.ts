@@ -29,12 +29,12 @@ import type {
 /** `description`: a plain summary of the verified profile, or empty (never unverified text). */
 export function marketplaceCommunity(row: ManagerDao, description = ''): MarketplaceCommunity {
   if (row.deploymentId !== DEPLOYMENT_ID || row.daoId !== row.tokenContract || row.tokenAddress !== row.daoId) {
-    throw new MarketplaceError('Indexed community identity is invalid.', 503);
+    throw new MarketplaceError('Indexed tribe identity is invalid.', 503);
   }
   return {
     deploymentId: row.deploymentId,
     daoId: row.daoId,
-    name: row.tokenName || 'Unnamed community',
+    name: row.tokenName || 'Unnamed tribe',
     symbol: row.tokenSymbol || '',
     description,
     marketplaceContract: row.marketplaceContract,
@@ -51,12 +51,12 @@ export function marketplaceCommunity(row: ManagerDao, description = ''): Marketp
 
 export async function marketplaceDao(daoId: string) {
   const row = await prisma.managerDao.findFirst({ where: { deploymentId: DEPLOYMENT_ID, daoId } });
-  if (!row) throw new MarketplaceError('Community not found in this deployment.', 404);
+  if (!row) throw new MarketplaceError('Tribe not found in this deployment.', 404);
   return marketplaceCommunity(row);
 }
 
 export function marketplaceClient(community: MarketplaceCommunity, publicKey?: string) {
-  if (!community.marketplaceContract) throw new MarketplaceError('This community has no marketplace.', 404);
+  if (!community.marketplaceContract) throw new MarketplaceError('This tribe has no marketplace.', 404);
   const network = getDeploymentConfig();
   return new MarketplaceClient({
     contractId: community.marketplaceContract,
@@ -222,7 +222,7 @@ export async function marketplaceOffers(
   const identities = new Map(communities.map((c) => [c.daoId, c]));
   for (const listing of listings) {
     const identity = identities.get(listing.daoId);
-    if (!identity) throw new MarketplaceError('Listing has no scoped community.', 503);
+    if (!identity) throw new MarketplaceError('Listing has no scoped tribe.', 503);
     assertMarketplaceIdentity(listing, identity);
   }
   const listedDaos = new Set(listings.map((listing) => listing.daoId));
@@ -257,7 +257,7 @@ export async function marketplaceListing(
       : await prisma.marketplaceSecondaryListing
           .findFirst({ where: { ...where, tokenId: parsed } })
           .then((row) => row && mapListing(row));
-  if (!listing) throw new MarketplaceError('Listing not found in this community.', 404);
+  if (!listing) throw new MarketplaceError('Listing not found in this tribe.', 404);
   assertMarketplaceIdentity(listing, community);
   return listing;
 }

@@ -72,7 +72,7 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
           Join {config.tokenName}
         </h2>
         <p className={classes.body}>
-          Members hold a token. Each token is a vote on how the community and its treasury move.
+          Members hold a token. Each token is a vote on how the tribe and its treasury move.
         </p>
         {way ? (
           <ButtonLink href={daoRoute(routeId, way === 'auction' ? 'auctions' : 'marketplace')} variant="secondary">

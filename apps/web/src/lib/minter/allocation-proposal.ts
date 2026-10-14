@@ -17,7 +17,7 @@ export function claimListQueueActions(
   deploymentId: string
 ): ProposalQueuedAction[] {
   if (state.network !== config.name || state.claimsContractId !== config.claimsContractId)
-    throw new Error('The claims module or network changed. Refresh this community.');
+    throw new Error('The claims module or network changed. Refresh this tribe.');
   assertClaimListScope(state, deploymentId, config.tokenContractId, config.treasuryContractId);
   const call = claimListCall(draft, config.claimsContractId);
   encodeSupportedCall(call.target, call.function, call.args, config);

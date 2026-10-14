@@ -68,7 +68,7 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
     <div>
       <ButtonLink href={daoRoute(routeId)} variant="ghost" size="sm" className={back}>
         <ChevronLeft aria-hidden="true" />
-        {config.tokenName || 'Community'}
+        {config.tokenName || 'Tribe'}
       </ButtonLink>
       <PageSection
         title={name}

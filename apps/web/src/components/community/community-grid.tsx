@@ -14,7 +14,7 @@ export function toCommunitySummary(dao: DaoConfig, yours?: string): CommunitySum
   return {
     id: dao.dao_id,
     routeId: daoRouteId({ daoId: dao.dao_id, slug: dao.slug }),
-    name: dao.token_name || dao.label || dao.token_symbol || 'Unnamed community',
+    name: dao.token_name || dao.label || dao.token_symbol || 'Unnamed tribe',
     symbol: dao.token_symbol,
     description: plainSummary(dao.description),
     image: dao.image,
@@ -97,13 +97,13 @@ export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
     <div className={css({ display: 'grid', gap: '4' })}>
       <div className={toolbar} role="search">
         <SearchInput
-          label="Search communities"
+          label="Search tribes"
           placeholder="Search by name or symbol"
           value={query}
           onValueChange={setQuery}
         />
         <Select aria-label="Show" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
-          <option value="all">All communities</option>
+          <option value="all">All tribes</option>
           <option value="auction">Auction running now</option>
           <option value="market">Tokens for sale</option>
         </Select>
@@ -115,7 +115,7 @@ export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
         </Select>
       </div>
       <p className={count} role="status" aria-live="polite">
-        {visible.length} {visible.length === 1 ? 'community' : 'communities'}
+        {visible.length} {visible.length === 1 ? 'tribe' : 'tribes'}
       </p>
       {visible.length ? (
         <div className={communityGrid}>
@@ -125,7 +125,7 @@ export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
         </div>
       ) : (
         <EmptyState
-          title="No community matches"
+          title="No tribe matches"
           action={
             query || filter !== 'all' ? (
               <Button

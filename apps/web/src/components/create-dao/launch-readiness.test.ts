@@ -93,7 +93,7 @@ describe('live launch readiness', () => {
       launch_config: { launch_auction: false, launch_marketplace: true }
     };
     expect(launchReadinessIssues({ ...result, assurance: drive }, 'wallet-A')).toEqual([
-      'This community is in a launch drive. Once enough people have claimed, anyone can launch it from the claims page.'
+      'This tribe is in a launch drive. Once enough people have claimed, anyone can launch it from the claims page.'
     ]);
     expect(mocks.supply).toHaveBeenCalled();
   });
@@ -131,7 +131,7 @@ describe('live launch readiness', () => {
   it('rejects a lost admin and never calls an already-live DAO ready', () => {
     expect(launchReadinessIssues({ ...ready(), admin: 'other-wallet', pending: null }, 'wallet-A')).toHaveLength(2);
     expect(launchReadinessIssues({ ...ready(), live: true }, 'wallet-A')).toEqual([
-      'This DAO is already live. Refresh the overview.'
+      'This tribe is already live. Refresh the overview.'
     ]);
   });
 });

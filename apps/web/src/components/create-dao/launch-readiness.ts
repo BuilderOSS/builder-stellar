@@ -78,10 +78,10 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
   };
 }
 export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: string): string[] {
-  if (readiness.live) return ['This DAO is already live. Refresh the overview.'];
+  if (readiness.live) return ['This tribe is already live. Refresh the overview.'];
   if (readiness.assurance)
     return [
-      'This community is in a launch drive. Once enough people have claimed, anyone can launch it from the claims page.'
+      'This tribe is in a launch drive. Once enough people have claimed, anyone can launch it from the claims page.'
     ];
   const issues: string[] = [];
   if (!readiness.pending || readiness.pending.launch_admin !== launchAdmin)
@@ -89,7 +89,7 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
   if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
   if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
   if (readiness.slugTaken && readiness.pending)
-    issues.push(`Another community launched first with /dao/${readiness.pending.slug}. Pick another link below.`);
+    issues.push(`Another tribe launched first with /dao/${readiness.pending.slug}. Pick another link below.`);
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets set at creation in every module before launch.');
   return issues;

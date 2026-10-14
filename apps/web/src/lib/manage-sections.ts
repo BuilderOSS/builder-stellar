@@ -20,10 +20,8 @@ export const MANAGE_GROUPS: Array<{ title: string; items: ManageSection[] }> = [
     items: [{ key: 'overview', label: 'Overview', meta: 'Your access and pending changes', section: '', exact: true }]
   },
   {
-    title: 'Community',
-    items: [
-      { key: 'profile', label: 'Community profile', meta: 'Name, link, image and description', section: '/profile' }
-    ]
+    title: 'Tribe',
+    items: [{ key: 'profile', label: 'Tribe profile', meta: 'Name, link, image and description', section: '/profile' }]
   },
   {
     title: 'Membership',

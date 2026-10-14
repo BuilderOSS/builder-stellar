@@ -251,7 +251,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       tx.success(label, await run());
       await refreshAll();
     } catch (error) {
-      tx.fail(error, `${label} failed`, label === 'Launch the community' ? 'manager' : 'minter');
+      tx.fail(error, `${label} failed`, label === 'Launch the tribe' ? 'manager' : 'minter');
     } finally {
       lock.current = false;
       setBusy(false);
@@ -269,7 +269,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   function launch() {
     if (!address) return;
     const manager = new ManagerClient(walletClientOptions(config, address, getDeploymentConfig().managerAddress));
-    void direct('Launch the community', async () =>
+    void direct('Launch the tribe', async () =>
       sendAndConfirm(await manager.launch_when_ready({ token_address: config.tokenContractId }), config.rpcUrl)
     );
   }
@@ -283,7 +283,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         <p>
           {admin
             ? 'Set aside tokens for specific wallets. People on a list claim their own tokens, free or at a price you set, until the list closes.'
-            : 'A community can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
+            : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
         </p>
         <div className={styles.row}>
           <ButtonLink href={`${base}/${admin ? 'claims' : 'admin/claims'}` as Route} variant="secondary" size="sm">
@@ -307,20 +307,20 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         {current.error ? (
           <Callout variant="error" title="Claims didn't load" description={current.error.message} />
         ) : null}
-        {data && !data.claimsContractId ? <Callout variant="info" title="This community has no claims module" /> : null}
+        {data && !data.claimsContractId ? <Callout variant="info" title="This tribe has no claims module" /> : null}
         {data && !data.authenticated && !admin ? (
           <p>Connect the wallet that is on a claim list to see your tokens, or to take back a payment.</p>
         ) : null}
         {wrongNetwork ? (
           <Callout
             variant="warning"
-            title="Switch your wallet to this community's network"
+            title="Switch your wallet to this tribe's network"
             description={session.walletNetworkIssue || 'Claims, launch and refunds sign on that network.'}
           />
         ) : null}
         {data ? (
           <Disclosure title="Technical details">
-            <p>Community: {data.live ? 'live' : 'in setup'}</p>
+            <p>Tribe: {data.live ? 'live' : 'in setup'}</p>
             {data.claimsContractId ? <Address value={data.claimsContractId} label="Claims module" /> : null}
             <p>
               Mint allowance:{' '}
@@ -379,8 +379,8 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                     : ''
                 }${
                   review.list.assurance && !data?.live
-                    ? ', held by the claims module until the community launches. If the drive fails, you can take it back.'
-                    : ', sent to the community Treasury.'
+                    ? ', held by the claims module until the tribe launches. If the drive fails, you can take it back.'
+                    : ', sent to the tribe Treasury.'
                 }`}{' '}
             Network fee: {formatStroops(review.prepared.fee)} XLM.
           </p>
@@ -593,22 +593,22 @@ function ClaimListCard({
           <ProgressBar value={list.claimers} max={drive.thresholdClaimers} label="People who have claimed" />
           <p>
             {drive.state === 'failed'
-              ? 'The drive ended before the community launched. Everyone who paid can take their payment back.'
+              ? 'The drive ended before the tribe launched. Everyone who paid can take their payment back.'
               : drive.state === 'met'
                 ? state.live
-                  ? 'Enough people claimed and the community launched.'
-                  : 'Enough people have claimed. Anyone can launch the community now.'
+                  ? 'Enough people claimed and the tribe launched.'
+                  : 'Enough people have claimed. Anyone can launch the tribe now.'
                 : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed by ${formatClaimDate(drive.deadline)}. Payments are held until launch.`}
           </p>
           {drive.state === 'met' && !state.live ? (
             <>
               <p>
-                Launching starts the community with the choices its launch admin made, and moves the held payments to
-                its treasury. It costs only the network fee.
+                Launching starts the tribe with the choices its launch admin made, and moves the held payments to its
+                treasury. It costs only the network fee.
               </p>
               <div>
                 <Button disabled={!state.authenticated || disabled} onClick={onLaunch}>
-                  Launch the community
+                  Launch the tribe
                 </Button>
               </div>
               {!state.authenticated ? <p className={styles.muted}>Connect a wallet to launch it.</p> : null}

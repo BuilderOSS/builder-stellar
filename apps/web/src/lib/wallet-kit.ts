@@ -19,8 +19,8 @@ export function initializeWalletKit(network: NetworkName) {
       new WalletConnectModule({
         projectId,
         metadata: {
-          name: 'Stellar DAOs',
-          description: 'Explore and participate in Stellar DAO governance.',
+          name: 'Tribes Builder',
+          description: 'Build a tribe: a DAO on Stellar with a shared treasury and onchain votes.',
           url: window.location.origin,
           icons: [`${window.location.origin}/icon.svg`]
         },

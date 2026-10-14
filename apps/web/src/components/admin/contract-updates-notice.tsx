@@ -33,7 +33,7 @@ export function ContractUpdatesNotice({ enabled }: { enabled: boolean }) {
       description={
         withdrawn
           ? config.status === 'pending'
-            ? 'That contract is on a withdrawn version, so the community can’t launch until it’s upgraded.'
+            ? 'That contract is on a withdrawn version, so the tribe can’t launch until it’s upgraded.'
             : 'That contract is on a withdrawn version. Upgrade it as soon as you can.'
           : first
             ? `${MODULE_LABELS[first.module]} ${first.current} → ${first.next!.version}${count > 1 ? `, and ${count - 1} more` : ''}.`

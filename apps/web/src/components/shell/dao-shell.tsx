@@ -57,7 +57,7 @@ function toShellItem(item: DaoNavItem, badge?: boolean): ShellNavItem {
   return { ...item, icon: ICONS[item.key], badge };
 }
 
-/** Builder inside a community: Home, Vote, slot 3, Treasury, More. */
+/** Tribes Builder inside a tribe: Home, Vote, slot 3, Treasury, More. */
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { daoId, routeId, daoConfig } = useDaoContext();
@@ -86,7 +86,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const allItems = [...rail, ...railFooter];
   const active = activeNavKey(canonicalPath, allItems)?.key;
   const moreActive = nav.more.some((item) => item.key === active);
-  const name = daoConfig.tokenName || 'Community';
+  const name = daoConfig.tokenName || 'Tribe';
 
   return (
     <ShellFrame
@@ -104,7 +104,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
       overlays={
         <>
           <YouSheet open={youOpen} onOpenChange={setYouOpen} />
-          <Sheet open={moreOpen} onOpenChange={setMoreOpen} title={name} description="More in this community">
+          <Sheet open={moreOpen} onOpenChange={setMoreOpen} title={name} description="More in this tribe">
             <ul className={moreList}>
               {nav.more.map((item) => {
                 const Icon = ICONS[item.key];

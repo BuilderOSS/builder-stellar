@@ -126,7 +126,7 @@ export default function ProposalCreatePage() {
   const isPendingLaunch = config.status === 'pending';
   const proposalCreationLocked = !eligibility.eligible || isPendingLaunch;
   const proposalCreationDisabledMessage = isPendingLaunch
-    ? 'Proposals open once your community launches.'
+    ? 'Proposals open once your tribe launches.'
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);

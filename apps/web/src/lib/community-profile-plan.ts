@@ -45,7 +45,7 @@ export function buildProfilePlan(
     steps.push({
       type: 'set-token-metadata',
       values: { name: next.name.trim(), symbol: next.symbol.trim() },
-      title: 'Rename the community',
+      title: 'Rename the tribe',
       detail: `${current.name} (${current.symbol}) → ${next.name.trim()} (${next.symbol.trim()})`
     });
   const changes = profileChanges(current.profile, next.profile);

@@ -109,8 +109,8 @@ export function inspectProposalAdminCall(
     const [expectedSeq, raw] = encoded.map(scValToNative) as [number, string];
     const profile = parseProfile(raw);
     return {
-      title: 'Update the community profile',
-      risk: 'Replaces the community description, links and image. It applies only if no other profile update lands first (revision check). Authority is Metadata’s own admin (the Treasury after launch).',
+      title: 'Update the tribe profile',
+      risk: 'Replaces the tribe description, links and image. It applies only if no other profile update lands first (revision check). Authority is Metadata’s own admin (the Treasury after launch).',
       fields: [
         { label: 'Replaces revision', value: String(expectedSeq) },
         { label: 'Description', value: profile.description },

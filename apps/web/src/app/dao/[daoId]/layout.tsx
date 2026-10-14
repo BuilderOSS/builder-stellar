@@ -17,14 +17,14 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
   try {
     const daoConfig = await getDaoNetworkConfigById(await resolveDaoId(routeId));
     return {
-      title: daoConfig.tokenName || 'Community',
+      title: daoConfig.tokenName || 'Tribe',
       // First line of the verified profile description, as plain text.
-      description: plainSummary(daoConfig.profile.description) || 'A community on Builder.'
+      description: plainSummary(daoConfig.profile.description) || 'A tribe on Tribes Builder.'
     };
   } catch {
     return {
-      title: 'Community not found',
-      description: "We couldn't find that community."
+      title: 'Tribe not found',
+      description: "We couldn't find that tribe."
     };
   }
 }

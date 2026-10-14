@@ -87,7 +87,7 @@ export default function AdminPage() {
   return (
     <PageSection
       title="Manage"
-      description={`Change how ${config.tokenName || 'this community'} works. ${
+      description={`Change how ${config.tokenName || 'this tribe'} works. ${
         config.status === 'pending'
           ? 'In Setup, the launch admin makes changes directly.'
           : 'After launch, most changes go up for a vote.'

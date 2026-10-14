@@ -71,9 +71,9 @@ describe('change-dao-slug', () => {
     const action = handler.serialize({ slug: 'night-walkers' }, form);
     expect(action).toMatchObject({ type: 'change-dao-slug', slug: 'night-walkers', previousSlug: 'lantern-club' });
     expect(isHighRiskProposalAction(action)).toBe(true);
-    expect(getProposalActionLabel(action.type)).toBe('Change Community Link');
+    expect(getProposalActionLabel(action.type)).toBe('Change Tribe Link');
     expect(getProposalActionSummary(action)).toBe(
-      'Change link from /dao/lantern-club to /dao/night-walkers. The old link is freed right away and keeps leading here only until another community takes it. If /dao/night-walkers is taken before this runs, the proposal fails.'
+      'Change link from /dao/lantern-club to /dao/night-walkers. The old link is freed right away and keeps leading here only until another tribe takes it. If /dao/night-walkers is taken before this runs, the proposal fails.'
     );
   });
 

@@ -7,7 +7,7 @@ import { ButtonLink, Section } from '@/components/ui';
 
 const SHOWN = 3;
 
-/** Proposals and DAOs you started on this browser. Hidden until there is one. */
+/** Proposals and tribes you started on this browser. Hidden until there is one. */
 export function HomeDrafts() {
   const { items, hydrated, discard } = useAllDrafts();
   if (!hydrated || !items.length) return null;

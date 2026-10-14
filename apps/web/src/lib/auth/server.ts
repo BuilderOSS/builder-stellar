@@ -76,7 +76,7 @@ export function getAuthOrigin(request: Request) {
 }
 
 export function getAuthAppName() {
-  return process.env.AUTH_APP_NAME?.trim() || 'Stellar DAOs';
+  return process.env.AUTH_APP_NAME?.trim() || 'Tribes Builder';
 }
 
 export function getSep10ServerKeypair() {

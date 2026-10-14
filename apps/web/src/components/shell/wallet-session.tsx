@@ -80,7 +80,9 @@ async function validateWalletNetwork(
       status: 'Wallet network validation unavailable',
       walletNetworkPassphrase: '',
       walletNetworkIssue:
-        error instanceof Error ? error.message : "This wallet can't report its network, so Builder can't check it."
+        error instanceof Error
+          ? error.message
+          : "This wallet can't report its network, so Tribes Builder can't check it."
     });
   }
 }

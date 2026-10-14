@@ -17,9 +17,9 @@ export class TreasuryError extends Error {
 }
 
 export async function treasuryScope(daoId: string): Promise<TreasuryScope> {
-  if (!StrKey.isValidContract(daoId)) throw new TreasuryError('Invalid community identifier.');
+  if (!StrKey.isValidContract(daoId)) throw new TreasuryError('Invalid tribe identifier.');
   const row = await prisma.managerDao.findFirst({ where: { deploymentId: DEPLOYMENT_ID, daoId } });
-  if (!row) throw new TreasuryError('Community not found in this deployment.', 404);
+  if (!row) throw new TreasuryError('Tribe not found in this deployment.', 404);
   if (
     row.deploymentId !== DEPLOYMENT_ID ||
     row.daoId !== daoId ||

@@ -86,7 +86,7 @@ export async function currentClaims(
   // could ask members to sign arbitrary calls under a claims-shaped review.
   if (registered && registered !== config.claimsContractId)
     throw new ClaimError(
-      'This community registered a claims module the platform did not deploy (or that is not indexed yet), so the app will not prepare claims against it.',
+      'This tribe registered a claims module the platform did not deploy (or that is not indexed yet), so the app will not prepare claims against it.',
       409
     );
   const [live, admin, allowance] = await Promise.all([
@@ -151,7 +151,7 @@ export async function prepareClaim(
   const { config } = await claimScope(daoId);
   assertClaimActor(actor, config);
   const state = await currentClaims(daoId, actor);
-  if (!state.claimsContractId) throw new ClaimError('This community has no claims module.');
+  if (!state.claimsContractId) throw new ClaimError('This tribe has no claims module.');
   const list = state.lists.find((item) => item.listId === action.listId);
   if (!list) throw new ClaimError('This claim list is unavailable. Refresh before reviewing.', 409);
   listOpenForClaims(list, Math.floor(Date.now() / 1000));

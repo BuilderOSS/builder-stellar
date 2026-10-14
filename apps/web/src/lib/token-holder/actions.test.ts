@@ -197,12 +197,12 @@ describe('holder binding actions', () => {
     ).rejects.toThrow('locked');
     await expect(
       prepareHolderAction('dao-a', actor, { action: 'approve', tokenId: '0', destination, expirationLedger: '1120' })
-    ).rejects.toThrow('only approve the community Treasury');
+    ).rejects.toThrow('only approve the tribe Treasury');
     expect(mocks.transfer).not.toHaveBeenCalled();
     expect(mocks.approve).not.toHaveBeenCalled();
     const back = await prepareHolderAction('dao-a', actor, { action: 'transfer', tokenId: '0', destination: treasury });
     expect(mocks.transfer).toHaveBeenCalledWith({ from: owner, to: treasury, token_id: 0 }, { timeoutInSeconds: 180 });
-    expect(back.summary).toContain('back to the community Treasury');
+    expect(back.summary).toContain('back to the tribe Treasury');
     const approval = await prepareHolderAction('dao-a', actor, {
       action: 'approve',
       tokenId: '0',

@@ -180,10 +180,10 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'sweep-pool': 'Sweep Closed Pool',
     'add-artwork-properties': 'Append Artwork Properties and Items',
     'set-artwork-renderer': 'Update Artwork Renderer',
-    'update-dao-profile': 'Update Community Profile',
-    'set-token-metadata': 'Rename Community',
+    'update-dao-profile': 'Update Tribe Profile',
+    'set-token-metadata': 'Rename Tribe',
     'transfer-dao-token': 'Give Treasury Token',
-    'change-dao-slug': 'Change Community Link',
+    'change-dao-slug': 'Change Tribe Link',
     'upgrade-dao-module': 'Upgrade DAO Module',
     'migrate-dao-module': 'Migrate Module Storage',
     'regenerate-token-traits': 'Seed Token Traits',
@@ -218,7 +218,7 @@ function profileSummary(raw: string) {
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
   if (action.type === 'change-dao-slug')
-    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another community takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
+    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another tribe takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
   if (action.type === 'open-claim-list')
@@ -227,7 +227,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.module || action.recipient} by ${action.amount} tokens`;
   if (action.type === 'set-transfers-locked')
     return action.enabled
-      ? 'Lock memberships: tokens move only by sale from the community, by giving them back to the DAO or by a DAO vote'
+      ? 'Lock memberships: tokens move only by sale from the tribe, by giving them back to the DAO or by a DAO vote'
       : 'Unlock memberships: members can transfer and sell their tokens';
   if (action.type === 'set-members-only-delegation')
     return action.enabled ? 'Allow delegating votes to members only' : 'Allow delegating votes to anyone';
@@ -252,7 +252,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `Treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
   if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
   if (action.type === 'update-dao-profile')
-    return `Replace the community profile (revision ${action.expectedSeq}) with: ${profileSummary(String(action.profile ?? ''))}`;
+    return `Replace the tribe profile (revision ${action.expectedSeq}) with: ${profileSummary(String(action.profile ?? ''))}`;
   if (
     action.type === 'set-voting-delay' ||
     action.type === 'set-voting-period' ||

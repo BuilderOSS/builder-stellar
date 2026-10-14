@@ -32,7 +32,7 @@ export function RouteError({
     return (
       // Not a failure: a newer version is live. Info, not error styling.
       <Callout
-        title="Builder was updated"
+        title="Tribes Builder was updated"
         description={reloading ? 'Loading the latest version…' : 'Reload to continue with the latest version.'}
       >
         <div>

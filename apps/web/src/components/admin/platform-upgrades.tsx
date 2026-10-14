@@ -11,7 +11,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const rows = css({ display: 'grid' });
 
-const LABELS = { manager: 'Builder (registry and factory)' };
+const LABELS = { manager: 'Tribes Builder (registry and factory)' };
 
 function when(ledger: number, latestLedger: number) {
   return estimateDate(ledger, latestLedger, Date.now()).toLocaleString('en-US', {
@@ -32,7 +32,7 @@ function Row({ state, latestLedger }: { state: PlatformContractState; latestLedg
         pending?.revoked
           ? `The announced upgrade ${pending.version ?? pending.toHash.slice(0, 8)} was withdrawn and cannot apply`
           : pending
-            ? `Upgrade to ${pending.version ?? pending.toHash.slice(0, 8)} approved · can apply from about ${when(pending.earliestLedger, latestLedger)} (${days}-day notice)${state.contract === 'manager' ? ' · new Builder code also controls the shared Minter' : ''}`
+            ? `Upgrade to ${pending.version ?? pending.toHash.slice(0, 8)} approved · can apply from about ${when(pending.earliestLedger, latestLedger)} (${days}-day notice)${state.contract === 'manager' ? ' · new Tribes Builder code also controls the shared Minter' : ''}`
             : state.running
               ? `Running ${state.running.slice(0, 8)}… · upgrades need ${days} days' notice`
               : 'Could not be read'
@@ -68,7 +68,7 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
   return (
     <Section
       title="Platform contracts"
-      description="Shared by every community. Builder can only upgrade them after a notice. The contracts this community runs, its claims module included, change only by its own vote."
+      description="Shared by every tribe. Tribes Builder can only upgrade them after a notice. The contracts this tribe runs, its claims module included, change only by its own vote."
     >
       <div className={rows}>{data.manager ? <Row state={data.manager} latestLedger={data.latestLedger} /> : null}</div>
       {data.errors.length ? (
@@ -99,14 +99,14 @@ export function PlatformUpgradeNotice({ enabled }: { enabled: boolean }) {
       <Callout
         variant="warning"
         title="Couldn't check for platform upgrades"
-        description="Some chain reads failed, so a pending upgrade of Builder's shared contracts may not be shown. Try again in a moment."
+        description="Some chain reads failed, so a pending upgrade of Tribes Builder's shared contracts may not be shown. Try again in a moment."
       />
     );
   return (
     <Callout
       variant="info"
       title="A platform upgrade is pending"
-      description={`Builder will upgrade its registry to ${notice.version ?? notice.toHash.slice(0, 8)} from about ${when(notice.earliestLedger, report.data.latestLedger)}. It approves the upgrades this community can vote on; it cannot change this community's contracts.`}
+      description={`Tribes Builder will upgrade its registry to ${notice.version ?? notice.toHash.slice(0, 8)} from about ${when(notice.earliestLedger, report.data.latestLedger)}. It approves the upgrades this tribe can vote on; it cannot change this tribe's contracts.`}
     >
       <div>
         <ButtonLink href={daoAdminRoute(routeId, '')} variant="secondary" size="sm">

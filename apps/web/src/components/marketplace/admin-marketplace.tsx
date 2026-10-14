@@ -70,8 +70,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const enabled = Boolean(authenticated && address && data?.launched && data.config);
   function queue(kind: 'open' | 'close' | 'sweep') {
     setMessage('');
-    if (!enabled || !data)
-      return setMessage('Connect your wallet. Pools can be proposed once the community has launched.');
+    if (!enabled || !data) return setMessage('Connect your wallet. Pools can be proposed once the tribe has launched.');
     try {
       if (kind === 'open') {
         if (!data.config || !['XLM', 'USDC'].includes(marketplaceAssetLabel(data.network, data.config.paymentAsset))) {
@@ -148,13 +147,13 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <div>
           <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="ghost" size="sm">
             <ChevronLeft aria-hidden="true" />
-            Community market
+            Tribe market
           </ButtonLink>
         </div>
         <section className={styles.hero}>
           <h1>Manage the marketplace</h1>
           <p>
-            Once the community has launched, members change the market by vote. Each button here adds an action to your
+            Once the tribe has launched, members change the market by vote. Each button here adds an action to your
             proposal draft. Nothing is signed on this page.
           </p>
         </section>
@@ -180,7 +179,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 <Address value={data.config.treasury} label="Run by the treasury" compact />
               </>
             ) : null}
-            {!data.launched ? <p>Pools and market settings can be proposed once the community has launched.</p> : null}
+            {!data.launched ? <p>Pools and market settings can be proposed once the tribe has launched.</p> : null}
             {data.configError ? <p>{data.configError}</p> : null}
           </section>
         ) : null}
@@ -268,7 +267,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             {!enabled ? (
               <FieldHelperText>
                 {data && !data.launched
-                  ? 'Available once the community has launched.'
+                  ? 'Available once the tribe has launched.'
                   : 'Connect your wallet to add this to a proposal.'}
               </FieldHelperText>
             ) : null}

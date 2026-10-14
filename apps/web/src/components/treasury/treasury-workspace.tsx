@@ -113,7 +113,7 @@ function ScopedTreasuryWorkspace() {
           <div className={head}>
             <div>
               <h2 id="treasury-balances-title" className={title}>
-                What the community holds
+                What the tribe holds
               </h2>
               <p className={muted}>
                 {funded === undefined
@@ -144,7 +144,7 @@ function ScopedTreasuryWorkspace() {
             </div>
           ) : null}
           {!config.treasuryContractId ? (
-            <EmptyState title="No treasury">This community doesn&apos;t have a treasury set up.</EmptyState>
+            <EmptyState title="No treasury">This tribe doesn&apos;t have a treasury set up.</EmptyState>
           ) : null}
           {knownBalances?.length ? (
             <div>

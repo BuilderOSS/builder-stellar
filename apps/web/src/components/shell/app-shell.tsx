@@ -25,7 +25,7 @@ const GLOBAL_NAV: ShellNavItem[] = [
 ];
 
 const mobileOnly = css({ display: { base: 'inline-flex', md: 'none' }, textDecoration: 'none' });
-/** Builder outside a community: Home, Discover, Market and You. */
+/** Tribes Builder outside a tribe: Home, Discover, Market and You. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [youOpen, setYouOpen] = useState(false);
@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const communities: RailCommunity[] = (data?.myDaos ?? [])
     .map((dao) => ({
       key: dao.dao_id,
-      label: dao.token_name || dao.token_symbol || 'Unnamed community',
+      label: dao.token_name || dao.token_symbol || 'Unnamed tribe',
       href: daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug })),
       seed: dao.dao_id,
       image: dao.image
@@ -48,23 +48,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ShellFrame
       rail={
         <NavRail
-          label="Builder"
+          label="Tribes Builder"
           items={GLOBAL_NAV}
           activeKey={active}
-          action={{ label: 'Start a DAO', href: '/create', icon: Plus }}
+          action={{ label: 'Build a tribe', href: '/create', icon: Plus }}
           communities={communities}
-          communitiesHref="/#your-communities"
+          communitiesHref="/#your-tribes"
         />
       }
       topStart={
-        <NextLink href="/" className={mobileOnly} aria-label="Builder home">
+        <NextLink href="/" className={mobileOnly} aria-label="Tribes Builder home">
           <BrandLockup />
         </NextLink>
       }
       topEnd={<WalletButton onOpenYou={() => setYouOpen(true)} />}
       tabBar={
         <TabBar
-          label="Builder"
+          label="Tribes Builder"
           items={GLOBAL_NAV}
           activeKey={active}
           extra={{ label: 'You', icon: UserRound, onClick: () => setYouOpen(true), active: youOpen }}

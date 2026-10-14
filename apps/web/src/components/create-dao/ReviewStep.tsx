@@ -92,8 +92,8 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
         ))}
       </dl>
       <p className={styles.muted}>
-        Creating sets your community up in Setup, not live yet. There you add artwork and mint founder tokens. Launching
-        is a separate step you sign when you&apos;re ready.
+        Creating sets your tribe up in Setup, not live yet. There you add artwork and mint founder tokens. Launching is
+        a separate step you sign when you&apos;re ready.
       </p>
       <Disclosure
         title="Advanced: metadata links"

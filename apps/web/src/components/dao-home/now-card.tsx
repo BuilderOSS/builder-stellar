@@ -107,7 +107,7 @@ function SetupNow() {
   return (
     <Shell
       meta={<Chip tone="warning">In setup</Chip>}
-      title={plan.canLaunch ? 'Ready to launch' : 'Finish setting up your community'}
+      title={plan.canLaunch ? 'Ready to launch' : 'Finish setting up your tribe'}
       text={
         <div className={css({ display: 'grid', gap: '3' })}>
           <span>
@@ -270,7 +270,7 @@ export function NowCard({
     : auction?.status === 'paused'
       ? { title: 'Auctions are paused', text: 'Bidding and settlement are on hold for now.' }
       : auction?.status === 'not-launched'
-        ? { title: 'The first auction is coming', text: 'Auctions are set up and start when the community launches.' }
+        ? { title: 'The first auction is coming', text: 'Auctions are set up and start when the tribe launches.' }
         : { title: 'All quiet for now', text: 'No proposals are open for voting and no auction is running.' };
 
   return (

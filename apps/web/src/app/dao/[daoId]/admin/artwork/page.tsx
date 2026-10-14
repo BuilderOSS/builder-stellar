@@ -183,8 +183,8 @@ export default function ArtworkAdminPage() {
           {!config.metadataContractId ? (
             <Callout
               variant="warning"
-              title="This community has no artwork contract on record"
-              description="It's created with the community, so this usually means the app's copy is out of date. Refresh the page; if it stays, ask the deployment admin to check it."
+              title="This tribe has no artwork contract on record"
+              description="It's created with the tribe, so this usually means the app's copy is out of date. Refresh the page; if it stays, ask the deployment admin to check it."
             />
           ) : null}
           {artwork.error || token.error ? (
@@ -209,7 +209,7 @@ export default function ArtworkAdminPage() {
             <Callout
               variant="error"
               title="This artwork belongs to a different token"
-              description="Changes are turned off because the artwork contract doesn't point at this community's token."
+              description="Changes are turned off because the artwork contract doesn't point at this tribe's token."
             />
           ) : null}
           {artwork.data && wired && !direct && !canPropose ? (
@@ -312,10 +312,10 @@ export default function ArtworkAdminPage() {
               <Stack gap="4">
                 <Text color="ink.muted">
                   Wallets and markets ask this address for every token&apos;s image. Change it only to move to a new
-                  renderer you trust; a wrong address breaks every token image at once. The community&apos;s own image,
+                  renderer you trust; a wrong address breaks every token image at once. The tribe&apos;s own image,
                   description and links are in{' '}
                   <NextLink href={daoAdminRoute(routeId, '/profile')} className={css({ color: 'signal' })}>
-                    Community profile
+                    Tribe profile
                   </NextLink>
                   .
                 </Text>

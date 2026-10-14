@@ -46,7 +46,7 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
     if (!context.config.treasuryContractId || context.config.adminAddress !== context.config.treasuryContractId) {
       return {
         canExecute: false,
-        reason: 'Minting by proposal works once the community has launched and its Treasury is the token admin.'
+        reason: 'Minting by proposal works once the tribe has launched and its Treasury is the token admin.'
       };
     }
 

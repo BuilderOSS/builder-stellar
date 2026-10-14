@@ -72,7 +72,7 @@ function TokenMetadataForm({ value, onChange, disabled, validationErrors }: Acti
 /** Rename the community's token (name and symbol), via token.set_metadata. Token 0.2.0+ reports it. */
 export const setTokenMetadataHandler: ActionHandler<TokenMetadataDraft> = {
   type: 'set-token-metadata',
-  label: 'Rename the community',
+  label: 'Rename the tribe',
   description: 'Change the token name and symbol members see everywhere',
   group: 'Administration',
   FormComponent: TokenMetadataForm,

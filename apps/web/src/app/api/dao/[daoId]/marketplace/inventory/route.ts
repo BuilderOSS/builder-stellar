@@ -30,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
           row.owner !== actor.address
       )
     ) {
-      throw new MarketplaceError('Indexed inventory identity does not match this account and community.', 503);
+      throw new MarketplaceError('Indexed inventory identity does not match this account and tribe.', 503);
     }
     const response: MarketplaceInventory = {
       deploymentId: DEPLOYMENT_ID,

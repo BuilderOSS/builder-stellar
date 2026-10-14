@@ -82,18 +82,18 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
     <div className={page}>
       <section className={hero} aria-labelledby="home-title">
         <h1 id="home-title" className={heroTitle}>
-          Your community. Your rules. Your treasury.
+          Build a tribe.
         </h1>
         <p className={heroBody}>
-          Start a DAO with your people, vote on what happens next, and see exactly where the shared money goes. All on
-          Stellar, with fees that cost a fraction of a cent.
+          Gather your people, pool what you put in, and decide together. A DAO on Stellar: shared treasury, onchain
+          votes, NFT membership. Fees cost a fraction of a cent.
         </p>
         <div className={heroActions}>
           <ButtonLink href="/discover" size="lg">
-            Find a community
+            Find a tribe
           </ButtonLink>
           <ButtonLink href="/create" variant="secondary" size="lg">
-            Start a DAO
+            Build a tribe
           </ButtonLink>
         </div>
       </section>
@@ -119,7 +119,7 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       <Section title="How it works">
         <ol className={steps}>
           <li className={step}>
-            <p className={stepTitle}>Start or find a community</p>
+            <p className={stepTitle}>Build or find a tribe</p>
             <p className={stepBody}>Give it a name, art and a treasury. Or join one that already exists.</p>
           </li>
           <li className={step}>
@@ -136,7 +136,7 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       </Section>
 
       <p className={credit}>
-        <BuilderDaoCredit />, for communities on Stellar.
+        Tribes Builder · DAOs on Stellar · <BuilderDaoCredit />
       </p>
     </div>
   );
@@ -152,7 +152,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
       ? toCommunitySummary(full)
       : {
           id: dao.dao_id,
-          name: dao.token_name || dao.token_symbol || 'Unnamed community',
+          name: dao.token_name || dao.token_symbol || 'Unnamed tribe',
           symbol: dao.token_symbol,
           description: plainSummary(dao.description),
           image: dao.image,
@@ -182,7 +182,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
     <div className={page}>
       <header className={css({ display: 'grid', gap: '2', pt: { base: '2', md: '4' } })}>
         <h1 className={greeting}>Welcome back</h1>
-        <p className={heroBody}>Here&apos;s what&apos;s happening in your communities.</p>
+        <p className={heroBody}>Here&apos;s what&apos;s happening in your tribes.</p>
       </header>
 
       {setup.length ? (
@@ -196,20 +196,20 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
       ) : null}
 
       <Section
-        id="your-communities"
-        title="Your communities"
+        id="your-tribes"
+        title="Your tribes"
         action={
           <ButtonLink href="/create" variant="secondary" size="sm">
             <Plus aria-hidden="true" />
-            Start a DAO
+            Build a tribe
           </ButtonLink>
         }
       >
         {error ? (
-          <Callout variant="error" title="Your communities didn't load" description="Try again in a moment." />
+          <Callout variant="error" title="Your tribes didn't load" description="Try again in a moment." />
         ) : isLoading ? (
           <div className={communityGrid} role="status" aria-busy="true">
-            <span className="sr-only">Loading your communities</span>
+            <span className="sr-only">Loading your tribes</span>
             {Array.from({ length: 4 }, (_, index) => (
               <Skeleton key={index} className={css({ aspectRatio: '0.8', borderRadius: 'card' })} />
             ))}
@@ -221,11 +221,8 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
             ))}
           </div>
         ) : (
-          <EmptyState
-            title="You're not in a community yet"
-            action={<ButtonLink href="/discover">Find a community</ButtonLink>}
-          >
-            Win an auction or buy a token to become a member. Your communities will show up here.
+          <EmptyState title="You're not in a tribe yet" action={<ButtonLink href="/discover">Find a tribe</ButtonLink>}>
+            Win an auction or buy a token to become a member. Your tribes will show up here.
           </EmptyState>
         )}
       </Section>
@@ -235,7 +232,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
           title={upForGrabs ? 'Up for grabs' : 'Discover more'}
           description={
             backIn.length
-              ? "Auctions and tokens for sale in your communities first, then what's open elsewhere."
+              ? "Auctions and tokens for sale in your tribes first, then what's open elsewhere."
               : upForGrabs
                 ? 'Auctions taking bids and tokens for sale right now.'
                 : undefined
@@ -282,7 +279,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
   );
 }
 
-/** Builder home: a real welcome when signed out, your communities when signed in. */
+/** Tribes Builder home: a real welcome when signed out, your tribes when signed in. */
 export function HomeView({
   daos,
   pendingDaos,
@@ -298,8 +295,8 @@ export function HomeView({
       {loadError ? (
         <Callout
           variant="error"
-          title="Communities didn't load"
-          description="Try again in a moment, or open a community directly if you have its link."
+          title="Tribes didn't load"
+          description="Try again in a moment, or open a tribe directly if you have its link."
         >
           <div>
             <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>

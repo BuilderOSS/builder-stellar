@@ -7,7 +7,7 @@ const KNOWN_CALLS: Record<string, string> = {
   transfer: 'Send funds',
   mint: 'Mint a token',
   batch_mint: 'Mint tokens',
-  set_metadata: 'Update the community profile',
+  set_metadata: 'Update the tribe profile',
   set_reserve_price: 'Change the starting price',
   set_duration: 'Change how long each auction runs',
   set_time_buffer: 'Change how much time a late bid adds',

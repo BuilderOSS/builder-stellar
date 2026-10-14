@@ -42,7 +42,7 @@ import { useTokenInventory } from '@/lib/token-queries';
 async function fetchJson<T>(url: string) {
   const response = await fetch(url, { cache: 'no-store' });
   const json = (await response.json()) as T & { message?: string };
-  if (!response.ok) throw new Error(json.message || 'Community data unavailable');
+  if (!response.ok) throw new Error(json.message || 'Tribe data unavailable');
   return json;
 }
 
@@ -74,10 +74,10 @@ function LaunchDriveCallout({ ended, href }: { ended: boolean; href: ReturnType<
   return (
     <Callout
       variant={ended ? 'warning' : 'info'}
-      title={ended ? 'This launch drive ended' : 'This community launches once enough people claim'}
+      title={ended ? 'This launch drive ended' : 'This tribe launches once enough people claim'}
       description={
         ended
-          ? 'Not enough people claimed in time, so the community did not launch. If you paid to claim, you can take your payment back.'
+          ? 'Not enough people claimed in time, so the tribe did not launch. If you paid to claim, you can take your payment back.'
           : 'If you are on its claim list, claim your tokens now. Payments are held until launch. If the drive ends first, everyone who paid can take their payment back.'
       }
     >
@@ -157,7 +157,7 @@ export default function Page() {
         </div>
         {launchDrive ?? (
           <Callout
-            title="This community is still being set up"
+            title="This tribe is still being set up"
             description="Its founder is finishing setup. Once it launches you can bid, join and vote here."
           />
         )}

@@ -49,7 +49,7 @@ const actions = css({ display: 'grid', gap: '2', pt: '4' });
 const sectionTitle = css({ textStyle: 'label', color: 'ink.muted', mb: '1' });
 
 function daoName(dao: Pick<DashboardDao, 'token_name' | 'token_symbol'>) {
-  return dao.token_name || dao.token_symbol || 'Unnamed community';
+  return dao.token_name || dao.token_symbol || 'Unnamed tribe';
 }
 
 /**
@@ -78,14 +78,14 @@ export function DaoSwitcher({
         className={pill}
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        aria-label={`${current.name}. Switch community`}
+        aria-label={`${current.name}. Switch tribe`}
       >
         <Crest name={current.name} seed={current.seed} src={current.image} size="sm" />
         <span className={pillName}>{current.name}</span>
         <ChevronDown aria-hidden="true" className={chevron} />
       </button>
 
-      <Sheet open={open} onOpenChange={setOpen} title="Your communities">
+      <Sheet open={open} onOpenChange={setOpen} title="Your tribes">
         {!currentIsMine ? (
           <>
             <p className={sectionTitle}>Viewing</p>
@@ -94,7 +94,7 @@ export function DaoSwitcher({
                 as="li"
                 media={<Crest name={current.name} seed={current.seed} src={current.image} />}
                 title={current.name}
-                trailing={<Check aria-label="Current community" />}
+                trailing={<Check aria-label="Current tribe" />}
               />
             </ul>
           </>
@@ -102,14 +102,14 @@ export function DaoSwitcher({
 
         {!wallet.isAuthenticated ? (
           <EmptyState
-            title="Connect to see your communities"
+            title="Connect to see your tribes"
             action={
               <Button variant="secondary" onClick={() => void wallet.connect()} loading={wallet.isAuthBusy}>
                 Connect wallet
               </Button>
             }
           >
-            Communities where you hold a token show up here.
+            Tribes where you hold a token show up here.
           </EmptyState>
         ) : isLoading ? (
           <div className={css({ display: 'grid', gap: '3', py: '3' })}>
@@ -117,9 +117,9 @@ export function DaoSwitcher({
             <Skeleton className={css({ height: '12' })} />
           </div>
         ) : error ? (
-          <EmptyState title="Couldn't load your communities">Try again in a moment.</EmptyState>
+          <EmptyState title="Couldn't load your tribes">Try again in a moment.</EmptyState>
         ) : myDaos.length === 0 ? (
-          <EmptyState title="No memberships yet">Win an auction or buy a token to join a community.</EmptyState>
+          <EmptyState title="No memberships yet">Win an auction or buy a token to join a tribe.</EmptyState>
         ) : (
           <>
             {!currentIsMine ? <p className={sectionTitle}>Yours</p> : null}
@@ -136,7 +136,7 @@ export function DaoSwitcher({
                     meta={dao.status === 'pending' ? 'In setup' : dao.token_symbol || undefined}
                     trailing={
                       isCurrent ? (
-                        <Check aria-label="Current community" />
+                        <Check aria-label="Current tribe" />
                       ) : dao.dao_id === home?.id ? (
                         <Chip tone="yours">Home</Chip>
                       ) : undefined
@@ -151,11 +151,11 @@ export function DaoSwitcher({
         <div className={actions}>
           <ButtonLink href="/" variant="secondary" block>
             <House aria-hidden="true" />
-            All communities
+            All tribes
           </ButtonLink>
           <ButtonLink href="/discover" variant="ghost" block>
             <Compass aria-hidden="true" />
-            Find more communities
+            Find more tribes
           </ButtonLink>
         </div>
       </Sheet>

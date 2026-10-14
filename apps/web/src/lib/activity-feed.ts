@@ -195,7 +195,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         title: `${firstValue(args.total_amount, item.amount) ?? 'Tokens'} tokens allocated to ${firstValue(args.recipient_count) ?? 'several'} members`
       };
     case 'daolaunched':
-      return { category: 'DAO', title: 'The community launched' };
+      return { category: 'DAO', title: 'The tribe launched' };
     case 'upgraded': {
       // The indexer's title names the module ("Auction upgraded", "Minter upgraded").
       const version = firstValue(args.version);
@@ -227,7 +227,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       const previous = firstValue(args.old_slug);
       return {
         category: 'DAO',
-        title: next ? `Community link is now /dao/${next}` : item.title,
+        title: next ? `Tribe link is now /dao/${next}` : item.title,
         detail: previous ? `Was /dao/${previous}` : undefined,
         href: next ? `/dao/${next}` : undefined
       };
@@ -242,7 +242,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'profileupdated':
-      return { category: 'DAO', title: 'Community profile updated' };
+      return { category: 'DAO', title: 'Tribe profile updated' };
     default:
       return { category: 'DAO', title: item.title, detail: item.summary };
   }

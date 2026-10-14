@@ -46,7 +46,7 @@ export function NewDraftButton({ hydrated, scope }: Pick<ReturnType<typeof useLo
         if (hydrated) useCreateDaoStore.getState().newDraft(scope);
       }}
     >
-      Start another DAO
+      Build another tribe
     </ButtonLink>
   );
 }

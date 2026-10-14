@@ -71,6 +71,6 @@ export function checkNewLink(
   if (!availability) return { state: 'checking', text: 'Checking…' };
   if (availability.message) return { state: 'bad', text: "Couldn't check this link. Try again in a moment." };
   if (availability.claimedBy && availability.claimedBy !== daoId)
-    return { state: 'bad', text: 'Another community has this link.' };
+    return { state: 'bad', text: 'Another tribe has this link.' };
   return { state: 'ok', text: `/dao/${value} is available.` };
 }

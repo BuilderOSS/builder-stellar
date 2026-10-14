@@ -23,7 +23,7 @@ export interface StarterCollection {
 export const STARTER_COLLECTIONS: StarterCollection[] = [
   {
     id: 'nouns-builder-demo',
-    name: 'Builder Demo Collection',
+    name: 'Tribes Builder Demo Collection',
     description: 'A colorful, whimsical collection inspired by Nouns DAO. Perfect for testing and learning.',
     baseUri: 'ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/',
     extension: '.png',

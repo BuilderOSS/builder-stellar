@@ -69,7 +69,7 @@ export async function prepareTreasuryFunding(
   };
   const treasury = new TreasuryClient({ ...options, contractId: readiness.treasuryContractId });
   if ((await treasury.governor()).result !== readiness.governorContractId)
-    throw new TreasuryError('Live treasury governor does not match this community.', 503);
+    throw new TreasuryError('Live treasury governor does not match this tribe.', 503);
   const sac = await contract.Client.from<SacTransfer>({ ...options, contractId: readiness.assetContractId });
   const assembled = await sac.transfer(
     { from: actor.address, to: readiness.treasuryContractId, amount },

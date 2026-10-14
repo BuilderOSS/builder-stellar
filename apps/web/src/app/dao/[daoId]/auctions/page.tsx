@@ -132,7 +132,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
     setMessage('');
     if (!walletReady) return setMessage(`Connect a wallet on ${getNetworkConfig(config.name).label} first.`);
     if (action !== 'refund' && (!data || state === 'setup' || state === 'disabled'))
-      return setMessage("This community doesn't run auctions right now.");
+      return setMessage("This tribe doesn't run auctions right now.");
     if (action === 'bid' && state !== 'active') return setMessage("This auction isn't taking bids.");
     if (action === 'settle' && !canSettle) return setMessage("This auction can't be settled yet.");
     const parsed = parseAuctionAmount(amount);
@@ -229,12 +229,12 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
         <Callout
           variant="warning"
           title="Auctions start after launch"
-          description="This community is still in setup. Bidding opens once it launches."
+          description="This tribe is still in setup. Bidding opens once it launches."
         />
       ) : null}
       {state === 'disabled' ? (
         <Callout
-          title="This community doesn't run auctions"
+          title="This tribe doesn't run auctions"
           description="Tokens are shared another way, like the market or claims."
         />
       ) : null}

@@ -98,7 +98,7 @@ export function MembershipStep() {
       {market.enabled && tokenSettings.transfersLocked ? (
         <p className={styles.muted}>
           While memberships are locked, members can&apos;t resell on the market. It still sells new tokens from pools
-          the community opens by vote.
+          the tribe opens by vote.
         </p>
       ) : null}
       <p className={styles.muted}>
@@ -218,7 +218,7 @@ export function MembershipStep() {
               label="Let members claim tokens from published lists"
               description={
                 type.id === 'invite'
-                  ? 'This is how people join an invite-only community. Lists open in Setup or by vote.'
+                  ? 'This is how people join an invite-only tribe. Lists open in Setup or by vote.'
                   : showAuction
                     ? 'Adds a claims module. Paid lists use the auction’s asset. Lists open in Setup or by vote.'
                     : 'Adds a claims module. Lists open in Setup or by vote.'
@@ -246,7 +246,7 @@ export function MembershipStep() {
             ) : null}
           </div>
           <p className={styles.muted}>
-            Payment assets are fixed once you create the community. Modules you leave out can be added later by vote.
+            Payment assets are fixed once you create the tribe. Modules you leave out can be added later by vote.
             You&apos;ll mint at least one founder token in Setup before launching.
           </p>
         </div>

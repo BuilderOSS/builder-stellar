@@ -20,7 +20,7 @@ export const RELEASE_NOTES: Partial<Record<UpgradeModule, Record<string, string>
   },
   token: {
     '0.2.0':
-      'Renaming the community (name or symbol) now shows up everywhere in the app. Nothing else changes: tokens, votes and owners stay as they are.'
+      'Renaming the tribe (name or symbol) now shows up everywhere in the app. Nothing else changes: tokens, votes and owners stay as they are.'
   }
 };
 

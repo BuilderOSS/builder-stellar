@@ -114,7 +114,7 @@ export async function prepareMarketplaceAction(
     config.treasury !== community.treasuryContract ||
     config.manager !== network.managerAddress
   ) {
-    throw new MarketplaceError('Marketplace wiring does not match this community.', 503);
+    throw new MarketplaceError('Marketplace wiring does not match this tribe.', 503);
   }
   const token = new TokenClient({
     contractId: config.token,
@@ -150,7 +150,7 @@ export async function prepareMarketplaceAction(
     // A locked community refuses holder approvals and listings (TransfersLocked): say so before simulating.
     if (action.action !== 'revoke' && (await token.transfers_locked()).result)
       throw new MarketplaceError(
-        'Memberships in this community are locked: tokens move only by sale from the community, by giving them back to the DAO or by a DAO vote.'
+        'Memberships in this tribe are locked: tokens move only by sale from the tribe, by giving them back to the DAO or by a DAO vote.'
       );
     const { result: owner } = await token.owner_of({ token_id: tokenId });
     if (owner !== actor.address)
@@ -279,7 +279,7 @@ export async function prepareMarketplaceAction(
       await livePool(client, indexed, poolId);
       const page = (await client.pool_stock({ pool_id: poolId, page: pick.page })).result;
       if (!page.includes(pick.tokenId)) throw new MarketplaceError(STALE_PURCHASE, 409);
-      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} to the community Treasury ${config.treasury} and receive token #${pick.tokenId} from pool ${poolId}.`;
+      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} to the tribe Treasury ${config.treasury} and receive token #${pick.tokenId} from pool ${poolId}.`;
     } else {
       throw new MarketplaceError('Pools are closed by DAO governance, not by buyers.');
     }

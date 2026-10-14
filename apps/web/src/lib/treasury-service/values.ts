@@ -52,5 +52,5 @@ export function assertTreasuryIdentity(actual: TreasuryScope, expected: Treasury
     actual.treasuryContractId !== expected.treasuryContractId ||
     actual.governorContractId !== expected.governorContractId
   )
-    throw new Error('Treasury response identity mismatch. Reload this community.');
+    throw new Error('Treasury response identity mismatch. Reload this tribe.');
 }

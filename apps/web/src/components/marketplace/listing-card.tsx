@@ -101,7 +101,7 @@ export function ListingCard({
             `/dao/${community.daoId}/marketplace?kind=${listing.kind}&listing=${listing.id}&eventId=${encodeURIComponent(listing.eventId)}` as Route
           }
         >
-          View in community
+          View in tribe
         </ButtonLink>
       )}
       {expanded ? (
