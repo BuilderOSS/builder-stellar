@@ -2,11 +2,11 @@ import { Asset } from '@stellar/stellar-sdk';
 import { TriangleAlert } from 'lucide-react';
 import { css, sva } from 'styled-system/css';
 
-import { Address, Chip, Section } from '@/components/ui';
+import { Address, Chip, Section, shortenId } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
-import { contractCallLabel } from '@/lib/contract-call-labels';
+import { contractCallLabel, mintGrants, mintTitle } from '@/lib/contract-call-labels';
 import { inspectProposalAdminCall, type ProposalCallInspection } from '@/lib/proposal-action-inspection';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
 import { ProposalState } from '@/lib/proposal-state';
@@ -82,27 +82,55 @@ function isSacTransfer(
   );
 }
 
-function getActionTitle(
+type ActionDescription = {
+  title: string;
+  /** Wallets the action mints or pays to; the title names them short, these rows in full. */
+  recipients: { address: string; label: string }[];
+  /** Why the contract will reject this call when it runs. */
+  failure?: string;
+};
+
+function describeAction(
   target: string,
   functionName: string,
   args: ProposalCallArg[],
   tokenContractId: string | undefined,
   network: 'testnet' | 'local' | 'public',
   passphrase: string
-) {
-  if (target === tokenContractId && functionName === 'mint') {
-    return `Mint a membership token to ${formatArg(args[1] ?? '')}`;
-  }
-  if (target === tokenContractId && functionName === 'batch_mint') {
-    return `Mint ${formatArg(args[2] ?? '')} membership tokens to ${formatArg(args[1] ?? '')}`;
+): ActionDescription {
+  if (target === tokenContractId && (functionName === 'mint' || functionName === 'batch_mint')) {
+    const grants = mintGrants(functionName, args);
+    if (!grants) {
+      return {
+        title: contractCallLabel(functionName),
+        recipients: [],
+        failure:
+          functionName === 'batch_mint'
+            ? 'The token rejects this call when it runs: each wallet needs a matching amount above zero.'
+            : undefined
+      };
+    }
+    const several = grants.length > 1;
+    return {
+      title: mintTitle(grants, shortenId),
+      recipients: grants.map((grant) => ({
+        address: grant.recipient,
+        label: several
+          ? `Gets ${grant.amount.toLocaleString('en-US')} token${grant.amount === 1n ? '' : 's'}`
+          : 'Recipient'
+      }))
+    };
   }
   if (isSacTransfer(target, functionName, args, tokenContractId, network, passphrase)) {
     const amount = formatStroopsAmount(args[2] ?? '0');
     const recipient = formatArg(args[1] ?? '');
     const assetCode = getAssetCodeFromContractId(target, network, passphrase);
-    return `Send ${amount} ${assetCode} to ${recipient}`;
+    return {
+      title: `Send ${amount} ${assetCode} to ${shortenId(recipient)}`,
+      recipients: [{ address: recipient, label: 'Recipient' }]
+    };
   }
-  return contractCallLabel(functionName);
+  return { title: contractCallLabel(functionName), recipients: [] };
 }
 
 function pauseTitle(
@@ -203,6 +231,7 @@ export function ProposalActionPreview({
             const actionArgs = normalizedArgs[index] ?? [];
             const target = targets[index] ?? '';
             let title = functionName;
+            let description: ActionDescription | null = null;
             let supported = true;
             let inspection: ProposalCallInspection | null = null;
             try {
@@ -211,10 +240,17 @@ export function ProposalActionPreview({
               if (!(target === daoConfig.treasuryContractId && functionName === 'authorize'))
                 encodeSupportedCall(target, functionName, actionArgs, daoConfig);
               inspection = inspectProposalAdminCall(target, functionName, actionArgs, daoConfig);
-              title =
-                inspection?.title ??
-                pauseTitle(target, functionName, daoConfig) ??
-                getActionTitle(target, functionName, actionArgs, tokenContractId, daoConfig.name, daoConfig.passphrase);
+              description = inspection
+                ? null
+                : describeAction(
+                    target,
+                    functionName,
+                    actionArgs,
+                    tokenContractId,
+                    daoConfig.name,
+                    daoConfig.passphrase
+                  );
+              title = inspection?.title ?? pauseTitle(target, functionName, daoConfig) ?? description?.title ?? title;
             } catch {
               supported = false;
             }
@@ -251,6 +287,10 @@ export function ProposalActionPreview({
                     </dl>
                   </>
                 ) : null}
+                {description?.recipients.map((recipient) => (
+                  <Address key={recipient.address} value={recipient.address} label={recipient.label} compact />
+                ))}
+                {description?.failure ? <p className={classes.note}>{description.failure}</p> : null}
                 {inspection?.upgrade ? null : (
                   <>
                     <Address value={target} label="Contract" compact />

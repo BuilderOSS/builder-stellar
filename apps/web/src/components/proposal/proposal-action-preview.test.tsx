@@ -19,9 +19,12 @@ vi.mock('@/contexts/dao-context', () => ({
   useDaoContext: () => ({ daoConfig: state.config }),
   useOptionalDaoContext: () => ({ daoConfig: state.config })
 }));
+import { shortenId } from '@/components/ui';
+
 import { ProposalActionPreview } from './proposal-action-preview';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));
+const wallet = (byte: number) => StrKey.encodeEd25519PublicKey(new Uint8Array(32).fill(byte));
 state.config = {
   name: 'testnet',
   rpcUrl: 'https://rpc.test',
@@ -115,6 +118,47 @@ describe('proposal admin-call inspector rendering', () => {
       const html = render();
       expect(html).toContain('Couldn&#x27;t check this release');
       expect(html).not.toContain('Approved release');
+    });
+  });
+  describe('token mints', () => {
+    const alice = wallet(7);
+    const bob = wallet(8);
+    const render = (functions: string[], args: unknown[][]) =>
+      renderToStaticMarkup(
+        <ProposalActionPreview
+          targets={functions.map(() => state.config.tokenContractId)}
+          functions={functions}
+          args={args as never}
+          tokenContractId={state.config.tokenContractId}
+        />
+      );
+
+    it('reads a batch mint as a sentence with the wallet in full below, never as JSON', () => {
+      const html = render(['batch_mint'], [[state.config.treasuryContractId, [alice], ['5']]]);
+      expect(html).toContain(`Mint 5 membership tokens to ${shortenId(alice)}</p>`);
+      expect(html).not.toContain('Mint [');
+      expect(html).toContain('Recipient');
+      expect(html).toContain(`title="${alice}"`);
+      // The exact call stays visible for verification.
+      expect(html).toContain(`batch_mint(${state.config.treasuryContractId}, [&quot;${alice}&quot;], [&quot;5&quot;])`);
+    });
+    it('totals a batch to several wallets and lists what each gets', () => {
+      const html = render(['batch_mint'], [[state.config.treasuryContractId, [alice, bob], ['5', '1']]]);
+      expect(html).toContain('Mint 6 membership tokens to 2 wallets');
+      expect(html).toContain('Gets 5 tokens');
+      expect(html).toContain('Gets 1 token<');
+      expect(html).not.toContain('>Recipient<');
+    });
+    it('says a batch the Token would reject fails, instead of titling it', () => {
+      const html = render(['batch_mint'], [[state.config.treasuryContractId, [alice, bob], ['5']]]);
+      expect(html).toContain('Mint tokens');
+      expect(html).toContain('The token rejects this call when it runs');
+      expect(html).not.toContain('Recipient');
+    });
+    it('reads a single mint the same way', () => {
+      const html = render(['mint'], [[state.config.treasuryContractId, alice]]);
+      expect(html).toContain(`Mint a membership token to ${shortenId(alice)}</p>`);
+      expect(html).toContain(`title="${alice}"`);
     });
   });
   it('leaves external upgrades unsupported instead of inferring a module authority', () => {
