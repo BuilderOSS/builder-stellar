@@ -2,6 +2,8 @@ export const SITE_NAME = 'Tribes Builder';
 export const SITE_DESCRIPTION =
   'Gather your people, pool what you put in, and decide together. A DAO on Stellar: shared treasury, onchain votes, NFT membership.';
 export const SOURCE_URL = 'https://github.com/BuilderOSS/builder-stellar';
+/** Community and support: questions, problems and legal requests all start here. */
+export const DISCORD_URL = 'https://discord.gg/bTygNksyRb';
 
 const DEFAULT_SITE_URL = 'https://tribes.build';
 

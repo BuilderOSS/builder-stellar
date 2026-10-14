@@ -15,7 +15,7 @@ import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoConfig } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { useDashboardData } from '@/lib/goldsky-queries';
-import { SOURCE_URL } from '@/lib/site';
+import { DISCORD_URL, SOURCE_URL } from '@/lib/site';
 
 import { HomeDrafts } from './home-drafts';
 
@@ -214,7 +214,10 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
 
       <p className={credit}>
         Tribes Builder · DAOs on Stellar · <BuilderDaoCredit /> ·{' '}
-        <WhatsATribe trigger={<button type="button">What&apos;s a tribe?</button>} />
+        <WhatsATribe trigger={<button type="button">What&apos;s a tribe?</button>} /> ·{' '}
+        <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+          Discord
+        </a>
       </p>
     </div>
   );

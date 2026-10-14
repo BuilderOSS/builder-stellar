@@ -86,7 +86,7 @@ components:
 
 **Memorable thing:** "Build a tribe." Your people, your rules, your treasury. Every screen shows whose it is and what you can do in it.
 
-**Lineage:** Tribes Builder is built on Nouns Builder. Give it a subtle nod (the Nouns lens is the table in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme. The Stellar Community Fund award stays under its original name, "Nouns Builder: DAOs on Stellar".
+**Lineage:** Tribes Builder is built on Nouns Builder. Give it a subtle nod (the Nouns lens is the table in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme.
 
 **Reference:** `docs/design/builder-dusk-preview.html` renders the system on real screens in both themes.
 
@@ -265,11 +265,11 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-10 | Launch setup is its own page with real step status | /dao/[id]/setup lists required steps (artwork, founder tokens, a free link) with live done/to-do status, optional reviews, then launch with consequences and a confirm. Manage marks what launch needs and links back. Artwork lives only in Manage |
 | 2026-10-10 | Community profile in Manage; everything the DAO owns is changeable | Name, symbol, image, description and website in one place (direct in setup, one proposal after launch). Token 0.2.0 makes renames visible; treasury-held tokens can be given by vote. Artwork keeps only layers and the renderer |
 | 2026-10-12 | Dark neutrals lose some yellow; warmth stays | UX walkthrough: menus and sign-in read too yellow in Dark. Canvas, surface, raised, hover, rules and muted text keep a warm hue at about half the chroma. Light theme and blue unchanged |
-| 2026-10-14 | Renamed to Tribes Builder on tribes.build; "tribe" names a group | A plain, warm noun for people with a purpose; "Builder" alone was generic and crowded. Full name in titles and metadata. The footer keeps "Built by Builder DAO"; the SCF award keeps "Nouns Builder: DAOs on Stellar" |
+| 2026-10-14 | Renamed to Tribes Builder on tribes.build; "tribe" names a group | A plain, warm noun for people with a purpose; "Builder" alone was generic and crowded. Full name in titles and metadata. The footer keeps "Built by Builder DAO" |
 | 2026-10-14 | Voice: a warm host, plain words first, the DAO term one line beneath | Newcomers lead; crypto natives still find NFT membership, onchain votes and the treasury one line down. Savings circles stay "circles" |
 | 2026-10-14 | Logo: the lens is the table | Three people around a Nouns lens, with an empty seat that turns brass when you join. Flat blue (`signal`) is the master, the Dusk tile is the app icon, no gradient on the glyph, and a dedicated 16px drawing |
 | 2026-10-14 | Brass on the Dusk tile is #D9A35A in both themes | It already stands out on deep blue, so no new token |
-| 2026-10-14 | Legal pages keep their wording in the rename | Terms, privacy and the disclaimer change in a separate reviewed pass |
+| 2026-10-14 | Terms, privacy and the disclaimer are rewritten in the brand voice | Each opens with "The short version", then numbered sections that match what the code does. Builder DAO is the operator, the governing law stays generic, and Discord is the contact |
 | 2026-10-14 | Brass in the light theme stays the `brass` token (#9A6A22), on the logo too | It passes 3:1 on paper and keeps one meaning for brass; no logo-only brass |
 | 2026-10-14 | The seat fill is the second authored motion moment, only when someone joins | It is the brand's own moment ("your seat"); used anywhere else it would stop meaning "you're in" |
 | 2026-10-14 | tribes.build is the only public origin; the old vercel.app host's pages redirect permanently | Old share links keep working. Its /api and /images stay up for testnet tribes whose on-chain renderer and image still point there |

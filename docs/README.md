@@ -10,11 +10,10 @@ Tribes Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called t
 - [Tenant and read-model boundaries](MULTITENANT_ARCHITECTURE.md)
 - [Design system, brand and voice](../DESIGN.md)
 
-## Brand and launch
+## Brand
 
 - [Brand and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md): voice, the tribe noun, the logo system and colours
 - [Press kit](brand/README.md): marks, lockups, the Dusk tile and the 16px favicon
-- [Launch checklist](LAUNCH_CHECKLIST.md): tribes.build DNS and hosting, redirects from the old host, handles, SCF, trademark, legal review and share cards
 
 ## How-to and operations
 

@@ -15,6 +15,7 @@ import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { DISCORD_URL } from '@/lib/site';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
@@ -175,7 +176,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
             ]}
           />
-          <nav className={footerLinks} aria-label="Legal">
+          <nav className={footerLinks} aria-label="Legal and community">
             <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
             </span>
@@ -184,6 +185,11 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             </span>
             <span>
               <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
+            </span>
+            <span>
+              <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+                Discord
+              </a>
             </span>
             <span>
               <BuilderDaoCredit />
