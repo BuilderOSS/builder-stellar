@@ -1,6 +1,6 @@
 # Documentation
 
-These pages describe the current repository source, including the frontend working-tree update. They do not certify a live deployment, production readiness, or a passing test run.
+Tribes Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tribes in the app. These pages describe the current repository source, including the frontend working-tree update. They do not certify a live deployment, production readiness, or a passing test run.
 
 ## Start here
 
@@ -8,6 +8,13 @@ These pages describe the current repository source, including the frontend worki
 - [Web setup, routes, local workspace, and marketplace](../apps/web/README.md)
 - [Architecture](ARCHITECTURE.md)
 - [Tenant and read-model boundaries](MULTITENANT_ARCHITECTURE.md)
+- [Design system, brand and voice](../DESIGN.md)
+
+## Brand and launch
+
+- [Brand and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md): voice, the tribe noun, the logo system and colours
+- [Press kit](brand/README.md): marks, lockups, the Dusk tile and the 16px favicon
+- [Launch checklist](LAUNCH_CHECKLIST.md): tribes.build DNS and hosting, redirects from the old host, handles, SCF, trademark, legal review and share cards
 
 ## How-to and operations
 
@@ -30,7 +37,6 @@ These pages describe the current repository source, including the frontend worki
 - [Contract review fixes](CONTRACT_REVIEW_FIX_PLAN.md): review findings and how each was fixed
 - [Membership models (design)](designs/membership-models.md): mint allowances, the module registry, ClaimMinter, the assurance launch and quick-buy pools; retires the shared Minter
 - [Membership token settings (design)](designs/locked-tokens.md): locked transfers, members-only delegation, DAO recovery and transfer agents
-- [Warm Ink and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md)
 - [Agent workflow and acceptance checks](AGENT_WORKFLOW.md)
 - Contracts: [Manager](../contracts/manager/README.md), [Token](../contracts/token/README.md), [Metadata](../contracts/metadata/README.md), [Auction](../contracts/auction/README.md), [Governor](../contracts/governor/README.md), [Treasury](../contracts/treasury/README.md), [Marketplace](../contracts/marketplace/README.md), [ClaimMinter](../contracts/minter/README.md)
 - Support: [common](../contracts/common/README.md), [in-memory integration tests](../contracts/e2e/README.md)

@@ -1,6 +1,17 @@
 # Tribes Builder
 
-Tribes Builder is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is called a tribe. It is built on Nouns Builder; the Stellar Community Fund award (SCF #44) keeps its original name, "Nouns Builder: DAOs on Stellar".
+**Build a tribe.** Gather your people, pool what you put in, and decide together.
+
+Tribes Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder; the Stellar Community Fund award (SCF #44) keeps its original name, "Nouns Builder: DAOs on Stellar".
+
+## Brand
+
+- **Voice:** a warm host. Plain words first, the DAO term one line beneath: "Members", then "Each membership is an NFT with one vote."
+- **Noun:** a group is a tribe everywhere in the app (Your tribes, Find a tribe, Build a tribe). Savings circles stay circles.
+- **Logo, "the lens is the table":** three people around a single Nouns lens, with an empty seat saved for you that turns brass when you join. Flat blue is the master; the Dusk tile is the app icon.
+- **Colour:** one blue for actions, brass for what's yours, warm neutrals, dark as the hero theme.
+
+[DESIGN.md](DESIGN.md) has the full system: brand and logo rules, tokens, type, layout, motion and voice. The press kit (marks, lockups, the Dusk tile and the favicon) is in [docs/brand](docs/brand/README.md). Launch tasks for the domain, redirects and share cards are in the [launch checklist](docs/LAUNCH_CHECKLIST.md).
 
 ## System
 
@@ -64,8 +75,8 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 - [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
 - [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
 - [Bindings regeneration](BINDINGS_GENERATION_ISSUE.md)
-- [Frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
+- [Brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), [press kit](docs/brand/README.md), [launch checklist](docs/LAUNCH_CHECKLIST.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
 
 ## Technology and license
 
-Rust/Soroban contracts; Next.js, React, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. MIT.
+Rust/Soroban contracts; Next.js, React, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. MIT. The share-image fonts (Bricolage Grotesque and Figtree) are under the SIL Open Font License; see [apps/web/src/assets/fonts/OFL.txt](apps/web/src/assets/fonts/OFL.txt).

@@ -111,6 +111,7 @@ Construction, on a 32-unit grid (viewBox `0 0 32 32`):
 | Home screen, PWA, social avatars | Dusk tile, brass seat | The gradient lives on the tile only. The glyph stays flat. |
 | Your profile, your tribes, your share images | Brass seat or brass glow | Only where the viewer has joined. Brass always means "yours". |
 | Anywhere at 16 to 24px | Master, flat | Never a gradient glyph. It turns to mud at small sizes. |
+| Share cards | Paper mark on the Dusk gradient | Empty seat, except on a member's card, where their tokens get a brass ring. |
 
 **Logo colours:**
 
@@ -206,6 +207,8 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 - **Inputs:** Field, Input, Textarea, Select, AmountInput, DurationInput, Checkbox, Switch, ChoiceGroup, SegmentedControl, SearchInput, FilterRail.
 - **Feedback:** Callout, Toast, Skeleton, EmptyState, ErrorState, Spinner, ProgressSteps.
 - **Identity and data:** CommunityCard, Avatar, Crest, Address, Amount, Countdown, Chip, StatusBadge, VoteTally, MembershipCard, Pagination, DataList.
+- **Help for newcomers** (`components/help`, `components/shell/wallet-intro.tsx`): `WhatsATribe` (a Sheet from the home hero and footer), `WalletIntro` (before the first Connect, once per browser, reopened from the You sheet) and `GlossaryTerm` (a Popover, so it works on touch) for Treasury, Proposal, Delegate, Quorum, Launch admin and Safety delay. Each explains in plain words with the DAO term beneath.
+- **Share cards** (`lib/og`): one 1200x630 `next/og` card on the Dusk gradient, with an `opengraph-image.tsx` beside each shared route. Satori reads inline styles only, so these files take colours from `lib/brand-colors.ts` instead of Panda tokens.
 
 ## Do's and Don'ts
 
@@ -227,7 +230,9 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 - **Duration:** colour and opacity 150ms or less; popovers and tooltips 150-200ms from their trigger; sheets 240ms in, 180ms out; toasts 300ms.
 - Never animate keyboard-initiated actions or the first page load. Use transitions, not keyframes, for interruptible UI. Theme switches suppress transitions.
 - Reduced motion drops movement and keeps opacity and colour changes.
-- **The one authored moment:** your vote lands. The tally bar fills to the new split and your brass avatar drops into the voters row (420ms ease-out).
+- **Two authored moments, and only two:**
+  - **Your vote lands.** The tally bar fills to the new split and your brass avatar drops into the voters row (420ms ease-out).
+  - **Your seat fills.** Used only when someone joins a tribe: the mark's empty seat ring fades out while a brass disc grows from 60% to full size over 420ms with `--ease-out`, and shrinks back in 200ms. Only transform and opacity animate. With reduced motion it only fades.
 
 ## Voice
 
@@ -265,3 +270,9 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-14 | Logo: the lens is the table | Three people around a Nouns lens, with an empty seat that turns brass when you join. Flat blue (`signal`) is the master, the Dusk tile is the app icon, no gradient on the glyph, and a dedicated 16px drawing |
 | 2026-10-14 | Brass on the Dusk tile is #D9A35A in both themes | It already stands out on deep blue, so no new token |
 | 2026-10-14 | Legal pages keep their wording in the rename | Terms, privacy and the disclaimer change in a separate reviewed pass |
+| 2026-10-14 | Brass in the light theme stays the `brass` token (#9A6A22), on the logo too | It passes 3:1 on paper and keeps one meaning for brass; no logo-only brass |
+| 2026-10-14 | The seat fill is the second authored motion moment, only when someone joins | It is the brand's own moment ("your seat"); used anywhere else it would stop meaning "you're in" |
+| 2026-10-14 | tribes.build is the only public origin; the old vercel.app host's pages redirect permanently | Old share links keep working. Its /api and /images stay up for testnet tribes whose on-chain renderer and image still point there |
+| 2026-10-14 | Signed-out home: one primary (Build a tribe), "How it works" in three steps, an "Under the hood" strip | A newcomer can say what a tribe is in five seconds; a Nouns builder can see it's a real DAO after one scroll. No audit or mainnet claims |
+| 2026-10-14 | Newcomer help lives in place: a "What's a tribe?" sheet, a wallet intro before the first Connect, glossary popovers | Explains wallets, signing and DAO words at the moment they come up, without a tour |
+| 2026-10-14 | Share cards for every page on the Dusk gradient, with a brand-card fallback | Links shared in WhatsApp, X and Discord show the tribe, proposal or auction; a broken data source still shows the brand |

@@ -15,4 +15,6 @@ The rules for using these files are in the Brand and Logo section of [DESIGN.md]
 
 The wordmark in the lockups is Bricolage Grotesque (SIL Open Font License), converted to outlines: "Tribes" at 700 and "Builder" at 500, muted. Keep one head's diameter of clear space on every side.
 
+Share cards use the same mark in paper on the Dusk gradient, with Bricolage Grotesque and Figtree from `apps/web/src/assets/fonts` (OFL); see `apps/web/src/lib/og`. The tile and cards take their colours from `apps/web/src/lib/brand-colors.ts`.
+
 The app draws the same mark in code: `apps/web/src/components/shell/brand-mark.tsx` (mark and lockup), `apps/web/src/app/icon.svg` (favicon), `apps/web/src/lib/brand-tile.tsx` (Dusk tile for the Apple and manifest icons). Change those first, then export this kit again.

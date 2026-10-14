@@ -28,6 +28,7 @@ The old production host's page routes redirect permanently to tribes.build. Its 
 - [ ] **Social handles.** Claim matching handles (X, Farcaster, Discord, GitHub) before the announcement.
 - [ ] **SCF update.** Note the rename in the next Stellar Community Fund update. The award stays under "Nouns Builder: DAOs on Stellar".
 - [ ] **Trademark search** for "Tribes Builder" before the public launch. Tribes Inc. (tribes.xyz), Tribe DAO and Tribe.run already exist. Always use the full name in titles and search metadata.
+- [ ] **License file.** The README and the home page's "Under the hood" strip say the contracts are MIT, but the repository has no `LICENSE` file, so GitHub shows no license. Add one (with the right copyright holder) before the launch.
 - [ ] **Legal pages.** Review terms, privacy and the disclaimer with whoever owns them. They still name Builder and communities, on purpose, until that review.
 
 ## 4. Share cards

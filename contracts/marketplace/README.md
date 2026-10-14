@@ -1,6 +1,6 @@
 # Marketplace contract
 
-Per-DAO fixed-price sales. Quick-buy pools sell stock minted into the Marketplace's custody; secondary listings escrow an existing NFT. Builder takes no protocol fee.
+Per-DAO fixed-price sales. Quick-buy pools sell stock minted into the Marketplace's custody; secondary listings escrow an existing NFT. Tribes Builder takes no protocol fee.
 
 ## Quick-buy pools ([design §4](../../docs/designs/membership-models.md))
 
