@@ -123,7 +123,7 @@ beforeEach(async () => {
   });
   await useCreateDaoStore.persist.rehydrate();
   useCreateDaoStore.setState({ ...defaultConfiguration(), drafts: [], activeDraftId: null });
-  useLocalPreferencesStore.setState({ homes: {}, launches: {} });
+  useLocalPreferencesStore.setState({ launches: {} });
   useAuthSessionStore.getState().updateSession({
     address: wallet,
     authStatus: 'authenticated',
