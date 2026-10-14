@@ -13,6 +13,7 @@ import {
 import { Address, Button, ButtonLink, Callout, Dialog, Disclosure, Switch } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useDeadlineClock } from '@/hooks/use-deadline-clock';
 import { parseContractErrorCode } from '@/lib/contract-errors';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
@@ -59,8 +60,9 @@ export function LaunchDriveCard({
   name: string;
 }) {
   const { routeId } = useDaoContext();
-  const [now] = useState(() => Date.now() / 1000);
   const deadline = Number(assurance.deadline);
+  // Re-read when the deadline passes, so the card flips to "ended" (and mounts ReleaseSlug) in place.
+  const now = useDeadlineClock(deadline);
   const ended = launchDriveEnded(deadline, now);
   const { launch_auction: auction, launch_marketplace: market } = assurance.launch_config;
   return (

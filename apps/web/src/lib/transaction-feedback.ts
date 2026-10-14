@@ -36,10 +36,11 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     });
   }
 
-  function success(message: string, hash: string) {
+  /** `description` replaces the default line, for an outcome that sent nothing (e.g. already done). */
+  function success(message: string, hash: string, description?: string) {
     const payload = {
       title: message,
-      description: hash ? 'Transaction confirmed on-chain.' : 'Transaction submitted.',
+      description: description ?? (hash ? 'Transaction confirmed on-chain.' : 'Transaction submitted.'),
       type: 'success' as const,
       duration: hash ? 20000 : 8000,
       action: hash
