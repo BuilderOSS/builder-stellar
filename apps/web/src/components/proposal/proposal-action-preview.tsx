@@ -7,6 +7,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
 import { contractCallLabel, mintGrants, mintTitle } from '@/lib/contract-call-labels';
+import { usePendingModules } from '@/lib/modules/pending';
 import { inspectProposalAdminCall, type ProposalCallInspection } from '@/lib/proposal-action-inspection';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
 import { ProposalState } from '@/lib/proposal-state';
@@ -210,7 +211,10 @@ export function ProposalActionPreview({
   tokenContractId,
   state
 }: ProposalActionPreviewProps) {
-  const { daoConfig } = useDaoContext();
+  const { daoConfig: indexedConfig } = useDaoContext();
+  const pending = usePendingModules(indexedConfig, targets, functions, args);
+  // A module the proposal adds is called before it exists: its address is the Manager's prediction.
+  const daoConfig = { ...indexedConfig, pendingModules: pending.pendingModules };
   const classes = action();
   const copy = actionListCopy(functions.length, state);
   const numbered = functions.length > 1;
@@ -237,7 +241,7 @@ export function ProposalActionPreview({
             try {
               // Indexed authorize trees lose their Val types, so they are
               // rendered for review rather than re-encoded.
-              if (!(target === daoConfig.treasuryContractId && functionName === 'authorize'))
+              if (!(target === daoConfig.treasuryContractId && functionName === 'authorize') && !pending.loading)
                 encodeSupportedCall(target, functionName, actionArgs, daoConfig);
               inspection = inspectProposalAdminCall(target, functionName, actionArgs, daoConfig);
               description = inspection

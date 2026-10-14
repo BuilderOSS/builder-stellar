@@ -83,6 +83,19 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return `token:agent:${String(action.module || action.recipient)
         .trim()
         .toUpperCase()}`;
+    case 'create-module':
+      // One module of a kind at a number: two for the same number cannot both run.
+      return `manager:module:${String(action.kind)}:${String(action.moduleNumber)}`;
+    case 'register-module':
+    case 'unregister-module':
+      // Registering and unregistering one contract conflict.
+      return `token:module:${String(action.address || action.recipient)
+        .trim()
+        .toUpperCase()}`;
+    case 'open-module':
+      return `module:open:${String(action.address || action.recipient)
+        .trim()
+        .toUpperCase()}`;
     case 'dao-transfer':
     case 'approved-transfer':
       // Any move of one token, by any path, is one resource.
@@ -165,6 +178,10 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type === 'set-transfer-agent' ||
     action.type === 'dao-transfer' ||
     action.type === 'approved-transfer' ||
+    action.type === 'create-module' ||
+    action.type === 'register-module' ||
+    action.type === 'unregister-module' ||
+    action.type === 'open-module' ||
     ARTWORK_SETTINGS.has(action.type)
   );
 }
@@ -178,6 +195,10 @@ function highRiskMessage(action: ProposalQueuedAction) {
   if (action.type === 'set-dao-recovery' && action.enabled === true)
     return 'Lets a vote move any member’s token without their signature.';
   if (action.type === 'dao-transfer') return 'Moves a member’s token and its votes without the member’s signature.';
+  if (action.type === 'create-module' || action.type === 'register-module')
+    return 'Adds a contract that can mint memberships within its allowance and hold members’ tokens.';
+  if (action.type === 'unregister-module')
+    return 'Takes a contract out of the tribe. Memberships it still holds become that contract’s own votes, and nobody can cast them.';
   return 'This action can change DAO control, treasury behavior, or token balances.';
 }
 

@@ -6,6 +6,7 @@ import { artworkAdditionTitle, mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { formatDuration } from '@/lib/duration';
 import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
+import { isModuleKind, MODULE_COPY } from '@/lib/modules/kinds';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
   BuildContext,
@@ -160,6 +161,10 @@ function moduleLabel(module: unknown) {
   return key in MODULE_LABELS ? moduleLabelInSentence(key as keyof typeof MODULE_LABELS) : key;
 }
 
+function moduleNoun(kind: unknown) {
+  return isModuleKind(kind) ? MODULE_COPY[kind].noun : 'a module';
+}
+
 function profileSummary(raw: string) {
   const profile = parseProfile(raw);
   const parts = [profile.description ? `“${plainSummary(profile.description, 80)}”` : 'no description'];
@@ -210,6 +215,16 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `Upgrade ${moduleLabel(action.module)} from release ${action.fromHash} to ${action.toHash}`;
   if (action.type === 'migrate-dao-module')
     return `Update storage for ${moduleLabel(action.module)} to the new release`;
+  if (action.type === 'create-module')
+    return `Deploy ${moduleNoun(action.kind)} as module number ${action.moduleNumber}, at ${action.address}`;
+  if (action.type === 'register-module')
+    return `Register ${moduleNoun(action.kind)} (${action.address}) with the membership token${action.nonVoting === false ? '' : '; it holds memberships without votes'}`;
+  if (action.type === 'unregister-module')
+    return `Remove ${moduleNoun(action.kind)} (${action.address}) from the tribe. Its mint allowance is cleared with it.`;
+  if (action.type === 'open-module')
+    return action.kind === 'auction'
+      ? `Start the first auction of ${action.address}`
+      : `Open the market ${action.address}`;
   if (action.type === 'regenerate-token-traits') return `Seed traits for token #${action.tokenId}`;
   if (action.type === 'treasury-authorize')
     return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;

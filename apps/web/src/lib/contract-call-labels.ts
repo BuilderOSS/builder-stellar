@@ -17,7 +17,10 @@ const KNOWN_CALLS: Record<string, string> = {
   set_voting_period: 'Change how long voting stays open',
   set_queue_delay: 'Change the safety delay',
   set_proposal_threshold: 'Change the votes needed to propose',
-  set_quorum_bps: 'Change the quorum'
+  set_quorum_bps: 'Change the quorum',
+  create_module: 'Add a module to the tribe',
+  register_module: 'Register a module with the membership token',
+  unregister_module: 'Remove a module from the tribe'
 };
 
 export function contractCallLabel(functionName: string) {

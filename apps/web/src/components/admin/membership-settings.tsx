@@ -8,24 +8,9 @@ import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { ModulesCard } from '@/components/admin/modules/modules-card';
 import { PageSection } from '@/components/page-section';
-import {
-  Badge,
-  Button,
-  Callout,
-  Card,
-  Field,
-  FieldHelperText,
-  FieldLabel,
-  Heading,
-  Input,
-  ListRow,
-  Select,
-  ShortId,
-  Skeleton,
-  Switch,
-  Text
-} from '@/components/ui';
+import { Badge, Button, Callout, Card, FieldHelperText, Heading, Skeleton, Switch, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
@@ -46,7 +31,6 @@ const KIND_LABELS: Record<string, string> = {
   circle: 'Circle'
 };
 const row = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
-const moduleMeta = css({ display: 'grid', gap: '1.5', justifyItems: 'start' });
 const settingRow = css({
   display: 'flex',
   alignItems: 'flex-start',
@@ -187,9 +171,8 @@ export function MembershipSettings() {
   const proposalDraft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
-  const [allowance, setAllowance] = useState({ module: '', amount: '' });
   // Shown beside the card whose action produced it, not at the top of a long page.
-  const [message, setMessage] = useState<{ where: 'switches' | 'allowance'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ where: 'switches' | 'modules'; text: string } | null>(null);
 
   if (state.isLoading || !state.data)
     return (
@@ -252,7 +235,7 @@ export function MembershipSettings() {
     values: Record<string, unknown>,
     title: string,
     description: string,
-    where: 'switches' | 'allowance'
+    where: 'switches' | 'modules'
   ) {
     if (!address) return;
     const handler = getActionHandler(type);
@@ -288,31 +271,47 @@ export function MembershipSettings() {
     );
   }
 
-  function changeAllowance(direction: 'increase' | 'decrease') {
-    const amount = Number(allowance.amount);
-    if (!allowance.module || !Number.isInteger(amount) || amount < 1) {
-      setMessage({ where: 'allowance', text: 'Choose a module and a whole number of tokens.' });
-      return;
-    }
-    const target = data.modules.find((entry) => entry.address === allowance.module);
-    const name = (target ? kindLabel(target.kind) : 'module').toLowerCase();
+  /** Returns a problem for the allowance sheet to show, or null once it was signed or drafted. */
+  function changeAllowance(
+    module: MembershipState['modules'][number],
+    direction: 'increase' | 'decrease',
+    amountText: string
+  ): string | null {
+    const amount = Number(amountText);
+    if (!Number.isInteger(amount) || amount < 1 || amount > UNLIMITED) return 'Enter a whole number of memberships.';
+    const name = kindLabel(module.kind).toLowerCase();
     const more = direction === 'decrease' ? 'fewer' : 'more';
     const title = `${direction === 'decrease' ? 'Lower' : 'Raise'} the ${name} mint allowance by ${amount}`;
-    if (!isLaunchAdmin)
-      return propose(
+    if (!isLaunchAdmin) {
+      propose(
         'change-mint-allowance',
-        { module: allowance.module, amount: String(amount), direction },
+        { module: module.address, amount: String(amount), direction },
         title,
-        `Lets the ${name} module (${allowance.module}) mint ${amount} ${more} ${amount === 1 ? 'token' : 'tokens'}.`,
-        'allowance'
+        `Lets the ${name} module (${module.address}) mint ${amount} ${more} ${amount === 1 ? 'token' : 'tokens'}.`,
+        'modules'
       );
+      return null;
+    }
     void direct(
       {
         fn: direction === 'decrease' ? 'decrease_mint_allowance' : 'increase_mint_allowance',
-        args: { module: allowance.module, amount }
+        args: { module: module.address, amount }
       },
       title
     );
+    return null;
+  }
+
+  function proposeOpen(kind: 'auction' | 'marketplace') {
+    if (kind === 'auction')
+      propose(
+        'unpause-auction',
+        {},
+        'Start auctions',
+        'Starts the first auction of this tribe’s auction module.',
+        'modules'
+      );
+    else propose('unpause-marketplace', {}, 'Reopen the market', 'Lets sales in the market begin.', 'modules');
   }
 
   return (
@@ -399,99 +398,22 @@ export function MembershipSettings() {
             </Stack>
           </Card>
 
-          <Card p="5">
-            <Stack gap="3">
-              <Heading size="heading">Modules</Heading>
-              <Text size="sm">
-                A module mints only up to its allowance. Pools and claim lists need one before they open.
-              </Text>
-              {data.modules.length ? (
-                <div>
-                  {data.modules.map((module) => (
-                    <ListRow
-                      key={module.address}
-                      title={kindLabel(module.kind)}
-                      meta={
-                        // Badges sit under the contract, where they can wrap; the trailing slot never does.
-                        <span className={moduleMeta}>
-                          <ShortId value={module.address} label="Contract" />
-                          {!module.vouched || module.nonVoting || module.agent || module.votes > 0n ? (
-                            <span className={row}>
-                              {module.vouched ? null : <Badge tone="warning">Not deployed by the Manager</Badge>}
-                              {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
-                              {module.agent ? <Badge>Can move memberships</Badge> : null}
-                              {module.votes > 0n ? (
-                                <Badge tone="warning">
-                                  {module.votes.toString()} {module.votes === 1n ? 'vote' : 'votes'}
-                                </Badge>
-                              ) : null}
-                            </span>
-                          ) : null}
-                        </span>
-                      }
-                      trailing={
-                        <Badge>
-                          {module.allowance >= UNLIMITED ? 'No limit' : `${module.allowance.toLocaleString()} to mint`}
-                        </Badge>
-                      }
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Text size="sm">This tribe has no modules yet.</Text>
-              )}
-              {data.modules.length ? (
-                <Stack gap="2">
-                  <Field>
-                    <FieldLabel htmlFor="membership-allowance-module">Module</FieldLabel>
-                    <Select
-                      id="membership-allowance-module"
-                      value={allowance.module}
-                      disabled={!canAct || busy}
-                      onChange={(event) => setAllowance({ ...allowance, module: event.target.value })}
-                    >
-                      <option value="">Choose a module</option>
-                      {data.modules.map((module) => (
-                        <option key={module.address} value={module.address}>
-                          {`${kindLabel(module.kind)} · ${module.address.slice(0, 4)}…${module.address.slice(-4)} · ${
-                            module.allowance >= UNLIMITED ? 'no limit' : `${module.allowance.toLocaleString()} left`
-                          }`}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="membership-allowance-amount">Tokens</FieldLabel>
-                    <Input
-                      id="membership-allowance-amount"
-                      inputMode="numeric"
-                      value={allowance.amount}
-                      disabled={!canAct || busy}
-                      onChange={(event) => setAllowance({ ...allowance, amount: event.target.value.trim() })}
-                    />
-                  </Field>
-                  <div className={row}>
-                    <Button type="button" disabled={!canAct || busy} onClick={() => changeAllowance('increase')}>
-                      {data.live ? 'Propose raising it' : 'Raise allowance'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={!canAct || busy}
-                      onClick={() => changeAllowance('decrease')}
-                    >
-                      {data.live ? 'Propose lowering it' : 'Lower allowance'}
-                    </Button>
-                  </div>
-                  {message?.where === 'allowance' ? <Callout variant="info" title={message.text} /> : null}
-                </Stack>
-              ) : null}
-              <FieldHelperText>
-                Modules that can move memberships were named when the tribe was created; after launch a proposal can add
-                or remove one (Proposals → Change a transfer agent).
-              </FieldHelperText>
-            </Stack>
-          </Card>
+          <ModulesCard
+            config={config}
+            daoId={daoId}
+            address={address}
+            modules={data.modules}
+            live={data.live}
+            canAct={canAct}
+            frozen={frozen}
+            busy={busy}
+            message={message?.where === 'modules' ? message.text : null}
+            addBatch={proposalDraft.requestAddBatch}
+            onMessage={(text) => setMessage({ where: 'modules', text })}
+            onChanged={() => void state.mutate()}
+            onChangeAllowance={changeAllowance}
+            onProposeOpen={proposeOpen}
+          />
         </Stack>
       </PageSection>
     </>

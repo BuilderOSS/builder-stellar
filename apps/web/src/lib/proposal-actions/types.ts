@@ -51,7 +51,11 @@ export type ProposalActionType =
   | 'open-claim-list'
   | 'set-token-metadata'
   | 'transfer-dao-token'
-  | 'change-dao-slug';
+  | 'change-dao-slug'
+  | 'create-module'
+  | 'register-module'
+  | 'unregister-module'
+  | 'open-module';
 
 /**
  * Queued action structure (persisted in store)
