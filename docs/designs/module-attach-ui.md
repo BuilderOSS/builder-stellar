@@ -176,5 +176,5 @@ Summary; the table in the preview is the spec.
 ### Proven live (testnet, tribe `drive-launch`)
 
 - Attach: a Market was added by proposal (create, register, open) at the predicted address with `non_voting` set, unpaused, version 0.4.0; the index showed the contract and `marketplace_enabled`.
-- Detach: see the notes folder for the removal proposal; the kind becomes free again once it executes.
+- Detach: the same Market was removed by proposal (unregister) and executed (tx `22e4f116308bda26103e4c0f675f72ce22b8691da5dc107d841aa7469dfcc194`). On chain the token's modules list lost it and `module(marketplace)` is empty; the index shows `registered: false` and no marketplace contract on the tribe; the Add sheet offers Market again.
 - Not exercised live: the launch-setup path (`create_module` signed directly by the launch admin), pool and auction clean-up steps, removing a claims module.
