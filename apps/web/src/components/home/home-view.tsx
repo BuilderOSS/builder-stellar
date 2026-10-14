@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Plus } from 'lucide-react';
+import { ArrowRight, ExternalLink, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
@@ -14,6 +14,7 @@ import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoConfig } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { useDashboardData } from '@/lib/goldsky-queries';
+import { SOURCE_URL } from '@/lib/site';
 
 import { HomeDrafts } from './home-drafts';
 
@@ -69,6 +70,18 @@ const step = css({
 });
 const stepTitle = css({ textStyle: 'subheading', m: '0' });
 const stepBody = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
+const hood = css({
+  display: 'grid',
+  gap: '4',
+  listStyle: 'none',
+  m: '0',
+  p: '0',
+  sm: { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
+  lg: { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }
+});
+const hoodItem = css({ display: 'grid', gap: '0.5', pt: '3', borderTopWidth: '1px', borderColor: 'rule' });
+const hoodTitle = css({ textStyle: 'label', m: '0' });
+const hoodBody = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const credit = css({
   textStyle: 'caption',
   color: 'ink.muted',
@@ -89,11 +102,11 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
           votes, NFT membership. Fees cost a fraction of a cent.
         </p>
         <div className={heroActions}>
-          <ButtonLink href="/discover" size="lg">
-            Find a tribe
-          </ButtonLink>
-          <ButtonLink href="/create" variant="secondary" size="lg">
+          <ButtonLink href="/create" size="lg">
             Build a tribe
+          </ButtonLink>
+          <ButtonLink href="/discover" variant="secondary" size="lg">
+            Find a tribe
           </ButtonLink>
         </div>
       </section>
@@ -119,20 +132,65 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       <Section title="How it works">
         <ol className={steps}>
           <li className={step}>
-            <p className={stepTitle}>Build or find a tribe</p>
-            <p className={stepBody}>Give it a name, art and a treasury. Or join one that already exists.</p>
+            <p className={stepTitle}>Gather your people</p>
+            <p className={stepBody}>
+              Build a tribe with a name, art and a link to share, or join one that already exists. Each member holds a
+              token, and each token is one vote.
+            </p>
           </li>
           <li className={step}>
-            <p className={stepTitle}>Members get a token</p>
-            <p className={stepBody}>Win one in the auction or buy one on the market. Each token is a vote.</p>
+            <p className={stepTitle}>Pool a treasury</p>
+            <p className={stepBody}>
+              People join through an auction, a sale or a claim list, and what they pay goes to the tribe&apos;s
+              treasury. Anyone can add more.
+            </p>
           </li>
           <li className={step}>
             <p className={stepTitle}>Decide together</p>
             <p className={stepBody}>
-              Anyone can propose. Members vote, and the treasury only moves when a vote passes.
+              Members put ideas to a vote. The treasury only moves when a vote passes, and everyone can see where it
+              went.
             </p>
           </li>
         </ol>
+      </Section>
+
+      <Section
+        title="Under the hood"
+        description="For people who know DAOs: what a tribe runs on."
+        action={
+          <ButtonLink href={SOURCE_URL} variant="ghost" size="sm" external>
+            Source on GitHub
+            <ExternalLink aria-hidden="true" />
+          </ButtonLink>
+        }
+      >
+        <ul className={hood}>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>Open-source Soroban contracts</p>
+            <p className={hoodBody}>MIT licensed. Every tribe deploys its own token, governor and treasury.</p>
+          </li>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>Built on Nouns Builder</p>
+            <p className={hoodBody}>The Nouns Builder DAO model, ported to Stellar.</p>
+          </li>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>One NFT, one vote</p>
+            <p className={hoodBody}>Membership is an NFT. Holders vote or delegate their votes.</p>
+          </li>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>An onchain treasury</p>
+            <p className={hoodBody}>Funds sit in the tribe&apos;s own contract and move only by a passed vote.</p>
+          </li>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>Anyone can execute a ready proposal</p>
+            <p className={hoodBody}>Once a vote passes and its safety delay ends, any wallet can run the proposal.</p>
+          </li>
+          <li className={hoodItem}>
+            <p className={hoodTitle}>Fees a fraction of a cent</p>
+            <p className={hoodBody}>Stellar network fees for voting, bidding and proposing.</p>
+          </li>
+        </ul>
       </Section>
 
       <p className={credit}>
