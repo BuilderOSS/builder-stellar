@@ -180,6 +180,79 @@ export function AdminPaymentTokenForm({
   );
 }
 
+/**
+ * The market's own assets (XLM or USDC for the network): buyers can only pay in those, so a price
+ * in anything else could never be paid. A value outside the list (an older draft) shows as unchosen.
+ */
+function MarketAssetSelect({
+  id,
+  network,
+  value,
+  onChange,
+  disabled,
+  error,
+  consequence
+}: {
+  id: string;
+  network: NonNullable<ActionFormProps<unknown>['network']>;
+  value: string;
+  onChange: (contractId: string) => void;
+  disabled: boolean;
+  error?: string;
+  /** Ends the helper sentence: what happens with any other asset. */
+  consequence: string;
+}) {
+  const assets = marketplaceAssets(network);
+  const codes = marketplaceAssetCodes(network);
+  return (
+    <>
+      <FieldLabel htmlFor={id}>Buyers pay in</FieldLabel>
+      <Select
+        id={id}
+        value={assets.some((asset) => asset.contractId === value) ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+      >
+        <option value="">Choose {codes}</option>
+        {assets.map((asset) => (
+          <option key={asset.contractId} value={asset.contractId}>
+            {asset.code} · {asset.name}
+          </option>
+        ))}
+      </Select>
+      {error ? (
+        <ErrorText message={error} />
+      ) : (
+        <FieldHelperText>
+          Buyers pay from their wallets in {codes}, the only assets the market takes, {consequence}
+        </FieldHelperText>
+      )}
+    </>
+  );
+}
+
+export function MarketPaymentAssetForm({
+  value,
+  onChange,
+  disabled,
+  validationErrors,
+  network = getConfiguredAuctionNetwork()
+}: ActionFormProps<AdminPaymentTokenDraft>) {
+  return (
+    <Stack gap="2">
+      <MarketAssetSelect
+        id="market-payment-asset"
+        network={network}
+        value={value.paymentToken}
+        onChange={(paymentToken) => onChange({ paymentToken })}
+        disabled={disabled}
+        error={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
+        consequence="so new listings can only be priced in one of them. Open listings keep the asset they were listed in."
+      />
+    </Stack>
+  );
+}
+
 export function OpenPoolForm({
   value,
   onChange,
@@ -189,8 +262,6 @@ export function OpenPoolForm({
 }: ActionFormProps<OpenPoolDraft>) {
   const fields = validationErrors && !validationErrors.valid ? validationErrors.fields : undefined;
   const set = (patch: Partial<OpenPoolDraft>) => onChange({ ...value, ...patch });
-  const assets = marketplaceAssets(network);
-  const assetCodes = marketplaceAssetCodes(network);
   return (
     <Stack gap="2">
       <FieldLabel htmlFor="pool-price">Price per token</FieldLabel>
@@ -203,28 +274,15 @@ export function OpenPoolForm({
         disabled={disabled}
       />
       <ErrorText message={fields?.price} />
-      <FieldLabel htmlFor="pool-asset">Buyers pay in</FieldLabel>
-      <Select
+      <MarketAssetSelect
         id="pool-asset"
-        value={assets.some((asset) => asset.contractId === value.asset) ? value.asset : ''}
-        onChange={(event) => set({ asset: event.target.value })}
+        network={network}
+        value={value.asset}
+        onChange={(asset) => set({ asset })}
         disabled={disabled}
-      >
-        <option value="">Choose {assetCodes}</option>
-        {assets.map((asset) => (
-          <option key={asset.contractId} value={asset.contractId}>
-            {asset.code} · {asset.name}
-          </option>
-        ))}
-      </Select>
-      {fields?.asset ? (
-        <ErrorText message={fields.asset} />
-      ) : (
-        <FieldHelperText>
-          Buyers pay from their wallets in {assetCodes}, the only assets the market takes, so a pool priced in anything
-          else could never sell.
-        </FieldHelperText>
-      )}
+        error={fields?.asset}
+        consequence="so a pool priced in anything else could never sell."
+      />
       <FieldLabel htmlFor="pool-size">Tokens in the pool</FieldLabel>
       <Input
         id="pool-size"

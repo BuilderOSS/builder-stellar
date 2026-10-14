@@ -199,6 +199,22 @@ describe('current marketplace/governor/auction administration registry', () => {
     ).toBe(false);
   });
 
+  it('limits the market payment asset to XLM or USDC, like quick-buy pools', () => {
+    const asset = getActionHandler('set-marketplace-payment-token');
+    expect(asset.FormComponent).not.toBe(getActionHandler('set-auction-payment-token').FormComponent);
+    for (const code of ['XLM', 'USDC'])
+      expect(asset.validate({ paymentToken: testnetAsset(code) }, formContext).valid).toBe(true);
+    for (const paymentToken of [testnetAsset('EURC'), `C${'A'.repeat(55)}`, 'invalid', ''])
+      expect(asset.validate({ paymentToken }, formContext)).toMatchObject({
+        valid: false,
+        fields: { paymentToken: 'Choose the asset buyers pay in: XLM or USDC.' }
+      });
+    // The auction can still take any token.
+    expect(
+      getActionHandler('set-auction-payment-token').validate({ paymentToken: testnetAsset('EURC') }, formContext).valid
+    ).toBe(true);
+  });
+
   it('stores and calls the resale fee in basis points, and shows a queued one as a percent again', () => {
     const fee = getActionHandler('set-marketplace-secondary-fee');
     const action = fee.serialize({ value: '2.5' }, formContext);

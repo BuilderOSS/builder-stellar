@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getTreasuryAssets } from '@/lib/assets-config';
 
-import { type OpenPoolDraft, OpenPoolForm, ResaleFeeForm } from './admin-action-forms';
+import { MarketPaymentAssetForm, type OpenPoolDraft, OpenPoolForm, ResaleFeeForm } from './admin-action-forms';
 
 vi.stubGlobal('React', React);
 
@@ -54,6 +54,27 @@ describe('OpenPoolForm', () => {
       />
     );
     expect(usdc).toContain(`<option value="${contractId('USDC')}" selected="">USDC · USD Coin</option>`);
+  });
+});
+
+describe('MarketPaymentAssetForm', () => {
+  it('offers only XLM and USDC for the market, never a custom contract', () => {
+    const html = renderToStaticMarkup(
+      <MarketPaymentAssetForm
+        value={{ paymentToken: contractId('XLM') }}
+        onChange={() => {}}
+        disabled={false}
+        network="testnet"
+      />
+    );
+    expect(options(html)).toEqual([
+      ['', 'Choose XLM or USDC'],
+      [contractId('XLM'), 'XLM · Lumens'],
+      [contractId('USDC'), 'USDC · USD Coin']
+    ]);
+    expect(html).toContain(`<option value="${contractId('XLM')}" selected="">`);
+    expect(html).toContain('Open listings keep the asset they were listed in.');
+    expect(html).not.toContain('contract address');
   });
 });
 

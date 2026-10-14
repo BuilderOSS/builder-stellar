@@ -1,5 +1,3 @@
-import { StrKey } from '@stellar/stellar-sdk';
-
 import {
   type AdminPaymentTokenDraft,
   AdminPaymentTokenForm,
@@ -7,12 +5,14 @@ import {
   AdminReservePriceForm,
   type AdminValueDraft,
   adminValueFormWithHint,
+  MarketPaymentAssetForm,
   type OpenPoolDraft,
   OpenPoolForm,
   type PoolIdDraft,
   PoolIdForm,
   ResaleFeeForm
 } from '@/components/admin/admin-action-forms';
+import type { NetworkName } from '@/config/networks';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
 import {
   MAX_MARKETPLACE_FEE_BPS,
@@ -340,23 +340,21 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
   })
 };
 
+/** The market can only take XLM or USDC, so a price in anything else could never be paid. */
+function marketAssetResult(network: NetworkName, asset: string, field: string): ValidationResult {
+  if (marketplaceAsset(network, asset.trim())) return valid();
+  const message = `Choose the asset buyers pay in: ${marketplaceAssetCodes(network)}.`;
+  return { valid: false, message, fields: { [field]: message } };
+}
+
 // Registry action IDs describe the UI intent; method names must match the current spec.
 export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   ...setAuctionPaymentTokenHandler,
   type: 'set-marketplace-payment-token',
   label: 'Change the market payment asset',
   description: 'Change the asset buyers pay in. Open listings keep the asset they were listed in.',
-  validate: (data, context) => {
-    const result = setAuctionPaymentTokenHandler.validate(data, context);
-    if (!result.valid) return result;
-    return StrKey.isValidContract(data.paymentToken.trim())
-      ? valid()
-      : {
-          valid: false,
-          message: 'Payment asset must be a contract address.',
-          fields: { paymentToken: 'Payment asset must be a contract address.' }
-        };
-  },
+  FormComponent: MarketPaymentAssetForm,
+  validate: (data, context) => marketAssetResult(context.config.name, data.paymentToken, 'paymentToken'),
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'set-marketplace-payment-token',
@@ -535,11 +533,8 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
   validate: (data, context) => {
     const priceError = validateReservePrice(data.price);
     if (priceError) return { valid: false, message: priceError, fields: { price: priceError } };
-    // The market can only take XLM or USDC, so a pool priced in anything else could never sell.
-    if (!marketplaceAsset(context.config.name, data.asset.trim())) {
-      const message = `Choose the asset buyers pay in: ${marketplaceAssetCodes(context.config.name)}.`;
-      return { valid: false, message, fields: { asset: message } };
-    }
+    const asset = marketAssetResult(context.config.name, data.asset, 'asset');
+    if (!asset.valid) return asset;
     const counts =
       positiveCount(data.size, 'size', 'Pool size') ??
       positiveCount(data.maxPerBuyer, 'maxPerBuyer', 'Per-wallet limit') ??
