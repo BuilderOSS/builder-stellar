@@ -243,7 +243,7 @@ export function NowCard({
     return (
       <section className={card().root} role="status" aria-busy="true">
         <span className="sr-only">Loading what&apos;s happening</span>
-        <div className={css({ display: 'grid', gap: '3' })}>
+        <div className={css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '3' })}>
           <Skeleton className={css({ width: '52', height: '7' })} />
           <Skeleton className={css({ width: '80', maxW: '100%', height: '4' })} />
         </div>

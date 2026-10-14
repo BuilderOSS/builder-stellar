@@ -2,7 +2,8 @@ import { css } from 'styled-system/css';
 
 import { Skeleton } from '@/components/ui';
 
-const wrap = css({ display: 'grid', gap: '4' });
+// minmax(0, 1fr): the fixed-width bars shrink to a phone-width column instead of widening the grid.
+const wrap = css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '4' });
 
 export default function Loading() {
   return (
