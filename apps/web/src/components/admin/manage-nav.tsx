@@ -11,95 +11,7 @@ import { Button, ListRow, Sheet } from '@/components/ui';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { activeNavKey } from '@/lib/dao-nav';
 import { daoAdminRoute, daoRoute } from '@/lib/dao-routes';
-
-type ManageItem = {
-  key: string;
-  label: string;
-  meta: string;
-  section: string;
-  exact?: boolean;
-  /** Needed before launch; tagged while the community is in setup. */
-  requiredForLaunch?: boolean;
-};
-
-const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
-  {
-    title: 'Overview',
-    items: [{ key: 'overview', label: 'Overview', meta: 'Your access and pending changes', section: '', exact: true }]
-  },
-  {
-    title: 'Community',
-    items: [
-      { key: 'profile', label: 'Community profile', meta: 'Name, link, image and description', section: '/profile' }
-    ]
-  },
-  {
-    title: 'Membership',
-    items: [
-      { key: 'token', label: 'Mint tokens', meta: 'Create new membership tokens', section: '/token' },
-      {
-        key: 'founders',
-        label: 'Founder tokens',
-        meta: 'Tokens for the founding team',
-        section: '/founders',
-        requiredForLaunch: true
-      },
-      { key: 'claims', label: 'Claim lists', meta: 'Tokens listed people can claim', section: '/claims' },
-      {
-        key: 'artwork',
-        label: 'Artwork',
-        meta: 'The art every token is drawn from',
-        section: '/artwork',
-        requiredForLaunch: true
-      }
-    ]
-  },
-  {
-    title: 'Rules',
-    items: [
-      { key: 'governance', label: 'Voting rules', meta: 'Timing, quorum and who can propose', section: '/governance' },
-      {
-        key: 'owner',
-        label: 'Membership',
-        meta: 'How tokens move, delegation and module allowances',
-        section: '/owner'
-      }
-    ]
-  },
-  {
-    title: 'Selling',
-    items: [
-      { key: 'auction', label: 'Auction', meta: 'Pause, pricing and timing', section: '/auction' },
-      { key: 'marketplace', label: 'Market', meta: 'Listings, fees and pausing', section: '/marketplace' }
-    ]
-  },
-  {
-    title: 'System',
-    items: [
-      {
-        key: 'upgrades',
-        label: 'Contract upgrades',
-        meta: 'Keep contracts on their latest release',
-        section: '/upgrades'
-      }
-    ]
-  }
-];
-
-/** Sections for optional modules show only when the community has that module. */
-type Modules = { auction: boolean; marketplace: boolean; claims: boolean };
-const MODULE_ITEMS: Record<string, keyof Modules> = {
-  auction: 'auction',
-  marketplace: 'marketplace',
-  claims: 'claims'
-};
-
-function groupsFor(modules: Modules) {
-  return GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !(item.key in MODULE_ITEMS) || modules[MODULE_ITEMS[item.key]!])
-  })).filter((group) => group.items.length);
-}
+import { MANAGE_SECTIONS, manageGroups, type ManageModules } from '@/lib/manage-sections';
 
 const nav = sva({
   slots: ['root', 'group', 'title', 'list', 'link'],
@@ -148,14 +60,14 @@ export function ManageNav({
 }: {
   routeId: string;
   inSetup?: boolean;
-  modules?: Modules;
+  modules?: ManageModules;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useCloseOnNavigate(() => setOpen(false));
-  const groups = groupsFor(modules);
+  const groups = manageGroups(modules);
   // Every section, hidden ones too, so a page reached by its URL still names itself in the picker.
-  const items = GROUPS.flatMap((group) => group.items).map((item) => ({
+  const items = MANAGE_SECTIONS.map((item) => ({
     ...item,
     href: daoAdminRoute(routeId, item.section) as string
   }));

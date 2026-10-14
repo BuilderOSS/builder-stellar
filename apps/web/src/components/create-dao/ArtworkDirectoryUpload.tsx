@@ -116,7 +116,10 @@ export function ArtworkDirectoryUpload({
           }
         }}
       />
-      <p className={styles.muted}>collection/layer/item.png · Same extension · Up to 16 layers and 1,000 files</p>
+      <p className={styles.muted}>
+        One folder per layer, holding that layer&apos;s images (collection/layer/item.png). Layers stack in name order,
+        bottom first, so number them: 0-backgrounds, 1-bodies. One file type, up to 16 layers and 1,000 files.
+      </p>
       <Button
         type="button"
         variant="secondary"

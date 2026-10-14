@@ -12,6 +12,7 @@ import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { daoAdminRoute } from '@/lib/dao-routes';
+import { manageGroups } from '@/lib/manage-sections';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const accessCard = css({
@@ -30,9 +31,6 @@ const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '0.5' 
 const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 
 type Access = 'direct' | 'vote' | 'read' | 'open';
-
-/** Manage sections the launch checklist depends on. */
-const REQUIRED_FOR_LAUNCH = new Set(['artwork', 'founders']);
 
 function AccessChip({ access }: { access: Access }) {
   if (access === 'direct') return <Chip tone="yours">You can change this</Chip>;
@@ -70,71 +68,21 @@ export default function AdminPage() {
     canProposeAuction
   );
 
-  const sections: Array<{ key: string; title: string; meta: string; href: string; access: Access }> = [
-    {
-      key: 'profile',
-      title: 'Community profile',
-      meta: 'Name, link, image and description',
-      href: daoAdminRoute(routeId, '/profile'),
-      access: access(isAdmin, canProposeAdminActions)
-    },
-    {
-      key: 'token',
-      title: 'Mint tokens',
-      meta: 'Create new membership tokens',
-      href: daoAdminRoute(routeId, '/token'),
-      access: access(hasMintAccess, canProposeMint)
-    },
-    {
-      key: 'founders',
-      title: 'Founder tokens',
-      meta: 'Tokens for the founding team, before launch',
-      href: daoAdminRoute(routeId, '/founders'),
-      access: 'open'
-    },
-    {
-      key: 'artwork',
-      title: 'Artwork',
-      meta: 'The art every token is drawn from',
-      href: daoAdminRoute(routeId, '/artwork'),
-      access: 'open'
-    },
-    {
-      key: 'governance',
-      title: 'Voting rules',
-      meta: 'Timing, quorum and who can propose',
-      href: daoAdminRoute(routeId, '/governance'),
-      access: access(hasGovernanceAccess, canProposeGovernance)
-    },
-    {
-      key: 'owner',
-      title: 'Who can mint',
-      meta: 'Accounts allowed to mint tokens',
-      href: daoAdminRoute(routeId, '/owner'),
-      access: access(isAdmin, canProposeAdminActions)
-    },
-    {
-      key: 'auction',
-      title: 'Auction',
-      meta: 'Pause, pricing and timing',
-      href: daoAdminRoute(routeId, '/auction'),
-      access: access(isAdmin, canProposeAuction)
-    },
-    {
-      key: 'upgrades',
-      title: 'Contract upgrades',
-      meta: 'Review and propose upgrades',
-      href: daoAdminRoute(routeId, '/upgrades'),
-      access: 'open'
-    },
-    {
-      key: 'renewal',
-      title: 'Storage renewal',
-      meta: 'When data expires, and renewing it in one go',
-      href: daoAdminRoute(routeId, '/renewal'),
-      access: 'open'
-    }
-  ];
+  // Who can change each section; anything not listed is open to read and act on.
+  const accessFor: Partial<Record<string, Access>> = {
+    profile: access(isAdmin, canProposeAdminActions),
+    token: access(hasMintAccess, canProposeMint),
+    governance: access(hasGovernanceAccess, canProposeGovernance),
+    owner: access(isAdmin, canProposeAdminActions),
+    auction: access(isAdmin, canProposeAuction)
+  };
+  const sections = manageGroups({
+    auction: Boolean(config.auctionContractId),
+    marketplace: Boolean(config.marketplaceContractId),
+    claims: Boolean(config.claimsContractId)
+  })
+    .flatMap((group) => group.items)
+    .filter((section) => section.key !== 'overview');
 
   return (
     <PageSection
@@ -178,18 +126,18 @@ export default function AdminPage() {
           {sections.map((section) => (
             <ListRow
               key={section.key}
-              href={section.href}
-              title={section.title}
+              href={daoAdminRoute(routeId, section.section)}
+              title={section.label}
               meta={section.meta}
               trailing={
                 config.status === 'pending' ? (
-                  REQUIRED_FOR_LAUNCH.has(section.key) ? (
+                  section.requiredForLaunch ? (
                     <Chip tone="warning">Required for launch</Chip>
                   ) : (
                     <Chip>Optional before launch</Chip>
                   )
                 ) : (
-                  <AccessChip access={section.access} />
+                  <AccessChip access={accessFor[section.key] ?? 'open'} />
                 )
               }
             />
