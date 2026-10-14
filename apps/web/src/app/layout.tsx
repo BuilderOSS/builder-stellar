@@ -33,7 +33,9 @@ export const metadata: Metadata = {
     description: 'Your people. Your rules. Your treasury.',
     siteName: SITE_NAME,
     type: 'website'
-  }
+  },
+  // X reads og:image and og:title; this asks for the large card.
+  twitter: { card: 'summary_large_image' }
 };
 
 export const viewport: Viewport = {

@@ -1,12 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-// next/og draws outside the page and can't read Panda tokens, so the brand colours live here.
-// They mirror the Brand and Logo section of DESIGN.md.
-/* eslint-disable no-restricted-syntax */
-const PAPER = '#F3EDE5';
-const BRASS = '#D9A35A';
-const DUSK = ['#10213F', '#143F86', '#2F6FD1'] as const;
-/* eslint-enable no-restricted-syntax */
+import { BRASS, DUSK, PAPER } from '@/lib/brand-colors';
 
 /**
  * The Dusk tile: the app icon. The gradient lives on the tile only; the glyph stays flat in
