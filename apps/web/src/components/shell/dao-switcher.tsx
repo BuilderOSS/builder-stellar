@@ -4,9 +4,8 @@ import { Check, ChevronDown, Compass, House } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { Button, ButtonLink, Chip, Crest, EmptyState, ListRow, Sheet, Skeleton } from '@/components/ui';
+import { Button, ButtonLink, Crest, EmptyState, ListRow, Sheet, Skeleton } from '@/components/ui';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
-import { useHomeDao } from '@/hooks/use-home-dao';
 import { daoRoute, daoRouteId } from '@/lib/dao-routes';
 import { type DashboardDao, useDashboardData } from '@/lib/goldsky-queries';
 
@@ -65,10 +64,7 @@ export function DaoSwitcher({
   useCloseOnNavigate(() => setOpen(false));
   const wallet = useWalletSession();
   const { data, isLoading, error } = useDashboardData(wallet.isAuthenticated ? wallet.address : '');
-  const { home } = useHomeDao();
-  const myDaos = [...(data?.myDaos ?? [])].sort((a, b) =>
-    a.dao_id === home?.id ? -1 : b.dao_id === home?.id ? 1 : daoName(a).localeCompare(daoName(b))
-  );
+  const myDaos = [...(data?.myDaos ?? [])].sort((a, b) => daoName(a).localeCompare(daoName(b)));
   const currentIsMine = myDaos.some((dao) => dao.dao_id === current.id);
 
   return (
@@ -134,13 +130,7 @@ export function DaoSwitcher({
                     media={<Crest name={daoName(dao)} seed={dao.dao_id} src={dao.image} />}
                     title={daoName(dao)}
                     meta={dao.status === 'pending' ? 'In setup' : dao.token_symbol || undefined}
-                    trailing={
-                      isCurrent ? (
-                        <Check aria-label="Current tribe" />
-                      ) : dao.dao_id === home?.id ? (
-                        <Chip tone="yours">Home</Chip>
-                      ) : undefined
-                    }
+                    trailing={isCurrent ? <Check aria-label="Current tribe" /> : undefined}
                   />
                 );
               })}

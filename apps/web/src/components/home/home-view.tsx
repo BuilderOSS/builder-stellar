@@ -11,7 +11,6 @@ import { WhatsATribe } from '@/components/help/whats-a-tribe';
 import { BuilderDaoCredit } from '@/components/shell/brand-mark';
 import { useWalletSession } from '@/components/shell/wallet-session';
 import { Button, ButtonLink, Callout, EmptyState, Section, Skeleton } from '@/components/ui';
-import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoConfig } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { useDashboardData } from '@/lib/goldsky-queries';
@@ -225,7 +224,6 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
 
 function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: DaoConfig[] }) {
   const wallet = useWalletSession();
-  const { home } = useHomeDao();
   const { data, error, isLoading } = useDashboardData(wallet.address);
   const mine: CommunitySummary[] = (data?.myDaos ?? []).map((dao) => {
     const full = daos.find((item) => item.dao_id === dao.dao_id);
@@ -239,9 +237,8 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
           image: dao.image,
           status: dao.status
         };
-    return { ...summary, yours: dao.dao_id === home?.id ? 'Home' : 'Member' };
+    return { ...summary, yours: 'Member' };
   });
-  mine.sort((a, b) => (a.yours === 'Home' ? -1 : b.yours === 'Home' ? 1 : 0));
   const setup = pendingDaos.map((dao) => toCommunitySummary(dao, 'Launch admin'));
   const [showAllActivity, setShowAllActivity] = useState(false);
   // Buy again first: open auctions and listings where you're already a member,

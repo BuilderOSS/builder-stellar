@@ -40,7 +40,7 @@ Every page shares as a 1200×630 card on the Dusk gradient, drawn with `next/og`
 
 ## Current flows
 
-`/create` is one long form with sections: identity, membership, governance, then review. Artwork and founder minting belong to Setup after creation. The local workspace supports multiple drafts, duplication, resumption and guarded deletion. Home tribe is a browser preference scoped to network, deployment and wallet, not an on-chain role. Marketplace favorites are private browser preferences, not public tags.
+`/create` is one long form with sections: identity, membership, governance, then review. Artwork and founder minting belong to Setup after creation. The local workspace supports multiple drafts, duplication, resumption and guarded deletion. Marketplace favorites are private browser preferences, not public tags.
 
 Marketplace discovery, sale views, approval and escrow selling, purchase, cancellation, expiry recovery and governance preparation are implemented. Proposal detail distinguishes chain state, indexed fallback, successful execution and receipt availability. Read [web behavior](../apps/web/README.md) for boundaries.
 
