@@ -27,8 +27,12 @@ export type OpenPoolDraft = {
 };
 export type PoolIdDraft = { poolId: string };
 
-function ErrorText({ message }: { message?: string }) {
-  return message ? <FieldHelperText tone="error">{message}</FieldHelperText> : null;
+function ErrorText({ message, id }: { message?: string; id?: string }) {
+  return message ? (
+    <FieldHelperText tone="error" id={id}>
+      {message}
+    </FieldHelperText>
+  ) : null;
 }
 
 export function AuthorityActionForm({
@@ -123,11 +127,13 @@ export function ResaleFeeForm({ value, onChange, disabled, validationErrors }: A
         inputMode="decimal"
         placeholder="2.5"
         disabled={disabled}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? 'resale-fee-error' : 'resale-fee-hint'}
       />
       {error ? (
-        <ErrorText message={error} />
+        <ErrorText message={error} id="resale-fee-error" />
       ) : (
-        <FieldHelperText>
+        <FieldHelperText id="resale-fee-hint">
           Sellers pay this share of each resale to the treasury, up to {feePercentText(MAX_MARKETPLACE_FEE_BPS)}%. Open
           listings keep the fee they were listed with.
         </FieldHelperText>
@@ -212,6 +218,8 @@ function MarketAssetSelect({
         value={assets.some((asset) => asset.contractId === value) ? value : ''}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? `${id}-error` : `${id}-hint`}
       >
         <option value="">Choose {codes}</option>
         {assets.map((asset) => (
@@ -221,9 +229,9 @@ function MarketAssetSelect({
         ))}
       </Select>
       {error ? (
-        <ErrorText message={error} />
+        <ErrorText message={error} id={`${id}-error`} />
       ) : (
-        <FieldHelperText>
+        <FieldHelperText id={`${id}-hint`}>
           Buyers pay from their wallets in {codes}, the only assets the market takes, {consequence}
         </FieldHelperText>
       )}
