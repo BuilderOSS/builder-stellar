@@ -6,12 +6,35 @@ import { css } from 'styled-system/css';
 
 import { Button, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useDeadlineClock } from '@/hooks/use-deadline-clock';
 import { driveLinkReleasable, releaseSlugFailure } from '@/lib/launch-drive';
 import { releaseDriveSlug } from '@/lib/release-slug';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const LABEL = 'Free the link';
+
+type Feedback = Pick<ReturnType<typeof useTransactionFeedback>, 'start' | 'success' | 'fail'>;
+
+/**
+ * Free the link and report it. A link someone else freed first (7128) is the outcome we wanted, so it
+ * counts as done: a success toast and `done()`, not an error. Every other failure stays an error.
+ */
+export async function freeDriveLink(release: () => Promise<string>, tx: Feedback, done: () => void) {
+  try {
+    tx.start(LABEL);
+    tx.success('The link is free again', await release());
+    done();
+  } catch (error) {
+    const failure = releaseSlugFailure(error);
+    if (!failure.freed) {
+      tx.fail(failure.error, failure.title, 'manager');
+      return;
+    }
+    tx.success(failure.title, '', failure.error instanceof Error ? failure.error.message : undefined);
+    done();
+  }
+}
 
 /**
  * After a launch drive fails, its tribe keeps the link it reserved until someone frees it. Anyone can,
@@ -23,7 +46,8 @@ export function ReleaseSlug({ disabled = false }: { disabled?: boolean }) {
   const session = useAuthSessionStore();
   const router = useRouter();
   const tx = useTransactionFeedback(config.name);
-  const [now] = useState(() => Date.now() / 1000);
+  // Re-read when the deadline passes, so a page left open offers this without a reload.
+  const now = useDeadlineClock(config.assuranceDeadline ?? null);
   const [busy, setBusy] = useState(false);
   const [freed, setFreed] = useState(false);
   const lock = useRef(false);
@@ -40,14 +64,14 @@ export function ReleaseSlug({ disabled = false }: { disabled?: boolean }) {
     lock.current = true;
     setBusy(true);
     try {
-      tx.start(LABEL);
-      tx.success('The link is free again', await releaseDriveSlug(config, address));
-      setFreed(true);
-      router.refresh();
-    } catch (error) {
-      const failure = releaseSlugFailure(error);
-      tx.fail(failure.error, failure.title, 'manager');
-      if (failure.freed) setFreed(true);
+      await freeDriveLink(
+        () => releaseDriveSlug(config, address),
+        tx,
+        () => {
+          setFreed(true);
+          router.refresh();
+        }
+      );
     } finally {
       lock.current = false;
       setBusy(false);
