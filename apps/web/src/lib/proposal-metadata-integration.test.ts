@@ -36,6 +36,7 @@ const config: DaoNetworkConfig = {
   claimsContractId: contract(7),
   tokenSettings: { transfersLocked: false, membersOnlyDelegation: false, daoRecovery: false },
   assuranceOutcome: null,
+  assuranceDeadline: null,
   label: '',
   tokenName: '',
   tokenSymbol: '',
@@ -191,7 +192,9 @@ describe('Metadata and module upgrade registry integration', () => {
     expect(proposalCallId(vectors.targets, vectors.functions, encoded, hash)).not.toBe(
       proposalCallId(vectors.targets, vectors.functions, [...encoded].reverse(), hash)
     );
-    expect(getProposalActionSummary(actions[0]!)).toContain('1 ordered items');
+    expect(getProposalActionSummary(actions[0]!)).toBe(
+      'Add 1 new layer and 1 image to the artwork (ipfs://collection)'
+    );
   });
 
   it('rejects unsafe nested integers, malformed structs and bools, obsolete argument lists, and unknown targets', () => {

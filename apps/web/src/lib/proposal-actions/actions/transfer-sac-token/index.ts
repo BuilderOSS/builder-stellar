@@ -12,8 +12,8 @@ import { validateTransferSacToken } from './validator';
 
 export const transferSacTokenHandler: ActionHandler<TransferSacTokenData> = {
   type: 'transfer-sac-token',
-  label: 'Transfer SAC Token',
-  description: 'Transfer tokens from the treasury to a recipient',
+  label: 'Send treasury funds',
+  description: 'Send XLM or another asset from the treasury to a wallet',
   order: 3,
   group: 'Treasury',
 

@@ -2,6 +2,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
 import type { UpgradeModule } from '@/lib/admin-module-versions';
+import { artworkAdditionTitle } from '@/lib/contract-call-labels';
 import { parseProfile } from '@/lib/dao-profile';
 import { moduleLabelInSentence } from '@/lib/module-updates';
 import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
@@ -95,7 +96,7 @@ export function inspectProposalAdminCall(
     const items = scValToNative(encoded[1]!) as { name: string; property_id: number; is_new_property: boolean }[];
     const group = scValToNative(encoded[2]!) as { base_uri: string; extension: string };
     return {
-      title: `Append artwork: ${names.length} new properties, ${items.length} ordered items`,
+      title: artworkAdditionTitle(names.length, items.length),
       risk: 'High risk: changes collection artwork. Calls allocate property/IPFS reference slots in order. New-property IDs refer to this call’s names; other IDs refer to existing properties. Authority is Metadata’s own admin (the Treasury after launch).',
       fields: [
         { label: 'New property names (ordered)', value: JSON.stringify(names) },

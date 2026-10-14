@@ -7,6 +7,9 @@ import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { Callout, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
+import { feePercentText } from '@/lib/marketplace/amount';
+import { marketplaceAssetCodes, marketplaceAssets } from '@/lib/marketplace/readiness';
 import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
@@ -24,8 +27,12 @@ export type OpenPoolDraft = {
 };
 export type PoolIdDraft = { poolId: string };
 
-function ErrorText({ message }: { message?: string }) {
-  return message ? <FieldHelperText tone="error">{message}</FieldHelperText> : null;
+function ErrorText({ message, id }: { message?: string; id?: string }) {
+  return message ? (
+    <FieldHelperText tone="error" id={id}>
+      {message}
+    </FieldHelperText>
+  ) : null;
 }
 
 export function AuthorityActionForm({
@@ -80,8 +87,10 @@ export function AdminValueForm({
   onChange,
   disabled,
   validationErrors,
-  draftPreview
-}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction }) {
+  draftPreview,
+  hint
+}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction; hint?: string }) {
+  const error = validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined;
   return (
     <Stack gap="2">
       {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
@@ -93,7 +102,42 @@ export function AdminValueForm({
         inputMode="numeric"
         disabled={disabled}
       />
-      <ErrorText message={validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined} />
+      {error ? <ErrorText message={error} /> : hint ? <FieldHelperText>{hint}</FieldHelperText> : null}
+    </Stack>
+  );
+}
+
+/** AdminValueForm with a unit hint ("In seconds."), for setting actions whose value has a unit. */
+export function adminValueFormWithHint(hint: string) {
+  return function AdminValueFormWithHint(props: ActionFormProps<AdminValueDraft>) {
+    return <AdminValueForm {...props} hint={hint} />;
+  };
+}
+
+/** The market shows its resale fee as a percent, so the form takes one; the proposal stores basis points. */
+export function ResaleFeeForm({ value, onChange, disabled, validationErrors }: ActionFormProps<AdminValueDraft>) {
+  const error = validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined;
+  return (
+    <Stack gap="2">
+      <FieldLabel htmlFor="resale-fee">Resale fee (%)</FieldLabel>
+      <Input
+        id="resale-fee"
+        value={value.value}
+        onChange={(event) => onChange({ value: event.target.value })}
+        inputMode="decimal"
+        placeholder="2.5"
+        disabled={disabled}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? 'resale-fee-error' : 'resale-fee-hint'}
+      />
+      {error ? (
+        <ErrorText message={error} id="resale-fee-error" />
+      ) : (
+        <FieldHelperText id="resale-fee-hint">
+          Sellers pay this share of each resale to the treasury, up to {feePercentText(MAX_MARKETPLACE_FEE_BPS)}%. Open
+          listings keep the fee they were listed with.
+        </FieldHelperText>
+      )}
     </Stack>
   );
 }
@@ -142,6 +186,81 @@ export function AdminPaymentTokenForm({
   );
 }
 
+/**
+ * The market's own assets (XLM or USDC for the network): buyers can only pay in those, so a price
+ * in anything else could never be paid. A value outside the list (an older draft) shows as unchosen.
+ */
+function MarketAssetSelect({
+  id,
+  network,
+  value,
+  onChange,
+  disabled,
+  error,
+  consequence
+}: {
+  id: string;
+  network: NonNullable<ActionFormProps<unknown>['network']>;
+  value: string;
+  onChange: (contractId: string) => void;
+  disabled: boolean;
+  error?: string;
+  /** Ends the helper sentence: what happens with any other asset. */
+  consequence: string;
+}) {
+  const assets = marketplaceAssets(network);
+  const codes = marketplaceAssetCodes(network);
+  return (
+    <>
+      <FieldLabel htmlFor={id}>Buyers pay in</FieldLabel>
+      <Select
+        id={id}
+        value={assets.some((asset) => asset.contractId === value) ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? `${id}-error` : `${id}-hint`}
+      >
+        <option value="">Choose {codes}</option>
+        {assets.map((asset) => (
+          <option key={asset.contractId} value={asset.contractId}>
+            {asset.code} · {asset.name}
+          </option>
+        ))}
+      </Select>
+      {error ? (
+        <ErrorText message={error} id={`${id}-error`} />
+      ) : (
+        <FieldHelperText id={`${id}-hint`}>
+          Buyers pay from their wallets in {codes}, the only assets the market takes, {consequence}
+        </FieldHelperText>
+      )}
+    </>
+  );
+}
+
+export function MarketPaymentAssetForm({
+  value,
+  onChange,
+  disabled,
+  validationErrors,
+  network = getConfiguredAuctionNetwork()
+}: ActionFormProps<AdminPaymentTokenDraft>) {
+  return (
+    <Stack gap="2">
+      <MarketAssetSelect
+        id="market-payment-asset"
+        network={network}
+        value={value.paymentToken}
+        onChange={(paymentToken) => onChange({ paymentToken })}
+        disabled={disabled}
+        error={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
+        consequence="so new listings can only be priced in one of them. Open listings keep the asset they were listed in."
+      />
+    </Stack>
+  );
+}
+
 export function OpenPoolForm({
   value,
   onChange,
@@ -163,13 +282,14 @@ export function OpenPoolForm({
         disabled={disabled}
       />
       <ErrorText message={fields?.price} />
-      <AuctionPaymentTokenSelect
+      <MarketAssetSelect
+        id="pool-asset"
         network={network}
         value={value.asset}
         onChange={(asset) => set({ asset })}
-        error={fields?.asset}
         disabled={disabled}
-        id="pool-asset"
+        error={fields?.asset}
+        consequence="so a pool priced in anything else could never sell."
       />
       <FieldLabel htmlFor="pool-size">Tokens in the pool</FieldLabel>
       <Input

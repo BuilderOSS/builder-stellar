@@ -37,6 +37,7 @@ import { paymentAssetCode } from '@/lib/assets-config';
 import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
+import { launchDriveState } from '@/lib/launch-drive';
 import { ProposalState } from '@/lib/proposal-state';
 import { useTokenInventory } from '@/lib/token-queries';
 
@@ -144,10 +145,11 @@ export default function Page() {
   }
 
   // A launch drive is how people join before launch, so visitors see it too, not only the launch admin.
-  const launchDrive =
-    config.assuranceOutcome === 'open' || config.assuranceOutcome === 'released' ? (
-      <LaunchDriveCallout ended={config.assuranceOutcome === 'released'} href={daoRoute(routeId, 'claims')} />
-    ) : null;
+  // The deadline decides when it ended, as on the setup page; the slug may be released much later.
+  const driveState = launchDriveState(config, now);
+  const launchDrive = driveState ? (
+    <LaunchDriveCallout ended={driveState === 'ended'} href={daoRoute(routeId, 'claims')} />
+  ) : null;
 
   if (config.status === 'pending' && !isLaunchAdmin) {
     return (

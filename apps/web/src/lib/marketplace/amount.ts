@@ -33,6 +33,20 @@ export function marketplaceFee(price: string, feeBps: number): bigint {
   return intermediate / 10_000n;
 }
 
+/** "2.5" (a percent, at most two decimals) -> 250 bps; null outside 0..MAX_MARKETPLACE_FEE_BPS. */
+export function feeBpsFromPercent(input: string): number | null {
+  const text = input.trim();
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(text)) return null;
+  const [whole, fraction = ''] = text.split('.');
+  const bps = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  return bps <= MAX_MARKETPLACE_FEE_BPS ? bps : null;
+}
+
+/** 250 bps -> "2.5", the percent the market shows. */
+export function feePercentText(bps: number): string {
+  return String(bps / 100);
+}
+
 /** A pool id or a token id: both are u32 on chain. */
 export function marketplaceId(value: string, kind: 'pool' | 'secondary'): bigint {
   void kind;

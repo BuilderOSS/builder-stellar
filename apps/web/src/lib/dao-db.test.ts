@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db = vi.hoisted(() => ({
   claimed: null as { daoId: string } | null,
   previous: null as { daoId: string } | null,
-  requested: [] as Array<{ daoId: string }>
+  requested: [] as Array<{ daoId: string }>,
+  drive: null as { deadline: { toString(): string } } | null
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -12,11 +13,12 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: vi.fn(async () => db.claimed),
       findMany: vi.fn(async () => db.requested)
     },
-    managerDaoPreviousSlug: { findFirst: vi.fn(async () => db.previous) }
+    managerDaoPreviousSlug: { findFirst: vi.fn(async () => db.previous) },
+    managerAssuranceDrive: { findFirst: vi.fn(async () => db.drive) }
   }
 }));
 
-import { resolveDaoId } from './dao-db';
+import { getAssuranceDeadlineFromDatabase, resolveDaoId } from './dao-db';
 
 describe('resolveDaoId', () => {
   beforeEach(() => {
@@ -47,5 +49,21 @@ describe('resolveDaoId', () => {
     await expect(resolveDaoId('night-walkers')).resolves.toBe('CPENDING');
     db.requested = [{ daoId: 'C1' }, { daoId: 'C2' }];
     await expect(resolveDaoId('night-walkers')).rejects.toThrow(/DAO not found/);
+  });
+});
+
+describe('getAssuranceDeadlineFromDatabase', () => {
+  beforeEach(() => {
+    db.drive = null;
+  });
+
+  it('reads the indexed drive deadline as unix seconds', async () => {
+    // Prisma returns the numeric column as a Decimal.
+    db.drive = { deadline: { toString: () => '1900000000' } };
+    await expect(getAssuranceDeadlineFromDatabase('CDAO')).resolves.toBe(1_900_000_000);
+  });
+
+  it('is null for a DAO that never opened a drive', async () => {
+    await expect(getAssuranceDeadlineFromDatabase('CDAO')).resolves.toBeNull();
   });
 });

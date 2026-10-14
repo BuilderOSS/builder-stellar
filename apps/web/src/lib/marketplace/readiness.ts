@@ -7,15 +7,25 @@ import { parseMarketplaceAmount } from './amount';
 import { MarketplaceError } from './query';
 import type { MarketplaceAccountReadiness } from './types';
 
-export function marketplaceAsset(network: NetworkName, contractId: string): TreasuryAsset | undefined {
+/** The assets the market can take payment in on this network: its 7-decimal XLM and USDC. */
+export function marketplaceAssets(network: NetworkName): TreasuryAsset[] {
   // Local asset ids must be derived for the actual passphrase, not the shared testnet placeholder.
   if (network === 'local') {
     const id = Asset.native().contractId('Standalone Network ; February 2017');
-    return contractId === id
-      ? { code: 'XLM', name: 'Lumens', imageSrc: '/assets/XLM.png', isNative: true, contractId: id }
-      : undefined;
+    return [{ code: 'XLM', name: 'Lumens', imageSrc: '/assets/XLM.png', isNative: true, contractId: id }];
   }
-  return getTreasuryAssets(network).find((a) => a.contractId === contractId && ['XLM', 'USDC'].includes(a.code));
+  return getTreasuryAssets(network).filter((a) => a.contractId && ['XLM', 'USDC'].includes(a.code));
+}
+
+/** "XLM or USDC": the assets the market takes, for copy. */
+export function marketplaceAssetCodes(network: NetworkName) {
+  return marketplaceAssets(network)
+    .map((asset) => asset.code)
+    .join(' or ');
+}
+
+export function marketplaceAsset(network: NetworkName, contractId: string): TreasuryAsset | undefined {
+  return marketplaceAssets(network).find((a) => a.contractId === contractId);
 }
 
 export type ReadinessAccount = {

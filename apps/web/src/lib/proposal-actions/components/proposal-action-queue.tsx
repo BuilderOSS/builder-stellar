@@ -82,7 +82,7 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
     setConfirmDialog({
       open: true,
       title: 'Remove action?',
-      message: `This ${actionLabel} action comes out of the proposal.`,
+      message: `“${actionLabel}” comes out of the proposal.`,
       confirmLabel: 'Remove',
       onConfirm: () => {
         removeAction(address, daoId, index);

@@ -2,8 +2,9 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
-import { mintTitle } from '@/lib/contract-call-labels';
+import { artworkAdditionTitle, mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
+import { formatDuration } from '@/lib/duration';
 import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
@@ -149,57 +150,9 @@ export function buildMintProposalCall(
   };
 }
 
+/** The action's name in the picker, composer queue and draft previews: its handler's label. */
 export function getProposalActionLabel(type: ProposalActionType) {
-  const labels: Partial<Record<ProposalActionType, string>> = {
-    'change-mint-allowance': 'Change Mint Allowance',
-    'set-transfers-locked': 'Lock Memberships',
-    'set-members-only-delegation': 'Members-only Delegation',
-    'set-dao-recovery': 'DAO Recovery',
-    'set-transfer-agent': 'Change Transfer Agent',
-    'dao-transfer': 'Recover a Membership',
-    'approved-transfer': 'Approve a Membership Transfer',
-    'set-voting-delay': 'Set Voting Delay',
-    'set-voting-period': 'Set Voting Period',
-    'set-queue-delay': 'Set Queue Delay',
-    'set-proposal-threshold': 'Set Proposal Threshold',
-    'set-quorum-bps': 'Set Quorum',
-    'pause-auction': 'Pause Auction',
-    'unpause-auction': 'Resume Auction',
-    'set-auction-duration': 'Set Auction Duration',
-    'set-auction-time-buffer': 'Set Auction Time Buffer',
-    'set-auction-reserve-price': 'Set Auction Reserve Price',
-    'set-auction-payment-token': 'Set Auction Payment Token',
-    'set-auction-min-bid-increment': 'Set Auction Minimum Bid Increment',
-    'cancel-auction': 'Cancel Paused Auction',
-    'set-marketplace-payment-token': 'Set Marketplace Payment Asset',
-    'set-marketplace-secondary-fee': 'Set Marketplace Secondary Fee',
-    'pause-marketplace': 'Pause Marketplace',
-    'unpause-marketplace': 'Resume Marketplace',
-    'open-pool': 'Open Quick-buy Pool',
-    'close-pool': 'Close Pool',
-    'sweep-pool': 'Sweep Closed Pool',
-    'add-artwork-properties': 'Append Artwork Properties and Items',
-    'set-artwork-renderer': 'Update Artwork Renderer',
-    'update-dao-profile': 'Update Tribe Profile',
-    'set-token-metadata': 'Rename Tribe',
-    'transfer-dao-token': 'Give Treasury Token',
-    'change-dao-slug': 'Change Tribe Link',
-    'upgrade-dao-module': 'Upgrade DAO Module',
-    'migrate-dao-module': 'Migrate Module Storage',
-    'regenerate-token-traits': 'Seed Token Traits',
-    'treasury-authorize': 'Authorize Next Action (Treasury)',
-    'treasury-buy-listing': 'Treasury Buys Listing',
-    'open-claim-list': 'Open a Claim List'
-  };
-
-  if (labels[type]) return labels[type]!;
-  if (type === 'batch-mint-governance-token') {
-    return 'Mint membership tokens';
-  }
-  if (type === 'transfer-sac-token') {
-    return 'Transfer SAC Token';
-  }
-  return 'Mint a membership token';
+  return getActionHandler(type).label;
 }
 
 function moduleLabel(module: unknown) {
@@ -213,6 +166,18 @@ function profileSummary(raw: string) {
   if (profile.links.length) parts.push(`${profile.links.length} ${profile.links.length === 1 ? 'link' : 'links'}`);
   if (profile.image) parts.push('an image');
   return parts.join(', ');
+}
+
+/** "1 day 2 hours" for a whole number of seconds; anything else as typed. */
+function seconds(value: unknown) {
+  const text = String(value ?? '');
+  return /^\d+$/.test(text) ? formatDuration(Number(text), { style: 'long', maxUnits: 4 }) : `${text} seconds`;
+}
+
+/** "12.5%" for basis points; anything else as typed. */
+function percentFromBps(value: unknown) {
+  const text = String(value ?? '');
+  return /^\d+$/.test(text) ? `${Number(text) / 100}%` : `${text} bps`;
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
@@ -240,7 +205,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'approved-transfer')
     return `Move token #${action.tokenId} from ${action.from} to ${action.to || action.recipient} with the member’s approval`;
   if (action.type === 'add-artwork-properties')
-    return `${getProposalActionLabel(action.type)}: ${Array.isArray(action.names) ? action.names.length : 0} new properties, ${Array.isArray(action.items) ? action.items.length : 0} ordered items (${action.ipfsGroup?.base_uri ?? 'IPFS reference unavailable'})`;
+    return `${artworkAdditionTitle(Array.isArray(action.names) ? action.names.length : 0, Array.isArray(action.items) ? action.items.length : 0)} (${action.ipfsGroup?.base_uri ?? 'IPFS directory unavailable'})`;
   if (action.type === 'upgrade-dao-module')
     return `Upgrade ${moduleLabel(action.module)} from release ${action.fromHash} to ${action.toHash}`;
   if (action.type === 'migrate-dao-module')
@@ -249,19 +214,18 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'treasury-authorize')
     return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
   if (action.type === 'treasury-buy-listing')
-    return `Treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
+    return `The treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
   if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
   if (action.type === 'update-dao-profile')
     return `Replace the tribe profile (revision ${action.expectedSeq}) with: ${profileSummary(String(action.profile ?? ''))}`;
-  if (
-    action.type === 'set-voting-delay' ||
-    action.type === 'set-voting-period' ||
-    action.type === 'set-queue-delay' ||
-    action.type === 'set-proposal-threshold' ||
-    action.type === 'set-quorum-bps'
-  ) {
-    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}`;
+  if (action.type === 'set-voting-delay' || action.type === 'set-voting-period' || action.type === 'set-queue-delay')
+    return `${getProposalActionLabel(action.type)} to ${seconds(action.value || action.amount)}`;
+  if (action.type === 'set-proposal-threshold') {
+    const votes = String(action.value || action.amount);
+    return `Require ${votes} ${votes === '1' ? 'vote' : 'votes'} to make a proposal`;
   }
+  if (action.type === 'set-quorum-bps' || action.type === 'set-marketplace-secondary-fee')
+    return `${getProposalActionLabel(action.type)} to ${percentFromBps(action.value || action.amount)}`;
   if (
     action.type === 'pause-auction' ||
     action.type === 'unpause-auction' ||
@@ -274,20 +238,19 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-auction-reserve-price') {
     return `${getProposalActionLabel(action.type)} to ${action.reservePrice || action.amount}`;
   }
-  if (action.type === 'set-auction-duration' || action.type === 'set-auction-time-buffer') {
-    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} seconds`;
-  }
+  if (action.type === 'set-auction-duration')
+    return `${getProposalActionLabel(action.type)} to ${seconds(action.value || action.amount)}`;
+  // "Change how much time a late bid adds to 5 minutes" reads two ways.
+  if (action.type === 'set-auction-time-buffer') return `Make a late bid add ${seconds(action.value || action.amount)}`;
   if (action.type === 'set-auction-payment-token' || action.type === 'set-marketplace-payment-token') {
     return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
   }
-  if (action.type === 'set-marketplace-secondary-fee')
-    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} bps`;
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
   if (action.type === 'open-pool')
     return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${action.expiresAt}`;
-  if (action.type === 'close-pool' || action.type === 'sweep-pool')
-    return `${getProposalActionLabel(action.type)} #${action.poolId}`;
+  if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
+  if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {
     return /^\d+$/.test(String(action.amount))
       ? mintTitle([{ recipient: action.recipient, amount: BigInt(action.amount) }])
@@ -295,7 +258,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   }
   if (action.type === 'mint-governance-token') return mintTitle([{ recipient: action.recipient, amount: 1n }]);
   if (action.type === 'transfer-sac-token') {
-    return `Transfer ${action.amount} ${action.assetCode || 'tokens'} to ${action.recipient}`;
+    return `Send ${action.amount} ${action.assetCode || 'tokens'} to ${action.recipient}`;
   }
   return `${getProposalActionLabel(action.type)} to ${action.recipient}`;
 }
