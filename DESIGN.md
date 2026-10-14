@@ -1,6 +1,6 @@
 ---
 # gstack: design-md-format=spec
-name: Tribes Builder
+name: Tribe Builder
 description: A cozy, lamplit clubhouse for tribes that own things together. Warm neutrals, one confident blue, brass for what's yours.
 colors:
   # Dark is the hero theme. Light values are in the Colors table below.
@@ -74,27 +74,27 @@ components:
     textColor: "{colors.signal}"
 ---
 
-# Tribes Builder
+# Tribe Builder
 
 ## Overview
 
 **Creative North Star:** Warm Ink · Dusk. A lamplit clubhouse: warm charcoal and paper, one confident blue for "act here", brass for "this is yours". Each tribe's art and people carry the personality; chrome stays quiet.
 
-**Product context:** Tribes Builder (tribes.build) lets people discover, build and run tribes: NFT-membership DAOs on Stellar with auctions, proposals, a treasury, a marketplace and claims. Members come first, founders and admins second. Many users are new to wallets and DAOs; crypto natives who know Nouns are the second audience.
+**Product context:** Tribe Builder (tribes.build) lets people discover, build and run tribes: NFT-membership DAOs on Stellar with auctions, proposals, a treasury, a marketplace and claims. Members come first, founders and admins second. Many users are new to wallets and DAOs; crypto natives who know Nouns are the second audience.
 
 **Mode per surface:** Operate on every app screen. Persuade on the signed-out Home hero only.
 
 **Memorable thing:** "Build a tribe." Your people, your rules, your treasury. Every screen shows whose it is and what you can do in it.
 
-**Lineage:** Tribes Builder is built on Nouns Builder. Give it a subtle nod (the Nouns lens is the table in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme.
+**Lineage:** Tribe Builder is built on Nouns Builder. Give it a subtle nod (the Nouns lens is the table in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme.
 
 **Reference:** `docs/design/builder-dusk-preview.html` renders the system on real screens in both themes.
 
 ## Brand and Logo
 
-**Name:** Tribes Builder, at tribes.build. Use the full name in titles and search metadata; never "Builder" or "Tribes" alone (the home-screen label, the manifest `short_name`, is the one exception). "Built by Builder DAO" credits Builder DAO, not the product.
+**Name:** Tribe Builder, singular, at tribes.build. Use the full name in titles and search metadata; never "Builder" or "Tribe" alone (the home-screen label "Tribe", the manifest `short_name`, is the one exception). The plural "tribes" names groups, never the product; the code reads it from `SITE_NAME` in `lib/site.ts`. "Built by Builder DAO" credits Builder DAO, not the product.
 
-**Wordmark:** "Tribes" in Bricolage Grotesque 700 with "Builder" at 500 in `ink.muted` (`BrandWordmark`). The lockup is the mark plus the wordmark (`BrandLockup`).
+**Wordmark:** "Tribe" in Bricolage Grotesque 700 with "Builder" at 500 in `ink.muted` (`BrandWordmark`). The lockup is the mark plus the wordmark (`BrandLockup`).
 
 **The mark, "the lens is the table":** three round heads sit around a single Nouns lens, and the seat nearest the viewer is empty, saved for you. When you join, the seat fills in brass. Newcomers see people at a table; Nouns folks see the lens.
 
@@ -119,7 +119,7 @@ Construction, on a 32-unit grid (viewBox `0 0 32 32`):
 |---|---|---|---|
 | Mark | #0068D6 | #0085FF | `signal` |
 | Joined seat | #9A6A22 | #D9A35A | `brass` |
-| "Tribes" | #221E19 | #F3EDE5 | `ink` |
+| "Tribe" | #221E19 | #F3EDE5 | `ink` |
 | "Builder" | #5E564C | #B3ABA1 | `ink.muted` |
 | Dusk tile | #10213F, #143F86 at 60%, #2F6FD1, top to bottom | same | icon files only |
 | Glyph on the tile | #F3EDE5, seat #D9A35A | same | icon files only |
@@ -240,7 +240,7 @@ Warm, plain, specific. Say "Proposals", "Treasury", "Members", "Your membership"
 
 The voice is a warm host: plain words first, the DAO term one line beneath.
 
-- **Tribes are tribes in copy; DAO sits one line beneath.** Name a group "tribe" everywhere: Your tribes, Find a tribe, Build a tribe, Switch tribe. Crypto natives find the DAO term on a quiet line under the plain one: the home supporting line ("A DAO on Stellar: shared treasury, onchain votes, NFT membership."), the Members subtitle ("Each membership is an NFT with one vote."), the Treasury subtitle and the footer ("Tribes Builder · DAOs on Stellar · Built by Builder DAO").
+- **Tribes are tribes in copy; DAO sits one line beneath.** Name a group "tribe" everywhere: Your tribes, Find a tribe, Build a tribe, Switch tribe. Crypto natives find the DAO term on a quiet line under the plain one: the home supporting line ("A DAO on Stellar: shared treasury, onchain votes, NFT membership."), the Members subtitle ("Each membership is an NFT with one vote."), the Treasury subtitle and the footer ("Tribe Builder · DAOs on Stellar · Built by Builder DAO").
 - Savings circles are "circles", "groups" or "savers", never tribes.
 - Never call a real group of people a tribe in marketing.
 - Code identifiers (`CommunityCard`, `components/community`) keep their names; only visible copy says tribe.
@@ -265,7 +265,7 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-10 | Launch setup is its own page with real step status | /dao/[id]/setup lists required steps (artwork, founder tokens, a free link) with live done/to-do status, optional reviews, then launch with consequences and a confirm. Manage marks what launch needs and links back. Artwork lives only in Manage |
 | 2026-10-10 | Community profile in Manage; everything the DAO owns is changeable | Name, symbol, image, description and website in one place (direct in setup, one proposal after launch). Token 0.2.0 makes renames visible; treasury-held tokens can be given by vote. Artwork keeps only layers and the renderer |
 | 2026-10-12 | Dark neutrals lose some yellow; warmth stays | UX walkthrough: menus and sign-in read too yellow in Dark. Canvas, surface, raised, hover, rules and muted text keep a warm hue at about half the chroma. Light theme and blue unchanged |
-| 2026-10-14 | Renamed to Tribes Builder on tribes.build; "tribe" names a group | A plain, warm noun for people with a purpose; "Builder" alone was generic and crowded. Full name in titles and metadata. The footer keeps "Built by Builder DAO" |
+| 2026-10-14 | Renamed on tribes.build, first with a plural name; "tribe" names a group | A plain, warm noun for people with a purpose; "Builder" alone was generic and crowded. Full name in titles and metadata. The footer keeps "Built by Builder DAO" |
 | 2026-10-14 | Voice: a warm host, plain words first, the DAO term one line beneath | Newcomers lead; crypto natives still find NFT membership, onchain votes and the treasury one line down. Savings circles stay "circles" |
 | 2026-10-14 | Logo: the lens is the table | Three people around a Nouns lens, with an empty seat that turns brass when you join. Flat blue (`signal`) is the master, the Dusk tile is the app icon, no gradient on the glyph, and a dedicated 16px drawing |
 | 2026-10-14 | Brass on the Dusk tile is #D9A35A in both themes | It already stands out on deep blue, so no new token |
@@ -276,3 +276,4 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-14 | Signed-out home: one primary (Build a tribe), "How it works" in three steps, an "Under the hood" strip | A newcomer can say what a tribe is in five seconds; a Nouns builder can see it's a real DAO after one scroll. No audit or mainnet claims |
 | 2026-10-14 | Newcomer help lives in place: a "What's a tribe?" sheet, a wallet intro before the first Connect, glossary popovers | Explains wallets, signing and DAO words at the moment they come up, without a tour |
 | 2026-10-14 | Share cards for every page on the Dusk gradient, with a brand-card fallback | Links shared in WhatsApp, X and Discord show the tribe, proposal or auction; a broken data source still shows the brand |
+| 2026-10-14 | The product name is Tribe Builder, singular | Replaces the plural first name after feedback. The domain stays tribes.build, the home-screen label is "Tribe", the wordmark is "Tribe" bold with a muted "Builder", and groups are still "tribes" in copy |

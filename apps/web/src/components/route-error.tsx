@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { Button, ButtonLink, Callout, ErrorState } from '@/components/ui';
 import { canAutoReload, isChunkLoadError, reloadForChunkError } from '@/lib/chunk-reload';
+import { SITE_NAME } from '@/lib/site';
 
 /**
  * Error boundary body. A stale tab after a deploy reloads itself once;
@@ -32,7 +33,7 @@ export function RouteError({
     return (
       // Not a failure: a newer version is live. Info, not error styling.
       <Callout
-        title="Tribes Builder was updated"
+        title={`${SITE_NAME} was updated`}
         description={reloading ? 'Loading the latest version…' : 'Reload to continue with the latest version.'}
       >
         <div>

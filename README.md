@@ -1,8 +1,8 @@
-# Tribes Builder
+# Tribe Builder
 
 **Build a tribe.** Gather your people, pool what you put in, and decide together.
 
-Tribes Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder.
+Tribe Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder.
 
 ## Brand
 
@@ -15,7 +15,7 @@ Tribes Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework
 
 ## Community and support
 
-Questions, ideas and problems: join the [Tribes Builder Discord](https://discord.gg/bTygNksyRb).
+Questions, ideas and problems: join the [Tribe Builder Discord](https://discord.gg/bTygNksyRb).
 
 ## System
 

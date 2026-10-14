@@ -212,7 +212,7 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       </Section>
 
       <p className={credit}>
-        Tribes Builder · DAOs on Stellar · <BuilderDaoCredit /> ·{' '}
+        Tribe Builder · DAOs on Stellar · <BuilderDaoCredit /> ·{' '}
         <WhatsATribe trigger={<button type="button">What&apos;s a tribe?</button>} /> ·{' '}
         <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
           Discord
@@ -357,7 +357,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
   );
 }
 
-/** Tribes Builder home: a real welcome when signed out, your tribes when signed in. */
+/** Tribe Builder home: a real welcome when signed out, your tribes when signed in. */
 export function HomeView({
   daos,
   pendingDaos,

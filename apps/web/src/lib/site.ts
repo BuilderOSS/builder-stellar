@@ -1,4 +1,4 @@
-export const SITE_NAME = 'Tribes Builder';
+export const SITE_NAME = 'Tribe Builder';
 export const SITE_DESCRIPTION =
   'Gather your people, pool what you put in, and decide together. A DAO on Stellar: shared treasury, onchain votes, NFT membership.';
 export const SOURCE_URL = 'https://github.com/BuilderOSS/builder-stellar';

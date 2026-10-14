@@ -57,7 +57,7 @@ function toShellItem(item: DaoNavItem, badge?: boolean): ShellNavItem {
   return { ...item, icon: ICONS[item.key], badge };
 }
 
-/** Tribes Builder inside a tribe: Home, Vote, slot 3, Treasury, More. */
+/** Tribe Builder inside a tribe: Home, Vote, slot 3, Treasury, More. */
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { daoId, routeId, daoConfig } = useDaoContext();

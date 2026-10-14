@@ -175,7 +175,7 @@ function Card(props: ShareCardProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Mark size={48} joined={Boolean(tokens?.length)} />
           <div style={{ display: 'flex', gap: 10, fontFamily: 'Bricolage Grotesque', fontSize: 32 }}>
-            <span>Tribes</span>
+            <span>Tribe</span>
             <span style={{ color: PAPER_MUTED }}>Builder</span>
           </div>
         </div>

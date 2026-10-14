@@ -1,6 +1,6 @@
 # Documentation
 
-Tribes Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tribes in the app. These pages describe the current repository source, including the frontend working-tree update. They do not certify a live deployment, production readiness, or a passing test run.
+Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tribes in the app. These pages describe the current repository source, including the frontend working-tree update. They do not certify a live deployment, production readiness, or a passing test run.
 
 ## Start here
 

@@ -4,7 +4,7 @@ import { DiscordLink, LegalPage } from '@/components/legal/legal-page';
 
 export const metadata: Metadata = {
   title: 'Disclaimer',
-  description: 'The risks of using Tribes Builder, experimental software for tribes (DAOs) on Stellar.'
+  description: 'The risks of using Tribe Builder, experimental software for tribes (DAOs) on Stellar.'
 };
 
 export default function DisclaimerPage() {
@@ -13,7 +13,7 @@ export default function DisclaimerPage() {
       title="Disclaimer"
       summary={[
         'Nothing here is financial, legal or tax advice.',
-        'Tribes Builder is experimental, non-custodial software, and transactions can’t be undone.',
+        'Tribe Builder is experimental, non-custodial software, and transactions can’t be undone.',
         'Tribes run themselves. We don’t vet or endorse them.',
         'A membership token is for belonging and voting, not an investment.',
         'Look before you sign, and only put in what you can afford to lose.'
@@ -22,7 +22,7 @@ export default function DisclaimerPage() {
       <section>
         <h2>1. Not advice</h2>
         <p>
-          Nothing in Tribes Builder, on tribes.build or from Builder DAO is financial, investment, legal or tax advice.
+          Nothing in Tribe Builder, on tribes.build or from Builder DAO is financial, investment, legal or tax advice.
           Decisions about tokens, treasuries and tribes are yours to make. Talk to a professional when you need one.
         </p>
       </section>
@@ -30,7 +30,7 @@ export default function DisclaimerPage() {
       <section>
         <h2>2. Non-custodial, experimental software</h2>
         <p>
-          Tribes Builder is an interface to open-source contracts on Stellar. It never holds your funds or keys, so we
+          Tribe Builder is an interface to open-source contracts on Stellar. It never holds your funds or keys, so we
           can&apos;t recover them for you. It&apos;s new and still changing: today it runs on the Stellar testnet, and
           features may change or break.
         </p>

@@ -1,5 +1,7 @@
 import { Networks, TransactionBuilder } from '@stellar/stellar-sdk';
 
+import { SITE_NAME } from '@/lib/site';
+
 /**
  * Fee guard (docs/STORAGE_DIET.md § 8, D29). A fee in the hundreds of XLM means
  * the transaction is paying rent on shared contract code the platform should have
@@ -16,7 +18,7 @@ export class FeeGuardError extends Error {
   constructor(readonly fee: bigint) {
     super(
       `This action would pay about ${formatXlm(fee)} XLM in network fees, most of it to renew shared contract code. ` +
-        'Tribes Builder renews that code, so nothing was signed. Please report this to the Tribes Builder team.'
+        `${SITE_NAME} renews that code, so nothing was signed. Please report this to the ${SITE_NAME} team.`
     );
     this.name = 'FeeGuardError';
   }

@@ -10,5 +10,5 @@ export function AgentationDevToolbar() {
   if (!enabled) return null;
   // Global shortcuts are off so the toolbar never intercepts keys the app or
   // wallet dialogs use; it is driven from its own buttons instead.
-  return <Agentation endpoint="http://localhost:4747" appName="Tribes Builder" enableKeyboardShortcuts={false} />;
+  return <Agentation endpoint="http://localhost:4747" appName="Tribe Builder" enableKeyboardShortcuts={false} />;
 }

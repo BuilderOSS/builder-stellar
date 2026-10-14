@@ -6,6 +6,7 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Networks } from '@creit.tech/stellar-wallets-kit/types';
 
 import type { NetworkName } from '@/config/networks';
+import { SITE_NAME } from '@/lib/site';
 
 let initialized = false;
 
@@ -19,7 +20,7 @@ export function initializeWalletKit(network: NetworkName) {
       new WalletConnectModule({
         projectId,
         metadata: {
-          name: 'Tribes Builder',
+          name: SITE_NAME,
           description: 'Build a tribe: a DAO on Stellar with a shared treasury and onchain votes.',
           url: window.location.origin,
           icons: [`${window.location.origin}/icon.svg`]

@@ -8,7 +8,7 @@ const CANVAS_DARK = '#141311';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: SITE_NAME,
-    short_name: 'Tribes',
+    short_name: 'Tribe',
     description: SITE_DESCRIPTION,
     start_url: '/',
     display: 'standalone',

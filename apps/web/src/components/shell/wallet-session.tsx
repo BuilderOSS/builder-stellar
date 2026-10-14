@@ -88,7 +88,7 @@ async function validateWalletNetwork(
       walletNetworkIssue:
         error instanceof Error
           ? error.message
-          : "This wallet can't report its network, so Tribes Builder can't check it."
+          : "This wallet can't report its network, so Tribe Builder can't check it."
     });
   }
 }

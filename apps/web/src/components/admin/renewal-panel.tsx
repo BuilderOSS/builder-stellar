@@ -125,10 +125,10 @@ function Classes({ report }: { report: RenewalReport }) {
         title="Shared contract code"
         meta={
           report.code.evicted.length
-            ? `Renewed by Tribes Builder for every tribe · ${report.code.evicted.length} of ${report.code.hashes} code entries archived (${report.code.evicted.map((h) => h.slice(0, 8)).join(', ')}); those contracts cannot run until Tribes Builder restores them`
+            ? `Renewed by Tribe Builder for every tribe · ${report.code.evicted.length} of ${report.code.hashes} code entries archived (${report.code.evicted.map((h) => h.slice(0, 8)).join(', ')}); those contracts cannot run until Tribe Builder restores them`
             : report.code.liveUntil === null
-              ? 'Renewed by Tribes Builder for every tribe. Its expiry could not be read.'
-              : `Renewed by Tribes Builder for every tribe · expires about ${when(report.code.liveUntil, latestLedger)}${
+              ? 'Renewed by Tribe Builder for every tribe. Its expiry could not be read.'
+              : `Renewed by Tribe Builder for every tribe · expires about ${when(report.code.liveUntil, latestLedger)}${
                   codeStatus === 'healthy' ? '' : ' · if it lapses, your next transaction pays a few days of its rent'
                 }`
         }

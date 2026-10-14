@@ -4,7 +4,7 @@ import { DiscordLink, LegalPage } from '@/components/legal/legal-page';
 
 export const metadata: Metadata = {
   title: 'Privacy policy',
-  description: 'What Tribes Builder collects, why, and what stays public onchain.'
+  description: 'What Tribe Builder collects, why, and what stays public onchain.'
 };
 
 export default function PrivacyPage() {
@@ -24,7 +24,7 @@ export default function PrivacyPage() {
       <section>
         <h2>1. Who we are</h2>
         <p>
-          Builder DAO (&quot;we&quot;, &quot;us&quot;) builds Tribes Builder. This policy covers the interface at
+          Builder DAO (&quot;we&quot;, &quot;us&quot;) builds Tribe Builder. This policy covers the interface at
           tribes.build and the servers behind it. It doesn&apos;t cover the Stellar network, IPFS, your wallet or other
           services, which have their own policies.
         </p>
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
             sent to the Stellar network as transactions. Images you upload go to IPFS through our pinning provider.
           </li>
           <li>
-            <strong>Public onchain data.</strong> We index public events from the Tribes Builder contracts into our
+            <strong>Public onchain data.</strong> We index public events from the Tribe Builder contracts into our
             database to show tribes, members and history. This includes wallet addresses and amounts that are already
             public on Stellar.
           </li>
@@ -114,7 +114,7 @@ export default function PrivacyPage() {
       <section>
         <h2>8. Age</h2>
         <p>
-          Tribes Builder is for people 18 and older. If you think someone younger has given us data, tell us and
+          Tribe Builder is for people 18 and older. If you think someone younger has given us data, tell us and
           we&apos;ll delete what we can.
         </p>
       </section>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
       <section>
         <h2>9. International processing</h2>
         <p>
-          Tribes Builder is used around the world, and our providers run servers in several countries. Your data may be
+          Tribe Builder is used around the world, and our providers run servers in several countries. Your data may be
           processed outside the country you live in.
         </p>
       </section>

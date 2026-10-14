@@ -113,7 +113,7 @@ export function ModulesCard({
 
   function removeReason(module: ModuleRowData) {
     if (!live) return 'Only a vote can remove a module, so this works after launch.';
-    if (!isModuleKind(module.kind)) return 'Only modules Tribes Builder deployed can be removed here.';
+    if (!isModuleKind(module.kind)) return 'Only modules Tribe Builder deployed can be removed here.';
     return null;
   }
 
@@ -150,7 +150,7 @@ export function ModulesCard({
                         <span className={row}>
                           {state === 'open' ? <Badge tone="live">Open</Badge> : null}
                           {state === 'closed' ? <Badge tone="warning">Closed</Badge> : null}
-                          {module.vouched ? null : <Badge tone="warning">Not deployed by Tribes Builder</Badge>}
+                          {module.vouched ? null : <Badge tone="warning">Not deployed by Tribe Builder</Badge>}
                           {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
                           {module.agent ? <Badge>Can move memberships</Badge> : null}
                           {module.votes > 0n ? (
