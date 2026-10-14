@@ -53,9 +53,9 @@ export default function PrivacyPage() {
             public on Stellar.
           </li>
           <li>
-            <strong>On your device.</strong> Drafts, your appearance setting, market favourites and whether you&apos;ve
-            seen the wallet intro are saved in your browser&apos;s local storage. The wallet library remembers which
-            wallet you picked. None of this reaches us unless you submit it.
+            <strong>On your device.</strong> Drafts, your appearance setting, your home tribe, market favourites and
+            whether you&apos;ve seen the wallet intro are saved in your browser&apos;s local storage. The wallet library
+            remembers which wallet you picked. None of this reaches us unless you submit it.
           </li>
         </ul>
       </section>

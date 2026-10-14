@@ -37,7 +37,7 @@ Warm Ink · Dusk fonts (Bricolage Grotesque, Figtree, JetBrains Mono) are loaded
 | `/drafts` | Browser-local creation drafts |
 | `/create` | Identity, Membership, Governance, Review; creates a DAO in Setup |
 | `/marketplace` | Communities/offers across the selected deployment |
-| `/dao/[daoId]` | Tribe overview |
+| `/dao/[daoId]` | DAO overview and home-DAO preference |
 | `/dao/[daoId]/proposals`, `/proposals/create`, `/proposals/[proposalId]` | Governance list, composer, vote/queue/execute and receipt detail |
 | `/dao/[daoId]/auctions`, `/treasury`, `/members`, `/members/[address]`, `/token/[tokenId]` | DAO operations and ownership |
 | `/dao/[daoId]/marketplace` | Quick-buy pools and resales, history, selling and recovery |
@@ -61,7 +61,7 @@ Guest drafts can be prepared before sign-in. Multiple drafts support resume, dup
 
 After creation, Setup → Launch provides artwork setup, founder minting links, live readiness, and reviewed Auction/Marketplace choices. Upload the artwork before minting founders (traits are seeded at mint time; mint pages warn and require confirmation without artwork). Launch requires a nonzero voting supply, an unclaimed requested slug (a `SlugTaken` failure offers a rename via `update_pending_slug`) and each module's payment asset unchanged, then hands every contract's admin to the Treasury. A community can instead open a launch drive from Manage → Claim lists (`manager.open_assurance`); it then launches once enough people claim. The create form checks slug availability against launched DAOs; a request is not a reservation. Web Locks and usable browser storage are required for safe creation/launch/artwork recovery. Clearing browser data removes drafts and recovery records, not contracts.
 
-Creation/artwork/launch preferences use network/Manager/wallet scope; proposal drafts use wallet/DAO scope. Marketplace favorites, private labels, and preferred discovery tab use deployment-scoped browser storage, not wallet encryption. There is **no server-synced draft collaboration, public tag registry, or cross-device preference sync**.
+Creation/artwork/home/launch preferences use network/Manager/wallet scope; proposal drafts use wallet/DAO scope. Home DAO only adds a local shortcut. Marketplace favorites, private labels, and preferred discovery tab use deployment-scoped browser storage, not wallet encryption. There is **no server-synced draft collaboration, public tag registry, or cross-device preference sync**.
 
 ## Wallet authentication
 

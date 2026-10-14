@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { css } from 'styled-system/css';
 
+import { useHomeDao } from '@/hooks/use-home-dao';
 import { activeNavKey } from '@/lib/dao-nav';
 import { daoRoute, daoRouteId } from '@/lib/dao-routes';
 import { useDashboardData } from '@/lib/goldsky-queries';
@@ -30,15 +31,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [youOpen, setYouOpen] = useState(false);
   const active = activeNavKey(pathname, GLOBAL_NAV)?.key;
   const wallet = useWalletSession();
-  // Same request as Home's "Your tribes", so it is shared rather than repeated.
+  const { home } = useHomeDao();
+  // Same request as Home's "Your communities", so it is shared rather than repeated.
   const { data } = useDashboardData(wallet.isAuthenticated ? wallet.address : '');
-  const communities: RailCommunity[] = (data?.myDaos ?? []).map((dao) => ({
-    key: dao.dao_id,
-    label: dao.token_name || dao.token_symbol || 'Unnamed tribe',
-    href: daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug })),
-    seed: dao.dao_id,
-    image: dao.image
-  }));
+  const communities: RailCommunity[] = (data?.myDaos ?? [])
+    .map((dao) => ({
+      key: dao.dao_id,
+      label: dao.token_name || dao.token_symbol || 'Unnamed tribe',
+      href: daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug })),
+      seed: dao.dao_id,
+      image: dao.image
+    }))
+    .sort((a, b) => (a.key === home?.id ? -1 : b.key === home?.id ? 1 : 0));
 
   return (
     <ShellFrame

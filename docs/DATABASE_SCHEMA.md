@@ -191,7 +191,7 @@ binding deployment, DAO, Treasury, Governor, and proposal ID. Complete matching
 actions must share one transaction/ledger. Receipt absence is separate from failed
 execution. See [web reference](../apps/web/README.md).
 
-Browser-local drafts and private labels do not add writable application
+Browser-local drafts, home DAO, and private labels do not add writable application
 tables. [Migrations](../db/migrations) define the full schema; Prisma is the app's
 view subset, not a schema-migration owner.
 

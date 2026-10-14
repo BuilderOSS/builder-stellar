@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
-import { assertPreferencesSaved, useLocalPreferencesStore } from './local-preferences-store';
+import { assertPreferencesSaved, preferenceScopeKey, useLocalPreferencesStore } from './local-preferences-store';
 
 const map = new Map<string, string>();
 const localStorage = {
@@ -12,18 +12,26 @@ beforeEach(() => {
   vi.stubGlobal('window', { localStorage });
   map.clear();
   localStorage.setItem.mockImplementation((key, value) => map.set(key, value));
-  useLocalPreferencesStore.setState({ launches: {} });
+  useLocalPreferencesStore.setState({ homes: {}, launches: {} });
 });
-it('drops the retired home preference from older saves on the next write', async () => {
-  map.set(
-    'dao.local-preferences.v1',
-    JSON.stringify({ state: { homes: { scope: { id: 'dao-A', name: 'Old home' } }, launches: {} }, version: 1 })
-  );
+it('persists independent home preferences across wallet, network, and deployment', async () => {
+  const scope = { network: 'testnet' as const, deployment: 'manager-A', wallet: null };
+  const store = useLocalPreferencesStore.getState();
+  store.setHome(scope, { id: 'dao-A', name: 'Guest home' });
+  store.setHome({ ...scope, wallet: 'wallet-A' }, { id: 'dao-B', name: 'Wallet home' });
   await useLocalPreferencesStore.persist.rehydrate();
-  useLocalPreferencesStore.getState().setLaunch('dao', { auction: true, marketplace: false });
-  const saved = JSON.parse(map.get('dao.local-preferences.v1')!).state;
-  expect(saved.homes).toBeUndefined();
-  expect(saved.launches.dao).toMatchObject({ auction: true, marketplace: false });
+  expect(useLocalPreferencesStore.getState().homes[preferenceScopeKey(scope)]?.id).toBe('dao-A');
+  expect(useLocalPreferencesStore.getState().homes[preferenceScopeKey({ ...scope, wallet: 'wallet-A' })]?.id).toBe(
+    'dao-B'
+  );
+  expect(
+    useLocalPreferencesStore.getState().homes[preferenceScopeKey({ ...scope, network: 'public' })]
+  ).toBeUndefined();
+  expect(
+    useLocalPreferencesStore.getState().homes[preferenceScopeKey({ ...scope, deployment: 'manager-B' })]
+  ).toBeUndefined();
+  store.setHome(scope, null);
+  expect(useLocalPreferencesStore.getState().homes[preferenceScopeKey(scope)]).toBeUndefined();
 });
 it('retains submitted launch hashes and actual module choices on reload', async () => {
   useLocalPreferencesStore.getState().setLaunch('scoped-dao', {

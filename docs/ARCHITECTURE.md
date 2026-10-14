@@ -67,7 +67,7 @@ The database is event-derived, not a copy of contract storage. The indexer follo
 
 Execution receipts come from scoped successful Treasury events or the indexed execution-call view. Confirmation and receipt/index availability are distinct. The marketplace uses indexed discovery and live preflight checks; the server prepares unsigned transactions and the wallet signs/submits them.
 
-The web app does not write application tables. Multiple drafts and private marketplace labels/favorites live in browser storage only. See [web reference](../apps/web/README.md), [database catalog](DATABASE_SCHEMA.md), and [tenant boundaries](MULTITENANT_ARCHITECTURE.md).
+The web app does not write application tables. Multiple drafts, home DAO, and private marketplace labels/favorites live in browser storage only. See [web reference](../apps/web/README.md), [database catalog](DATABASE_SCHEMA.md), and [tenant boundaries](MULTITENANT_ARCHITECTURE.md).
 
 Treasury funding and token-holder/claim APIs prepare unsigned transactions from
 session-derived identity; they are not database writes or server signing. Treasury

@@ -7,6 +7,7 @@ import type { SignedSubmission, SubmissionStatus, WorkspaceScope } from './creat
 
 export const preferenceScopeKey = (scope: WorkspaceScope) =>
   JSON.stringify([scope.network, scope.deployment, scope.wallet]);
+export type HomeDao = { id: string; name: string };
 export type LocalLaunch = {
   auction: boolean;
   marketplace: boolean;
@@ -35,12 +36,23 @@ export function assertPreferencesSaved() {
   if (saveError) throw new Error(saveError);
 }
 export const useLocalPreferencesStore = create<{
+  homes: Record<string, HomeDao>;
   launches: Record<string, LocalLaunch>;
+  setHome: (scope: WorkspaceScope, dao: HomeDao | null) => void;
   setLaunch: (key: string, choice: LocalLaunch) => void;
 }>()(
   persist(
     (set, get) => ({
+      homes: {},
       launches: {},
+      setHome: (scope, dao) => {
+        const latest = readPreferences(get());
+        const key = preferenceScopeKey(scope);
+        const homes = { ...latest.homes };
+        if (dao) homes[key] = dao;
+        else delete homes[key];
+        set({ homes, launches: latest.launches });
+      },
       setLaunch: (key, choice) => {
         const latest = readPreferences(get());
         const existing = latest.launches[key];
@@ -55,15 +67,13 @@ export const useLocalPreferencesStore = create<{
           saveError = 'Could not save the launch transaction receipt. Free browser storage before signing.';
           throw new Error(saveError);
         }
-        set({ launches: { ...latest.launches, [key]: choice } });
+        set({ homes: latest.homes, launches: { ...latest.launches, [key]: choice } });
       }
     }),
     {
       name: 'dao.local-preferences.v1',
       version: 1,
       skipHydration: true,
-      // Only launches persist; older saves may still carry a retired `homes` map, dropped on the next write.
-      partialize: (state) => ({ launches: state.launches }),
       storage: createJSONStorage(() => ({
         getItem: (key) => {
           try {
@@ -99,12 +109,12 @@ export const useLocalPreferencesStore = create<{
   )
 );
 
-function readPreferences(fallback: { launches: Record<string, LocalLaunch> }) {
+function readPreferences(fallback: { homes: Record<string, HomeDao>; launches: Record<string, LocalLaunch> }) {
   if (typeof window === 'undefined' || readFailed) return fallback;
   try {
     const raw = window.localStorage.getItem('dao.local-preferences.v1');
     const saved = raw ? JSON.parse(raw).state : fallback;
-    return { launches: withLaunchReceipts(saved.launches ?? {}) };
+    return { homes: saved.homes ?? {}, launches: withLaunchReceipts(saved.launches ?? {}) };
   } catch {
     readFailed = true;
     saveError = 'Could not read local preference recovery data. Existing data is preserved.';

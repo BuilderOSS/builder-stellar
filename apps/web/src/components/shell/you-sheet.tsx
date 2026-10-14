@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Moon, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
+import { Home, LogOut, Moon, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css } from 'styled-system/css';
@@ -12,6 +12,7 @@ import { setThemePreference, useThemePreference } from '@/components/warm-ink-th
 import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
+import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { DISCORD_URL } from '@/lib/site';
@@ -150,6 +151,8 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
   };
   const dao = useOptionalDaoContext();
   const preference = useThemePreference();
+  const { home, setHome } = useHomeDao();
+  const isHome = Boolean(dao && home?.id === dao.daoId);
 
   return (
     <Sheet
@@ -269,14 +272,35 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
       {dao ? <MembershipBlock config={dao.daoConfig} daoId={dao.daoId} /> : null}
 
-      {dao ? (
+      {dao || home ? (
         <section className={block} aria-label="Places">
-          <ListRow
-            href={daoRoute(dao.daoId, 'admin')}
-            media={<Settings aria-hidden="true" />}
-            title="Manage"
-            meta="Settings, roles and setup"
-          />
+          {dao ? (
+            <ListRow
+              media={<Home aria-hidden="true" />}
+              title={isHome ? 'Your home tribe' : 'Make this your home tribe'}
+              meta="Opens first on this browser"
+              trailing={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-pressed={isHome}
+                  onClick={() => setHome(isHome ? null : { id: dao.daoId, name: dao.daoConfig.tokenName })}
+                >
+                  {isHome ? 'Remove' : 'Set home'}
+                </Button>
+              }
+            />
+          ) : home ? (
+            <ListRow href={daoRoute(home.id)} media={<Home aria-hidden="true" />} title={home.name} meta="Home tribe" />
+          ) : null}
+          {dao ? (
+            <ListRow
+              href={daoRoute(dao.daoId, 'admin')}
+              media={<Settings aria-hidden="true" />}
+              title="Manage"
+              meta="Settings, roles and setup"
+            />
+          ) : null}
         </section>
       ) : null}
 
