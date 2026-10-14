@@ -1,10 +1,16 @@
-import { Keypair, StrKey } from '@stellar/stellar-sdk';
+import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
+import { Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
+import { Keypair, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
+import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
 import { inspectProposalAdminCall } from './proposal-action-inspection';
-import { treasuryPurchaseAuthNodes, validateAuthNodes } from './treasury-authorize';
+import { getActionHandler } from './proposal-actions/registry';
+import type { FormContext } from './proposal-actions/types';
+import { authNodeSpecValue, treasuryPurchaseAuthNodes, validateAuthNodes } from './treasury-authorize';
 
 const contract = (n: number) => StrKey.encodeContract(Buffer.alloc(32, n));
 const treasury = contract(1);
@@ -52,5 +58,57 @@ describe('Treasury authorize trees', () => {
       'Migrate metadata storage'
     );
     expect(inspectProposalAdminCall(config.metadataContractId, 'regenerate', [3], config)?.title).toContain('#3');
+  });
+});
+
+describe('Treasury buys a listing proposal', () => {
+  const price = 1_000n;
+  const nodes = treasuryPurchaseAuthNodes({ treasury, paymentAsset: sac, seller, price, fee: 25n });
+  const daoConfig = config as unknown as DaoNetworkConfig;
+  const formContext = { config: daoConfig } as FormContext;
+  const actions = [
+    getActionHandler('treasury-authorize').serialize({ nodes }, formContext),
+    getActionHandler('treasury-buy-listing').serialize({ tokenId: '5', maxPrice: price.toString() }, formContext)
+  ];
+
+  it('builds the authorize and buy calls in order, targeting the Treasury and the Marketplace', () => {
+    const vectors = buildProposalCallVectors(actions, config.tokenContractId, treasury, daoConfig);
+    expect(vectors.targets).toEqual([treasury, config.marketplaceContractId]);
+    expect(vectors.functions).toEqual(['authorize', 'buy']);
+    expect(vectors.args[1]).toEqual(['5', treasury, '1000']);
+  });
+
+  it('encodes both calls from the contract specs, the buy as (u32 token, address buyer, i128 max price)', () => {
+    const vectors = buildProposalCallVectors(actions, config.tokenContractId, treasury, daoConfig);
+    const [authorize, buy] = encodeProposalCallArgs(vectors.targets, vectors.functions, vectors.args, config);
+    const options = { rpcUrl: config.rpcUrl, networkPassphrase: config.passphrase };
+
+    const treasurySpec = new TreasuryClient({ ...options, contractId: treasury }).spec;
+    expect(authorize!.map((arg) => arg.toXDR('base64'))).toEqual(
+      treasurySpec
+        .funcArgsToScVals('check_authorization', { nodes: nodes.map(authNodeSpecValue) })
+        .map((arg) => arg.toXDR('base64'))
+    );
+
+    const marketplaceSpec = new MarketplaceClient({ ...options, contractId: config.marketplaceContractId }).spec;
+    expect(buy!.map((arg) => arg.type)).toEqual(['scvU32', 'scvAddress', 'scvI128']);
+    expect(buy!.map((arg) => arg.toXDR('base64'))).toEqual(
+      marketplaceSpec
+        .funcArgsToScVals('buy', { token_id: 5, buyer: treasury, max_price: price })
+        .map((arg) => arg.toXDR('base64'))
+    );
+    expect(buy!.map((arg) => scValToNative(arg))).toEqual([5, treasury, price]);
+  });
+
+  it('refuses a buy aimed at anything but this DAO’s Marketplace, or with a bad price', () => {
+    expect(() => encodeProposalCallArgs([contract(9)], ['buy'], [['5', treasury, '1000']], config)).toThrow(
+      /Unsupported external call/
+    );
+    expect(() =>
+      encodeProposalCallArgs([config.marketplaceContractId], ['buy'], [['5', treasury, 'x']], config)
+    ).toThrow(/whole-number/);
+    expect(() => encodeProposalCallArgs([config.marketplaceContractId], ['buy'], [['5', treasury]], config)).toThrow(
+      /argument count/
+    );
   });
 });
