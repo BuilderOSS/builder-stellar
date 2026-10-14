@@ -6,7 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { keccak256Bytes } from './keccak';
 import { getActionHandler } from './proposal-actions/registry';
 import type { BuildContext, FormContext } from './proposal-actions/types';
-import { encodeProposalCallArgs, normalizeProposalCallArgs, proposalCallId } from './proposal-call';
+import {
+  encodeProposalCallArgs,
+  getProposalActionLabel,
+  getProposalActionSummary,
+  normalizeProposalCallArgs,
+  proposalCallId
+} from './proposal-call';
 import type { ProposalEncodingContext } from './proposal-supported-calls';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));
@@ -184,5 +190,18 @@ describe('current proposal ABI encoding', () => {
     expect(encode(config.governorContractId, 'set_queue_delay', [300])[0]?.type).toBe('scvU32');
     expect(encode(config.auctionContractId, 'set_min_bid_increment', [10])[0]?.type).toBe('scvU32');
     expect(encode(config.auctionContractId, 'cancel_auction', [])).toEqual([]);
+  });
+});
+
+describe('mint draft wording', () => {
+  const recipient = Keypair.random().publicKey();
+  it('describes queued mints the way the proposal page does', () => {
+    const mint = { id: 'a', type: 'batch-mint-governance-token' as const, recipient, amount: '5' };
+    expect(getProposalActionSummary(mint)).toBe(`Mint 5 membership tokens to ${recipient}`);
+    expect(getProposalActionSummary({ ...mint, amount: '1' })).toBe(`Mint a membership token to ${recipient}`);
+    expect(getProposalActionSummary({ ...mint, type: 'mint-governance-token', amount: '' })).toBe(
+      `Mint a membership token to ${recipient}`
+    );
+    expect(getProposalActionLabel('batch-mint-governance-token')).toBe('Mint membership tokens');
   });
 });

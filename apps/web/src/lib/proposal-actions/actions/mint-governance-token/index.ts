@@ -7,8 +7,8 @@ import { validateMintGovernanceToken } from './validator';
 
 export const mintGovernanceTokenHandler: ActionHandler<MintGovernanceTokenData> = {
   type: 'mint-governance-token',
-  label: 'Mint Governance Token',
-  description: 'Mint a single governance token to a recipient',
+  label: 'Mint a membership token',
+  description: 'Mint one membership token to a wallet',
   order: 1,
   group: 'Governance',
 

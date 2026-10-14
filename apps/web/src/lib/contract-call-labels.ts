@@ -26,3 +26,40 @@ export function contractCallLabel(functionName: string) {
   const words = functionName.replace(/_/g, ' ').trim();
   return words ? words[0]!.toUpperCase() + words.slice(1) : functionName;
 }
+
+/** Who a token mint gives tokens to, and how many each. */
+export type MintGrant = { recipient: string; amount: bigint };
+
+function mintAmount(value: unknown): bigint | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return BigInt(value);
+  if (typeof value === 'string' && /^\d+$/.test(value) && BigInt(value) > 0n) return BigInt(value);
+  return null;
+}
+
+/**
+ * The grants in a Token `mint(minter, to)` or `batch_mint(minter, recipients, amounts)` call,
+ * one per wallet in first-seen order. Null when the lists don't line up or an amount isn't
+ * positive: the Token rejects those calls.
+ */
+export function mintGrants(functionName: string, args: unknown[]): MintGrant[] | null {
+  if (functionName === 'mint') return typeof args[1] === 'string' ? [{ recipient: args[1], amount: 1n }] : null;
+  if (functionName !== 'batch_mint') return null;
+  const [, recipients, amounts] = args;
+  if (!Array.isArray(recipients) || !Array.isArray(amounts)) return null;
+  if (!recipients.length || recipients.length !== amounts.length) return null;
+  const byRecipient = new Map<string, bigint>();
+  for (const [index, recipient] of recipients.entries()) {
+    const amount = mintAmount(amounts[index]);
+    if (typeof recipient !== 'string' || amount === null) return null;
+    byRecipient.set(recipient, (byRecipient.get(recipient) ?? 0n) + amount);
+  }
+  return [...byRecipient].map(([recipient, amount]) => ({ recipient, amount }));
+}
+
+/** "Mint 5 membership tokens to GABC…", or "… to 3 wallets" when it mints to several. */
+export function mintTitle(grants: MintGrant[], formatAddress = (address: string) => address) {
+  const total = grants.reduce((sum, grant) => sum + grant.amount, 0n);
+  const tokens = total === 1n ? 'a membership token' : `${total.toLocaleString('en-US')} membership tokens`;
+  const to = grants.length === 1 ? formatAddress(grants[0]!.recipient) : `${grants.length} wallets`;
+  return `Mint ${tokens} to ${to}`;
+}

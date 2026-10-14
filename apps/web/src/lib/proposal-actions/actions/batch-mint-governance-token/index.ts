@@ -9,8 +9,8 @@ import { validateBatchMintGovernanceToken } from './validator';
 
 export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceTokenData> = {
   type: 'batch-mint-governance-token',
-  label: 'Batch Mint Governance Tokens',
-  description: `Mint multiple governance tokens (1-${MAX_BATCH_MINT}) to a recipient`,
+  label: 'Mint membership tokens',
+  description: `Mint 1 to ${MAX_BATCH_MINT} membership tokens to one wallet`,
   order: 2,
   group: 'Governance',
 

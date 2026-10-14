@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
@@ -193,12 +194,12 @@ export function getProposalActionLabel(type: ProposalActionType) {
 
   if (labels[type]) return labels[type]!;
   if (type === 'batch-mint-governance-token') {
-    return 'Batch Mint Governance Token';
+    return 'Mint membership tokens';
   }
   if (type === 'transfer-sac-token') {
     return 'Transfer SAC Token';
   }
-  return 'Mint Governance Token';
+  return 'Mint a membership token';
 }
 
 function moduleLabel(module: unknown) {
@@ -288,8 +289,11 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'close-pool' || action.type === 'sweep-pool')
     return `${getProposalActionLabel(action.type)} #${action.poolId}`;
   if (action.type === 'batch-mint-governance-token') {
-    return `${getProposalActionLabel(action.type)} to ${action.recipient} for ${action.amount} tokens`;
+    return /^\d+$/.test(String(action.amount))
+      ? mintTitle([{ recipient: action.recipient, amount: BigInt(action.amount) }])
+      : `Mint ${action.amount} membership tokens to ${action.recipient}`;
   }
+  if (action.type === 'mint-governance-token') return mintTitle([{ recipient: action.recipient, amount: 1n }]);
   if (action.type === 'transfer-sac-token') {
     return `Transfer ${action.amount} ${action.assetCode || 'tokens'} to ${action.recipient}`;
   }
