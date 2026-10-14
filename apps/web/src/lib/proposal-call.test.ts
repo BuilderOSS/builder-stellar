@@ -3,9 +3,10 @@ import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { Keypair, nativeToScVal, Networks, scValToNative, StrKey, xdr } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
+import { contractCallLabel } from './contract-call-labels';
 import { keccak256Bytes } from './keccak';
-import { getActionHandler } from './proposal-actions/registry';
-import type { BuildContext, FormContext } from './proposal-actions/types';
+import { getActionHandler, getAllActionHandlers } from './proposal-actions/registry';
+import type { BuildContext, FormContext, ProposalActionType } from './proposal-actions/types';
 import {
   encodeProposalCallArgs,
   getProposalActionLabel,
@@ -203,5 +204,67 @@ describe('mint draft wording', () => {
       `Mint a membership token to ${recipient}`
     );
     expect(getProposalActionLabel('batch-mint-governance-token')).toBe('Mint membership tokens');
+  });
+});
+
+describe('admin draft wording', () => {
+  const setting = (type: ProposalActionType, value: string) => ({ id: 'a', type, recipient: '', amount: value, value });
+
+  it('labels each action in sentence case, the way the proposal page titles its call', () => {
+    expect(getProposalActionLabel('transfer-sac-token')).toBe('Send treasury funds');
+    expect(getProposalActionLabel('set-voting-delay')).toBe(contractCallLabel('set_voting_delay'));
+    expect(getProposalActionLabel('set-queue-delay')).toBe(contractCallLabel('set_queue_delay'));
+    expect(getProposalActionLabel('set-auction-reserve-price')).toBe(contractCallLabel('set_reserve_price'));
+    expect(getProposalActionLabel('pause-auction')).toBe('Pause auctions');
+    expect(getProposalActionLabel('pause-marketplace')).toBe('Pause the market');
+    expect(getProposalActionLabel('unpause-marketplace')).toBe('Reopen the market');
+    for (const handler of getAllActionHandlers()) {
+      const label = getProposalActionLabel(handler.type);
+      expect(label, handler.type).toBe(handler.label);
+      // Sentence case: no capitalised word after the first (acronyms like DAO and "(Treasury)" pass).
+      expect(
+        label
+          .split(' ')
+          .slice(1)
+          .filter((word) => /^[A-Z][a-z]/.test(word)),
+        handler.type
+      ).toEqual([]);
+    }
+  });
+
+  it('summarises settings as sentences with units', () => {
+    expect(getProposalActionSummary(setting('set-voting-delay', '3600'))).toBe(
+      'Change the wait before voting opens to 1 hour'
+    );
+    expect(getProposalActionSummary(setting('set-voting-period', '90000'))).toBe(
+      'Change how long voting stays open to 1 day 1 hour'
+    );
+    expect(getProposalActionSummary(setting('set-queue-delay', '172800'))).toBe('Change the safety delay to 2 days');
+    expect(getProposalActionSummary(setting('set-proposal-threshold', '5'))).toBe('Require 5 votes to make a proposal');
+    expect(getProposalActionSummary(setting('set-proposal-threshold', '1'))).toBe('Require 1 vote to make a proposal');
+    expect(getProposalActionSummary(setting('set-quorum-bps', '1250'))).toBe('Change the quorum to 12.5%');
+    expect(getProposalActionSummary(setting('set-marketplace-secondary-fee', '250'))).toBe(
+      'Change the resale fee to 2.5%'
+    );
+    expect(getProposalActionSummary(setting('set-auction-duration', '86400'))).toBe(
+      'Change how long each auction runs to 1 day'
+    );
+    expect(getProposalActionSummary(setting('set-auction-time-buffer', '300'))).toBe('Make a late bid add 5 minutes');
+    expect(getProposalActionSummary(setting('set-auction-min-bid-increment', '5'))).toBe(
+      'Change the minimum bid increase to 5%'
+    );
+  });
+
+  it('summarises pauses, pools and treasury sends without jargon', () => {
+    const empty = (type: ProposalActionType) => ({ id: 'a', type, recipient: '', amount: '' });
+    expect(getProposalActionSummary(empty('unpause-auction'))).toBe('Resume auctions');
+    expect(getProposalActionSummary(empty('cancel-auction'))).toBe('Cancel the current auction');
+    expect(getProposalActionSummary({ ...empty('close-pool'), poolId: '3' })).toBe('Close pool #3');
+    expect(getProposalActionSummary({ ...empty('sweep-pool'), poolId: '3' })).toBe(
+      'Move pool #3’s unsold tokens to the treasury'
+    );
+    expect(
+      getProposalActionSummary({ id: 'a', type: 'transfer-sac-token', recipient, amount: '12.5', assetCode: 'XLM' })
+    ).toBe(`Send 12.5 XLM to ${recipient}`);
   });
 });

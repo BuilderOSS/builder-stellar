@@ -434,7 +434,7 @@ function MarketplaceSetting({
         <Form value={draft} onChange={setDraft} disabled={!enabled} network={network} />
         <div>
           <Button variant="secondary" disabled={!enabled} onClick={() => onQueue(handler, draft)}>
-            Review {handler.label.toLowerCase()} proposal
+            Add to proposal
           </Button>
         </div>
       </div>

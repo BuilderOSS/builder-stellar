@@ -50,8 +50,8 @@ export type TreasuryBuyListingDraft = { tokenId: string; maxPrice: string };
 /** marketplace.buy(token_id, treasury, max_price): must follow its treasury-authorize action. */
 export const treasuryBuyListingHandler: ActionHandler<TreasuryBuyListingDraft> = {
   type: 'treasury-buy-listing',
-  label: 'Buy a secondary listing (Treasury)',
-  description: 'The Treasury buys an escrowed listing at no more than the reviewed price',
+  label: 'Buy a listing for the treasury',
+  description: 'The treasury buys a token listed in the market, paying no more than the reviewed price',
   group: 'Treasury',
   FormComponent: ({ value }: ActionFormProps<TreasuryBuyListingDraft>) => (
     <Readonly lines={[`Token #${value.tokenId}`, `Max price (base units): ${value.maxPrice}`]} />

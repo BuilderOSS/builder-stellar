@@ -70,8 +70,11 @@ function propertiesHandler(
 ): PendingAdminHandler<ArtworkPropertiesDraft, typeof type> {
   return {
     type,
-    label: type === 'add-artwork-properties' ? 'Append artwork properties and items' : 'Reset artwork properties',
-    description: 'Write an artwork batch and its IPFS reference. Resetting can break existing token metadata.',
+    label: type === 'add-artwork-properties' ? 'Add artwork layers' : 'Replace all artwork layers',
+    description:
+      type === 'add-artwork-properties'
+        ? 'Add new layers and images from an IPFS directory. Prepare them in Manage → Artwork.'
+        : 'Replace every layer and image. This can break existing token images.',
     group: 'Artwork',
     FormComponent: PropertiesForm,
     getDefaultValues: () => ({ names: [], items: [], ipfsGroup: { base_uri: '', extension: '.png' } }),
@@ -95,6 +98,9 @@ export type ArtworkSettingDraft = { value: string };
 export const artworkSettingMethods = {
   'set-artwork-renderer': 'update_renderer_base'
 } as const;
+const artworkSettingLabels: Record<keyof typeof artworkSettingMethods, string> = {
+  'set-artwork-renderer': 'Change the artwork renderer'
+};
 export type ArtworkSettingType = keyof typeof artworkSettingMethods;
 export function validateArtworkSetting(value: string, type: ArtworkSettingType): ValidationResult {
   if (!value.trim()) return { valid: false, message: 'Enter a non-empty value.' };
@@ -112,8 +118,8 @@ export function validateArtworkSetting(value: string, type: ArtworkSettingType):
 export const artworkSettingHandlers = (Object.keys(artworkSettingMethods) as ArtworkSettingType[]).map(
   (type): PendingAdminHandler<ArtworkSettingDraft, ArtworkSettingType> => ({
     type,
-    label: type.replace('set-artwork-', 'Update artwork ').replaceAll('-', ' '),
-    description: 'Update collection metadata through the Metadata admin (the Treasury after launch).',
+    label: artworkSettingLabels[type],
+    description: 'Change where token images are drawn from. Existing token images can change too.',
     group: 'Artwork',
     FormComponent: ({ value, onChange, disabled }) => (
       <Field>

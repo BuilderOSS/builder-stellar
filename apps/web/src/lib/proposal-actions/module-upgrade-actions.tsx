@@ -5,7 +5,7 @@ import type { PendingAdminHandler } from '@/lib/proposal-actions/artwork-admin-a
 export type ModuleUpgradeDraft = { module: UpgradeModule; fromHash: string; toHash: string };
 export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgrade-dao-module'> = {
   type: 'upgrade-dao-module',
-  label: 'Upgrade DAO module',
+  label: 'Upgrade a module',
   group: 'Administration',
   description: 'Upgrade a current module along a Manager-approved transition. Approval is checked again on-chain.',
   FormComponent: ({ value, onChange, disabled }) => (

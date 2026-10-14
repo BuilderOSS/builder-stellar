@@ -63,3 +63,12 @@ export function mintTitle(grants: MintGrant[], formatAddress = (address: string)
   const to = grants.length === 1 ? formatAddress(grants[0]!.recipient) : `${grants.length} wallets`;
   return `Mint ${tokens} to ${to}`;
 }
+
+/** "Add 2 new layers and 5 images to the artwork", for a Metadata `add_properties` call. */
+export function artworkAdditionTitle(newLayers: number, images: number) {
+  const parts = [
+    newLayers ? `${newLayers} new ${newLayers === 1 ? 'layer' : 'layers'}` : null,
+    `${images} ${images === 1 ? 'image' : 'images'}`
+  ].filter(Boolean);
+  return `Add ${parts.join(' and ')} to the artwork`;
+}

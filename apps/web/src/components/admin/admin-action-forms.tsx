@@ -80,8 +80,10 @@ export function AdminValueForm({
   onChange,
   disabled,
   validationErrors,
-  draftPreview
-}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction }) {
+  draftPreview,
+  hint
+}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction; hint?: string }) {
+  const error = validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined;
   return (
     <Stack gap="2">
       {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
@@ -93,9 +95,16 @@ export function AdminValueForm({
         inputMode="numeric"
         disabled={disabled}
       />
-      <ErrorText message={validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined} />
+      {error ? <ErrorText message={error} /> : hint ? <FieldHelperText>{hint}</FieldHelperText> : null}
     </Stack>
   );
+}
+
+/** AdminValueForm with a unit hint ("In seconds."), for setting actions whose value has a unit. */
+export function adminValueFormWithHint(hint: string) {
+  return function AdminValueFormWithHint(props: ActionFormProps<AdminValueDraft>) {
+    return <AdminValueForm {...props} hint={hint} />;
+  };
 }
 
 export function AdminReservePriceForm({

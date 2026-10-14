@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mintGrants, mintTitle } from './contract-call-labels';
+import { artworkAdditionTitle, mintGrants, mintTitle } from './contract-call-labels';
 
 const minter = 'CTREASURY';
 
@@ -40,5 +40,13 @@ describe('token mint wording', () => {
     }
     expect(mintGrants('mint', [minter, ['GALICE']])).toBeNull();
     expect(mintGrants('transfer', [minter, 'GALICE', 1])).toBeNull();
+  });
+});
+
+describe('artwork wording', () => {
+  it('counts new layers and images, and leaves out new layers when there are none', () => {
+    expect(artworkAdditionTitle(2, 5)).toBe('Add 2 new layers and 5 images to the artwork');
+    expect(artworkAdditionTitle(1, 1)).toBe('Add 1 new layer and 1 image to the artwork');
+    expect(artworkAdditionTitle(0, 3)).toBe('Add 3 images to the artwork');
   });
 });

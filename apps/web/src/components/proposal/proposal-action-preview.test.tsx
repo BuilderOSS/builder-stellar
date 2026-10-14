@@ -58,7 +58,7 @@ describe('proposal admin-call inspector rendering', () => {
         ]}
       />
     );
-    expect(html).toContain('Append artwork: 1 new properties, 2 ordered items');
+    expect(html).toContain('Add 1 new layer and 2 images to the artwork');
     expect(html).toContain('High risk');
     expect(html).toContain('Metadata’s own admin');
     expect(html).toContain('007');
