@@ -78,7 +78,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
   const governance = useGovernorSettings(config, session.address || undefined);
   const refresh = () => Promise.all([readiness.mutate(), artwork.mutate()]);
   const loadError = readiness.error || artwork.error;
-  const name = config.tokenName || 'This community';
+  const name = config.tokenName || 'This tribe';
 
   // An open drive hands everything to the treasury, so nothing here can change until it ends. Everyone,
   // launch admin or not, sees the same thing: claim, launch or refund.

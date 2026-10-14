@@ -10,7 +10,7 @@ export type DaoSlugDraft = { slug: string };
 
 /** What members are told about the old link; shared by the preview and the profile caption. */
 export const SLUG_CHANGE_WARNING =
-  'The old link is freed right away. It keeps leading here only until another community takes it, which can happen at any time.';
+  'The old link is freed right away. It keeps leading here only until another tribe takes it, which can happen at any time.';
 
 function validateDaoSlug(data: DaoSlugDraft, context?: Pick<FormContext, 'config'>): ValidationResult {
   const slug = data.slug.trim();
@@ -50,8 +50,8 @@ function DaoSlugForm({ value, onChange, disabled, validationErrors }: ActionForm
  */
 export const changeDaoSlugHandler: ActionHandler<DaoSlugDraft> = {
   type: 'change-dao-slug',
-  label: 'Change the community link',
-  description: 'Move the community to a new /dao/ link',
+  label: 'Change the tribe link',
+  description: 'Move the tribe to a new /dao/ link',
   group: 'Administration',
   FormComponent: DaoSlugForm,
   getDefaultValues: () => ({ slug: '' }),

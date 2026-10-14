@@ -31,7 +31,7 @@ export const MEMBERSHIP_TYPES = [
   {
     id: 'fixed-price',
     title: 'Fixed-price sales',
-    description: 'The community sells tokens at a set price from quick-buy pools it opens by vote.',
+    description: 'The tribe sells tokens at a set price from quick-buy pools it opens by vote.',
     recommended: false,
     auction: false,
     marketplace: true,
@@ -40,7 +40,7 @@ export const MEMBERSHIP_TYPES = [
   {
     id: 'invite',
     title: 'Invite only',
-    description: 'No sales. Members claim their tokens from invite lists the community publishes.',
+    description: 'No sales. Members claim their tokens from invite lists the tribe publishes.',
     recommended: false,
     auction: false,
     marketplace: false,
@@ -140,7 +140,7 @@ const ALL_PACES: Pace[] = [
   {
     id: 'balanced',
     title: 'Balanced',
-    description: 'Votes open after a day and run 3 days. A good start for most communities.',
+    description: 'Votes open after a day and run 3 days. A good start for most tribes.',
     recommended: true,
     testnetOnly: false,
     governance: { votingDelay: DAY, votingPeriod: 3 * DAY, queueDelay: HOUR, quorumBps: 1000, proposalThreshold: 1 }

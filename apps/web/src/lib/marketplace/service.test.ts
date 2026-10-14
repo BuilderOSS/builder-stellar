@@ -198,7 +198,7 @@ describe('read-only marketplace services and DTO isolation', () => {
             : { contractId: 'market-dao-b' })
       };
       db.marketplacePool.findMany.mockResolvedValue([bad]);
-      await expect(marketplaceOffers(new URLSearchParams())).rejects.toThrow(/identity|scoped community/);
+      await expect(marketplaceOffers(new URLSearchParams())).rejects.toThrow(/identity|scoped tribe/);
     }
   );
   it('DAO status, history and every listing query keep deployment/DAO/module filters', async () => {

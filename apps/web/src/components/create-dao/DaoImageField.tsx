@@ -60,7 +60,7 @@ export function DaoImageField() {
         id="contractImage"
         type="button"
         className={styles.image}
-        aria-label="Choose community image"
+        aria-label="Choose tribe image"
         data-invalid={Boolean(fieldError)}
         aria-describedby={fieldError ? 'contractImage-error' : undefined}
         disabled={busy}
@@ -70,7 +70,7 @@ export function DaoImageField() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={preview || (image === DEFAULT_DAO_IMAGE_URL ? LOCAL_DEFAULT_DAO_IMAGE_URL : image)}
-          alt="Community image preview"
+          alt="Tribe image preview"
           onError={(event) => {
             if (!event.currentTarget.src.endsWith(LOCAL_DEFAULT_DAO_IMAGE_URL))
               event.currentTarget.src = LOCAL_DEFAULT_DAO_IMAGE_URL;

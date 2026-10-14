@@ -54,7 +54,7 @@ const PRESETS = ['30', '90', '180'];
 // Rent is linear in time, so the longest renewal costs no more per year and needs the fewest signatures.
 const DEFAULT_PRESET = '180';
 const CLASS_HINTS: Record<RenewalClass, string> = {
-  contracts: 'The community’s contracts and modules',
+  contracts: 'The tribe’s contracts and modules',
   artwork: 'Layer names, images and each token’s traits',
   tokens: 'Current supply and what each module may mint',
   proposals: 'Open proposals and the quorum rate',
@@ -62,7 +62,7 @@ const CLASS_HINTS: Record<RenewalClass, string> = {
   holdings: 'Tokens and funds the treasury and modules hold',
   slug: 'Your /dao link and launch records',
   claims: 'Who has claimed, and payments held for a launch drive',
-  modules: 'Records kept by modules added to the community'
+  modules: 'Records kept by modules added to the tribe'
 };
 const STATUS_TEXT: Record<TtlStatus, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: 'Healthy', tone: 'success' },
@@ -125,10 +125,10 @@ function Classes({ report }: { report: RenewalReport }) {
         title="Shared contract code"
         meta={
           report.code.evicted.length
-            ? `Renewed by Builder for every community · ${report.code.evicted.length} of ${report.code.hashes} code entries archived (${report.code.evicted.map((h) => h.slice(0, 8)).join(', ')}); those contracts cannot run until Builder restores them`
+            ? `Renewed by Tribes Builder for every tribe · ${report.code.evicted.length} of ${report.code.hashes} code entries archived (${report.code.evicted.map((h) => h.slice(0, 8)).join(', ')}); those contracts cannot run until Tribes Builder restores them`
             : report.code.liveUntil === null
-              ? 'Renewed by Builder for every community. Its expiry could not be read.'
-              : `Renewed by Builder for every community · expires about ${when(report.code.liveUntil, latestLedger)}${
+              ? 'Renewed by Tribes Builder for every tribe. Its expiry could not be read.'
+              : `Renewed by Tribes Builder for every tribe · expires about ${when(report.code.liveUntil, latestLedger)}${
                   codeStatus === 'healthy' ? '' : ' · if it lapses, your next transaction pays a few days of its rent'
                 }`
         }
@@ -228,13 +228,13 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
   return (
     <div className={stack}>
       <p className={muted}>
-        Stellar keeps a community&apos;s data for a paid stretch of time. Renewing pays for more, for everything below
-        at once. Anyone can renew; the wallet that signs pays the network fee.
+        Stellar keeps a tribe&apos;s data for a paid stretch of time. Renewing pays for more, for everything below at
+        once. Anyone can renew; the wallet that signs pays the network fee.
       </p>
       {inventory.bootstrap ? (
         <Callout
           variant="warning"
-          title="This community's contracts were archived"
+          title="This tribe's contracts were archived"
           description="Nothing can be read until they are restored. Get a price to restore the contracts first; once they are back, this screen lists everything else and renews it."
         />
       ) : null}
@@ -255,7 +255,7 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
         <Callout
           variant="warning"
           title={`${inventory.missing.length} ${inventory.missing.length === 1 ? 'item was' : 'items were'} archived`}
-          description="They are restored first, in the same renewal. Until then, the parts of the community that use them stop working."
+          description="They are restored first, in the same renewal. Until then, the parts of the tribe that use them stop working."
         />
       ) : null}
       <Classes report={report.data} />

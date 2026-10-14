@@ -36,7 +36,7 @@ export function DraftsOverview() {
     <div className={page}>
       {storageError ? <Callout variant="error" title="Drafts need attention" description={storageError} /> : null}
 
-      <Section title="Proposals in progress" description="Saved per wallet, for each community.">
+      <Section title="Proposals in progress" description="Saved per wallet, for each tribe.">
         {!signedIn ? (
           <p className={note}>Connect your wallet to see your proposal drafts.</p>
         ) : proposals.length ? (
@@ -46,12 +46,12 @@ export function DraftsOverview() {
             ))}
           </div>
         ) : (
-          <p className={note}>No proposal drafts. Start one from a community&apos;s Proposals page.</p>
+          <p className={note}>No proposal drafts. Start one from a tribe&apos;s Proposals page.</p>
         )}
       </Section>
 
       <Section
-        title="DAOs you're starting"
+        title="Tribes you're building"
         description="You don't need a wallet until you create one."
         action={<NewDraftButton hydrated={hydrated} scope={scope} />}
       >
@@ -82,7 +82,7 @@ export function DraftsOverview() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No DAO drafts">When you start a DAO, it saves here as you go.</EmptyState>
+          <EmptyState title="No tribe drafts">When you build a tribe, it saves here as you go.</EmptyState>
         )}
       </Section>
     </div>

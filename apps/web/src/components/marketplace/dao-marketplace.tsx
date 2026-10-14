@@ -83,7 +83,7 @@ export function DaoMarketplaceView({
   const marketState = !data
     ? null
     : !data.community.marketplaceContract
-      ? { label: "This community doesn't have a market", tone: 'neutral' as const }
+      ? { label: "This tribe doesn't have a market", tone: 'neutral' as const }
       : !data.launched
         ? { label: "The market hasn't opened yet", tone: 'warning' as const }
         : !data.config
@@ -98,8 +98,8 @@ export function DaoMarketplaceView({
         title="Market"
         description={
           locked
-            ? 'Buy a new token straight from the community. Memberships here are locked, so members can’t resell them. Sales fund the treasury.'
-            : 'Buy a new token straight from the community, or a resale from a member. New sales fund the treasury.'
+            ? 'Buy a new token straight from the tribe. Memberships here are locked, so members can’t resell them. Sales fund the treasury.'
+            : 'Buy a new token straight from the tribe, or a resale from a member. New sales fund the treasury.'
         }
         actions={
           <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
@@ -148,7 +148,7 @@ export function DaoMarketplaceView({
                 }}
               >
                 <option value="all">New and resale</option>
-                <option value="pool">New from the community</option>
+                <option value="pool">New from the tribe</option>
                 <option value="secondary">Resale from members</option>
               </Select>
               <Select

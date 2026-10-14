@@ -15,6 +15,8 @@ import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { DISCORD_URL } from '@/lib/site';
+import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
 import { BuilderDaoCredit } from './brand-mark';
@@ -49,6 +51,8 @@ const networkStatus = css({
   color: 'ink.muted'
 });
 // One line where it fits; wraps on narrow screens, each separator travelling with the link after it.
+// Link buttons line up with the text above them.
+const flushLink = css({ px: '0' });
 const footerLinks = css({
   display: 'flex',
   flexWrap: 'wrap',
@@ -86,7 +90,7 @@ function YouDrafts() {
           ))}
         </div>
       ) : (
-        <p className={statLabel}>No drafts. Start a DAO or a proposal and it saves here as you go.</p>
+        <p className={statLabel}>No drafts. Build a tribe or write a proposal and it saves here as you go.</p>
       )}
     </section>
   );
@@ -141,6 +145,10 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
 export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   useCloseOnNavigate(() => onOpenChange(false));
   const wallet = useWalletSession();
+  const openIntro = () => {
+    onOpenChange(false);
+    wallet.openWalletIntro();
+  };
   const dao = useOptionalDaoContext();
   const preference = useThemePreference();
   const { home, setHome } = useHomeDao();
@@ -168,7 +176,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
             ]}
           />
-          <nav className={footerLinks} aria-label="Legal">
+          <nav className={footerLinks} aria-label="Legal and community">
             <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
             </span>
@@ -177,6 +185,11 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             </span>
             <span>
               <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
+            </span>
+            <span>
+              <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+                Discord
+              </a>
             </span>
             <span>
               <BuilderDaoCredit />
@@ -220,21 +233,39 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               Disconnect
             </Button>
           </div>
+          <div>
+            <Button variant="link" size="sm" className={flushLink} onClick={openIntro}>
+              How wallets work
+            </Button>
+          </div>
         </section>
       ) : (
         <section className={block} aria-label="Wallet">
           <p className={css({ textStyle: 'heading', m: '0' })}>Connect a wallet</p>
           <Text>
-            Your wallet is how you vote, bid and hold membership. Builder never holds your funds and can&apos;t move
-            them without your signature.
+            Your wallet is how you vote, bid and hold membership. Tribes Builder never holds your funds and can&apos;t
+            move them without your signature.
           </Text>
-          <Button onClick={() => void wallet.connect()} loading={wallet.isAuthBusy} block>
+          <Button
+            onClick={() => {
+              // The first Connect opens the wallet intro; it shouldn't stack on this sheet.
+              if (!hasSeenWalletIntro()) onOpenChange(false);
+              void wallet.connect();
+            }}
+            loading={wallet.isAuthBusy}
+            block
+          >
             <Wallet aria-hidden="true" />
             {wallet.isAuthBusy ? 'Check your wallet' : 'Connect wallet'}
           </Button>
           <div className={networkStatus}>
             <span className={dot} aria-hidden="true" />
-            Builder is on {wallet.network.label}
+            Tribes Builder is on {wallet.network.label}
+          </div>
+          <div>
+            <Button variant="link" size="sm" className={flushLink} onClick={openIntro}>
+              How wallets work
+            </Button>
           </div>
         </section>
       )}
@@ -246,7 +277,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
           {dao ? (
             <ListRow
               media={<Home aria-hidden="true" />}
-              title={isHome ? 'Your home community' : 'Make this your home community'}
+              title={isHome ? 'Your home tribe' : 'Make this your home tribe'}
               meta="Opens first on this browser"
               trailing={
                 <Button
@@ -260,12 +291,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               }
             />
           ) : home ? (
-            <ListRow
-              href={daoRoute(home.id)}
-              media={<Home aria-hidden="true" />}
-              title={home.name}
-              meta="Home community"
-            />
+            <ListRow href={daoRoute(home.id)} media={<Home aria-hidden="true" />} title={home.name} meta="Home tribe" />
           ) : null}
           {dao ? (
             <ListRow

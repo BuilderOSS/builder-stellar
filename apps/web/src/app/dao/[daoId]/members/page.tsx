@@ -61,7 +61,11 @@ function MemberDirectory({ daoId }: { daoId: string }) {
   const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page);
 
   return (
-    <PageSection title="Members" description="Everyone who holds a token or has votes delegated to them.">
+    <PageSection
+      title="Members"
+      description="Everyone who holds a token or has votes delegated to them."
+      daoNote="Each membership is an NFT with one vote."
+    >
       <form
         className={finder}
         onSubmit={(event) => {
@@ -158,7 +162,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                 const system = systemHolders[member.address];
                 const isViewer = Boolean(viewer && viewer === member.address);
                 const delegation = system
-                  ? 'Held by the community, no votes'
+                  ? 'Held by the tribe, no votes'
                   : !member.delegated_to
                     ? 'No delegate set'
                     : member.delegated_to === member.address
@@ -172,7 +176,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                     media={<Avatar address={member.address} yours={isViewer} />}
                     title={
                       <span title={member.address}>
-                        {isViewer ? 'You' : system ? `${system} (community contract)` : shortAddress(member.address)}
+                        {isViewer ? 'You' : system ? `${system} (tribe contract)` : shortAddress(member.address)}
                       </span>
                     }
                     meta={delegation}

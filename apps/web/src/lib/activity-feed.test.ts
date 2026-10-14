@@ -147,7 +147,7 @@ describe('activity feed rows', () => {
         'dao-uno'
       )
     ).toMatchObject({
-      title: 'Community link is now /dao/alpha-club',
+      title: 'Tribe link is now /dao/alpha-club',
       detail: 'Was /dao/dao-uno',
       href: '/dao/alpha-club'
     });
@@ -159,7 +159,7 @@ describe('activity feed rows', () => {
       href: '/dao/alpha-club/claims'
     });
     expect(formatActivity(item({ event_name: 'profile_updated', args: JSON.stringify({ seq: 3 }) })).title).toBe(
-      'Community profile updated'
+      'Tribe profile updated'
     );
   });
 

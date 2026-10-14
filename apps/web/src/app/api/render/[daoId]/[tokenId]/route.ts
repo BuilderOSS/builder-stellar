@@ -1,11 +1,8 @@
-import { isIP } from 'node:net';
-
 import sharp from 'sharp';
-import { Agent, fetch } from 'undici';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
-import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
+import { fetchSafeImage, MAX_INPUT_PIXELS, withSignal } from '@/lib/safe-image-fetch';
 import { cached } from '@/lib/server-cache';
 import { parseTokenId } from '@/lib/token-id';
 
@@ -17,24 +14,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024;
 const MAX_LAYERS = 16;
 const MAX_CONCURRENT_LAYER_FETCHES = 4;
-const MAX_REDIRECTS = 3;
-const MAX_INPUT_PIXELS = 16_777_216;
 const SIZE = 1080;
-const ALLOWED_IMAGE_FORMATS = new Set(['png', 'jpeg', 'webp']);
-
-function abortError() {
-  return new DOMException('Artwork request timed out', 'AbortError');
-}
-
-async function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) throw abortError();
-
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(abortError());
-    signal.addEventListener('abort', abort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
-  });
-}
 
 async function mapWithConcurrency<T, U>(values: T[], limit: number, mapper: (value: T) => Promise<U>) {
   const results = new Array<U>(values.length);
@@ -51,82 +31,6 @@ async function mapWithConcurrency<T, U>(values: T[], limit: number, mapper: (val
 
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
   return results;
-}
-
-async function fetchImage(uri: string, signal: AbortSignal, maxBytes: number) {
-  const urls = getFetchableUrls(uri);
-  if (!urls?.length) throw new Error(`Unsupported artwork URL: ${uri}`);
-
-  let lastError: Error | undefined;
-  for (let urlIndex = 0; urlIndex < urls.length; urlIndex += 1) {
-    let url = urls[urlIndex];
-    try {
-      for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-        const isIpfsGateway = IPFS_GATEWAYS.some((gateway) => new URL(gateway).hostname === new URL(url).hostname);
-        const addresses = await withSignal(assertSafeRemoteUrl(url, isIpfsGateway), signal);
-        const pinnedAddress = addresses[0];
-        const dispatcher = new Agent({
-          connect: {
-            lookup: (_hostname, options, callback) => {
-              const family = isIP(pinnedAddress);
-              if (options.all) {
-                callback(null, [{ address: pinnedAddress, family }]);
-                return;
-              }
-
-              callback(null, pinnedAddress, family);
-            }
-          }
-        });
-
-        try {
-          const response = await fetch(url, {
-            redirect: 'manual',
-            signal,
-            dispatcher
-          });
-
-          if (response.status >= 300 && response.status < 400) {
-            if (redirect === MAX_REDIRECTS) throw new Error('Too many artwork redirects');
-            const location = response.headers.get('location');
-            if (!location) throw new Error('Artwork redirect has no location');
-            url = new URL(location, url).toString();
-            continue;
-          }
-
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const contentLength = Number(response.headers.get('content-length'));
-          if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-            throw new Error('Artwork exceeds size limit');
-          }
-
-          if (!response.body) throw new Error('Artwork response has no body');
-          const reader = response.body.getReader();
-          const chunks: Buffer[] = [];
-          let totalBytes = 0;
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            totalBytes += value.byteLength;
-            if (totalBytes > maxBytes) throw new Error('Artwork exceeds size limit');
-            chunks.push(Buffer.from(value));
-          }
-          const image = Buffer.concat(chunks, totalBytes);
-          const metadata = await withSignal(sharp(image, { limitInputPixels: MAX_INPUT_PIXELS }).metadata(), signal);
-          if (!metadata.format || !ALLOWED_IMAGE_FORMATS.has(metadata.format)) {
-            throw new Error('Unsupported artwork format');
-          }
-          return image;
-        } finally {
-          await dispatcher.close();
-        }
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Artwork fetch failed');
-      if (urlIndex === urls.length - 1) break;
-    }
-  }
-  throw lastError || new Error('Artwork fetch failed');
 }
 
 function fallbackSvg() {
@@ -156,7 +60,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       async () => {
         const maxBytesPerLayer = Math.min(MAX_IMAGE_BYTES, Math.floor(MAX_TOTAL_IMAGE_BYTES / metadata.artwork.length));
         const layers = await mapWithConcurrency(metadata.artwork, MAX_CONCURRENT_LAYER_FETCHES, ({ url }) =>
-          fetchImage(url, controller.signal, maxBytesPerLayer)
+          fetchSafeImage(url, controller.signal, maxBytesPerLayer)
         );
 
         const base = await withSignal(

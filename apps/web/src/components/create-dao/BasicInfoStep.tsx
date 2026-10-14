@@ -24,7 +24,7 @@ export function BasicInfoStep() {
     <div className={styles.stack}>
       <div className={styles.identity}>
         <div className={styles.stack}>
-          <CreationField id="tokenName" label="DAO name">
+          <CreationField id="tokenName" label="Tribe name">
             <Input
               id="tokenName"
               autoComplete="off"
@@ -83,7 +83,7 @@ export function BasicInfoStep() {
               autoComplete="off"
               value={basicInfo.slug}
               maxLength={63}
-              placeholder="my-community"
+              placeholder="my-tribe"
               {...fieldAccessibility('slug', errors)}
               onChange={(e) => {
                 update({ slug: e.target.value.toLowerCase() });
@@ -98,7 +98,7 @@ export function BasicInfoStep() {
       <CreationField
         id="description"
         label="Description"
-        hint={`What your community is about. Markdown works. ${profileBytes({ description: basicInfo.description, links: basicInfo.links, image: basicInfo.contractImage }).toLocaleString()} of ${MAX_PROFILE_BYTES.toLocaleString()} bytes used with the links and image.`}
+        hint={`What your tribe is about. Markdown works. ${profileBytes({ description: basicInfo.description, links: basicInfo.links, image: basicInfo.contractImage }).toLocaleString()} of ${MAX_PROFILE_BYTES.toLocaleString()} bytes used with the links and image.`}
       >
         <MarkdownField
           id="description"

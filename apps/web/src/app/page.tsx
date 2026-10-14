@@ -9,10 +9,11 @@ import {
   getPendingDaosForLaunchAdmin,
   withLiveAvailability
 } from '@/lib/dao-db';
+import { SITE_DESCRIPTION, SITE_NAME } from '@/lib/site';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Builder · Your community. Your rules. Your treasury.' },
-  description: 'Start a community with your people, vote on what happens next, and see where the shared treasury goes.'
+  title: { absolute: `${SITE_NAME} · Build a tribe` },
+  description: SITE_DESCRIPTION
 };
 
 export default async function Page() {

@@ -1,4 +1,6 @@
-# Builder (Stellar)
+# Tribes Builder (Stellar)
+
+The product is Tribes Builder (tribes.build). In user-facing copy a DAO is a tribe, with the DAO term one line beneath; code identifiers such as `CommunityCard` keep their names. See the Brand and Logo and Voice sections of `DESIGN.md`.
 
 ## Design System
 

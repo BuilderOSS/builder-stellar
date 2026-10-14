@@ -8,7 +8,7 @@ import { css, cx, sva } from 'styled-system/css';
 
 import { Crest } from '@/components/ui';
 
-import { BrandMark } from './brand-mark';
+import { BrandMark, BrandWordmark } from './brand-mark';
 
 export type ShellNavItem = {
   key: string;
@@ -207,7 +207,7 @@ export function NavRail({
   items: ShellNavItem[];
   footerItems?: ShellNavItem[];
   activeKey?: string;
-  /** One filled action pinned to the bottom, e.g. Start a DAO. */
+  /** One filled action pinned to the bottom, e.g. Build a tribe. */
   action?: Pick<ShellNavItem, 'label' | 'href' | 'icon'>;
   /** Shortcuts to the viewer's own communities, shown as crests under the main items. */
   communities?: RailCommunity[];
@@ -239,7 +239,9 @@ export function NavRail({
           <span className={classes.icon}>
             <BrandMark size={36} />
           </span>
-          <span className={cx(classes.label, classes.brand)}>Builder</span>
+          <span className={cx(classes.label, classes.brand)}>
+            <BrandWordmark />
+          </span>
           <span className="sr-only"> home</span>
         </NextLink>
         <span className={classes.separator} aria-hidden="true" />
@@ -267,7 +269,7 @@ export function NavRail({
                     <span className={classes.icon}>
                       <LayoutGrid aria-hidden="true" strokeWidth={1.75} />
                     </span>
-                    <span className={classes.label}>All your communities</span>
+                    <span className={classes.label}>All your tribes</span>
                   </NextLink>
                 </li>
               ) : null}

@@ -56,7 +56,7 @@ export function buildLaunchPlan({
       doneCount: 0,
       totalCount: 0,
       canLaunch: false,
-      launchHint: 'This community is already live.'
+      launchHint: 'This tribe is already live.'
     };
 
   const layers = artwork?.properties.length ?? 0;
@@ -89,7 +89,7 @@ export function buildLaunchPlan({
       id: 'slug',
       title: 'Pick a new link',
       status: 'blocked',
-      detail: `Another community launched first with "${readiness.pending.slug}".`
+      detail: `Another tribe launched first with "${readiness.pending.slug}".`
     });
 
   if (withdrawnContracts > 0)
@@ -107,7 +107,7 @@ export function buildLaunchPlan({
         id: 'admin',
         title: "We couldn't confirm your launch rights",
         detail:
-          'The DAO factory has a different launch admin for this community. Refresh, then check you are on the right wallet.'
+          'The DAO factory has a different launch admin for this tribe. Refresh, then check you are on the right wallet.'
       });
     if (readiness.admin !== launchAdmin)
       blockers.push({

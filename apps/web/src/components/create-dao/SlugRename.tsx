@@ -42,7 +42,7 @@ export function SlugRename({
     setMessage('');
     try {
       const status = await fetch(`/api/slugs/${slug}`, { cache: 'no-store' }).then((response) => response.json());
-      if (status?.claimedBy) throw new Error(`/dao/${slug} is taken by another community.`);
+      if (status?.claimedBy) throw new Error(`/dao/${slug} is taken by another tribe.`);
       const manager = new ManagerClient({
         contractId: getDeploymentConfig().managerAddress,
         rpcUrl: config.rpcUrl,
@@ -70,7 +70,7 @@ export function SlugRename({
   }
 
   return (
-    <Callout variant="warning" title={`Another community took /dao/${currentSlug}`}>
+    <Callout variant="warning" title={`Another tribe took /dao/${currentSlug}`}>
       <p>
         It launched first with this link, so your launch would fail. Pick another link, then launch. It becomes yours
         when you launch.

@@ -100,7 +100,7 @@ export default function GovernanceAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     ) {
-      setFormMessage('Switch your wallet to this community’s network first.');
+      setFormMessage('Switch your wallet to this tribe’s network first.');
       return;
     }
     const handler = getActionHandler(type);
@@ -131,7 +131,7 @@ export default function GovernanceAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     )
-      throw new Error('Switch your wallet to this community’s network first.');
+      throw new Error('Switch your wallet to this tribe’s network first.');
     if (!session.address) {
       throw new Error('Connect the launch admin wallet first.');
     }

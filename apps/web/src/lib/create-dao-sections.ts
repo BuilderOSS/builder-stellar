@@ -8,7 +8,7 @@ export const FORM_SECTIONS = [
     id: 'identity',
     stored: 'basicInfo',
     title: 'Identity',
-    description: 'Your name, picture and what the community is about. This is how people find you.'
+    description: 'Your name, picture and what the tribe is about. This is how people find you.'
   },
   {
     id: 'membership',

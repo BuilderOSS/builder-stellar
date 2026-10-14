@@ -6,11 +6,11 @@ export default function NotFound() {
       title="We couldn't find that"
       action={
         <ButtonLink href="/discover" variant="secondary">
-          Find a community
+          Find a tribe
         </ButtonLink>
       }
     >
-      The page or community you opened doesn&apos;t exist on this network, or the link is out of date.
+      The page or tribe you opened doesn&apos;t exist on this network, or the link is out of date.
     </EmptyState>
   );
 }

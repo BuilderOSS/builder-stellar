@@ -11,6 +11,8 @@ const prose = css({
   '& h3': { textStyle: 'subheading', mt: '6', mb: '2' },
   '& p': { m: '0', mb: '3', color: 'ink.muted', lineHeight: '1.65' },
   '& ul, & ol': { m: '0', mb: '3', pl: '5', color: 'ink.muted', lineHeight: '1.65' },
+  '& ul': { listStyleType: 'disc' },
+  '& ol': { listStyleType: 'decimal' },
   '& li': { mb: '1.5' },
   '& strong': { color: 'ink', fontWeight: '600' },
   '& a': { color: 'signal', textDecoration: 'underline', textUnderlineOffset: '3px' },

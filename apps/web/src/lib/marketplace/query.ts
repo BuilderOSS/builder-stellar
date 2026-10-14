@@ -26,7 +26,7 @@ export function assertMarketplaceIdentity(
     row.daoId !== community.daoId ||
     row.contractId !== community.marketplaceContract
   ) {
-    throw new MarketplaceError('Indexed marketplace identity does not match this community.', 503);
+    throw new MarketplaceError('Indexed marketplace identity does not match this tribe.', 503);
   }
 }
 

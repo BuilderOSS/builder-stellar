@@ -168,7 +168,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
   );
   return (
     <div className={panel}>
-      <p className={intro}>How this community decided similar things before.</p>
+      <p className={intro}>How this tribe decided similar things before.</p>
       <DataState loading={isLoading && !data} error={error} hasData={Boolean(data)}>
         {data?.items.length ? (
           <div>
@@ -183,7 +183,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
             ))}
           </div>
         ) : (
-          <Text size="sm">No proposals yet. This could be the first decision.</Text>
+          <Text size="sm">No proposals yet. Got an idea for the tribe? Put it to a vote.</Text>
         )}
       </DataState>
     </div>

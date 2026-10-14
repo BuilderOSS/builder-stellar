@@ -1,6 +1,6 @@
 # Architecture
 
-Builder separates platform deployment, DAO authority, and indexed history. A Manager creates each DAO's four core contracts and the plug-in modules it chooses (Auction, Marketplace, ClaimMinter); every one of them belongs to that DAO, and the platform mints for nobody. Manager cannot administer a DAO after launch, but its registry remains an upgrade-policy dependency and the source of every contract's `version()`. The design is [membership-models](designs/membership-models.md), with the membership switches in [locked-tokens](designs/locked-tokens.md).
+Tribes Builder separates platform deployment, DAO authority, and indexed history. A Manager creates each DAO's four core contracts and the plug-in modules it chooses (Auction, Marketplace, ClaimMinter); every one of them belongs to that DAO, and the platform mints for nobody. Manager cannot administer a DAO after launch, but its registry remains an upgrade-policy dependency and the source of every contract's `version()`. The design is [membership-models](designs/membership-models.md), with the membership switches in [locked-tokens](designs/locked-tokens.md).
 
 The protocol runs on chain state alone: a client with public RPC, the contract addresses and its own keys can create, operate, upgrade and renew a DAO. The indexer is a read cache for discovery, feeds and history. Display text (the DAO profile, proposal descriptions, comments) lives in events. See [STORAGE_DIET](STORAGE_DIET.md) and, for every storage key and its renewal, [TTL_ECONOMICS](TTL_ECONOMICS.md).
 

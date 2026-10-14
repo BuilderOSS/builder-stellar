@@ -65,7 +65,7 @@ export const CLASS_LABELS: Record<RenewalClass, string> = {
   proposals: 'Proposals',
   listings: 'Listings',
   holdings: 'Treasury holdings',
-  slug: 'Community link',
+  slug: 'Tribe link',
   claims: 'Claim lists',
   modules: 'Module records'
 };

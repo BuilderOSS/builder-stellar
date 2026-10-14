@@ -153,7 +153,7 @@ const SWITCHES = [
     type: 'set-transfers-locked',
     fn: 'set_transfers_locked',
     label: 'Lock memberships',
-    on: 'Tokens move only by sale from the community, by giving them back to the DAO or by a DAO vote.',
+    on: 'Tokens move only by sale from the tribe, by giving them back to the DAO or by a DAO vote.',
     off: 'Members can transfer and sell their tokens freely.'
   },
   {
@@ -335,7 +335,7 @@ export function MembershipSettings() {
             <Callout
               variant="info"
               title="Locked in for the launch drive"
-              description="The community belongs to its treasury until it launches. After launch, changes go through proposals."
+              description="The tribe belongs to its treasury until it launches. After launch, changes go through proposals."
             />
           ) : !canAct ? (
             <Callout
@@ -438,7 +438,7 @@ export function MembershipSettings() {
                   ))}
                 </div>
               ) : (
-                <Text size="sm">This community has no modules yet.</Text>
+                <Text size="sm">This tribe has no modules yet.</Text>
               )}
               {data.modules.length ? (
                 <Stack gap="2">
@@ -487,8 +487,8 @@ export function MembershipSettings() {
                 </Stack>
               ) : null}
               <FieldHelperText>
-                Modules that can move memberships were named when the community was created; after launch a proposal can
-                add or remove one (Proposals → Change a transfer agent).
+                Modules that can move memberships were named when the tribe was created; after launch a proposal can add
+                or remove one (Proposals → Change a transfer agent).
               </FieldHelperText>
             </Stack>
           </Card>

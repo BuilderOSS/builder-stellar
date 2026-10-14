@@ -1,6 +1,7 @@
 import { CircleCheck, CircleDashed } from 'lucide-react';
 import { css, cx } from 'styled-system/css';
 
+import { GlossaryTerm } from '@/components/help/glossary';
 import { Avatar, VoteTally } from '@/components/ui';
 
 type ProposalVoteSummaryProps = {
@@ -24,8 +25,8 @@ const status = css({
   textStyle: 'caption',
   fontSize: '0.875rem',
   color: 'ink.muted',
-  '& svg': { width: '4', height: '4', flexShrink: '0' },
-  '&[data-met] svg': { color: 'success' }
+  '& > svg': { width: '4', height: '4', flexShrink: '0' },
+  '&[data-met] > svg': { color: 'success' }
 });
 const votersRow = css({
   display: 'flex',
@@ -94,6 +95,7 @@ export function ProposalVoteSummary({
         <li className={status} data-met={quorumMet ? '' : undefined}>
           {quorumMet ? <CircleCheck aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
           {quorumLine(quorum, participation, quorumMet, phase)}
+          <GlossaryTerm term="quorum" />
         </li>
         <li className={status} data-met={approvalMet ? '' : undefined}>
           {approvalMet ? <CircleCheck aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}

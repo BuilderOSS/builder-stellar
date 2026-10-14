@@ -263,7 +263,7 @@ export function HolderControls({
             (session.authStatus !== 'authenticated'
               ? 'Connect your wallet to manage a token you hold.'
               : session.walletNetworkPassphrase !== config.passphrase
-                ? 'Switch your wallet to this community’s network.'
+                ? 'Switch your wallet to this tribe’s network.'
                 : !liveOwner
                   ? 'Live ownership has to load before you can act.'
                   : 'Only the current holder can do this.')}
@@ -283,9 +283,9 @@ export function HolderControls({
         options={
           locked
             ? [
-                { value: 'transfer', label: 'Give back', description: 'Return this token to the community' },
+                { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
                 { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-                { value: 'approve', label: 'Approve the community', description: 'Let a vote move this token' },
+                { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
                 { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
               ]
             : [
@@ -301,10 +301,10 @@ export function HolderControls({
           <div>
             <p className={muted}>
               {kind === 'transfer'
-                ? 'Memberships here are locked, so a token can only go back to the community. You stop being a member if it was your last one.'
-                : 'Memberships here are locked. Approving the community lets a proposal members pass move this token, for example to a new wallet of yours.'}
+                ? 'Memberships here are locked, so a token can only go back to the tribe. You stop being a member if it was your last one.'
+                : 'Memberships here are locked. Approving the tribe lets a proposal members pass move this token, for example to a new wallet of yours.'}
             </p>
-            <Address value={config.treasuryContractId} label="Community Treasury" compact />
+            <Address value={config.treasuryContractId} label="Tribe Treasury" compact />
           </div>
         ) : kind !== 'revoke' ? (
           <Field>
@@ -327,7 +327,7 @@ export function HolderControls({
               <FieldHelperText>
                 Applies to every token you hold here, not just this one. You keep the tokens; only votes move.
                 {membersOnly
-                  ? ' This community only lets you delegate to members: someone who holds a token that isn’t listed for sale.'
+                  ? ' This tribe only lets you delegate to members: someone who holds a token that isn’t listed for sale.'
                   : ''}
               </FieldHelperText>
             ) : null}
@@ -433,7 +433,7 @@ export function HolderControls({
           <Address value={hash} label="Transaction" />
           {confirmed && locked && kind === 'approve' ? (
             <p className={muted}>
-              Next, ask the community to move it: a proposal with &quot;Approve a membership transfer&quot; names this
+              Next, ask the tribe to move it: a proposal with &quot;Approve a membership transfer&quot; names this
               token, your wallet and the new one. The approval lasts long enough for that vote.
             </p>
           ) : null}

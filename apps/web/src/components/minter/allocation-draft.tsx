@@ -245,7 +245,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         fresh.live !== state.live ||
         fresh.admin !== state.admin
       )
-        throw new Error('The community or your account changed. Refresh and try again.');
+        throw new Error('The tribe or your account changed. Refresh and try again.');
       const draft = await publish(fresh, entries);
       at = 'open';
       stage('open', 'active');
@@ -295,7 +295,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       <div className={form}>
         <h2>Open a claim list</h2>
         <p className={intro}>
-          The launch drive is open, so no other list can open now. Once the community launches, new lists go through a
+          The launch drive is open, so no other list can open now. Once the tribe launches, new lists go through a
           proposal.
         </p>
       </div>
@@ -319,7 +319,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
           {mode === 'free'
             ? 'Listed wallets claim their tokens for free, before and after launch.'
             : mode === 'drive'
-              ? 'People claim, and pay the price if there is one, while the community is still in setup. Once enough of them have claimed, anyone can launch it. If the drive ends first, everyone can take their payment back.'
+              ? 'People claim, and pay the price if there is one, while the tribe is still in setup. Once enough of them have claimed, anyone can launch it. If the drive ends first, everyone can take their payment back.'
               : 'Listed wallets claim their tokens themselves, paying the price if there is one. The list goes into a proposal members vote on.'}{' '}
           Up to {MAX_TREE_CLAIMS.toLocaleString()} wallets. The full list is published to IPFS so anyone can check it.
         </p>
@@ -341,8 +341,8 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       {mode === 'drive' ? (
         <Callout
           variant="warning"
-          title="Opening a drive hands the community to its Treasury now"
-          description="Add your artwork and mint founder tokens first: after this you can't change settings, artwork, founder tokens or modules. The community launches once enough people claim, with the launch choices below, or it never launches and everyone who paid can take it back."
+          title="Opening a drive hands the tribe to its Treasury now"
+          description="Add your artwork and mint founder tokens first: after this you can't change settings, artwork, founder tokens or modules. The tribe launches once enough people claim, with the launch choices below, or it never launches and everyone who paid can take it back."
         />
       ) : null}
 
@@ -367,7 +367,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
               onChange={(event) => setPrice(event.target.value.trim())}
             />
             <FieldHelperText>
-              In {code ?? 'the community payment asset'}, up to 7 decimal places. 0 makes it free.
+              In {code ?? 'the tribe payment asset'}, up to 7 decimal places. 0 makes it free.
             </FieldHelperText>
           </Field>
         ) : null}
@@ -433,7 +433,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       {!ready ? (
         <p className={intro}>
           {state?.live
-            ? 'Connect and sign in with a wallet to draft a proposal. The Treasury must be the community admin.'
+            ? 'Connect and sign in with a wallet to draft a proposal. The Treasury must be the tribe admin.'
             : 'Connect and sign in with the launch admin wallet to open a list.'}
         </p>
       ) : null}
@@ -492,7 +492,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         onOpenChange={(open) => (open ? null : setConfirmDrive(null))}
         role="alertdialog"
         title="Open the launch drive?"
-        description="This can't be undone. You won't be able to change anything about the community after you sign."
+        description="This can't be undone. You won't be able to change anything about the tribe after you sign."
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDrive(null)}>
@@ -520,7 +520,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
               .
             </li>
             <li>
-              The community launches once {confirmDrive.needed.toLocaleString()} of them claim, by{' '}
+              The tribe launches once {confirmDrive.needed.toLocaleString()} of them claim, by{' '}
               {formatClaimDate(confirmDrive.deadline)}
               {launchAuction || launchMarketplace
                 ? `, and then ${[launchAuction ? 'auctions start' : null, launchMarketplace ? 'the market opens' : null].filter(Boolean).join(' and ')}`
@@ -531,7 +531,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
               If that many don&apos;t claim in time, it never launches
               {confirmDrive.price === 0n ? '.' : ' and everyone who paid can take their payment back.'}
             </li>
-            <li>The community, its settings and its modules pass to its Treasury now. You sign one transaction.</li>
+            <li>The tribe, its settings and its modules pass to its Treasury now. You sign one transaction.</li>
           </ul>
         ) : null}
       </Dialog>

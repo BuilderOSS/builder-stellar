@@ -11,8 +11,11 @@ import {
   type DraftConfiguration,
   OPEN_MEMBERSHIP
 } from '@/lib/create-dao-schema';
+import { siteHref, withSiteOrigin } from '@/lib/site';
 
-export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
+export const DEFAULT_DAO_IMAGE_URL = siteHref('/images/dao-logo.png');
+// token_uri appends `?contract=<token>&token=<id>` (served by /api/render).
+export const DEFAULT_RENDERER_BASE = siteHref('/api/render');
 export const LOCAL_DEFAULT_DAO_IMAGE_URL = '/images/dao-logo.png';
 // Artwork types are also consumed by the reusable layer preview and starter registry.
 export type ArtworkProperty = { name: string; items: string[] };
@@ -59,8 +62,7 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
       description: '',
       contractImage: DEFAULT_DAO_IMAGE_URL,
       links: [],
-      // token_uri appends `?contract=<token>&token=<id>` (served by /api/render).
-      rendererBase: 'https://builder-stellar-web.vercel.app/api/render'
+      rendererBase: DEFAULT_RENDERER_BASE
     },
     auction: { enabled: true, paymentAsset, reservePrice: '1', duration: 86400, timeBuffer: 900 },
     marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
@@ -125,12 +127,24 @@ function withLinks(info: Record<string, unknown>): DraftConfiguration['basicInfo
       : [];
   return { ...rest, links } as DraftConfiguration['basicInfo'];
 }
+/**
+ * Drafts that haven't been submitted move their image and renderer from the old host to the site
+ * URL. Submitted drafts keep theirs: recovery checks them against the signed transaction.
+ */
+function withSiteUrls(draft: LocalDaoDraft, info: DraftConfiguration['basicInfo']): DraftConfiguration['basicInfo'] {
+  if (draft.deployment) return info;
+  return {
+    ...info,
+    contractImage: typeof info.contractImage === 'string' ? withSiteOrigin(info.contractImage) : info.contractImage,
+    rendererBase: typeof info.rendererBase === 'string' ? withSiteOrigin(info.rendererBase) : info.rendererBase
+  };
+}
 function withProfileLinks(draft: LocalDaoDraft): LocalDaoDraft {
   return {
     ...draft,
     configuration: {
       ...draft.configuration,
-      basicInfo: withLinks(draft.configuration.basicInfo as unknown as Record<string, unknown>),
+      basicInfo: withSiteUrls(draft, withLinks(draft.configuration.basicInfo as unknown as Record<string, unknown>)),
       // Drafts saved before claims and membership rules existed: no claims, an open community.
       claims: draft.configuration.claims ?? { enabled: false },
       tokenSettings: draft.configuration.tokenSettings ?? { ...OPEN_MEMBERSHIP }
@@ -169,7 +183,8 @@ export function migrateCreationWorkspace(value: unknown): { drafts: LocalDaoDraf
       ...config,
       basicInfo: {
         ...basicInfo,
-        contractImage: preview ? DEFAULT_DAO_IMAGE_URL : image || DEFAULT_DAO_IMAGE_URL
+        rendererBase: withSiteOrigin(basicInfo.rendererBase),
+        contractImage: preview ? DEFAULT_DAO_IMAGE_URL : withSiteOrigin(image || DEFAULT_DAO_IMAGE_URL)
       },
       governance: { ...config.governance, ...old.governance },
       auction: { ...config.auction, enabled: old.purpose?.membershipMode === 'auctions' },

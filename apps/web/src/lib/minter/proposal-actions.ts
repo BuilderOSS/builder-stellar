@@ -39,7 +39,7 @@ export function validateClaimListDraft(draft: ClaimListDraft, now = Math.floor(D
 /** The call a proposal (or the launch admin in Setup) makes, after the allowance grant. */
 export function claimListCall(draft: ClaimListDraft, claimsContractId: string) {
   validateClaimListDraft(draft);
-  if (!StrKey.isValidContract(claimsContractId)) throw new Error('This community has no claims module.');
+  if (!StrKey.isValidContract(claimsContractId)) throw new Error('This tribe has no claims module.');
   return {
     target: claimsContractId,
     function: 'open_list' as const,
@@ -56,7 +56,7 @@ export function assertClaimListScope(state: ClaimState, deploymentId: string, da
     !state.claimsContractId ||
     !StrKey.isValidContract(state.claimsContractId)
   )
-    throw new Error('The community and its claims module must be verified first.');
+    throw new Error('The tribe and its claims module must be verified first.');
   if (state.live && (!treasury || state.admin !== treasury))
     throw new Error('The Treasury must be the current Token admin for a governance claim list.');
 }

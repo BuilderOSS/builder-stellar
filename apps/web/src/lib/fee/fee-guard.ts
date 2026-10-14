@@ -16,7 +16,7 @@ export class FeeGuardError extends Error {
   constructor(readonly fee: bigint) {
     super(
       `This action would pay about ${formatXlm(fee)} XLM in network fees, most of it to renew shared contract code. ` +
-        'Builder renews that code, so nothing was signed. Please report this to the Builder team.'
+        'Tribes Builder renews that code, so nothing was signed. Please report this to the Tribes Builder team.'
     );
     this.name = 'FeeGuardError';
   }

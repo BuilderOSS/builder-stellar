@@ -198,6 +198,36 @@ describe('durable browser workspace', () => {
     expect('purpose' in migrated.configuration).toBe(false);
     expect(old.purpose.purpose).toBe('Old purpose');
   });
+  it('moves unsubmitted drafts off the old host and leaves submitted ones as signed', () => {
+    const old = 'https://builder-stellar-web.vercel.app';
+    const store = useCreateDaoStore.getState();
+    store.newDraft(guest);
+    const [draft] = useCreateDaoStore.getState().drafts;
+    const legacy = {
+      ...draft,
+      configuration: {
+        ...draft.configuration,
+        basicInfo: {
+          ...draft.configuration.basicInfo,
+          contractImage: `${old}/images/dao-logo.png`,
+          rendererBase: `${old}/api/render`
+        }
+      }
+    };
+    const submitted = { ...legacy, id: 'submitted', deployment: { nonce: '1' } as unknown as typeof draft.deployment };
+    const [moved, kept] = migrateCreationWorkspace({ drafts: [legacy, submitted] }).drafts;
+    expect(moved.configuration.basicInfo).toMatchObject({
+      contractImage: 'https://tribes.build/images/dao-logo.png',
+      rendererBase: 'https://tribes.build/api/render'
+    });
+    expect(kept.configuration.basicInfo.rendererBase).toBe(`${old}/api/render`);
+  });
+  it('defaults new drafts to the site URL', () => {
+    expect(defaultConfiguration().basicInfo).toMatchObject({
+      contractImage: 'https://tribes.build/images/dao-logo.png',
+      rendererBase: 'https://tribes.build/api/render'
+    });
+  });
   it('preserves damaged browser data instead of overwriting it with an empty workspace', async () => {
     data.set(CREATE_WORKSPACE_KEY, '{corrupted');
     await useCreateDaoStore.persist.rehydrate();

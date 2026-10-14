@@ -207,7 +207,7 @@ export const setTransfersLockedHandler = switchHandler({
   label: 'Lock memberships',
   description: 'Choose whether members can sell or give their tokens to anyone',
   fn: 'set_transfers_locked',
-  on: 'Tokens move only by sale from the community, by giving them back to the DAO, or by a DAO vote.',
+  on: 'Tokens move only by sale from the tribe, by giving them back to the DAO, or by a DAO vote.',
   off: 'Members can transfer and sell their tokens freely.',
   warning:
     'Locking takes away every member’s way out by sale: after it, a member can only give their token back to the DAO or ask for a vote.'
@@ -216,7 +216,7 @@ export const setTransfersLockedHandler = switchHandler({
 export const setMembersOnlyDelegationHandler = switchHandler({
   type: 'set-members-only-delegation',
   label: 'Members-only delegation',
-  description: 'Choose whether votes can be delegated to people outside the community',
+  description: 'Choose whether votes can be delegated to people outside the tribe',
   fn: 'set_members_only_delegation',
   on: 'Members can delegate their votes only to themselves or another member.',
   off: 'Members can delegate their votes to anyone.',
@@ -399,8 +399,8 @@ function ApprovedTransferForm({ value, onChange, disabled, validationErrors }: A
         />
         <ErrorText result={validationErrors} field="to" />
         <FieldHelperText>
-          The holder first approves the community for this token, from the token’s page (Approve the community). The
-          transfer happens when the proposal runs, and fails if that approval has run out.
+          The holder first approves the tribe for this token, from the token’s page (Approve the tribe). The transfer
+          happens when the proposal runs, and fails if that approval has run out.
         </FieldHelperText>
       </Field>
     </div>

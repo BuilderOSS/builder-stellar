@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
+import { GlossaryTerm } from '@/components/help/glossary';
 import { PageSection } from '@/components/page-section';
 import { ProposalRow } from '@/components/proposal/proposal-row';
 import type { ProposalListResponse } from '@/components/proposal/types';
@@ -81,7 +82,12 @@ export default function ProposalsPage() {
   return (
     <PageSection
       title="Proposals"
-      description="Members propose changes, then vote on each one together. Each token is one vote."
+      description={
+        <>
+          Members make <GlossaryTerm term="proposal">proposals</GlossaryTerm>, then vote on each one together. Each
+          token is one vote.
+        </>
+      }
       actions={
         canShowProposalAction ? (
           <Button onClick={() => router.push(daoRoute(routeId, 'proposals/create'))} disabled={createDisabled}>

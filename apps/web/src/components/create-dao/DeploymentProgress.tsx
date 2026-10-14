@@ -29,13 +29,13 @@ export function DeploymentProgress({
     error: 'This needs attention'
   };
   return (
-    <section className={styles.panel} aria-label="Creating your community">
+    <section className={styles.panel} aria-label="Creating your tribe">
       <h2 className={titleClass}>{confirmed ? 'Created. Next, set it up' : labels[state.currentStep]}</h2>
       <p className={styles.muted} role="status">
         {confirmed
           ? record.confirmedBy === 'manager-state'
-            ? 'Your community exists on the network (we could not read the transaction itself). Finish Setup, then launch.'
-            : 'Your community is created in Setup. Next: upload artwork, mint founder tokens, then launch.'
+            ? 'Your tribe exists on the network (we could not read the transaction itself). Finish Setup, then launch.'
+            : 'Your tribe is created in Setup. Next: upload artwork, mint founder tokens, then launch.'
           : record.hash
             ? record.status === 'signed'
               ? "Your wallet signed it, but the network hasn't confirmed receiving it. Check it, or send the same signed transaction again while it's still valid."

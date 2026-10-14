@@ -5,6 +5,7 @@ import { DaoProvider } from '@/contexts/dao-context';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { resolveDaoId } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
+import { SITE_NAME } from '@/lib/site';
 
 interface DaoLayoutProps {
   children: ReactNode;
@@ -16,15 +17,19 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
 
   try {
     const daoConfig = await getDaoNetworkConfigById(await resolveDaoId(routeId));
+    const title = daoConfig.tokenName || 'Tribe';
+    // First line of the verified profile description, as plain text.
+    const description = plainSummary(daoConfig.profile.description) || 'A tribe on Tribes Builder.';
     return {
-      title: daoConfig.tokenName || 'Community',
-      // First line of the verified profile description, as plain text.
-      description: plainSummary(daoConfig.profile.description) || 'A community on Builder.'
+      title,
+      description,
+      // Share previews show the tribe, not the site name; the image comes from opengraph-image.tsx.
+      openGraph: { title, description, siteName: SITE_NAME, type: 'website' }
     };
   } catch {
     return {
-      title: 'Community not found',
-      description: "We couldn't find that community."
+      title: 'Tribe not found',
+      description: "We couldn't find that tribe."
     };
   }
 }

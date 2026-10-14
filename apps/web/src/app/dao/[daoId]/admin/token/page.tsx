@@ -58,7 +58,7 @@ export default function TokenAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     ) {
-      setFormMessage('Switch your wallet to this community’s network before minting.');
+      setFormMessage('Switch your wallet to this tribe’s network before minting.');
       return;
     }
     if (!session.address || (!hasMintAccess && !canProposeMint)) {
@@ -197,7 +197,7 @@ export default function TokenAdminPage() {
                   : canProposeMint
                     ? `Propose minting up to ${MAX_BATCH_MINT} tokens at a time to one wallet. It runs if the vote passes.`
                     : frozen
-                      ? 'The launch drive froze minting: new tokens come only from its claim list until the community launches.'
+                      ? 'The launch drive froze minting: new tokens come only from its claim list until the tribe launches.'
                       : token.data?.live && !session.address
                         ? 'Connect a wallet to propose a mint. It runs if the vote passes.'
                         : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
@@ -216,7 +216,7 @@ export default function TokenAdminPage() {
                   <Callout
                     variant="error"
                     title="Upload the artwork first"
-                    description="This community has no artwork yet. Tokens minted now have no traits until they’re seeded from Manage."
+                    description="This tribe has no artwork yet. Tokens minted now have no traits until they’re seeded from Manage."
                   />
                   <Checkbox
                     label="I understand these tokens will be minted without traits."

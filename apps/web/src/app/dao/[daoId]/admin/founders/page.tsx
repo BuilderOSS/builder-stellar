@@ -286,7 +286,7 @@ export default function FoundersAdminPage() {
         ) : token.data.live ? (
           <Callout
             variant="info"
-            title="Your community has launched"
+            title="Your tribe has launched"
             description="Founder tokens are minted before launch. To mint more now, use Mint tokens."
           >
             <div className={css({ mt: '3' })}>

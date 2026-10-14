@@ -70,7 +70,7 @@ export default function AuctionAdminPage() {
         {!config.auctionContractId ? (
           <Callout
             variant="info"
-            title="This community has no auction"
+            title="This tribe has no auction"
             description="It was created without one. People join through its other ways in, like the market or claim lists."
           />
         ) : null}

@@ -71,7 +71,7 @@ describe('set-token-metadata', () => {
     const second = rename.serialize({ ...draft, name: 'Lantern Society' }, form);
     expect(analyzeProposalAction(second, [first]).some((finding) => finding.kind === 'conflict')).toBe(true);
     expect(isHighRiskProposalAction(first)).toBe(true);
-    expect(getProposalActionLabel('set-token-metadata')).toBe('Rename the community');
+    expect(getProposalActionLabel('set-token-metadata')).toBe('Rename the tribe');
     expect(getProposalActionSummary(first)).toBe('Rename to Lantern Club (LANTERN)');
   });
 });

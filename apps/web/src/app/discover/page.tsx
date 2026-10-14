@@ -10,8 +10,8 @@ import { type DaoConfig, getAllDaosFromDatabase, withLiveAvailability } from '@/
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Discover communities',
-  description: 'Find a community on Stellar to join, bid in, or vote with.'
+  title: 'Discover tribes',
+  description: 'Find a tribe on Stellar to join, bid in, or vote with.'
 };
 
 export default async function DiscoverPage() {
@@ -25,19 +25,19 @@ export default async function DiscoverPage() {
   return (
     <PageSection
       title="Discover"
-      description="Communities on Stellar. Bid in an auction or buy a token to become a member and vote."
+      description="Tribes on Stellar. Bid in an auction or buy a token to become a member and vote."
       actions={
         <ButtonLink href="/create">
           <Plus aria-hidden="true" />
-          Start a DAO
+          Build a tribe
         </ButtonLink>
       }
     >
       {loadError ? (
         <Callout
           variant="error"
-          title="Communities didn't load"
-          description="Try again in a moment, or open a community directly if you have its link."
+          title="Tribes didn't load"
+          description="Try again in a moment, or open a tribe directly if you have its link."
         />
       ) : null}
       <CommunityGrid daos={daos} />

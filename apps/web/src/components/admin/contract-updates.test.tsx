@@ -82,7 +82,7 @@ describe('ContractUpdates', () => {
     expect(html).toContain('1 upgrade available');
     expect(html).toContain('Membership token');
     expect(html).toContain('0.1.0 → 0.2.0');
-    expect(html).toContain('Renaming the community');
+    expect(html).toContain('Renaming the tribe');
     expect(html).toContain('Apply 1 upgrade');
     expect(html).toContain('Up to date');
   });

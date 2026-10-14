@@ -28,7 +28,7 @@ export default function SetupPage() {
         className={css({ justifySelf: 'start', ml: '-3' })}
       >
         <ChevronLeft aria-hidden="true" />
-        {config.tokenName || 'Community'}
+        {config.tokenName || 'Tribe'}
       </ButtonLink>
       <PageHeader
         title="Set up and launch"

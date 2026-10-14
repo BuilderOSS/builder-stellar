@@ -7,8 +7,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
     <RouteError
       error={error}
       reset={reset}
-      title="This part of the community didn't load"
-      homeLabel="Go to Builder home"
+      title="This part of the tribe didn't load"
+      homeLabel="Go to Tribes Builder home"
     />
   );
 }

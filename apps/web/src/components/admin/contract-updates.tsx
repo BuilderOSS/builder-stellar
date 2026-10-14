@@ -177,7 +177,7 @@ export function ContractUpdates() {
                   ? pending
                     ? 'During setup you apply upgrades yourself. Each one is a signature.'
                     : 'Upgrades go to a vote like any other change.'
-                  : 'New contract releases show up here when they are approved for your community.'}
+                  : 'New contract releases show up here when they are approved for your tribe.'}
               </p>
             </div>
 
@@ -188,7 +188,7 @@ export function ContractUpdates() {
                 title={`Release ${update.current} of ${moduleLabelInSentence(update.module)} was withdrawn`}
                 description={
                   pending
-                    ? `Your community can't launch on a withdrawn version. ${update.next ? 'Apply the upgrade below first.' : 'Wait for a replacement release.'}`
+                    ? `Your tribe can't launch on a withdrawn version. ${update.next ? 'Apply the upgrade below first.' : 'Wait for a replacement release.'}`
                     : `It keeps working, but upgrade it as soon as you can.${update.next ? '' : ' A replacement release isn’t approved yet.'}`
                 }
               />

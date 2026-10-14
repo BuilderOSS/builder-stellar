@@ -1,6 +1,6 @@
 # Storage, TTL and rent reference
 
-Every ledger entry a Builder contract owns, how long it lives, who renews it and what that costs. The design
+Every ledger entry a Tribes Builder contract owns, how long it lives, who renews it and what that costs. The design
 behind it is [STORAGE_DIET.md](STORAGE_DIET.md); this page is the operating reference and must change with any
 storage layout change (the e2e tests `protocol_runs_on_chain_state_only` and
 `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` fail when the inventory drifts).
@@ -68,11 +68,11 @@ are not transactions and renew nothing.
 
 ## Key reference
 
-Every Builder key is namespaced: `(Symbol("builder"), [Symbol(Variant), args…])` (D30, D37). OpenZeppelin keys
-keep OZ's own shape. Off-chain code builds Builder keys with `apps/web/src/lib/storage-key.ts`, whose bytes are
+Every Tribes Builder key is namespaced: `(Symbol("builder"), [Symbol(Variant), args…])` (D30, D37). OpenZeppelin keys
+keep OZ's own shape. Off-chain code builds these keys with `apps/web/src/lib/storage-key.ts`, whose bytes are
 pinned against the Rust encoding. The namespace adds 28 bytes per key and no host allocation (the symbol stays
 inline in a `Val`). Each crate's `storage::key_samples` lists every
-variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps Builder enums disjoint.
+variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps the Tribes Builder enums disjoint.
 
 "Sweep" means the DAO's renewal sweep covers the key. "Holder" means it renews when its owner acts and is restored
 by the app before the owner's next transaction (see [Archived member state](#archived-member-state)). Sizes are

@@ -14,12 +14,12 @@ export default function NotFound() {
       <BrandMark size={48} />
       <h1 className={title}>Lost your noggles?</h1>
       <p className={body}>
-        This page doesn&apos;t exist, or the link is out of date. Your communities are right where you left them.
+        This page doesn&apos;t exist, or the link is out of date. Your tribes are right where you left them.
       </p>
       <div className={actions}>
         <ButtonLink href="/">Go home</ButtonLink>
         <ButtonLink href="/discover" variant="secondary">
-          Find a community
+          Find a tribe
         </ButtonLink>
       </div>
     </section>

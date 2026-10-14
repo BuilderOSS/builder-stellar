@@ -163,12 +163,12 @@ export function validateDaoProfileDraft(data: DaoProfileDraft): ValidationResult
 
 export const updateDaoProfileHandler: PendingAdminHandler<DaoProfileDraft, 'update-dao-profile'> = {
   type: 'update-dao-profile',
-  label: 'Update the community profile',
-  description: 'Replace the description, links and image people see. Prepare it in Manage → Community profile.',
+  label: 'Update the tribe profile',
+  description: 'Replace the description, links and image people see. Prepare it in Manage → Tribe profile.',
   group: 'Administration',
   FormComponent: ({ value }) => (
     <>
-      <Text>Edit the profile in Manage → Community profile; this shows what the proposal will write.</Text>
+      <Text>Edit the profile in Manage → Tribe profile; this shows what the proposal will write.</Text>
       <CodeBlock>{value.profile}</CodeBlock>
     </>
   ),

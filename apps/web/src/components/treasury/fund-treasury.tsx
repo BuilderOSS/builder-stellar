@@ -170,7 +170,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
           Add funds
         </h2>
         <p className={muted}>
-          Send XLM or USDC from your wallet to the treasury. It becomes the community&apos;s, spent only by vote.
+          Send XLM or USDC from your wallet to the treasury. It becomes the tribe&apos;s, spent only by vote.
         </p>
       </div>
       {!allowed ? (

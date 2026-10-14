@@ -79,7 +79,7 @@ export function DraftRow({
           {item.title}
         </NextLink>
         <span className={meta}>
-          {item.kind === 'proposal' ? 'Proposal' : 'New DAO'} · {item.meta}
+          {item.kind === 'proposal' ? 'Proposal' : 'New tribe'} · {item.meta}
         </span>
       </span>
       {extra || item.discardable ? (

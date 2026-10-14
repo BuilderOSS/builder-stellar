@@ -143,7 +143,7 @@ export function verifyClaimTree(
   if (file.format !== TREE_FORMAT || file.hash !== 'sha256' || file.leaf !== TREE_LEAF || file.node !== TREE_NODE)
     throw new Error('The claim list uses an unknown format.');
   if (file.network !== expected.network || file.token !== expected.token)
-    throw new Error('The claim list is for a different community or network.');
+    throw new Error('The claim list is for a different tribe or network.');
   if (!file.claims || typeof file.claims !== 'object') throw new Error('The claim list has no claims.');
   const entries = Object.entries(file.claims).map(([address, claim]) => ({
     address,

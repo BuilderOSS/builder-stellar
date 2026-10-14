@@ -50,7 +50,7 @@ function TransferProposalForm() {
   const Form = handler.FormComponent;
 
   function checkDraft() {
-    if (!allowed) throw new Error('Authenticate on this network after the community launches.');
+    if (!allowed) throw new Error('Authenticate on this network after the tribe launches.');
     if (!getTreasuryAssets(daoConfig.name).some((asset) => asset.code === draft.assetCode))
       throw new Error('Choose an asset to send.');
     if (
@@ -81,7 +81,7 @@ function TransferProposalForm() {
         <p className={muted} role="status">
           {session.walletNetworkIssue ||
             (daoConfig.status === 'pending'
-              ? 'Payouts can be proposed once the community launches.'
+              ? 'Payouts can be proposed once the tribe launches.'
               : 'Connect your wallet to propose a payout.')}
         </p>
       ) : null}
