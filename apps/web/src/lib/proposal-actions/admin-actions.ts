@@ -6,7 +6,7 @@ import {
   type AdminReservePriceDraft,
   AdminReservePriceForm,
   type AdminValueDraft,
-  AdminValueForm,
+  adminValueFormWithHint,
   type OpenPoolDraft,
   OpenPoolForm,
   type PoolIdDraft,
@@ -27,6 +27,16 @@ import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation'
 import type { ActionHandler, ValidationResult } from './types';
 
 type EmptyDraft = Record<string, never>;
+
+/** What the picker and summaries call a setting change, and what its field and errors call the value. */
+type SettingCopy = {
+  label: string;
+  /** The value's name in validation messages: "Voting delay must be a whole number." */
+  field: string;
+  description: string;
+  /** Unit hint under the value input. */
+  hint: string;
+};
 
 function valid(): ValidationResult {
   return { valid: true };
@@ -71,19 +81,19 @@ function decimalPrice(value: string): ValidationResult {
 
 function settingHandler(
   type: 'set-voting-delay' | 'set-voting-period' | 'set-queue-delay' | 'set-proposal-threshold' | 'set-quorum-bps',
-  label: string,
+  { label, field, description, hint }: SettingCopy,
   functionName: string,
   limitCheck: (value: number | bigint) => string | null
 ): ActionHandler<AdminValueDraft> {
   return {
     type,
     label,
-    description: `Update ${label.toLowerCase()}`,
+    description,
     group: 'Administration',
-    FormComponent: AdminValueForm,
+    FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
-      const whole = wholeNumber(data.value, label);
+      const whole = wholeNumber(data.value, field);
       if (!whole.valid) return whole;
       // Contract bounds: timings 300..=2_592_000s, quorum 1..=10_000 bps, threshold >= 1 vote (absolute).
       const limitError = limitCheck(
@@ -110,7 +120,7 @@ function settingHandler(
 
 function auctionDurationHandler(
   type: 'set-auction-duration' | 'set-auction-time-buffer',
-  label: string,
+  { label, field, description, hint }: SettingCopy,
   functionName: 'set_duration' | 'set_time_buffer',
   minimum: number,
   limitCheck?: (seconds: number) => string | null
@@ -118,24 +128,24 @@ function auctionDurationHandler(
   return {
     type,
     label,
-    description: `Update ${label.toLowerCase()}`,
+    description,
     group: 'Administration',
-    FormComponent: AdminValueForm,
+    FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
       const parsed = Number(data.value.trim());
       if (!/^\d+$/.test(data.value.trim()) || !Number.isSafeInteger(parsed)) {
         return {
           valid: false,
-          message: `${label} must be a whole number.`,
-          fields: { value: `${label} must be a whole number.` }
+          message: `${field} must be a whole number.`,
+          fields: { value: `${field} must be a whole number.` }
         };
       }
       if (parsed < minimum) {
         return {
           valid: false,
-          message: `${label} must be at least ${minimum} seconds.`,
-          fields: { value: `${label} must be at least ${minimum} seconds.` }
+          message: `${field} must be at least ${minimum} seconds.`,
+          fields: { value: `${field} must be at least ${minimum} seconds.` }
         };
       }
       const limitError = limitCheck?.(parsed);
@@ -158,47 +168,96 @@ function auctionDurationHandler(
   };
 }
 
-export const setVotingDelayHandler = settingHandler('set-voting-delay', 'Voting delay', 'set_voting_delay', (value) =>
-  validateVotingDelay(Number(value))
+// Labels match the proposal page (contract-call-labels.ts) so a change reads the same before and after it's proposed.
+export const setVotingDelayHandler = settingHandler(
+  'set-voting-delay',
+  {
+    label: 'Change the wait before voting opens',
+    field: 'Voting delay',
+    description: 'How long after a proposal is made before members can vote',
+    hint: 'In seconds.'
+  },
+  'set_voting_delay',
+  (value) => validateVotingDelay(Number(value))
 );
 export const setVotingPeriodHandler = settingHandler(
   'set-voting-period',
-  'Voting period',
+  {
+    label: 'Change how long voting stays open',
+    field: 'Voting period',
+    description: 'How long members have to vote on a proposal',
+    hint: 'In seconds.'
+  },
   'set_voting_period',
   (value) => validateVotingPeriod(Number(value))
 );
 export const setProposalThresholdHandler = settingHandler(
   'set-proposal-threshold',
-  'Proposal threshold',
+  {
+    label: 'Change the votes needed to propose',
+    field: 'Proposal threshold',
+    description: 'How many votes someone needs to make a proposal',
+    hint: 'In votes, at least 1.'
+  },
   'set_proposal_threshold',
   (value) => validateProposalThreshold(value)
 );
-export const setQuorumBpsHandler = settingHandler('set-quorum-bps', 'Quorum', 'set_quorum_bps', (value) =>
-  validateQuorumBps(Number(value))
+export const setQuorumBpsHandler = settingHandler(
+  'set-quorum-bps',
+  {
+    label: 'Change the quorum',
+    field: 'Quorum',
+    description: 'Share of all votes that must be For or Abstain for a proposal to pass',
+    hint: 'In basis points: 1000 is 10%.'
+  },
+  'set_quorum_bps',
+  (value) => validateQuorumBps(Number(value))
 );
-export const setQueueDelayHandler = settingHandler('set-queue-delay', 'Queue delay', 'set_queue_delay', (value) =>
-  validateQueueDelay(Number(value))
+export const setQueueDelayHandler = settingHandler(
+  'set-queue-delay',
+  {
+    label: 'Change the safety delay',
+    field: 'Safety delay',
+    description: 'How long a passed proposal waits after it’s queued before it can run',
+    hint: 'In seconds.'
+  },
+  'set_queue_delay',
+  (value) => validateQueueDelay(Number(value))
 );
 export const setAuctionDurationHandler = auctionDurationHandler(
   'set-auction-duration',
-  'Auction duration',
+  {
+    label: 'Change how long each auction runs',
+    field: 'Auction duration',
+    description: 'How long each auction stays open for bids',
+    hint: 'In seconds, at least 300.'
+  },
   'set_duration',
   300,
   (seconds) => (seconds > 2_592_000 ? 'Auction duration cannot exceed 30 days.' : null)
 );
 export const setAuctionTimeBufferHandler = auctionDurationHandler(
   'set-auction-time-buffer',
-  'Auction time buffer',
+  {
+    label: 'Change how much time a late bid adds',
+    field: 'Late-bid extension',
+    description: 'How much time a bid near the end adds to the auction',
+    hint: 'In seconds.'
+  },
   'set_time_buffer',
   1,
   validateAuctionTimeBuffer
 );
 
-function emptyAuctionHandler(type: 'pause-auction' | 'unpause-auction', label: string): ActionHandler<EmptyDraft> {
+function emptyAuctionHandler(
+  type: 'pause-auction' | 'unpause-auction',
+  label: string,
+  description: string
+): ActionHandler<EmptyDraft> {
   return {
     type,
     label,
-    description: label,
+    description,
     group: 'Administration',
     FormComponent: () => null,
     getDefaultValues: () => ({}),
@@ -213,15 +272,21 @@ function emptyAuctionHandler(type: 'pause-auction' | 'unpause-auction', label: s
   };
 }
 
-export const pauseAuctionHandler = emptyAuctionHandler('pause-auction', 'Pause auction');
-// Label is generic since unpause can mean either "launch" (first time) or "resume" (after pause)
-// Admin page determines context-aware label based on auction status
-export const unpauseAuctionHandler = emptyAuctionHandler('unpause-auction', 'Resume or launch auction');
+export const pauseAuctionHandler = emptyAuctionHandler(
+  'pause-auction',
+  'Pause auctions',
+  'Stop auctions until a vote resumes them'
+);
+export const unpauseAuctionHandler = emptyAuctionHandler(
+  'unpause-auction',
+  'Resume auctions',
+  'Start auctions again, with any new settings'
+);
 
 export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft> = {
   type: 'set-auction-reserve-price',
-  label: 'Set auction reserve price',
-  description: 'Update the reserve price while the auction is paused',
+  label: 'Change the starting price',
+  description: 'Change the lowest opening bid while auctions are paused',
   group: 'Administration',
   FormComponent: AdminReservePriceForm,
   getDefaultValues: () => ({ reservePrice: '' }),
@@ -243,8 +308,8 @@ export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft
 
 export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   type: 'set-auction-payment-token',
-  label: 'Set auction payment token',
-  description: 'Update the payment token while the auction is paused',
+  label: 'Change the auction payment asset',
+  description: 'Change the asset bids are paid in while auctions are paused',
   group: 'Administration',
   FormComponent: AdminPaymentTokenForm,
   getDefaultValues: () => ({ paymentToken: '' }),
@@ -276,8 +341,8 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
 export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   ...setAuctionPaymentTokenHandler,
   type: 'set-marketplace-payment-token',
-  label: 'Set marketplace payment asset',
-  description: 'Update the marketplace payment asset; existing listings keep their snapshotted asset',
+  label: 'Change the market payment asset',
+  description: 'Change the asset buyers pay in. Open listings keep the asset they were listed in.',
   validate: (data, context) => {
     const result = setAuctionPaymentTokenHandler.validate(data, context);
     if (!result.valid) return result;
@@ -305,16 +370,16 @@ export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenD
 
 function boundedModuleValueHandler(
   type: 'set-marketplace-secondary-fee' | 'set-auction-min-bid-increment',
-  label: string,
+  { label, field, description, hint }: SettingCopy,
   minimum: number,
   maximum: number
 ): ActionHandler<AdminValueDraft> {
   return {
     type,
     label,
-    description: `Update ${label.toLowerCase()}`,
+    description,
     group: 'Administration',
-    FormComponent: AdminValueForm,
+    FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
       const parsed = Number(data.value.trim());
@@ -322,7 +387,7 @@ function boundedModuleValueHandler(
         ? valid()
         : {
             valid: false,
-            message: `${label} must be a whole number between ${minimum} and ${maximum}.`,
+            message: `${field} must be a whole number between ${minimum} and ${maximum}.`,
             fields: { value: `${minimum}–${maximum} required.` }
           };
     },
@@ -347,25 +412,36 @@ function boundedModuleValueHandler(
 
 export const setMarketplaceSecondaryFeeHandler = boundedModuleValueHandler(
   'set-marketplace-secondary-fee',
-  'Marketplace secondary fee (bps)',
+  {
+    label: 'Change the resale fee',
+    field: 'Resale fee',
+    description: 'Change the fee on each resale in the market',
+    hint: 'In basis points: 100 is 1%.'
+  },
   0,
   MAX_MARKETPLACE_FEE_BPS
 );
 export const setAuctionMinBidIncrementHandler = boundedModuleValueHandler(
   'set-auction-min-bid-increment',
-  'Auction minimum bid increment (%)',
+  {
+    label: 'Change the minimum bid increase',
+    field: 'Minimum bid increase',
+    description: 'Change how much higher each new bid must be than the last',
+    hint: 'In percent, 1 to 100.'
+  },
   1,
   100
 );
 
 function emptyModuleHandler(
   type: 'pause-marketplace' | 'unpause-marketplace' | 'cancel-auction',
-  label: string
+  label: string,
+  description: string
 ): ActionHandler<EmptyDraft> {
   return {
     type,
     label,
-    description: label,
+    description,
     group: 'Administration',
     FormComponent: () => null,
     getDefaultValues: () => ({}),
@@ -380,9 +456,21 @@ function emptyModuleHandler(
   };
 }
 
-export const pauseMarketplaceHandler = emptyModuleHandler('pause-marketplace', 'Pause marketplace');
-export const unpauseMarketplaceHandler = emptyModuleHandler('unpause-marketplace', 'Resume marketplace');
-export const cancelAuctionHandler = emptyModuleHandler('cancel-auction', 'Cancel paused auction');
+export const pauseMarketplaceHandler = emptyModuleHandler(
+  'pause-marketplace',
+  'Pause the market',
+  'Stop sales in the market until a vote reopens it'
+);
+export const unpauseMarketplaceHandler = emptyModuleHandler(
+  'unpause-marketplace',
+  'Reopen the market',
+  'Let sales in the market start again'
+);
+export const cancelAuctionHandler = emptyModuleHandler(
+  'cancel-auction',
+  'Cancel the current auction',
+  'Refunds the top bid and sends the token to the treasury. Auctions must be paused first.'
+);
 
 // Quick-buy pools (docs/designs/membership-models.md § 4): after launch the Treasury is the
 // marketplace admin, so opening, closing and sweeping a pool are proposal actions. A pool reserves
