@@ -1417,7 +1417,7 @@ mod comments {
     }
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 1: no marketplace key may encode like a
+/// docs/STORAGE_DIET.md D26: no marketplace key may encode like a
 /// `common` or OpenZeppelin key the contract links.
 #[test]
 fn storage_keys_do_not_collide() {

@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
     const daoConfig = await getDaoNetworkConfigById(await resolveDaoId(routeId));
     const title = daoConfig.tokenName || 'Tribe';
     // First line of the verified profile description, as plain text.
-    const description = plainSummary(daoConfig.profile.description) || 'A tribe on Tribes Builder.';
+    const description = plainSummary(daoConfig.profile.description) || 'A tribe on Tribe Builder.';
     return {
       title,
       description,

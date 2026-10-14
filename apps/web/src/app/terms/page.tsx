@@ -4,7 +4,7 @@ import { DiscordLink, LegalPage } from '@/components/legal/legal-page';
 
 export const metadata: Metadata = {
   title: 'Terms of use',
-  description: 'The terms for using Tribes Builder, a non-custodial interface for tribes (DAOs) on Stellar.'
+  description: 'The terms for using Tribe Builder, a non-custodial interface for tribes (DAOs) on Stellar.'
 };
 
 export default function TermsPage() {
@@ -12,7 +12,7 @@ export default function TermsPage() {
     <LegalPage
       title="Terms of use"
       summary={[
-        'Tribes Builder is an open-source app for running tribes, which are DAOs on Stellar. It never holds your funds or your keys.',
+        'Tribe Builder is an open-source app for running tribes, which are DAOs on Stellar. It never holds your funds or your keys.',
         'What happens onchain is public and permanent. Nobody, including us, can undo it.',
         'Each tribe is run by its own members. We don’t vet, endorse or control any tribe.',
         'It’s experimental software, offered as is. Use it only if you’re 18 or older and it’s legal where you live.',
@@ -24,7 +24,7 @@ export default function TermsPage() {
       <section>
         <h2>1. Accepting these terms</h2>
         <p>
-          These terms are an agreement between you and Builder DAO (&quot;we&quot;, &quot;us&quot;), which builds Tribes
+          These terms are an agreement between you and Builder DAO (&quot;we&quot;, &quot;us&quot;), which builds Tribe
           Builder. They apply when you use the app at tribes.build or any other copy of it we run (the
           &quot;interface&quot;). By using the interface you agree to them. If you don&apos;t agree, please don&apos;t
           use it.
@@ -32,18 +32,18 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>2. What Tribes Builder is</h2>
+        <h2>2. What Tribe Builder is</h2>
         <p>
-          Tribes Builder is a non-custodial web interface to open-source smart contracts on the Stellar network. It
-          helps people build and join tribes: groups with a shared treasury that decide together by vote. Under the
-          hood, each tribe is a DAO with its own token, governor and treasury contracts.
+          Tribe Builder is a non-custodial web interface to open-source smart contracts on the Stellar network. It helps
+          people build and join tribes: groups with a shared treasury that decide together by vote. Under the hood, each
+          tribe is a DAO with its own token, governor and treasury contracts.
         </p>
         <p>
           The interface prepares transactions. Your wallet signs them and the network runs them. We never take custody
           of your assets or your keys, and we can&apos;t move anything without your signature.
         </p>
         <p>
-          Today Tribes Builder runs on the Stellar testnet, where tokens have no value and the network can be reset.
+          Today Tribe Builder runs on the Stellar testnet, where tokens have no value and the network can be reset.
           Mainnet isn&apos;t live yet. When it is, these terms apply there too.
         </p>
       </section>
@@ -173,7 +173,7 @@ export default function TermsPage() {
       <section>
         <h2>14. Limitation of liability</h2>
         <p>
-          To the fullest extent the law allows, Builder DAO and the people who contribute to Tribes Builder aren&apos;t
+          To the fullest extent the law allows, Builder DAO and the people who contribute to Tribe Builder aren&apos;t
           liable for any indirect, incidental, special, consequential or punitive damages, or for any loss of funds,
           tokens, data or profits, that come from using or being unable to use the interface or the contracts. Where the
           law doesn&apos;t allow a limit, our liability is limited to the minimum the law permits.
@@ -203,7 +203,7 @@ export default function TermsPage() {
       <section>
         <h2>17. Governing law and disputes</h2>
         <p>
-          Tribes Builder is a global online service and hasn&apos;t chosen a governing law yet. Until it does, these
+          Tribe Builder is a global online service and hasn&apos;t chosen a governing law yet. Until it does, these
           terms are governed by the laws that apply to you and to us. If something goes wrong, tell us on{' '}
           <DiscordLink>Discord</DiscordLink> first and we&apos;ll try to sort it out informally.
         </p>

@@ -1,4 +1,4 @@
-import { siteHref } from '@/lib/site';
+import { SITE_NAME, siteHref } from '@/lib/site';
 import { ArtworkProperty } from '@/stores/create-dao-store';
 
 /**
@@ -24,7 +24,7 @@ export interface StarterCollection {
 export const STARTER_COLLECTIONS: StarterCollection[] = [
   {
     id: 'nouns-builder-demo',
-    name: 'Tribes Builder Demo Collection',
+    name: `${SITE_NAME} Demo Collection`,
     description: 'A colorful, whimsical collection inspired by Nouns DAO. Perfect for testing and learning.',
     baseUri: 'ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/',
     extension: '.png',

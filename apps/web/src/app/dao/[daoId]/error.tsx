@@ -8,7 +8,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       error={error}
       reset={reset}
       title="This part of the tribe didn't load"
-      homeLabel="Go to Tribes Builder home"
+      homeLabel="Go to Tribe Builder home"
     />
   );
 }

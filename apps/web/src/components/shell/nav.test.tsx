@@ -14,12 +14,12 @@ const community = (n: number) => ({ key: `C${n}`, label: `Club ${n}`, href: `/da
 
 describe('NavRail communities', () => {
   it('shows no group when there are no communities', () => {
-    expect(renderToStaticMarkup(<NavRail label="Tribes Builder" items={items} />)).not.toContain('Yours');
+    expect(renderToStaticMarkup(<NavRail label="Tribe Builder" items={items} />)).not.toContain('Yours');
   });
 
   it('links each community by its route and names it', () => {
     const html = renderToStaticMarkup(
-      <NavRail label="Tribes Builder" items={items} communities={[community(1), community(2)]} />
+      <NavRail label="Tribe Builder" items={items} communities={[community(1), community(2)]} />
     );
     expect(html).toContain('href="/dao/club-1"');
     expect(html).toContain('Club 2');
@@ -29,7 +29,7 @@ describe('NavRail communities', () => {
   it(`caps the list at ${RAIL_COMMUNITY_LIMIT} and links to the rest`, () => {
     const many = Array.from({ length: RAIL_COMMUNITY_LIMIT + 2 }, (_, i) => community(i + 1));
     const html = renderToStaticMarkup(
-      <NavRail label="Tribes Builder" items={items} communities={many} communitiesHref="/#your-tribes" />
+      <NavRail label="Tribe Builder" items={items} communities={many} communitiesHref="/#your-tribes" />
     );
     expect(html).toContain(`Club ${RAIL_COMMUNITY_LIMIT}`);
     expect(html).not.toContain(`Club ${RAIL_COMMUNITY_LIMIT + 1}`);

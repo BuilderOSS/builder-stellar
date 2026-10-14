@@ -1,12 +1,12 @@
 # Design: add and remove modules in the web app
 
-Status: design for review. No app code yet. Preview: `docs/design/module-attach-preview.html` (open it in a browser; dark and light, with a clickable Add flow).
+Status: shipped in PR #57; § 12 records what changed during the build and what was proven on testnet. The clickable design preview was removed once the build landed; it is in git at `431e9b6:docs/design/module-attach-preview.html`.
 
 Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events and the `manager.daos` view that resolves auction, marketplace and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
 
 ## 1. Brief
 
-- **Product and place:** Tribes Builder, Manage → Membership → Modules. Today the card lists each module, its allowance and badges ("Not deployed by the Manager", "Holds tokens without votes", votes held). It cannot add or remove one.
+- **Product and place:** Tribe Builder, Manage → Membership → Modules. Today the card lists each module, its allowance and badges ("Not deployed by the Manager", "Holds tokens without votes", votes held). It cannot add or remove one.
 - **Who:** a tribe member who proposes a change (often a founder, new to DAOs), and the voters who read the proposal afterwards. Before launch, the launch admin.
 - **Job:** "Let my tribe sell, auction or hand out memberships in a new way", and later "stop doing that, safely".
 - **Idea level (Pollard):** an execution inside an existing surface. It has to feel like part of Manage, not like a new product.
@@ -121,15 +121,15 @@ The built-in "holds without votes" flag follows the contract (`builtin_non_votin
 | Manager paused | Check fails: "New modules can't be created right now. The platform has paused it." |
 | Stale module number | Check fails: "Another market was added while you were drafting. Reload this list, then add it again." |
 | Added to the draft | Existing "added to the proposal draft" callout. |
-| Not one of ours | Row says "Not deployed by Tribes Builder" and its "Remove from tribe…" stays disabled with the reason. |
+| Not one of ours | Row says "Not deployed by Tribe Builder" and its "Remove from tribe…" stays disabled with the reason. |
 
 ## 7. Copy rules applied
 
-Sentence case, contractions, no em dashes, plain words first with the DAO term one line beneath, buttons name their outcome, no "nonce", "SAC", "ledger" or "envelope" ("module number" instead of the index), durations as "5 minutes", "tribe" for the group, contract ids only in the Address pattern or under Technical details. "Tribes Builder did not deploy this contract" uses the brand name; the existing badge text "Not deployed by the Manager" changes to "Not deployed by Tribes Builder" for members.
+Sentence case, contractions, no em dashes, plain words first with the DAO term one line beneath, buttons name their outcome, no "nonce", "SAC", "ledger" or "envelope" ("module number" instead of the index), durations as "5 minutes", "tribe" for the group, contract ids only in the Address pattern or under Technical details. "Tribe Builder did not deploy this contract" uses the brand name; the existing badge text "Not deployed by the Manager" changes to "Not deployed by Tribe Builder" for members.
 
 ## 8. Motion and polish
 
-Summary; the table in the preview is the spec.
+Summary. The full table was in the design preview (see the status line); the shipped code is now the reference.
 
 - No new authored moment. The sheet, press scale (.96, 160ms), menu (150ms from its trigger) and callouts are the primitives.
 - The check line's icon swaps with scale .25 to 1, opacity and blur 4px to 0, `cubic-bezier(.2,0,0,1)`, 160ms. Its words change with it.

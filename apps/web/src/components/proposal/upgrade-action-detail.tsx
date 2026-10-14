@@ -81,7 +81,7 @@ export function UpgradeActionDetail({
         </div>
         {note ? <p className={body}>{note}</p> : null}
         <p className={muted}>
-          This moves {moduleLabelInSentence(module)} to a release approved for Tribes Builder. Tokens, votes, the
+          This moves {moduleLabelInSentence(module)} to a release approved for Tribe Builder. Tokens, votes, the
           treasury and history carry over unchanged.
         </p>
         {technical}
@@ -95,13 +95,13 @@ export function UpgradeActionDetail({
         <Callout
           variant="error"
           title="This release was withdrawn"
-          description="Tribes Builder withdrew this release, so the upgrade will fail when the proposal runs and nothing changes."
+          description="Tribe Builder withdrew this release, so the upgrade will fail when the proposal runs and nothing changes."
         />
       ) : data ? (
         <Callout
           variant="warning"
           title="This release isn't approved"
-          description="The Tribes Builder registry doesn't approve this upgrade, so it will fail when the proposal runs and nothing changes. Check where this proposal came from before voting."
+          description="The Tribe Builder registry doesn't approve this upgrade, so it will fail when the proposal runs and nothing changes. Check where this proposal came from before voting."
         />
       ) : (
         <Callout

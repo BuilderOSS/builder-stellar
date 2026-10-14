@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+import { SITE_NAME } from '@/lib/site';
 
 import type { AuthSession } from './types';
 
@@ -76,7 +77,7 @@ export function getAuthOrigin(request: Request) {
 }
 
 export function getAuthAppName() {
-  return process.env.AUTH_APP_NAME?.trim() || 'Tribes Builder';
+  return process.env.AUTH_APP_NAME?.trim() || SITE_NAME;
 }
 
 export function getSep10ServerKeypair() {

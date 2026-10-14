@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { readProposalChainState } from '@/lib/proposal-chain-state';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 import { proposalStateFromLabel, proposalStateLabel } from '@/lib/proposal-state';
+import { SITE_NAME } from '@/lib/site';
 import { parseTokenId } from '@/lib/token-id';
 
 import { remoteArt, tokenArt } from './art';
@@ -33,7 +34,7 @@ export async function tribeCard(routeId: string, section?: string): Promise<Shar
   if (config.status === 'pending') chips.push({ label: 'In setup', tone: 'warning' });
   return {
     title: name,
-    subtitle: plainSummary(config.profile.description, 120) || 'A tribe on Tribes Builder.',
+    subtitle: plainSummary(config.profile.description, 120) || `A tribe on ${SITE_NAME}.`,
     chips,
     stats: members ? [{ label: members.total === 1 ? 'member' : 'members', value: String(members.total) }] : [],
     art,

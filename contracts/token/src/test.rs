@@ -1379,7 +1379,7 @@ fn wiring_getters_expose_every_module() {
     assert!(entries.iter().all(|m| m.non_voting));
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 1: no token key may encode like an
+/// docs/STORAGE_DIET.md D26: no token key may encode like an
 /// OpenZeppelin key the token links (the old `TokenKey::MetadataContract` did).
 #[test]
 fn storage_keys_do_not_collide() {

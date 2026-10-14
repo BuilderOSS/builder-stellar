@@ -1,6 +1,6 @@
 # Storage, TTL and rent reference
 
-Every ledger entry a Tribes Builder contract owns, how long it lives, who renews it and what that costs. The design
+Every ledger entry a Tribe Builder contract owns, how long it lives, who renews it and what that costs. The design
 behind it is [STORAGE_DIET.md](STORAGE_DIET.md); this page is the operating reference and must change with any
 storage layout change (the e2e tests `protocol_runs_on_chain_state_only` and
 `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` fail when the inventory drifts).
@@ -34,7 +34,7 @@ per-transaction overhead. The Renewal tab defaults to 180 days for that reason.
 | Entry kind | Measured rate | How |
 |---|---|---|
 | Contract data and instances | **~0.0098 XLM per KB per day** | Simulated `ExtendFootprintTTL` of the Manager and the six DAO 0 instances (884 and 6,420 bytes, 167.7 → 180 days): 98 stroops per byte-day |
-| Contract code | **~0.051 XLM per KB per day** | A 35,604-byte code entry for ~164 days simulated at 2,998,799,289 stroops (STORAGE_DIET_REVIEW § 3): 514 stroops per byte-day, about five times data |
+| Contract code | **~0.051 XLM per KB per day** | A 35,604-byte code entry for ~164 days simulated at 2,998,799,289 stroops (testnet, 2026-10-12): 514 stroops per byte-day, about five times data |
 
 | What | 30 days | 120 days | 180 days | One year of upkeep |
 |---|---|---|---|---|
@@ -68,11 +68,11 @@ are not transactions and renew nothing.
 
 ## Key reference
 
-Every Tribes Builder key is namespaced: `(Symbol("builder"), [Symbol(Variant), args…])` (D30, D37). OpenZeppelin keys
+Every Tribe Builder key is namespaced: `(Symbol("builder"), [Symbol(Variant), args…])` (D30, D37). OpenZeppelin keys
 keep OZ's own shape. Off-chain code builds these keys with `apps/web/src/lib/storage-key.ts`, whose bytes are
 pinned against the Rust encoding. The namespace adds 28 bytes per key and no host allocation (the symbol stays
 inline in a `Val`). Each crate's `storage::key_samples` lists every
-variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps the Tribes Builder enums disjoint.
+variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps the Tribe Builder enums disjoint.
 
 "Sweep" means the DAO's renewal sweep covers the key. "Holder" means it renews when its owner acts and is restored
 by the app before the owner's next transaction (see [Archived member state](#archived-member-state)). Sizes are
@@ -141,7 +141,7 @@ archived id; chain-reading clients read the `ProposalId(seq)` entries raw with `
 
 ### Treasury and modules
 
-Modules list their own sweep keys (`DaoModule::renewal_keys(cursor, limit)`, at most 200 per page, eng review R3):
+Modules list their own sweep keys (`DaoModule::renewal_keys(cursor, limit)`, at most 200 per page; membership-models R3):
 the sweep reads the Token's registry and pages through each module by simulation, then reads which of the listed
 keys exist. A module registered from outside the Manager without `renewal_keys` has only its instance renewed, and
 Manage → Storage renewal says so.

@@ -362,7 +362,7 @@ mod ttl_policy {
         assert_eq!(ttls(&e, &c), (INSTANCE_TTL_EXTEND_TO, 30 * DAY_IN_LEDGERS));
     }
 
-    /// The original bug (STORAGE_DIET_REVIEW Finding 2): with both low, the
+    /// The original bug (docs/STORAGE_DIET.md D27): with both low, the
     /// old `instance().extend_ttl` pushed code to 170 days at the caller's cost.
     #[test]
     fn both_below_never_push_code_past_four_days() {

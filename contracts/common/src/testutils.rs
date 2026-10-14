@@ -89,7 +89,7 @@ impl MockManager {
 
 /// `(variant symbol, encoded length)` of a `#[contracttype]` storage key. Two
 /// keys with the same shape address the same storage slot, whatever their
-/// enum's type name (docs/STORAGE_DIET_REVIEW.md Finding 1).
+/// enum's type name (docs/STORAGE_DIET.md D26).
 pub fn key_shape(e: &Env, key: soroban_sdk::Val) -> (std::string::String, u32) {
     use soroban_sdk::xdr::ScVal;
     use soroban_sdk::TryFromVal;

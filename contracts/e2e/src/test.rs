@@ -3747,7 +3747,7 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
     );
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 2: a state-changing call must never push
+/// docs/STORAGE_DIET.md D27: a state-changing call must never push
 /// shared code to the instance's 170 days. The instance gets 170 days; code
 /// gets at most `CODE_TTL_EXTEND_TO`.
 #[test]
@@ -3808,7 +3808,7 @@ fn calls_bump_instance_long_and_shared_code_only_briefly() {
     );
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 1, end to end: a live DAO renames its
+/// docs/STORAGE_DIET.md D26, end to end: a live DAO renames its
 /// token by proposal, then settles an auction. The rename keeps the metadata
 /// hook, so the newly minted token still gets artwork.
 #[test]
@@ -4156,9 +4156,9 @@ fn a_module_created_after_launch_works_in_the_next_call() {
     assert_eq!(f.manager.module_count(&f.dao.token, &claims), 1);
 }
 
-/// docs/designs/membership-models.md §2 (Phase 4): a DAO created with no
-/// Auction or Marketplace launches with the four core contracts, and the
-/// Treasury registers outside code that holds NFTs by vote (R6): tokens it
+/// docs/designs/membership-models.md §2 (optional modules): a DAO created
+/// with no Auction or Marketplace launches with the four core contracts, and
+/// the Treasury registers outside code that holds NFTs by vote (R6): tokens it
 /// holds stop voting, and unregistering brings them back (review 2 A1).
 #[test]
 fn a_dao_without_optional_modules_launches_and_registers_external_code() {

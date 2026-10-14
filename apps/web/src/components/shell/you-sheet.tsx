@@ -240,7 +240,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
         <section className={block} aria-label="Wallet">
           <p className={css({ textStyle: 'heading', m: '0' })}>Connect a wallet</p>
           <Text>
-            Your wallet is how you vote, bid and hold membership. Tribes Builder never holds your funds and can&apos;t
+            Your wallet is how you vote, bid and hold membership. Tribe Builder never holds your funds and can&apos;t
             move them without your signature.
           </Text>
           <Button
@@ -257,7 +257,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
           </Button>
           <div className={networkStatus}>
             <span className={dot} aria-hidden="true" />
-            Tribes Builder is on {wallet.network.label}
+            Tribe Builder is on {wallet.network.label}
           </div>
           <div>
             <Button variant="link" size="sm" className={flushLink} onClick={openIntro}>

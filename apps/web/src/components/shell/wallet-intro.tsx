@@ -53,7 +53,7 @@ export function WalletIntro({
         <li className={item}>
           <p className={heading}>A wallet is your account</p>
           <p className={body}>
-            It&apos;s an app that holds your Stellar account. It&apos;s how you hold a membership, bid and vote. Tribes
+            It&apos;s an app that holds your Stellar account. It&apos;s how you hold a membership, bid and vote. Tribe
             Builder never holds your funds and can&apos;t move them without your approval.
           </p>
         </li>

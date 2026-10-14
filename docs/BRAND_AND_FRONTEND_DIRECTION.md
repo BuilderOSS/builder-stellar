@@ -1,6 +1,6 @@
 # Brand and frontend direction
 
-Tribes Builder, at [tribes.build](https://tribes.build), is where people build and run tribes: independent DAOs on Stellar with a shared treasury, NFT membership and onchain votes. Platform discovery and local preparation belong outside the tribe workspace; inside it, governance and Treasury authority must remain explicit.
+Tribe Builder, at [tribes.build](https://tribes.build), is where people build and run tribes: independent DAOs on Stellar with a shared treasury, NFT membership and onchain votes. Platform discovery and local preparation belong outside the tribe workspace; inside it, governance and Treasury authority must remain explicit.
 
 [DESIGN.md](../DESIGN.md) is the specification ("Warm Ink · Dusk"): brand and logo, tokens, type, navigation, density rules, motion and voice. This page is the short version, plus the frontend boundaries that copy must respect.
 
@@ -25,7 +25,7 @@ A warm host: plain, kind, specific, quietly confident.
 - **Master:** flat blue (`signal`), empty seat. Favicon, app bar, docs and the lockup. Below 32px, use the dedicated 16px drawing.
 - **Dusk tile:** the app icon, home screen and social avatars. The gradient lives on the tile only; the glyph stays flat in paper with a brass seat.
 - **Brass seat or brass glow:** only where the viewer has joined: your profile, your tribes, a member's share card.
-- **Wordmark:** "Tribes" in Bricolage Grotesque 700, "Builder" at 500 and muted.
+- **Wordmark:** "Tribe" in Bricolage Grotesque 700, "Builder" at 500 and muted.
 - **Don't** recolour the people, rotate the lens, add the noggle arm or bridge, put a gradient on the glyph, or use brass for anything that isn't the viewer's own. No tribal imagery: patterns, feathers, masks or totems.
 
 Files: the [press kit](brand/README.md); in code, `apps/web/src/components/shell/brand-mark.tsx`, `apps/web/src/app/icon.svg` and `apps/web/src/lib/brand-tile.tsx`.
@@ -58,4 +58,4 @@ Authority language is correctness, not style, and stays exact:
 
 The newcomer help explains these ideas; it is not a guided tour, and there is no cross-device collaboration. Document such capabilities only when they're implemented.
 
-A rendered reference of the system lives at [design/builder-dusk-preview.html](design/builder-dusk-preview.html). The [earlier dark/blue design](archive/BRAND_AND_FRONTEND_DIRECTION.md) preserves historical rationale only.
+The app is the rendered reference; its tokens are in `apps/web/panda.config.ts`.

@@ -1,5 +1,5 @@
 /**
- * The DAO renewal sweep (docs/STORAGE_DIET.md § 7, membership-models eng review R3).
+ * The DAO renewal sweep (docs/STORAGE_DIET.md § 7, membership-models R3).
  *
  * Every key a DAO owns is listed from chain state: the core contracts (Token,
  * Metadata, Governor, Treasury) by ledger reads of their instances and counts,

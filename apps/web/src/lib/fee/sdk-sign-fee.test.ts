@@ -1,5 +1,5 @@
 /**
- * docs/STORAGE_DIET_REVIEW.md § 3 open item: the app reported about twice the
+ * docs/STORAGE_DIET.md D29: the app reported about twice the
  * simulated resource fee. stellar-sdk 17.1.0 `AssembledTransaction.sign` rebuilds
  * with `fee: this.built.fee` (which already includes the resource fee), and
  * `build()` adds the resource fee again. patches/@stellar__stellar-sdk@17.1.0.patch

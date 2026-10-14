@@ -85,7 +85,7 @@ describe('ModulesCard', () => {
   });
 
   it('labels a module the Manager did not deploy', () => {
-    expect(render({ modules: [{ ...claims, vouched: false }] })).toContain('Not deployed by Tribes Builder');
+    expect(render({ modules: [{ ...claims, vouched: false }] })).toContain('Not deployed by Tribe Builder');
   });
 
   it('shows votes a module holds as a warning', () => {

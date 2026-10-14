@@ -16,7 +16,7 @@ const lockup = css({
 const wordmarkMuted = css({ fontWeight: '500', color: 'ink.muted' });
 
 /**
- * Tribes Builder's mark, "the lens is the table": three people around a single Nouns lens,
+ * Tribe Builder's mark, "the lens is the table": three people around a single Nouns lens,
  * with the seat nearest you left empty. When `joined`, that seat fills in brass ("yours").
  * Flat only: below 32px the favicon uses its own 16px drawing (app/icon.svg).
  */
@@ -53,11 +53,11 @@ export function BrandMark({
   );
 }
 
-/** "Tribes" bold with a muted "Builder", in the display face. Inherits size from its parent. */
+/** "Tribe" bold with a muted "Builder", in the display face. Inherits size from its parent. */
 export function BrandWordmark() {
   return (
     <span>
-      Tribes <span className={wordmarkMuted}>Builder</span>
+      Tribe <span className={wordmarkMuted}>Builder</span>
     </span>
   );
 }

@@ -9,6 +9,7 @@ import { css } from 'styled-system/css';
 import { activeNavKey } from '@/lib/dao-nav';
 import { daoRoute, daoRouteId } from '@/lib/dao-routes';
 import { useDashboardData } from '@/lib/goldsky-queries';
+import { SITE_NAME } from '@/lib/site';
 
 import { BrandLockup } from './brand-mark';
 import { NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
@@ -24,7 +25,7 @@ const GLOBAL_NAV: ShellNavItem[] = [
 ];
 
 const mobileOnly = css({ display: { base: 'inline-flex', md: 'none' }, textDecoration: 'none' });
-/** Tribes Builder outside a tribe: Home, Discover, Market and You. */
+/** Tribe Builder outside a tribe: Home, Discover, Market and You. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [youOpen, setYouOpen] = useState(false);
@@ -44,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ShellFrame
       rail={
         <NavRail
-          label="Tribes Builder"
+          label={SITE_NAME}
           items={GLOBAL_NAV}
           activeKey={active}
           action={{ label: 'Build a tribe', href: '/create', icon: Plus }}
@@ -53,14 +54,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       }
       topStart={
-        <NextLink href="/" className={mobileOnly} aria-label="Tribes Builder home">
+        <NextLink href="/" className={mobileOnly} aria-label={`${SITE_NAME} home`}>
           <BrandLockup />
         </NextLink>
       }
       topEnd={<WalletButton onOpenYou={() => setYouOpen(true)} />}
       tabBar={
         <TabBar
-          label="Tribes Builder"
+          label={SITE_NAME}
           items={GLOBAL_NAV}
           activeKey={active}
           extra={{ label: 'You', icon: UserRound, onClick: () => setYouOpen(true), active: youOpen }}

@@ -1,5 +1,5 @@
 //! Membership token settings end to end on the built WASMs
-//! (docs/designs/locked-tokens.md, Next Steps 3): a locked DAO created
+//! (docs/designs/locked-tokens.md, Success Criteria): a locked DAO created
 //! through the factory with its switches and transfer agents, its sales still
 //! running while resale is refused, a DAO-approved transfer and a recovery by
 //! real proposals, and unlocking by vote.

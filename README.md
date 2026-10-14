@@ -1,8 +1,8 @@
-# Tribes Builder
+# Tribe Builder
 
 **Build a tribe.** Gather your people, pool what you put in, and decide together.
 
-Tribes Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder.
+Tribe Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder.
 
 ## Brand
 
@@ -15,7 +15,7 @@ Tribes Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework
 
 ## Community and support
 
-Questions, ideas and problems: join the [Tribes Builder Discord](https://discord.gg/bTygNksyRb).
+Questions, ideas and problems: join the [Tribe Builder Discord](https://discord.gg/bTygNksyRb).
 
 ## System
 
@@ -73,12 +73,11 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [Contract review fixes](docs/CONTRACT_REVIEW_FIX_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md) and [tenant/read-model boundaries](docs/MULTITENANT_ARCHITECTURE.md)
 - [Manager deployment](docs/MANAGER_DEPLOYMENT.md) and [DAO deployment](docs/DAO_DEPLOYMENT.md)
 - [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
 - [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
-- [Bindings regeneration](BINDINGS_GENERATION_ISSUE.md)
+- [Bindings regeneration](docs/BINDINGS_GENERATION.md)
 - [Brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), [press kit](docs/brand/README.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
 
 ## Technology and license
