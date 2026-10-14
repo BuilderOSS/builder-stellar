@@ -2,7 +2,7 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import type { ManagerDao, MarketplacePool, MarketplaceSecondaryListing } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
-import { getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
+import { countBuyableOffers, getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { marketplaceId } from './amount';
 import {
   assertMarketplaceIdentity,
+  buyableOfferWhere,
   listingStatus,
   MARKETPLACE_MAX_PAGE,
   MarketplaceError,
@@ -141,10 +142,23 @@ function communityWhere(query: ReturnType<typeof parseMarketplaceQuery>) {
   };
 }
 
+/** Only communities with something to buy right now: an open market holding a buyable offer. */
 export async function marketplaceDirectory(params: URLSearchParams): Promise<MarketplaceDirectory> {
   const query = parseMarketplaceQuery(params);
+  const network = getDeploymentConfig().name;
+  const offers = await countBuyableOffers();
+  if (!offers.length) return { deploymentId: DEPLOYMENT_ID, network, communities: [], hasMore: false };
   const rows = await prisma.managerDao.findMany({
-    where: communityWhere(query),
+    where: {
+      // communityWhere's search is an OR of its own, so the market scope joins it with AND.
+      AND: [
+        communityWhere(query),
+        {
+          marketplaceEnabled: true,
+          OR: offers.map((offer) => ({ daoId: offer.daoId, marketplaceContract: offer.contractId }))
+        }
+      ]
+    },
     orderBy: [{ createdLedger: 'desc' }, { daoId: 'asc' }],
     skip: query.page * query.take,
     take: query.take + 1
@@ -153,10 +167,11 @@ export async function marketplaceDirectory(params: URLSearchParams): Promise<Mar
   const profiles = await verifyRows(getDeploymentNetwork(), page);
   return {
     deploymentId: DEPLOYMENT_ID,
-    network: getDeploymentConfig().name,
-    communities: page.map((row) =>
-      marketplaceCommunity(row, plainSummary(profiles.get(row.daoId)?.profile.description ?? ''))
-    ),
+    network,
+    communities: page.map((row) => ({
+      ...marketplaceCommunity(row, plainSummary(profiles.get(row.daoId)?.profile.description ?? '')),
+      forSale: offers.find((o) => o.daoId === row.daoId && o.contractId === row.marketplaceContract)?.count ?? 0
+    })),
     hasMore: query.page < MARKETPLACE_MAX_PAGE && rows.length > query.take
   };
 }
@@ -167,9 +182,16 @@ export async function marketplaceOffers(
   dao?: MarketplaceCommunity
 ): Promise<MarketplaceOffers> {
   const query = parseMarketplaceQuery(params);
+  // Across communities, "open" means buyable now. A community's own market still lists ended
+  // and sold-out offers, so they can be cleared and swept.
+  const buyable = !dao && query.status === 'open' ? buyableOfferWhere() : null;
   const communities = dao
     ? [dao]
-    : (await prisma.managerDao.findMany({ where: communityWhere(query) })).map((row) => marketplaceCommunity(row));
+    : (
+        await prisma.managerDao.findMany({
+          where: { ...communityWhere(query), ...(buyable ? { marketplaceEnabled: true } : {}) }
+        })
+      ).map((row) => marketplaceCommunity(row));
   const scoped = communities
     .filter((c) => c.marketplaceContract)
     .map((c) => marketplaceScope(DEPLOYMENT_ID, c.daoId, c.marketplaceContract!));
@@ -184,14 +206,14 @@ export async function marketplaceOffers(
     query.kind === 'secondary' || (query.status !== 'all' && !['open', 'closed'].includes(query.status))
       ? []
       : prisma.marketplacePool.findMany({
-          where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...poolStatus },
+          where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...(buyable?.pool ?? poolStatus) },
           orderBy: [{ openedLedger: 'desc' }, { eventId: 'desc' }],
           ...page
         }),
     query.kind === 'pool' || query.status === 'closed'
       ? []
       : prisma.marketplaceSecondaryListing.findMany({
-          where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...listingStatusFilter },
+          where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...(buyable?.secondary ?? listingStatusFilter) },
           orderBy: [{ createdLedger: 'desc' }, { eventId: 'desc' }],
           ...page
         })

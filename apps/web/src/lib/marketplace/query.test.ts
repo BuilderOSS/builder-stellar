@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertMarketplaceIdentity,
+  buyableOfferWhere,
   listingStatus,
   marketplaceScope,
   matchesPoolSnapshot,
@@ -53,6 +54,12 @@ describe('marketplace identity and listing snapshots', () => {
     expect(listingStatus('open', '100', 100)).toBe('awaiting-expiry');
     expect(listingStatus('purchased', '100', 101)).toBe('purchased');
     expect(() => listingStatus('invented', '100', 101)).toThrow();
+  });
+  it('counts as buyable only what is open, unexpired and, for a pool, in stock', () => {
+    expect(buyableOfferWhere(100n)).toEqual({
+      pool: { status: 'open', expiresAt: { gt: 100n }, inStock: { gt: 0 } },
+      secondary: { status: 'open', expiresAt: { gt: 100n } }
+    });
   });
   it('detects relisting, changed asset, price, fee, seller or expiry', () => {
     const live = { price: 10000001n, payment_asset: 'sac-a', expires_at: 100n, seller: 'seller', fee_bps: 250 };

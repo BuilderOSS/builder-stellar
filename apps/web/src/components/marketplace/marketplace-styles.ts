@@ -31,6 +31,8 @@ const styles = {
     '& h2, & h3': { textStyle: 'heading', fontSize: '1.125rem', m: '0' },
     '& p': { m: '0' }
   }),
+  /** Where a card's footer starts: pinned to the bottom so footers line up across a stretched row. */
+  cardFoot: css({ mt: 'auto' }),
   panel: css({
     p: { base: '4', md: '6' },
     minW: '0',

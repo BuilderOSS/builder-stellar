@@ -81,7 +81,8 @@ export interface MarketplaceConfig {
 export interface MarketplaceDirectory {
   deploymentId: string;
   network: NetworkName;
-  communities: MarketplaceCommunity[];
+  /** `forSale`: how many pools and resales it has open to buy right now. */
+  communities: (MarketplaceCommunity & { forSale: number })[];
   hasMore: boolean;
 }
 export interface MarketplaceOffers {

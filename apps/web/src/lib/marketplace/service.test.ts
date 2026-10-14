@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   managerDao: { findFirst: vi.fn(), findMany: vi.fn() },
-  marketplacePool: { findFirst: vi.fn(), findMany: vi.fn() },
-  marketplaceSecondaryListing: { findFirst: vi.fn(), findMany: vi.fn() },
+  marketplacePool: { findFirst: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
+  marketplaceSecondaryListing: { findFirst: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
   marketplaceModuleLaunch: { findFirst: vi.fn() },
   marketplaceSale: { findMany: vi.fn() }
 }));
@@ -97,6 +97,9 @@ function resale(id: string) {
     closedAt: null
   };
 }
+function buyable(id: string, count: number) {
+  return { daoId: id, contractId: `market-${id}`, _count: { _all: count } };
+}
 beforeEach(() => {
   vi.clearAllMocks();
   db.managerDao.findMany.mockResolvedValue([dao('dao-a'), dao('dao-b')]);
@@ -105,6 +108,8 @@ beforeEach(() => {
   );
   db.marketplacePool.findMany.mockResolvedValue([]);
   db.marketplaceSecondaryListing.findMany.mockResolvedValue([]);
+  db.marketplacePool.groupBy.mockResolvedValue([buyable('dao-a', 2), buyable('dao-b', 1)]);
+  db.marketplaceSecondaryListing.groupBy.mockResolvedValue([buyable('dao-a', 1)]);
   db.marketplaceModuleLaunch.findFirst.mockResolvedValue({ isLive: true, opened: true });
   db.marketplaceSale.findMany.mockResolvedValue([]);
 });
@@ -112,15 +117,44 @@ beforeEach(() => {
 describe('read-only marketplace services and DTO isolation', () => {
   it('filters directory by deployment and truthful indexed capability', async () => {
     const response = await marketplaceDirectory(new URLSearchParams('capability=auction&page=2&search=community'));
-    expect(db.managerDao.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ deploymentId: 'deployment-a', auctionEnabled: true }),
-        skip: 48,
-        take: 25
-      })
-    );
+    const where = db.managerDao.findMany.mock.calls[0][0].where;
+    expect(where.AND[0]).toEqual(expect.objectContaining({ deploymentId: 'deployment-a', auctionEnabled: true }));
+    expect(db.managerDao.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 48, take: 25 }));
     expect(response.communities[0].capabilities).toEqual(['marketplace']);
     expect(response.network).toBe('testnet');
+  });
+  it('lists only open markets with something to buy right now, with how many', async () => {
+    const response = await marketplaceDirectory(new URLSearchParams());
+    const now = expect.any(BigInt);
+    expect(db.marketplacePool.groupBy.mock.calls[0][0].where).toEqual({
+      deploymentId: 'deployment-a',
+      status: 'open',
+      expiresAt: { gt: now },
+      inStock: { gt: 0 }
+    });
+    expect(db.marketplaceSecondaryListing.groupBy.mock.calls[0][0].where).toEqual({
+      deploymentId: 'deployment-a',
+      status: 'open',
+      expiresAt: { gt: now }
+    });
+    expect(db.managerDao.findMany.mock.calls[0][0].where.AND[1]).toEqual({
+      marketplaceEnabled: true,
+      OR: [
+        { daoId: 'dao-a', marketplaceContract: 'market-dao-a' },
+        { daoId: 'dao-b', marketplaceContract: 'market-dao-b' }
+      ]
+    });
+    expect(response.communities.map((c) => [c.daoId, c.forSale])).toEqual([
+      ['dao-a', 3],
+      ['dao-b', 1]
+    ]);
+  });
+  it('lists no communities when nothing is for sale', async () => {
+    db.marketplacePool.groupBy.mockResolvedValue([]);
+    db.marketplaceSecondaryListing.groupBy.mockResolvedValue([]);
+    const response = await marketplaceDirectory(new URLSearchParams());
+    expect(db.managerDao.findMany).not.toHaveBeenCalled();
+    expect(response).toEqual(expect.objectContaining({ communities: [], hasMore: false }));
   });
   it('does not advertise a next page that the bounded API would reject', async () => {
     db.managerDao.findMany.mockResolvedValue(Array.from({ length: 25 }, (_, index) => dao(`dao-${index}`)));
@@ -131,13 +165,19 @@ describe('read-only marketplace services and DTO isolation', () => {
   it('global offers retain two DAO identities and string amounts; pools carry their terms', async () => {
     db.marketplacePool.findMany.mockResolvedValue([pool('dao-a'), pool('dao-b')]);
     const response = await marketplaceOffers(new URLSearchParams('kind=pool'));
+    expect(db.managerDao.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ deploymentId: 'deployment-a', marketplaceEnabled: true })
+    );
+    // Across communities only what can be bought now: no ended, sold-out or unstocked pools.
     expect(db.marketplacePool.findMany.mock.calls[0][0].where).toEqual({
       deploymentId: 'deployment-a',
       OR: [
         { deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'market-dao-a' },
         { deploymentId: 'deployment-a', daoId: 'dao-b', contractId: 'market-dao-b' }
       ],
-      status: 'open'
+      status: 'open',
+      expiresAt: { gt: expect.any(BigInt) },
+      inStock: { gt: 0 }
     });
     expect(response.listings.map((r) => [r.daoId, r.kind, r.id, r.price, r.tokenId, r.pool?.inStock])).toEqual([
       ['dao-a', 'pool', '99', '90071992547409930', null, 2],
@@ -172,9 +212,10 @@ describe('read-only marketplace services and DTO isolation', () => {
       daoId: 'dao-a',
       contractId: 'market-dao-a'
     });
-    expect(db.marketplacePool.findMany.mock.calls[0][0].where.OR).toEqual([
-      { deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'market-dao-a' }
-    ]);
+    expect(db.marketplacePool.findMany.mock.calls[0][0].where).toEqual({
+      deploymentId: 'deployment-a',
+      OR: [{ deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'market-dao-a' }]
+    });
     expect(response.launched).toBe(true);
     expect(response.openedAtLaunch).toBe(true);
     expect(response.config?.feeBps).toBe(250);
