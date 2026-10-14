@@ -281,8 +281,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       <section className={styles.panel}>
         <h1>{admin ? 'Claim lists' : 'Claim your tokens'}</h1>
         <p>
-          A community can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens
-          here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.
+          {admin
+            ? 'Set aside tokens for specific wallets. People on a list claim their own tokens, free or at a price you set, until the list closes.'
+            : 'A community can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
         </p>
         <div className={styles.row}>
           <ButtonLink href={`${base}/${admin ? 'claims' : 'admin/claims'}` as Route} variant="secondary" size="sm">
@@ -356,7 +357,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               />
             ))}
           </div>
-        ) : (
+        ) : admin ? null : (
           <section className={styles.panel}>
             <p>No claim lists yet.</p>
           </section>

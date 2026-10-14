@@ -4,28 +4,38 @@ import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import NextLink from 'next/link';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { artworkAppendPlan } from '@/components/admin/artwork-admin-plan';
-import { ArtworkStateInspector } from '@/components/admin/artwork-state-inspector';
+import { ArtworkLayers } from '@/components/admin/artwork-layers';
 import { UnseededTokens } from '@/components/admin/unseeded-tokens';
 import type { ArtworkPlan } from '@/components/create-dao/artwork-configuration';
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { PageSection } from '@/components/page-section';
-import { Button, Callout, Card, Field, FieldLabel, Heading, Input, ShortId, Text } from '@/components/ui';
+import {
+  Button,
+  Callout,
+  Card,
+  ConfirmAction,
+  Disclosure,
+  Field,
+  FieldHelperText,
+  FieldLabel,
+  Heading,
+  Input,
+  Text,
+  Textarea
+} from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import {
-  artworkSettingMethods,
-  type ArtworkSettingType,
-  validateArtworkSetting
-} from '@/lib/proposal-actions/artwork-admin-actions';
-import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
+import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -33,8 +43,10 @@ import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-// The image, description and links live in Community profile; only the renderer stays here.
-const fields = [{ type: 'set-artwork-renderer', key: 'renderer_base', label: 'Renderer URL' }] as const;
+/** A renderer change goes to a vote with its reasons; this is the shortest reason we accept. */
+const MIN_REASON = 20;
+
+const current = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink', m: '0', overflowWrap: 'anywhere' });
 
 export default function ArtworkAdminPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
@@ -43,12 +55,13 @@ export default function ArtworkAdminPage() {
   const artwork = useAdminArtwork(config, session.address);
   const proposal = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
-  const [edits, setEdits] = useState<Partial<Record<ArtworkSettingType, string>>>({});
+  const [renderer, setRenderer] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
   const [upload, setUpload] = useState<ArtworkPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  // Artwork and settings authority is Metadata's own admin() (launch admin in
-  // setup, the Treasury after launch).
+  // Artwork changes are authorized by the artwork contract's own admin: the launch
+  // admin in setup, the Treasury (so a proposal) after launch.
   const wired = artwork.data?.settings.token === config.tokenContractId;
   const direct = Boolean(wired && session.address && artwork.data?.admin === session.address);
   const canPropose = Boolean(
@@ -58,69 +71,78 @@ export default function ArtworkAdminPage() {
     !session.walletNetworkIssue &&
     (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
   const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
-  const handlers = getAllActionHandlers();
-  const appendHandler = handlers.find((handler) => String(handler.type) === 'add-artwork-properties');
+  const currentRenderer = artwork.data?.settings.renderer_base ?? '';
+  const nextRenderer = (renderer ?? currentRenderer).trim();
+  const rendererChanged = Boolean(nextRenderer) && nextRenderer !== currentRenderer;
+  const reasonReady = reason.trim().length >= MIN_REASON;
 
-  async function applySetting(type: ArtworkSettingType) {
-    if (!session.address || busy || !networkReady || (!direct && !canPropose)) return;
-    const value = edits[type]?.trim() ?? '';
-    const validation = validateArtworkSetting(value, type);
-    if (!validation.valid) return setMessage(validation.message);
-    const registered = handlers.find((handler) => String(handler.type) === type);
-    if (!direct) {
-      if (!registered)
-        return setMessage('Metadata governance encoding is not registered in this build. No proposal was added.');
-      try {
-        assertAdminCallSupported(registered, { value }, context);
-      } catch (error) {
-        return setMessage((error as Error).message);
-      }
-      proposal.requestAdd({
-        daoId,
-        action: registered.serialize({ value }, context),
-        source: `admin/artwork/${type}`,
-        metadata: { title: registered.label, description: `Set artwork metadata to ${value}.`, url: '' }
-      });
-      return;
+  function checkRenderer() {
+    const validation = validateArtworkSetting(nextRenderer, 'set-artwork-renderer');
+    if (!validation.valid) {
+      setMessage(validation.message);
+      return false;
     }
+    return true;
+  }
+
+  function proposeRenderer() {
+    if (!canPropose || busy || !networkReady || !checkRenderer() || !reasonReady) return;
+    const handler = getActionHandler('set-artwork-renderer');
+    try {
+      assertAdminCallSupported(handler, { value: nextRenderer }, context);
+    } catch (error) {
+      return setMessage((error as Error).message);
+    }
+    proposal.requestAdd({
+      daoId,
+      action: handler.serialize({ value: nextRenderer }, context),
+      source: 'admin/artwork/set-artwork-renderer',
+      metadata: {
+        title: 'Change where token images are drawn',
+        description: `Every token's image will be drawn from ${nextRenderer} instead of ${currentRenderer || 'the current renderer'}.\n\nWhy: ${reason.trim()}`,
+        url: ''
+      }
+    });
+  }
+
+  async function applyRenderer() {
+    if (!session.address || !direct || busy || !networkReady || !checkRenderer()) return;
     setBusy(true);
     setMessage('');
-    tx.start('Update artwork metadata');
+    tx.start('Change the renderer');
     try {
       const client = new MetadataClient({
         ...adminReadOptions(config, config.metadataContractId, session.address),
         ...restoreArchivedState,
         signTransaction: (xdr, opts) =>
-          signWithWallet(xdr, {
-            ...opts,
-            address: session.address!,
-            networkPassphrase: config.passphrase
-          })
+          signWithWallet(xdr, { ...opts, address: session.address!, networkPassphrase: config.passphrase })
       });
-      const assembled = await client.update_renderer_base({ new_renderer_base: value });
+      const assembled = await client.update_renderer_base({ new_renderer_base: nextRenderer });
       assembled.result.unwrap();
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Artwork metadata submitted', hash);
+      tx.submitted('Renderer change submitted', hash);
       await waitForConfirmation(hash, config.rpcUrl);
-      tx.success('Artwork metadata updated', hash);
+      tx.success('Token images now come from the new renderer', hash);
+      setRenderer(null);
       await artwork.mutate();
     } catch (error) {
-      tx.fail(error, 'Artwork metadata update failed', 'metadata');
+      tx.fail(error, "The renderer didn't change", 'metadata');
     } finally {
       setBusy(false);
     }
   }
 
   async function proposeUpload() {
-    if (!upload || !appendHandler || !canPropose || !networkReady || busy) return;
+    const appendHandler = getActionHandler('add-artwork-properties');
+    if (!upload || !canPropose || !networkReady || busy) return;
     setBusy(true);
     try {
-      // Read count again just before building IDs; contract execution still checks
-      // them. Governance reviewers must check no other artwork batch precedes it.
-      const current = await artwork.mutate();
-      if (!current) throw new Error('Current artwork state is unavailable.');
-      const batches = artworkAppendPlan(upload, current.properties.length);
+      // Read the layer count again just before numbering the new ones; the contract
+      // still checks them when the proposal runs.
+      const fresh = await artwork.mutate();
+      if (!fresh) throw new Error("The current artwork didn't load. Try again.");
+      const batches = artworkAppendPlan(upload, fresh.properties.length);
       for (const batch of batches) {
         const validation = appendHandler.validate(batch, context);
         if (!validation.valid) throw new Error(validation.message);
@@ -133,15 +155,18 @@ export default function ArtworkAdminPage() {
           action: appendHandler.serialize(batch, context),
           source: 'admin/artwork/add-artwork-properties',
           metadata: {
-            title: 'Append DAO artwork',
-            description: `Artwork batch ${index + 1} of ${batches.length}. IPFS: ${upload.baseUri}. Expected starting property count: ${current.properties.length}. Review absolute IDs and ordering before execution.`,
+            title: 'Add new artwork layers',
+            description: `Part ${index + 1} of ${batches.length} of a new artwork upload (${upload.baseUri}). It adds to the ${fresh.properties.length} existing layers and changes none of them. If another artwork proposal runs first, this one fails rather than numbering layers wrongly.`,
             url: ''
           }
         })),
-        onAdded: () => setMessage(`${batches.length} artwork batches added to the proposal draft.`)
+        onAdded: () =>
+          setMessage(
+            `Added the new layers to your proposal draft${batches.length > 1 ? ` in ${batches.length} parts` : ''}.`
+          )
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not prepare artwork proposal.');
+      setMessage(error instanceof Error ? error.message : "The new layers couldn't be added to a proposal.");
     } finally {
       setBusy(false);
     }
@@ -158,39 +183,44 @@ export default function ArtworkAdminPage() {
           {!config.metadataContractId ? (
             <Callout
               variant="warning"
-              title="Metadata contract address is missing"
-              description="The Manager creates Metadata with the DAO, not at launch. Refresh the DAO configuration or ask the deployment admin to inspect it."
+              title="This community has no artwork contract on record"
+              description="It's created with the community, so this usually means the app's copy is out of date. Refresh the page; if it stays, ask the deployment admin to check it."
             />
           ) : null}
-          {artwork.isLoading || token.isLoading ? <Text role="status">Reading artwork and Token admin…</Text> : null}
           {artwork.error || token.error ? (
             <Callout
               variant="error"
-              title="Artwork state unavailable"
+              title="The artwork didn't load"
               description={(artwork.error || token.error).message}
-            />
-          ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy || artwork.isLoading}
-            onClick={() => void Promise.all([artwork.mutate(), token.mutate()])}
-          >
-            Refresh artwork and authority
-          </Button>
-          {config.metadataContractId ? <ShortId value={config.metadataContractId} label="Metadata contract" /> : null}
-          {!direct && !canPropose ? (
-            <Callout
-              variant="info"
-              title="Read-only artwork view"
-              description="Artwork authority is the Metadata admin: connect the launch admin during setup, or prepare a governance proposal once the Treasury is the admin."
-            />
+            >
+              <div className={css({ mt: '3' })}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={artwork.isValidating}
+                  onClick={() => void Promise.all([artwork.mutate(), token.mutate()])}
+                >
+                  Try again
+                </Button>
+              </div>
+            </Callout>
           ) : null}
           {artwork.data && !wired ? (
             <Callout
               variant="error"
-              title="Metadata points to another Token"
-              description="Edits are blocked because Metadata's token address does not match this DAO."
+              title="This artwork belongs to a different token"
+              description="Changes are turned off because the artwork contract doesn't point at this community's token."
+            />
+          ) : null}
+          {artwork.data && wired && !direct && !canPropose ? (
+            <Callout
+              variant="info"
+              title="You can look, but not change the artwork"
+              description={
+                token.data?.live
+                  ? 'After launch, artwork changes go through a proposal. Connect a wallet to start one.'
+                  : 'During setup, only the launch admin can change the artwork.'
+              }
             />
           ) : null}
           {message ? (
@@ -198,6 +228,7 @@ export default function ArtworkAdminPage() {
               <Callout variant="warning" title={message} />
             </div>
           ) : null}
+
           {artwork.data && wired ? (
             <UnseededTokens
               daoId={daoId}
@@ -209,125 +240,151 @@ export default function ArtworkAdminPage() {
               proposal={proposal}
             />
           ) : null}
-          {artwork.data ? (
-            <>
-              <Card p="5">
-                <Stack gap="4">
-                  <Heading size="heading">Renderer</Heading>
-                  <Text>
-                    Where token images are drawn from. Changing it can affect existing token images. The community's
-                    image, description and links are in{' '}
-                    <NextLink href={daoAdminRoute(routeId, '/profile')}>Community profile</NextLink>.
+
+          {direct && token.data?.live === false ? (
+            <Card p="5">
+              <Stack gap="3">
+                <Heading size="heading">
+                  {artwork.data?.properties.length ? 'Finish adding your artwork' : 'Add your artwork'}
+                </Heading>
+                {artwork.data?.properties.length ? (
+                  <Text color="ink.muted">
+                    Your artwork is in. If an upload stopped partway, pick it up here; this never replaces the layers
+                    already added.
                   </Text>
-                  {fields.map(({ type, key, label }) => {
-                    const registered = handlers.some((handler) => String(handler.type) === type);
-                    return (
-                      <Stack gap="2" key={key}>
-                        <Text overflowWrap="anywhere">
-                          Current {label.toLowerCase()}: {artwork.data!.settings[key] || 'Not set'}
-                        </Text>
-                        <Field>
-                          <FieldLabel htmlFor={key}>{label}</FieldLabel>
-                          <Input
-                            id={key}
-                            name={key}
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={edits[type] ?? artwork.data!.settings[key]}
-                            disabled={busy || (!direct && !canPropose)}
-                            onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}
-                          />
-                        </Field>
-                        {direct || (canPropose && registered) ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={
-                              busy ||
-                              !networkReady ||
-                              !edits[type]?.trim() ||
-                              edits[type]?.trim() === artwork.data!.settings[key]
-                            }
-                            onClick={() => void applySetting(type)}
-                          >
-                            {direct ? `Apply ${label.toLowerCase()}` : 'Add to proposal'}
-                          </Button>
-                        ) : null}
-                      </Stack>
-                    );
-                  })}
-                  {canPropose &&
-                  fields.some(({ type }) => !handlers.some((handler) => String(handler.type) === type)) ? (
-                    <Callout
-                      variant="warning"
-                      title="Metadata governance integration required"
-                      description={`This build does not register artwork actions and Metadata target encoding yet. No transaction or proposal is created here until those safeguards are integrated. ABI methods: ${Object.values(artworkSettingMethods).join(', ')}.`}
-                    />
-                  ) : null}
-                </Stack>
-              </Card>
-              <ArtworkStateInspector
-                config={config}
-                address={session.address}
-                propertyCount={artwork.data.properties.length}
-                groupCount={artwork.data.groupCount}
-              />
-              {direct && token.data?.live === false ? (
-                <Card p="5">
-                  <Stack gap="3">
-                    <Heading size="heading">Install setup artwork</Heading>
-                    {!artwork.data.properties.length ? (
-                      <ArtworkSetup daoId={daoId} config={config} />
-                    ) : (
-                      <Text>
-                        Artwork is already installed. The setup installer can resume a saved batch plan but does not
-                        replace an existing collection.
-                      </Text>
-                    )}
-                    {artwork.data.properties.length ? <ArtworkSetup daoId={daoId} config={config} /> : null}
-                  </Stack>
-                </Card>
-              ) : null}
-              {canPropose ? (
-                <Card p="5">
-                  <Stack gap="3">
-                    <Heading size="heading">Append artwork through governance</Heading>
-                    <Text>
-                      Upload a directory of new layers. Each call adds at most 30 items and an IPFS group. Existing
-                      property and item IDs stay intact; this is not a reset.
-                    </Text>
-                    <ArtworkDirectoryUpload disabled={busy} onComplete={setUpload} />
-                    {session.authStatus !== 'authenticated' ? (
-                      <Callout
-                        variant="info"
-                        title="Authenticate your wallet to upload artwork"
-                        description="Directory uploads use the existing authenticated upload service. Uploading does not change the metadata contract until a signed transaction or governance proposal executes."
+                ) : null}
+                <ArtworkSetup daoId={daoId} config={config} />
+              </Stack>
+            </Card>
+          ) : null}
+
+          {canPropose ? (
+            <Card p="5">
+              <Stack gap="3">
+                <Heading size="heading">Add new layers by vote</Heading>
+                <Text color="ink.muted">
+                  Upload a folder of new layers. They&apos;re added after the existing ones, which stay exactly as they
+                  are.
+                </Text>
+                {session.authStatus !== 'authenticated' ? (
+                  <Callout
+                    variant="info"
+                    title="Sign in with your wallet to upload"
+                    description="Uploading doesn't change anything on chain. The layers are added only if the proposal passes."
+                  />
+                ) : null}
+                <ArtworkDirectoryUpload disabled={busy} onComplete={setUpload} />
+                {upload ? (
+                  <Text>
+                    Uploaded {upload.properties.length} new {upload.properties.length === 1 ? 'layer' : 'layers'}.
+                  </Text>
+                ) : null}
+                <div>
+                  <Button
+                    type="button"
+                    disabled={busy || !upload || !networkReady}
+                    onClick={() => void proposeUpload()}
+                  >
+                    Add the new layers to a proposal
+                  </Button>
+                </div>
+              </Stack>
+            </Card>
+          ) : null}
+
+          {artwork.data ? (
+            <ArtworkLayers
+              config={config}
+              address={session.address}
+              layers={artwork.data.properties}
+              groupCount={artwork.data.groupCount}
+              refreshing={busy || artwork.isValidating}
+              onRefresh={() => void Promise.all([artwork.mutate(), token.mutate()])}
+            />
+          ) : artwork.isLoading ? (
+            <Text role="status" color="ink.muted">
+              Reading the artwork…
+            </Text>
+          ) : null}
+
+          {artwork.data ? (
+            <Disclosure title="Advanced: where token images are drawn">
+              <Stack gap="4">
+                <Text color="ink.muted">
+                  Wallets and markets ask this address for every token&apos;s image. Change it only to move to a new
+                  renderer you trust; a wrong address breaks every token image at once. The community&apos;s own image,
+                  description and links are in{' '}
+                  <NextLink href={daoAdminRoute(routeId, '/profile')} className={css({ color: 'signal' })}>
+                    Community profile
+                  </NextLink>
+                  .
+                </Text>
+                <div>
+                  <Text textStyle="caption" color="ink.muted">
+                    Renderer now
+                  </Text>
+                  <p className={current}>{currentRenderer || 'Not set'}</p>
+                </div>
+                {direct || canPropose ? (
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="renderer-base">New renderer address</FieldLabel>
+                      <Input
+                        id="renderer-base"
+                        autoComplete="off"
+                        spellCheck={false}
+                        inputMode="url"
+                        value={renderer ?? currentRenderer}
+                        disabled={busy}
+                        onChange={(event) => setRenderer(event.target.value)}
                       />
+                      <FieldHelperText>An https:// or ipfs:// address.</FieldHelperText>
+                    </Field>
+                    {canPropose ? (
+                      <Field>
+                        <FieldLabel htmlFor="renderer-reason">Why change it?</FieldLabel>
+                        <Textarea
+                          id="renderer-reason"
+                          rows={3}
+                          value={reason}
+                          disabled={busy}
+                          onChange={(event) => setReason(event.target.value)}
+                        />
+                        <FieldHelperText>
+                          Members read this in the proposal. Say what the new renderer is, who runs it and why it&apos;s
+                          better.
+                        </FieldHelperText>
+                      </Field>
                     ) : null}
-                    {upload ? (
-                      <Text>
-                        {upload.properties.length} new layers · IPFS directory: {upload.baseUri}
-                      </Text>
-                    ) : null}
-                    {appendHandler ? (
-                      <Button
-                        type="button"
-                        disabled={busy || !upload || !networkReady}
-                        onClick={() => void proposeUpload()}
-                      >
-                        Review artwork proposal batches
-                      </Button>
-                    ) : (
-                      <Callout
-                        variant="warning"
-                        title="Artwork proposal registration required"
-                        description="Directory upload is separate from governance. add_properties cannot be queued until the registry and Metadata ABI encoding are integrated. No proposal has been created."
-                      />
-                    )}
-                  </Stack>
-                </Card>
-              ) : null}
-            </>
+                    <div>
+                      {direct ? (
+                        <ConfirmAction
+                          title="Change where every token image comes from?"
+                          description="Token images in wallets and markets switch to the new address as soon as this confirms."
+                          confirmLabel="Change the renderer"
+                          cancelLabel="Keep the current one"
+                          busy={busy}
+                          onConfirm={() => void applyRenderer()}
+                          trigger={
+                            <Button variant="secondary" disabled={busy || !networkReady || !rendererChanged}>
+                              Change the renderer
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          disabled={busy || !networkReady || !rendererChanged || !reasonReady}
+                          onClick={proposeRenderer}
+                        >
+                          Add to proposal
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </Stack>
+            </Disclosure>
           ) : null}
         </Stack>
       </PageSection>
