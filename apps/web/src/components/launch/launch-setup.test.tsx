@@ -6,7 +6,8 @@ const ADMIN = `G${'A'.repeat(55)}`;
 const state = vi.hoisted(() => ({
   address: '',
   readiness: undefined as unknown,
-  artwork: undefined as unknown
+  artwork: undefined as unknown,
+  drive: {} as Record<string, unknown>
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
@@ -24,11 +25,17 @@ vi.mock('@/contexts/dao-context', () => {
       status: 'pending'
     }
   };
-  return { useDaoContext: () => value, useOptionalDaoContext: () => value };
+  const current = () => ({ ...value, daoConfig: { ...value.daoConfig, ...state.drive } });
+  return { useDaoContext: current, useOptionalDaoContext: current };
 });
 vi.mock('@/stores/auth-session-store', () => ({
   useAuthSessionStore: (selector?: (s: unknown) => unknown) => {
-    const session = { address: state.address, authStatus: 'authenticated', walletNetworkIssue: '' };
+    const session = {
+      address: state.address,
+      authStatus: 'authenticated',
+      walletNetworkIssue: '',
+      walletNetworkPassphrase: 'PASS'
+    };
     return selector ? selector(session) : session;
   }
 }));
@@ -99,6 +106,7 @@ describe('LaunchSetup', () => {
     state.address = ADMIN;
     state.readiness = readiness();
     state.artwork = artwork(0);
+    state.drive = {};
   });
 
   it('starts with artwork as the clear first step, and launch disabled with a reason', () => {
@@ -186,6 +194,62 @@ describe('LaunchSetup', () => {
     expect(html).toContain('The launch drive ended');
     expect(html).toContain('Go to refunds');
     expect(html).not.toContain('Launch Lantern Club');
+    expect(html).not.toContain('Free the link');
+  });
+
+  describe('freeing the link of a failed drive', () => {
+    const endedDrive = () => {
+      const deadline = Math.floor(Date.now() / 1000) - 60;
+      state.readiness = readiness({
+        supply: 2n,
+        assurance: {
+          claim_minter: 'CCLAIMS',
+          deadline: BigInt(deadline),
+          list_id: 0,
+          launch_config: { launch_auction: false, launch_marketplace: false }
+        }
+      });
+      state.drive = {
+        passphrase: 'PASS',
+        tokenContractId: 'CDAO',
+        assuranceOutcome: 'open',
+        assuranceDeadline: deadline
+      };
+    };
+
+    it('offers it next to the refunds, to the launch admin and to visitors', () => {
+      endedDrive();
+      for (const address of [ADMIN, `G${'B'.repeat(55)}`]) {
+        state.address = address;
+        const html = render().replace(/<!-- -->/g, '');
+        expect(html).toContain('Go to refunds');
+        expect(html).toContain('Free the link');
+      }
+    });
+
+    it('hides it once the indexed outcome is released', () => {
+      endedDrive();
+      state.drive = { ...state.drive, assuranceOutcome: 'released' };
+      const html = render();
+      expect(html).toContain('The launch drive ended');
+      expect(html).not.toContain('Free the link');
+    });
+
+    it('never offers it while the drive is open', () => {
+      endedDrive();
+      const deadline = Math.floor(Date.now() / 1000) + 86_400;
+      state.readiness = readiness({
+        supply: 2n,
+        assurance: {
+          claim_minter: 'CCLAIMS',
+          deadline: BigInt(deadline),
+          list_id: 0,
+          launch_config: { launch_auction: false, launch_marketplace: false }
+        }
+      });
+      state.drive = { ...state.drive, assuranceDeadline: deadline };
+      expect(render()).not.toContain('Free the link');
+    });
   });
 
   it('shows visitors progress only, never the launch controls', () => {

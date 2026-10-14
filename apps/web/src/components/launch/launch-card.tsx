@@ -25,6 +25,8 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 import { assertPreferencesSaved, preferenceScopeKey, useLocalPreferencesStore } from '@/stores/local-preferences-store';
 
+import { ReleaseSlug } from './release-slug';
+
 const group = css({ display: 'grid', gap: '3' });
 const subTitle = css({ textStyle: 'label', color: 'ink', m: '0' });
 const consequences = css({
@@ -93,6 +95,7 @@ export function LaunchDriveCard({
           {ended ? 'Go to refunds' : 'See the drive'}
         </ButtonLink>
       </div>
+      {ended ? <ReleaseSlug /> : null}
     </section>
   );
 }

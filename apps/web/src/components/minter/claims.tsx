@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
+import { ReleaseSlug } from '@/components/launch/release-slug';
 import {
   Address,
   Badge,
@@ -655,6 +656,7 @@ function ClaimListCard({
       ) : !admin && phase === 'failed' && BigInt(list.price) > 0n && (list.claimed ?? 0) > 0 ? (
         <p className={styles.muted}>Your payment has been returned.</p>
       ) : null}
+      {drive ? <ReleaseSlug disabled={disabled} /> : null}
       <Disclosure title="List details">
         <p className={styles.address}>Root: {list.root}</p>
         <p className={styles.address}>Published list: {list.treeUri}</p>
