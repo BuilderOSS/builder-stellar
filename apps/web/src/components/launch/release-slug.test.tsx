@@ -17,7 +17,9 @@ vi.mock('@/lib/transaction-feedback', () => ({
 }));
 vi.mock('@/lib/release-slug', () => ({ releaseDriveSlug: vi.fn() }));
 
-import { ReleaseSlug } from './release-slug';
+import { deadlineWaitMs } from '@/hooks/use-deadline-clock';
+
+import { freeDriveLink, ReleaseSlug } from './release-slug';
 
 // The existing Vitest config uses classic JSX, while Next uses the automatic runtime.
 vi.stubGlobal('React', React);
@@ -84,5 +86,59 @@ describe('ReleaseSlug', () => {
 
   it('follows the page it sits on while another transaction runs', () => {
     expect(button(render(true))).toContain('disabled');
+  });
+});
+
+describe('freeDriveLink', () => {
+  const feedback = () => ({ start: vi.fn(), success: vi.fn(), fail: vi.fn() });
+
+  it('reports a freed link and finishes', async () => {
+    const tx = feedback();
+    const done = vi.fn();
+    await freeDriveLink(async () => 'abc123', tx, done);
+    expect(tx.success).toHaveBeenCalledWith('The link is free again', 'abc123');
+    expect(tx.fail).not.toHaveBeenCalled();
+    expect(done).toHaveBeenCalledOnce();
+  });
+
+  it('treats a link someone freed first (7128) as done, not as an error', async () => {
+    const tx = feedback();
+    const done = vi.fn();
+    await freeDriveLink(
+      async () => {
+        throw new Error('HostError: Error(Contract, #7128)');
+      },
+      tx,
+      done
+    );
+    expect(tx.fail).not.toHaveBeenCalled();
+    expect(tx.success).toHaveBeenCalledWith('The link is already free', '', 'Someone freed it first.');
+    expect(done).toHaveBeenCalledOnce();
+  });
+
+  it('keeps every other failure an error and does not finish', async () => {
+    for (const message of ['HostError: Error(Contract, #7142)', 'wallet rejected']) {
+      const tx = feedback();
+      const done = vi.fn();
+      await freeDriveLink(
+        async () => {
+          throw new Error(message);
+        },
+        tx,
+        done
+      );
+      expect(tx.fail).toHaveBeenCalledOnce();
+      expect(tx.success).not.toHaveBeenCalled();
+      expect(done).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('deadlineWaitMs', () => {
+  it('waits until just past the deadline, re-checks a far one hourly, and stops once it passed', () => {
+    expect(deadlineWaitMs(DEADLINE, DEADLINE - 10)).toBe(11_000);
+    expect(deadlineWaitMs(DEADLINE, DEADLINE - 90 * 86_400)).toBe(60 * 60 * 1000);
+    expect(deadlineWaitMs(DEADLINE, DEADLINE + 1)).toBeNull();
+    expect(deadlineWaitMs(null, DEADLINE)).toBeNull();
   });
 });
