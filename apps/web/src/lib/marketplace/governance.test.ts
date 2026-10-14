@@ -29,8 +29,9 @@ describe('marketplace governance queue adapter', () => {
     expect(marketplaceSettingHandlers({ ...config, marketplaceContractId: '' })).toEqual([]);
   });
   it('queues fee as the actual registry shape with explicit marketplace role and u32 call arg', () => {
+    // The form takes a percent; the call and the queued action carry basis points.
     const result = marketplaceGovernanceAction(config, 'wallet-a', getActionHandler('set-marketplace-secondary-fee'), {
-      value: '250'
+      value: '2.5'
     });
     expect(result.call).toEqual({ target: 'market-a', function: 'set_secondary_fee_bps', args: [250] });
     expect(result.action).toMatchObject({
@@ -41,7 +42,7 @@ describe('marketplace governance queue adapter', () => {
     });
     expect(() =>
       marketplaceGovernanceAction(config, 'wallet-a', getActionHandler('set-marketplace-secondary-fee'), {
-        value: '10001'
+        value: '25.01'
       })
     ).toThrow();
   });

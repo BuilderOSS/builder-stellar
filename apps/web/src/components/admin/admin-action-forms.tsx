@@ -7,6 +7,9 @@ import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { Callout, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
+import { feePercentText } from '@/lib/marketplace/amount';
+import { marketplaceAssetCodes, marketplaceAssets } from '@/lib/marketplace/readiness';
 import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
@@ -107,6 +110,32 @@ export function adminValueFormWithHint(hint: string) {
   };
 }
 
+/** The market shows its resale fee as a percent, so the form takes one; the proposal stores basis points. */
+export function ResaleFeeForm({ value, onChange, disabled, validationErrors }: ActionFormProps<AdminValueDraft>) {
+  const error = validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined;
+  return (
+    <Stack gap="2">
+      <FieldLabel htmlFor="resale-fee">Resale fee (%)</FieldLabel>
+      <Input
+        id="resale-fee"
+        value={value.value}
+        onChange={(event) => onChange({ value: event.target.value })}
+        inputMode="decimal"
+        placeholder="2.5"
+        disabled={disabled}
+      />
+      {error ? (
+        <ErrorText message={error} />
+      ) : (
+        <FieldHelperText>
+          Sellers pay this share of each resale to the treasury, up to {feePercentText(MAX_MARKETPLACE_FEE_BPS)}%. Open
+          listings keep the fee they were listed with.
+        </FieldHelperText>
+      )}
+    </Stack>
+  );
+}
+
 export function AdminReservePriceForm({
   value,
   onChange,
@@ -160,6 +189,8 @@ export function OpenPoolForm({
 }: ActionFormProps<OpenPoolDraft>) {
   const fields = validationErrors && !validationErrors.valid ? validationErrors.fields : undefined;
   const set = (patch: Partial<OpenPoolDraft>) => onChange({ ...value, ...patch });
+  const assets = marketplaceAssets(network);
+  const assetCodes = marketplaceAssetCodes(network);
   return (
     <Stack gap="2">
       <FieldLabel htmlFor="pool-price">Price per token</FieldLabel>
@@ -172,14 +203,28 @@ export function OpenPoolForm({
         disabled={disabled}
       />
       <ErrorText message={fields?.price} />
-      <AuctionPaymentTokenSelect
-        network={network}
-        value={value.asset}
-        onChange={(asset) => set({ asset })}
-        error={fields?.asset}
-        disabled={disabled}
+      <FieldLabel htmlFor="pool-asset">Buyers pay in</FieldLabel>
+      <Select
         id="pool-asset"
-      />
+        value={assets.some((asset) => asset.contractId === value.asset) ? value.asset : ''}
+        onChange={(event) => set({ asset: event.target.value })}
+        disabled={disabled}
+      >
+        <option value="">Choose {assetCodes}</option>
+        {assets.map((asset) => (
+          <option key={asset.contractId} value={asset.contractId}>
+            {asset.code} · {asset.name}
+          </option>
+        ))}
+      </Select>
+      {fields?.asset ? (
+        <ErrorText message={fields.asset} />
+      ) : (
+        <FieldHelperText>
+          Buyers pay from their wallets in {assetCodes}, the only assets the market takes, so a pool priced in anything
+          else could never sell.
+        </FieldHelperText>
+      )}
       <FieldLabel htmlFor="pool-size">Tokens in the pool</FieldLabel>
       <Input
         id="pool-size"

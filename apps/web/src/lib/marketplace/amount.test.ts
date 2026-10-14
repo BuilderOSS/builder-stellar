@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMarketplaceAmount, marketplaceFee, marketplaceId, MAX_I128, parseMarketplaceAmount } from './amount';
+import {
+  feeBpsFromPercent,
+  feePercentText,
+  formatMarketplaceAmount,
+  marketplaceFee,
+  marketplaceId,
+  MAX_I128,
+  parseMarketplaceAmount
+} from './amount';
 
 describe('marketplace exact SAC amounts', () => {
   it('round-trips seven places without a Number conversion', () => {
@@ -27,5 +35,22 @@ describe('marketplace exact SAC amounts', () => {
       expect(marketplaceId('4294967295', kind)).toBe((1n << 32n) - 1n);
     }
     for (const id of ['-1', '1e2', '01', '1.0']) expect(() => marketplaceId(id, 'pool')).toThrow();
+  });
+});
+
+describe('resale fee as a percent', () => {
+  it('reads a percent with at most two decimals as exact basis points, within the 25% cap', () => {
+    expect(feeBpsFromPercent('2.5')).toBe(250);
+    expect(feeBpsFromPercent(' 0.07 ')).toBe(7);
+    expect(feeBpsFromPercent('25')).toBe(2_500);
+    expect(feeBpsFromPercent('0')).toBe(0);
+    for (const input of ['', '25.01', '100', '1.234', '-1', '1e1', '.5', '2,5'])
+      expect(feeBpsFromPercent(input)).toBeNull();
+  });
+
+  it('shows every basis-point fee as the percent that reads back to it', () => {
+    for (let bps = 0; bps <= 2_500; bps += 1) expect(feeBpsFromPercent(feePercentText(bps))).toBe(bps);
+    expect(feePercentText(250)).toBe('2.5');
+    expect(feePercentText(1)).toBe('0.01');
   });
 });
