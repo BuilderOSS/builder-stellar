@@ -27,6 +27,7 @@ import { shortAddress } from '@/lib/activity-feed';
 import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES } from '@/lib/comments';
 import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
+import { usePendingModules } from '@/lib/modules/pending';
 import { proposalActionAvailability } from '@/lib/proposal-availability';
 import { encodeProposalCallArgs, proposalCallId } from '@/lib/proposal-call';
 import {
@@ -205,10 +206,18 @@ export default function ProposalDetailPage() {
     },
     { refreshInterval: 5000, revalidateOnFocus: true }
   );
+  // A proposal that adds a module calls it before it exists: its address is the Manager's prediction.
+  const pending = usePendingModules(config, detail?.targets ?? [], detail?.functions ?? [], detail?.args ?? []);
+  const encodingConfig = useMemo(
+    () => ({ ...config, pendingModules: pending.pendingModules }),
+    [config, pending.pendingModules]
+  );
   const encodingError = useMemo(() => {
     if (!detail) return '';
+    if (pending.loading) return '';
+    if (pending.error) return 'The new module’s address could not be checked right now. Reload to try again.';
     try {
-      const encoded = encodeProposalCallArgs(detail.targets, detail.functions, detail.args, config);
+      const encoded = encodeProposalCallArgs(detail.targets, detail.functions, detail.args, encodingConfig);
       const hash = proposalCallId(detail.targets, detail.functions, encoded, descriptionHash(detail.description));
       if (hash !== proposalIdToBuffer(detail.proposalId).toString('hex'))
         throw new Error('Indexed arguments do not reproduce this proposal ID. Submission is disabled.');
@@ -216,8 +225,8 @@ export default function ProposalDetailPage() {
     } catch (error) {
       return error instanceof Error ? error.message : 'Unsupported proposal calls.';
     }
-  }, [detail, config]);
-  const actionsDisabled = !session.address || detail?.stateSource !== 'chain' || !!encodingError;
+  }, [detail, encodingConfig, pending.loading, pending.error]);
+  const actionsDisabled = !session.address || detail?.stateSource !== 'chain' || !!encodingError || pending.loading;
   const availability = detail
     ? proposalActionAvailability(detail, now, session.address)
     : { vote: false, cancel: false, queue: false, execute: false };
@@ -260,7 +269,7 @@ export default function ProposalDetailPage() {
     const payload = {
       targets: detail.targets,
       functions: detail.functions,
-      args: encodeProposalCallArgs(detail.targets, detail.functions, detail.args, config),
+      args: encodeProposalCallArgs(detail.targets, detail.functions, detail.args, encodingConfig),
       description_hash: descriptionHash(detail.description)
     };
     const computed = (await governor.get_proposal_id(payload)).result;

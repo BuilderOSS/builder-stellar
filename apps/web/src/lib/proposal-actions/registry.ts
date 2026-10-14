@@ -33,6 +33,7 @@ import {
 } from './artwork-admin-actions';
 import { membershipHandlers } from './membership-actions';
 import { openClaimListHandler } from './minter-actions';
+import { moduleHandlers } from './module-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
 import { reviewFixHandlers } from './review-fix-actions';
 import { changeDaoSlugHandler } from './slug-actions';
@@ -59,6 +60,7 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   batchMintGovernanceTokenHandler,
   transferSacTokenHandler,
   ...membershipHandlers,
+  ...moduleHandlers,
   setVotingDelayHandler,
   setVotingPeriodHandler,
   setProposalThresholdHandler,

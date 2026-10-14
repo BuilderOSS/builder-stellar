@@ -13,6 +13,7 @@ import { Buffer } from 'buffer';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
+import type { ModuleKind } from '@/lib/modules/kinds';
 import {
   type AuthNodeDraft,
   authNodeSpecValue,
@@ -33,7 +34,14 @@ export type ProposalEncodingContext = Pick<
   | 'marketplaceContractId'
   | 'metadataContractId'
   | 'claimsContractId'
->;
+> & {
+  /**
+   * Modules an earlier action of the same proposal creates (`Manager.create_module`), by their
+   * predicted address, so a later action (register, allowance, open) can call them before they
+   * exist. The proposal's own `create_module` calls are the only source.
+   */
+  pendingModules?: Readonly<Record<string, ModuleKind>>;
+};
 
 const supported = {
   token: [
@@ -48,6 +56,8 @@ const supported = {
     'set_dao_recovery',
     'set_transfer_agent',
     'dao_transfer',
+    'register_module',
+    'unregister_module',
     'set_metadata',
     'upgrade',
     'migrate'
@@ -118,6 +128,32 @@ function specValue(value: unknown, type: xdr.ScSpecTypeDef, spec: Spec): unknown
       throw new Error('Expected a vector proposal argument (obsolete scalar ABI is unsupported).');
     return value.map((item) => specValue(item, type.vec.elementType, spec));
   }
+  if (type.type === 'scSpecTypeUdt' && spec.findEntry(type.udt.name.toString()).type === 'scSpecEntryUdtUnionV0') {
+    // A union arrives as the indexer's array (`['Marketplace', { … }]`) or as `{ tag, values }`.
+    const entry = spec.findEntry(type.udt.name.toString());
+    if (entry.type !== 'scSpecEntryUdtUnionV0') throw new Error('Expected a union argument.');
+    const unionName = type.udt.name.toString();
+    const parts = Array.isArray(value)
+      ? { tag: value[0], values: value.slice(1) }
+      : value && typeof value === 'object' && 'tag' in value
+        ? {
+            tag: (value as { tag: unknown }).tag,
+            values: ((value as { values?: unknown[] }).values ?? []) as unknown[]
+          }
+        : null;
+    if (!parts || typeof parts.tag !== 'string') throw new Error(`Expected a ${unionName} argument.`);
+    const found = entry.udtUnionV0.cases.find(
+      (c) => (c.type === 'scSpecUdtUnionCaseVoidV0' ? c.voidCase.name : c.tupleCase.name).toString() === parts.tag
+    );
+    if (!found) throw new Error(`Unknown ${unionName} case ${parts.tag}.`);
+    if (found.type === 'scSpecUdtUnionCaseVoidV0') {
+      if (parts.values.length) throw new Error(`${parts.tag} takes no values.`);
+      return { tag: parts.tag };
+    }
+    const types = found.tupleCase.type;
+    if (parts.values.length !== types.length) throw new Error(`${parts.tag} takes ${types.length} value(s).`);
+    return { tag: parts.tag, values: types.map((t, i) => specValue(parts.values[i], t, spec)) };
+  }
   if (type.type === 'scSpecTypeUdt') {
     const name = type.udt.name.toString();
     // A guided AuthNode draft (fnName, typed args) becomes the AuthNode struct.
@@ -174,18 +210,31 @@ export function encodeSupportedCall(
 ): xdr.ScVal[] {
   // The shared Manager: only a DAO's own slug change (the Manager checks the caller is its token admin).
   if (target && target === getDeploymentConfig().managerAddress) {
-    if (fn !== 'change_slug') throw new Error(`Unsupported Manager call ${fn}; submission is disabled.`);
-    if (args.length !== 2 || args[0] !== config.tokenContractId) throw new Error('A slug change must name this DAO.');
-    if (typeof args[1] !== 'string') throw new Error('Expected a string proposal argument.');
+    if (fn !== 'change_slug' && fn !== 'create_module')
+      throw new Error(`Unsupported Manager call ${fn}; submission is disabled.`);
     const spec = new ManagerClient({
       contractId: target,
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase
     }).spec;
+    if (fn === 'create_module') {
+      // The Manager deploys a module for one DAO: this one, named first.
+      if (args.length !== 3 || args[0] !== config.tokenContractId)
+        throw new Error('A new module must be added to this DAO.');
+      const inputs = spec.getFunc('create_module').inputs;
+      return spec.funcArgsToScVals(
+        fn,
+        Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(args[i], input.type, spec)]))
+      );
+    }
+    if (args.length !== 2 || args[0] !== config.tokenContractId) throw new Error('A slug change must name this DAO.');
+    if (typeof args[1] !== 'string') throw new Error('Expected a string proposal argument.');
     return spec.funcArgsToScVals(fn, { token_address: args[0], new_slug: args[1] });
   }
-  const role =
-    target && target === config.tokenContractId
+  const pendingKind = target ? config.pendingModules?.[target] : undefined;
+  const role = pendingKind
+    ? pendingKind
+    : target && target === config.tokenContractId
       ? 'token'
       : target && target === config.governorContractId
         ? 'governor'

@@ -30,6 +30,7 @@ import {
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
+import { createCallsIn, resolvePendingModules } from '@/lib/modules/pending';
 import { analyzeProposalAction } from '@/lib/proposal-action-identity';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
@@ -174,8 +175,21 @@ export default function ProposalCreatePage() {
         config
       );
 
+      // A module this proposal adds is called before it exists. Its address is the Manager's own
+      // prediction, read now, and the draft's address must match it or the later steps would
+      // call somewhere else.
+      const pendingModules = await resolvePendingModules(
+        config,
+        createCallsIn(targets, functions, args, config.tokenContractId)
+      );
+      for (const queued of queuedActions)
+        if (queued.type === 'create-module' && !pendingModules[String(queued.address)])
+          throw new Error(
+            'The new module’s address no longer matches what the Manager predicts. Add it again from Manage → Membership.'
+          );
+
       // Encode args and metadata
-      const encodedArgs = encodeProposalCallArgs(targets, functions, args, config);
+      const encodedArgs = encodeProposalCallArgs(targets, functions, args, { ...config, pendingModules });
       const description = encodeProposalMetadata(metadata);
 
       // Create governor client
