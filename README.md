@@ -1,6 +1,6 @@
-# Builder for Stellar
+# Tribes Builder
 
-Builder is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar.
+Tribes Builder is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is called a tribe. It is built on Nouns Builder; the Stellar Community Fund award (SCF #44) keeps its original name, "Nouns Builder: DAOs on Stellar".
 
 ## System
 
@@ -15,7 +15,7 @@ Builder is a Soroban DAO framework and web application for creating and operatin
 
 The current frontend includes DAO discovery, auction history/settlement, governance and ordered execution receipts, Treasury funding/history, paginated members and token-holder controls, claim lists (free or priced, launch drives with refunds), quick-buy pools and resales, membership switches (locked tokens, members-only delegation, DAO recovery) and one-click storage renewal. Creation uses a compact Identity → Membership → Governance → Review form, followed by separate Setup → Launch.
 
-Warm Ink provides light, dark, and system appearance with green accents, Instrument Serif display type, and Inter interface/body type. Multiple creation drafts, home-DAO preferences, marketplace favorites, and private labels are stored in this browser only. They are not shared collaboration or public tags.
+The Warm Ink · Dusk design system ([DESIGN.md](DESIGN.md)) provides light, dark, and system appearance with one blue for actions and brass for what's yours, Bricolage Grotesque display type, Figtree interface type, and JetBrains Mono for figures. Brand files are in [docs/brand](docs/brand). Multiple creation drafts, home-DAO preferences, marketplace favorites, and private labels are stored in this browser only. They are not shared collaboration or public tags.
 
 See [the web README](apps/web/README.md) for setup, routes, recovery behavior, and limitations. Feature descriptions reflect source, not a live deployment check.
 

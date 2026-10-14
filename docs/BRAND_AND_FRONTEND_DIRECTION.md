@@ -1,10 +1,10 @@
 # Brand and frontend direction
 
-Builder is a gateway to independent DAO communities. Platform discovery and local preparation belong outside the community workspace; inside it, governance and Treasury authority must remain explicit.
+Tribes Builder is a gateway to independent DAOs, called tribes in the app. Platform discovery and local preparation belong outside the tribe workspace; inside it, governance and Treasury authority must remain explicit.
 
 ## Visual system
 
-The visual specification is [DESIGN.md](../DESIGN.md) ("Warm Ink · Dusk"): tokens, type, navigation, density rules, motion and voice. A rendered reference lives at [design/builder-dusk-preview.html](design/builder-dusk-preview.html). The [earlier dark/blue design](archive/BRAND_AND_FRONTEND_DIRECTION.md) preserves historical rationale only.
+The visual specification is [DESIGN.md](../DESIGN.md) ("Warm Ink · Dusk"): brand and logo, tokens, type, navigation, density rules, motion and voice. The press kit is in [brand/](brand/README.md). A rendered reference lives at [design/builder-dusk-preview.html](design/builder-dusk-preview.html). The [earlier dark/blue design](archive/BRAND_AND_FRONTEND_DIRECTION.md) preserves historical rationale only.
 
 ## Current flows
 
