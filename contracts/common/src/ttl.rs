@@ -52,7 +52,7 @@ const _: () = assert!(INSTANCE_TTL_EXTEND_TO < 3_110_400);
 /// Not `instance().extend_ttl`: that applies the same threshold and target to
 /// the code entry, so whenever shared code had under 60 days left the next
 /// caller paid 170 days of its rent (~300 XLM per ~35 KB on testnet,
-/// docs/STORAGE_DIET_REVIEW.md Finding 2).
+/// docs/STORAGE_DIET.md D27).
 pub fn extend_instance(e: &Env) {
     let this = e.current_contract_address();
     let deployer = e.deployer();

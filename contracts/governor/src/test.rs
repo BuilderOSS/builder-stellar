@@ -1882,7 +1882,7 @@ mod comments {
     }
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 1: no governor key may encode like a
+/// docs/STORAGE_DIET.md D26: no governor key may encode like a
 /// `common` or OpenZeppelin key the contract links.
 #[test]
 fn storage_keys_do_not_collide() {
@@ -2023,10 +2023,10 @@ fn proposal_id_entry_renews_with_the_core() {
     );
 }
 
-/// Review S6 (docs/designs/membership-models.md Next Steps 10): after a
-/// proposal's first and only vote, the OpenZeppelin tally lives as long as
-/// the proposal does, not the network's minimum, so `queue` after a full
-/// 30-day voting period finds it without a restore.
+/// docs/designs/membership-models.md, Success Criteria (vote tally
+/// lifetime): after a proposal's first and only vote, the OpenZeppelin tally
+/// lives as long as the proposal does, not the network's minimum, so `queue`
+/// after a full 30-day voting period finds it without a restore.
 #[test]
 fn the_vote_tally_lives_as_long_as_the_proposal() {
     use soroban_sdk::testutils::storage::Persistent as _;

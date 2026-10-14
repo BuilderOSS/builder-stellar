@@ -1,5 +1,5 @@
 //! Membership models end to end on the built WASMs
-//! (docs/designs/membership-models.md, Next Steps 6): the assurance launch
+//! (docs/designs/membership-models.md, Success Criteria): the assurance launch
 //! with a 1,000-leaf tree, a failed drive with refunds and recovery, a
 //! 100-token quick-buy pool against 16-trait artwork, and allowance
 //! exhaustion.

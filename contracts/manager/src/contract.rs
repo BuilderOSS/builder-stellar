@@ -1845,7 +1845,7 @@ impl ManagerContract {
             return Err(ManagerError::InvalidProposalThreshold);
         }
 
-        // Every module is optional (Phase 4); each kind at most once.
+        // Every module is optional; each kind at most once.
         let mut kinds: Vec<Symbol> = Vec::new(env);
         for spec in config.modules.iter() {
             let kind = spec.kind(env);

@@ -29,7 +29,7 @@ pub use error::CommonError;
 /// `[Symbol("builder"), [Symbol(variant), args...]]`. A `#[contracttype]`
 /// key encodes only its variant name and arguments, so without the wrapper a
 /// module key can address the same slot as an OpenZeppelin key with the same
-/// variant (docs/STORAGE_DIET_REVIEW.md Finding 1). OpenZeppelin's own keys
+/// variant (docs/STORAGE_DIET.md D26). OpenZeppelin's own keys
 /// (owners, balances, votes, approvals) are not ours and stay unwrapped.
 ///
 /// Nine characters or fewer: the host keeps such a symbol inline in a `Val`

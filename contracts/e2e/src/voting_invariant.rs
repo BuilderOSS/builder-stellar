@@ -1,5 +1,5 @@
-//! The voting-units invariant (docs/designs/membership-models.md, "The
-//! Assignment"): after every operation,
+//! The voting-units invariant (docs/designs/membership-models.md, Success
+//! Criteria, "Vote counts stay exact"): after every operation,
 //!
 //! 1. every address holds voting units equal to its token balance, or zero if
 //!    it is a non-voting holder (today: Treasury, Auction, Marketplace);

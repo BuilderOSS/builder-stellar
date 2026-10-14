@@ -1816,7 +1816,7 @@ fn token_uri_worst_case_fits_the_limits() {
     assert!(cpu < 400_000_000 / 4, "{cpu} instructions");
 }
 
-/// docs/STORAGE_DIET_REVIEW.md Finding 1: no metadata key may encode like a
+/// docs/STORAGE_DIET.md D26: no metadata key may encode like a
 /// `common` or OpenZeppelin key the contract links.
 #[test]
 fn storage_keys_do_not_collide() {

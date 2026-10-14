@@ -34,7 +34,7 @@ per-transaction overhead. The Renewal tab defaults to 180 days for that reason.
 | Entry kind | Measured rate | How |
 |---|---|---|
 | Contract data and instances | **~0.0098 XLM per KB per day** | Simulated `ExtendFootprintTTL` of the Manager and the six DAO 0 instances (884 and 6,420 bytes, 167.7 → 180 days): 98 stroops per byte-day |
-| Contract code | **~0.051 XLM per KB per day** | A 35,604-byte code entry for ~164 days simulated at 2,998,799,289 stroops (STORAGE_DIET_REVIEW § 3): 514 stroops per byte-day, about five times data |
+| Contract code | **~0.051 XLM per KB per day** | A 35,604-byte code entry for ~164 days simulated at 2,998,799,289 stroops (testnet, 2026-10-12): 514 stroops per byte-day, about five times data |
 
 | What | 30 days | 120 days | 180 days | One year of upkeep |
 |---|---|---|---|---|
@@ -141,7 +141,7 @@ archived id; chain-reading clients read the `ProposalId(seq)` entries raw with `
 
 ### Treasury and modules
 
-Modules list their own sweep keys (`DaoModule::renewal_keys(cursor, limit)`, at most 200 per page, eng review R3):
+Modules list their own sweep keys (`DaoModule::renewal_keys(cursor, limit)`, at most 200 per page; membership-models R3):
 the sweep reads the Token's registry and pages through each module by simulation, then reads which of the listed
 keys exist. A module registered from outside the Manager without `renewal_keys` has only its instance renewed, and
 Manage → Storage renewal says so.

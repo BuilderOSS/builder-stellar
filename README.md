@@ -73,7 +73,6 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [Contract review fixes](docs/CONTRACT_REVIEW_FIX_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md) and [tenant/read-model boundaries](docs/MULTITENANT_ARCHITECTURE.md)
 - [Manager deployment](docs/MANAGER_DEPLOYMENT.md) and [DAO deployment](docs/DAO_DEPLOYMENT.md)
 - [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)

@@ -190,7 +190,7 @@ export function invokeView(contractId, method, args, { network, source }) {
 }
 
 // ---------------------------------------------------------------------------
-// Fee-capped TTL extension (STORAGE_DIET_FIX_REVIEW issue 2)
+// Fee-capped TTL extension (docs/STORAGE_DIET.md D36)
 // ---------------------------------------------------------------------------
 
 /**
