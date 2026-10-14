@@ -96,6 +96,7 @@ export function ListingCard({
       ) : (
         <ButtonLink
           variant="secondary"
+          className={styles.cardFoot}
           href={
             `/dao/${community.daoId}/marketplace?kind=${listing.kind}&listing=${listing.id}&eventId=${encodeURIComponent(listing.eventId)}` as Route
           }

@@ -13,6 +13,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 import { type DaoProfile, EMPTY_PROFILE } from '@/lib/dao-profile';
 import { type ProfileView, verifyProfiles } from '@/lib/dao-profile-server';
+import { buyableOfferWhere } from '@/lib/marketplace/query';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -360,24 +361,14 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
   if (!auctionScopes.length && !marketScopes.length) return daos;
 
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const listingWhere = { deploymentId: DEPLOYMENT_ID, OR: marketScopes, status: 'open', expiresAt: { gt: now } };
-  const [auctions, pools, secondary] = await Promise.all([
+  const [auctions, offers] = await Promise.all([
     auctionScopes.length
       ? prisma.auctionCurrentAuction.findMany({
           where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
           select: { daoId: true, currentEndSeconds: true }
         })
       : [],
-    marketScopes.length
-      ? prisma.marketplacePool.groupBy({
-          by: ['daoId'],
-          where: { ...listingWhere, inStock: { gt: 0 } },
-          _count: { _all: true }
-        })
-      : [],
-    marketScopes.length
-      ? prisma.marketplaceSecondaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
-      : []
+    marketScopes.length ? countBuyableOffers(marketScopes) : []
   ]);
 
   // auction.current_auctions is the newest auction per contract; an open one is
@@ -385,13 +376,34 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
   const live = new Set(auctions.filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
 
   const listings = new Map<string, number>();
-  for (const row of [...pools, ...secondary]) listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row._count._all);
+  for (const row of offers) listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row.count);
 
   return daos.map((dao) => ({
     ...dao,
     auction_live: live.has(dao.dao_id),
     listings_open: listings.get(dao.dao_id) ?? 0
   }));
+}
+
+/**
+ * Pools and resales a buyer can take right now (buyableOfferWhere), counted per DAO and
+ * market contract. Without `scopes` it counts every market in this deployment.
+ */
+export async function countBuyableOffers(scopes?: { daoId: string; contractId: string }[]) {
+  const where = buyableOfferWhere();
+  const scope = { deploymentId: DEPLOYMENT_ID, ...(scopes ? { OR: scopes } : {}) };
+  const by: ['daoId', 'contractId'] = ['daoId', 'contractId'];
+  const [pools, secondary] = await Promise.all([
+    prisma.marketplacePool.groupBy({ by, where: { ...scope, ...where.pool }, _count: { _all: true } }),
+    prisma.marketplaceSecondaryListing.groupBy({ by, where: { ...scope, ...where.secondary }, _count: { _all: true } })
+  ]);
+  const counts = new Map<string, { daoId: string; contractId: string; count: number }>();
+  for (const row of [...pools, ...secondary]) {
+    const key = `${row.daoId}:${row.contractId}`;
+    const count = (counts.get(key)?.count ?? 0) + row._count._all;
+    counts.set(key, { daoId: row.daoId, contractId: row.contractId, count });
+  }
+  return [...counts.values()];
 }
 
 /** The membership switches a DAO's Token has in force (docs/designs/locked-tokens.md). */

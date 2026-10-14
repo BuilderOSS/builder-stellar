@@ -43,6 +43,15 @@ export function listingStatus(
     : (status as MarketplaceListing['status']);
 }
 
+/**
+ * Offers a buyer can take right now: open and unexpired, and a pool must have tokens in stock
+ * (a sold-out pool has none). The indexed `open` status alone also covers ended and sold-out offers.
+ */
+export function buyableOfferWhere(now = BigInt(Math.floor(Date.now() / 1000))) {
+  const open = { status: 'open', expiresAt: { gt: now } };
+  return { pool: { ...open, inStock: { gt: 0 } }, secondary: open };
+}
+
 export function parseMarketplaceQuery(params: URLSearchParams) {
   const rawPage = params.get('page') ?? '0';
   if (!/^\d{1,3}$/.test(rawPage) || Number(rawPage) > MARKETPLACE_MAX_PAGE)

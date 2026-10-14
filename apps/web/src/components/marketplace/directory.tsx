@@ -4,7 +4,7 @@ import { Bookmark, BookmarkCheck } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { useDeferredValue, useState } from 'react';
-import { css } from 'styled-system/css';
+import { css, cx } from 'styled-system/css';
 
 import { PageSection } from '@/components/page-section';
 import {
@@ -43,7 +43,8 @@ const viewRow = css({
   gap: '3'
 });
 const card = css({
-  display: 'grid',
+  display: 'flex',
+  flexDirection: 'column',
   gap: '3',
   p: '4',
   minW: '0',
@@ -56,14 +57,15 @@ const cardName = css({ textStyle: 'heading', fontSize: '1.0625rem', m: '0', over
 const cardDescription = css({ textStyle: 'body', color: 'ink.muted', m: '0', lineClamp: '3' });
 const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
-const skeletonGrid = css({
+// Cards here never expand in place, so a row stretches to its tallest card.
+const cardGrid = css({
   display: 'grid',
   gap: '4',
   gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))'
 });
 
+// Every listed community has an open market, so its for-sale count stands in for a "Market" chip.
 const CAPABILITY_LABEL: Record<string, string> = {
-  marketplace: 'Market',
   auction: 'Auction',
   metadata: 'Artwork'
 };
@@ -137,7 +139,6 @@ export function MarketplaceDirectoryView() {
             }}
           >
             <option value="all">Everything</option>
-            <option value="marketplace">Has a market</option>
             <option value="auction">Runs auctions</option>
             <option value="metadata">Has artwork</option>
           </Select>
@@ -172,7 +173,7 @@ export function MarketplaceDirectoryView() {
           />
         ) : null}
         {result.isLoading ? (
-          <div className={skeletonGrid} role="status" aria-busy="true">
+          <div className={cardGrid} role="status" aria-busy="true">
             <span className="sr-only">Loading the market</span>
             {Array.from({ length: 3 }, (_, index) => (
               <Skeleton key={index} className={css({ height: '56', borderRadius: 'card' })} />
@@ -181,7 +182,7 @@ export function MarketplaceDirectoryView() {
         ) : null}
 
         {view === 'communities' ? (
-          <section className={styles.grid} aria-label="Communities">
+          <section className={cardGrid} aria-label="Communities">
             {communities.map((community) => {
               const saved = preferences.favorites.includes(community.daoId);
               return (
@@ -207,15 +208,16 @@ export function MarketplaceDirectoryView() {
                     </IconButton>
                   </div>
                   {community.description ? <p className={cardDescription}>{community.description}</p> : null}
-                  {community.capabilities.length ? (
-                    <div className={chips}>
-                      {community.capabilities.map((capabilityName) => (
+                  <div className={cx(chips, styles.cardFoot)}>
+                    <Chip tone="outline">{community.forSale} for sale</Chip>
+                    {community.capabilities
+                      .filter((capabilityName) => capabilityName in CAPABILITY_LABEL)
+                      .map((capabilityName) => (
                         <Chip key={capabilityName} tone="outline">
-                          {CAPABILITY_LABEL[capabilityName] ?? capabilityName}
+                          {CAPABILITY_LABEL[capabilityName]}
                         </Chip>
                       ))}
-                    </div>
-                  ) : null}
+                  </div>
                   <ButtonLink href={`/dao/${community.daoId}/marketplace` as Route} variant="secondary" block>
                     See what&apos;s for sale
                   </ButtonLink>
@@ -224,7 +226,7 @@ export function MarketplaceDirectoryView() {
             })}
           </section>
         ) : (
-          <section className={styles.grid} aria-label="For sale">
+          <section className={cardGrid} aria-label="For sale">
             {offers.data?.listings.map((listing) => {
               const community = offers.data?.communities.find((c) => c.daoId === listing.daoId);
               return community ? (
@@ -268,8 +270,8 @@ export function MarketplaceDirectoryView() {
           disabled={result.isLoading}
         />
         <p className={note}>
-          Saved communities and your market view stay on this device. Every trade checks the live chain before you sign,
-          so a listing shown here may already be gone.{' '}
+          Only communities with something to buy right now show here. Saved communities and your market view stay on
+          this device. Every trade checks the live chain before you sign, so a listing shown here may already be gone.{' '}
           <NextLink href="/discover" className={css({ color: 'signal' })}>
             Discover communities
           </NextLink>
