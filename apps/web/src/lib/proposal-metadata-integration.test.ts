@@ -1,4 +1,5 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
+import { Client as ClaimMinterClient } from '@builder-stellar/claim-minter-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
@@ -227,7 +228,8 @@ describe('Metadata and module upgrade registry integration', () => {
       ['governor', config.governorContractId, GovernorClient],
       ['auction', config.auctionContractId, AuctionClient],
       ['treasury', config.treasuryContractId, TreasuryClient],
-      ['marketplace', config.marketplaceContractId, MarketplaceClient]
+      ['marketplace', config.marketplaceContractId, MarketplaceClient],
+      ['claims', config.claimsContractId, ClaimMinterClient]
     ] as const) {
       const values = { module, fromHash, toHash };
       expect(handler.validate(values, context).valid).toBe(true);
@@ -256,6 +258,23 @@ describe('Metadata and module upgrade registry integration', () => {
       ).toEqual([fromHash, toHash.toLowerCase()]);
       expect(getProposalActionSummary(handler.serialize(values, context))).toContain(fromHash);
     }
+  });
+
+  it('migrates each supported DAO module through its own contract, and only one the DAO has', () => {
+    const handler = getActionHandler('migrate-dao-module');
+    for (const [module, target] of [
+      ['token', config.tokenContractId],
+      ['claims', config.claimsContractId]
+    ] as const) {
+      expect(handler.validate({ module }, context).valid).toBe(true);
+      const call = handler.buildCallVector({ module }, build);
+      expect(call).toEqual({ target, function: 'migrate', args: [] });
+      expect(encodeSupportedCall(target, 'migrate', call.args, config)).toEqual([]);
+      expect(inspectProposalAdminCall(target, 'migrate', [], config)?.title).toBe(`Migrate ${module} storage`);
+    }
+    const withoutClaims = { ...context, config: { ...config, claimsContractId: '' } };
+    expect(handler.validate({ module: 'claims' }, withoutClaims).valid).toBe(false);
+    expect(handler.validate({ module: '' }, context).valid).toBe(false);
   });
 
   it('supports Metadata upgrades (Metadata exposes admin()) and refuses unknown modules/malformed hashes', () => {
