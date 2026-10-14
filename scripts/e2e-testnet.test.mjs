@@ -63,3 +63,11 @@ test('CLI output parsing helpers', () => {
   assert.equal(selectPhases('all').length, 9);
   assert.throws(() => selectPhases('bogus'));
 });
+
+test('selectPhases serves other rehearsal scripts: their own phase list and usage line', () => {
+  const phases = ['preflight', 'one', 'report'];
+  assert.deepEqual(selectPhases('1', phases, 'scripts/other.mjs'), ['one']);
+  assert.deepEqual(selectPhases('all', phases), phases);
+  assert.throws(() => selectPhases('3', phases, 'scripts/other.mjs'), /Usage: node scripts\/other\.mjs <preflight\|one\|report\|all\|0\.\.2>/);
+  assert.throws(() => selectPhases(undefined), /scripts\/e2e-testnet\.mjs <preflight\|deploy-manager.*0\.\.8>/);
+});
