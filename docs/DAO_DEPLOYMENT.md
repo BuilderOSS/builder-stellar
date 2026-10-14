@@ -117,6 +117,8 @@ The web app offers the same under Manage → Storage renewal, with expiry dates 
 
 ## Tests and testnet rehearsal
 
-`pnpm contracts:test` runs the in-memory suites. `node --test scripts/e2e-testnet.test.mjs` tests rehearsal helpers offline.
+`pnpm contracts:test` runs the in-memory suites. `node --test scripts/e2e-testnet.test.mjs scripts/e2e-membership.test.mjs` tests the rehearsal helpers offline.
 
 `node scripts/e2e-testnet.mjs all` is a **network-mutating, testnet-only** rehearsal. It uses existing funded identities and saves resumable `.e2e` state/reports. Read [the driver](../scripts/e2e-testnet.mjs) before running it; do not confuse it with Cargo integration tests. No live rehearsal is implied by this guide.
+
+`node scripts/e2e-membership.mjs all` is the same kind of rehearsal for the membership flows of Manager / ClaimMinter / Token 0.4.0: a failed assurance drive (refund, slug release), a launched drive (escrow to the Treasury, claims after launch) and the token switches (`transfers_locked`, `members_only_delegation`, `dao_recovery`) turned on and off by proposal. It deploys two throwaway DAOs on an existing testnet Manager (default `deploys/builder-testnet-manager.json`; the DAO artifacts land in the gitignored `deploys/e2e-*`), takes about 30 minutes (governance waits dominate) and signs with `testnet-admin`, `alice` and `testnet-dev`, so never run it next to another script using those keys. `node scripts/e2e-membership.mjs preflight` sends nothing. The usage header of the script lists the phases, identities and timing overrides.

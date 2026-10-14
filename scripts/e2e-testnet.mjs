@@ -108,9 +108,9 @@ export const descriptionHash = (description) => keccak256(Buffer.from(descriptio
 //   BytesN<32>                -> 64 lowercase hex chars (plain string)
 //   u32 plain args            -> decimal; u64/u128/i128 plain args -> decimal string
 // ---------------------------------------------------------------------------------------------
-const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
+export const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
 const SYMBOL_RE = /^[A-Za-z0-9_]{1,32}$/;
-const HEX32_RE = /^[0-9a-f]{64}$/;
+export const HEX32_RE = /^[0-9a-f]{64}$/;
 
 export const val = {
   u32: (v) => ({ u32: Number(v) }),
@@ -202,16 +202,16 @@ export function txHashFrom(text) {
 
 export const redact = (text) => String(text ?? '').replace(/\bS[A-Z2-7]{55}\b/g, '<redacted-secret>');
 
-const big = (v) => BigInt(typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
+export const big = (v) => BigInt(typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
 
 // ---------------------------------------------------------------------------------------------
 // Context, state, assertions
 // ---------------------------------------------------------------------------------------------
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const pollMs = () => Number(process.env.E2E_POLL_MS || 15000);
-const nowS = () => Math.floor(Date.now() / 1000);
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export const pollMs = () => Number(process.env.E2E_POLL_MS || 15000);
+export const nowS = () => Math.floor(Date.now() / 1000);
 
-function refuseWrongNetwork(templateNetworkConfig) {
+export function refuseWrongNetwork(templateNetworkConfig) {
   const bad = [];
   for (const key of ['E2E_NETWORK', 'STELLAR_NETWORK']) {
     if (process.env[key] && process.env[key] !== NETWORK) bad.push(`${key}=${process.env[key]}`);
@@ -222,11 +222,13 @@ function refuseWrongNetwork(templateNetworkConfig) {
   if (bad.length) throw new Error(`REFUSING to run: this rehearsal only runs against "${NETWORK}" (${bad.join(', ')})`);
 }
 
-export function createContext({ root, statePath, keepGoing = false, redo = false }) {
+export function createContext({ root, statePath, keepGoing = false, redo = false, labelPrefix = 'e2e' }) {
   const scriptsDir = process.env.E2E_SCRIPTS_DIR || join(root, 'scripts');
   const ctx = {
     root, scriptsDir, statePath, keepGoing, redo,
     startedAt: Date.now(),
+    // The identity role that signs read-only simulations when a call names none.
+    viewRole: 'MANAGER_ADMIN',
     results: [],
     state: null
   };
@@ -234,7 +236,7 @@ export function createContext({ root, statePath, keepGoing = false, redo = false
     ctx.state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : null;
     if (!ctx.state) {
       const nonce = nowS();
-      ctx.state = { runId: String(nonce), nonce, label: `e2e-${nonce}`, network: NETWORK, createdAt: new Date().toISOString(), phases: {}, txs: {}, results: {} };
+      ctx.state = { runId: String(nonce), nonce, label: `${labelPrefix}-${nonce}`, network: NETWORK, createdAt: new Date().toISOString(), phases: {}, txs: {}, results: {} };
     }
     if (ctx.state.network !== NETWORK) throw new Error(`State file network is ${ctx.state.network}; refusing`);
     return ctx.state;
@@ -267,31 +269,31 @@ export function createContext({ root, statePath, keepGoing = false, redo = false
   return ctx;
 }
 
-const replacer = (_k, v) => (typeof v === 'bigint' ? v.toString() : v);
+export const replacer = (_k, v) => (typeof v === 'bigint' ? v.toString() : v);
 
 // ---------------------------------------------------------------------------------------------
 // Chain access (all through the `stellar` CLI)
 // ---------------------------------------------------------------------------------------------
-function cli(args, opts = {}) {
+export function cli(args, opts = {}) {
   return runQuiet('stellar', args, { env: { ...process.env, STELLAR_NO_CACHE: 'true' }, timeout: opts.timeout ?? 180_000 });
 }
 
 /** Read-only call (simulation, nothing submitted). Throws on failure. */
-function view(ctx, id, method, params, role = 'MANAGER_ADMIN') {
+export function view(ctx, id, method, params, role = ctx.viewRole) {
   const result = cli(invokeArgv({ id, source: ctx.name(role), send: 'no', method, params }));
   if (!result.ok) throw new Error(`view ${method} failed: ${redact(result.stderr || result.stdout).slice(0, 600)}`);
   return parseCliValue(result.stdout);
 }
 
 /** Simulation expected to fail. Returns { code, text, unexpectedSuccess }. Never submits a transaction. */
-function expectFailure(ctx, id, method, params, role = 'MANAGER_ADMIN') {
+export function expectFailure(ctx, id, method, params, role = ctx.viewRole) {
   const result = cli(invokeArgv({ id, source: ctx.name(role), send: 'no', method, params }));
   const text = redact(`${result.stderr}\n${result.stdout}`);
   return { unexpectedSuccess: result.ok, code: errorCode(text), text };
 }
 
 /** Real transaction. Throws on failure; returns { value, txHash }. */
-function write(ctx, id, method, params, role, txName) {
+export function write(ctx, id, method, params, role, txName) {
   const result = cli(invokeArgv({ id, source: ctx.name(role), method, params }));
   const text = `${result.stderr}\n${result.stdout}`;
   if (!result.ok) throw new Error(`${method} (${role}) failed: ${redact(text).slice(0, 800)}`);
@@ -300,13 +302,13 @@ function write(ctx, id, method, params, role, txName) {
   return { value: parseCliValue(result.stdout), txHash };
 }
 
-function runScript(ctx, scriptName, args, role) {
+export function runScript(ctx, scriptName, args, role) {
   const env = { ...process.env, DEPLOY_IDENTITY: ctx.name(role), STELLAR_NO_CACHE: 'true' };
   console.log(`$ DEPLOY_IDENTITY=${ctx.name(role)} node scripts/${scriptName} ${args.join(' ')}`);
   run('node', [join(ctx.scriptsDir, scriptName), ...args], { env, cwd: ctx.root });
 }
 
-async function waitFor(label, fn, { timeoutS, every = pollMs() }) {
+export async function waitFor(label, fn, { timeoutS, every = pollMs() }) {
   const started = Date.now();
   for (let n = 0; ; n++) {
     const outcome = await fn();
@@ -318,7 +320,7 @@ async function waitFor(label, fn, { timeoutS, every = pollMs() }) {
   }
 }
 
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const stroops = (v) => big(v);
 
 // ---------------------------------------------------------------------------------------------
@@ -342,7 +344,7 @@ function resolveIdentities(ctx) {
   ctx.save();
 }
 
-function nativeSac(ctx) {
+export function nativeSac(ctx) {
   if (ctx.state.nativeSac) return ctx.state.nativeSac;
   const result = cli(['contract', 'id', 'asset', '--asset', 'native', '--network', NETWORK], { timeout: 30_000 });
   const id = result.stdout.trim();
@@ -389,7 +391,7 @@ function prepareConfigs(ctx) {
 // ---------------------------------------------------------------------------------------------
 // Phases
 // ---------------------------------------------------------------------------------------------
-const nativeBalance = (ctx, who, asset) => big(view(ctx, asset ?? ctx.state.nativeSac, 'balance', { id: who }));
+export const nativeBalance = (ctx, who, asset) => big(view(ctx, asset ?? ctx.state.nativeSac, 'balance', { id: who }));
 
 async function preflight(ctx) {
   const version = cli(['--version'], { timeout: 30_000 });
@@ -433,7 +435,7 @@ async function preflight(ctx) {
 const managerArtifactPath = (ctx) => join(ctx.root, 'deploys', `${ctx.state.label}-${NETWORK}-manager.json`);
 const daoArtifactPath = (ctx) => join(ctx.root, 'deploys', `${ctx.state.label}-${NETWORK}-dao-${ctx.state.nonce}.json`);
 
-function artifactTxs(artifact) {
+export function artifactTxs(artifact) {
   const out = {};
   for (const [key, value] of Object.entries(artifact?.transactions ?? {})) {
     (Array.isArray(value) ? value : [value]).forEach((tx, i) => { if (tx?.txHash) out[Array.isArray(value) ? `${key}[${i}]` : key] = tx.txHash; });
@@ -820,36 +822,46 @@ const PHASE_FNS = { preflight, 'deploy-manager': deployManager, 'create-dao': cr
 // ---------------------------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------------------------
-function parseArgs(argv) {
-  const out = { target: argv[0], statePath: '.e2e/state.json', keepGoing: false, redo: false };
+function parseArgs(argv, { defaultState, valueOptions = {} }) {
+  const out = { target: argv[0], statePath: defaultState, keepGoing: false, redo: false, extra: {} };
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--state') out.statePath = argv[++i];
     else if (argv[i] === '--keep-going') out.keepGoing = true;
     else if (argv[i] === '--redo') out.redo = true;
+    else if (Object.hasOwn(valueOptions, argv[i])) out.extra[valueOptions[argv[i]]] = argv[++i];
     else throw new Error(`unknown argument ${argv[i]}`);
   }
   return out;
 }
 
-export function selectPhases(target) {
-  if (target === 'all') return PHASES;
-  const byIndex = /^\d+$/.test(target ?? '') ? PHASES[Number(target)] : undefined;
+export function selectPhases(target, phases = PHASES, script = 'scripts/e2e-testnet.mjs') {
+  if (target === 'all') return phases;
+  const byIndex = /^\d+$/.test(target ?? '') ? phases[Number(target)] : undefined;
   const name = byIndex ?? target;
-  if (!PHASES.includes(name)) throw new Error(`Usage: node scripts/e2e-testnet.mjs <${PHASES.join('|')}|all|0..8> [--state path] [--keep-going] [--redo]`);
+  if (!phases.includes(name)) throw new Error(`Usage: node ${script} <${phases.join('|')}|all|0..${phases.length - 1}> [--state path] [--keep-going] [--redo]`);
   return [name];
 }
 
-export async function main(argv) {
-  const opts = parseArgs(argv);
-  const phases = selectPhases(opts.target);
+/**
+ * The phase loop shared by the rehearsal scripts: select phases, load the state file, skip phases already
+ * recorded as done, run the rest, record each phase's assertions, print the summary. Returns the exit code.
+ * `valueOptions` maps extra `--flag value` options to keys of `ctx.options`.
+ */
+export async function runPhases({
+  argv, phases, phaseFns, script, defaultState = '.e2e/state.json', labelPrefix = 'e2e', valueOptions = {}, title = 'E2E rehearsal', viewRole = 'MANAGER_ADMIN'
+}) {
+  const opts = parseArgs(argv, { defaultState, valueOptions });
+  const selected = selectPhases(opts.target, phases, script);
   const root = resolve(process.env.E2E_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..'));
   refuseWrongNetwork(null);
-  const ctx = createContext({ root, statePath: resolve(root, opts.statePath), keepGoing: opts.keepGoing, redo: opts.redo });
+  const ctx = createContext({ root, statePath: resolve(root, opts.statePath), keepGoing: opts.keepGoing, redo: opts.redo, labelPrefix });
+  ctx.options = opts.extra;
+  ctx.viewRole = viewRole;
   ctx.load();
   let failed = false;
-  console.log(`E2E rehearsal on ${NETWORK}; run ${ctx.state.runId}; state ${opts.statePath}`);
+  console.log(`${title} on ${NETWORK}; run ${ctx.state.runId}; state ${opts.statePath}`);
 
-  for (const phase of phases) {
+  for (const phase of selected) {
     ctx.phaseName = phase;
     const prior = ctx.state.phases[phase];
     if (phase !== 'report' && prior?.status === 'done' && !ctx.redo) {
@@ -857,11 +869,11 @@ export async function main(argv) {
       continue;
     }
     if (phase !== 'preflight' && phase !== 'report' && !ctx.state.identities) { console.log('Run preflight first.'); failed = true; break; }
-    console.log(`\n=== Phase ${PHASES.indexOf(phase)}: ${phase} ===`);
+    console.log(`\n=== Phase ${phases.indexOf(phase)}: ${phase} ===`);
     const before = ctx.results.length;
     const started = Date.now();
     try {
-      await PHASE_FNS[phase](ctx);
+      await phaseFns[phase](ctx);
     } catch (error) {
       ctx.check('phase completed without error', false, redact(error instanceof Error ? error.message : String(error)).slice(0, 800));
     }
@@ -884,6 +896,10 @@ export async function main(argv) {
   console.log('\n=== SUMMARY ===');
   console.log(JSON.stringify({ counts, failed: all.filter((r) => r.status === 'FAIL').map((r) => `${r.phase}: ${r.name}`) }, null, 2));
   return failed ? 1 : 0;
+}
+
+export function main(argv) {
+  return runPhases({ argv, phases: PHASES, phaseFns: PHASE_FNS, script: 'scripts/e2e-testnet.mjs' });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
