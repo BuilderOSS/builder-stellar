@@ -11,8 +11,8 @@ import {
   Avatar,
   ButtonLink,
   Callout,
-  Chip,
   EmptyState,
+  HelpTip,
   IconButton,
   ListRow,
   Pagination,
@@ -79,8 +79,10 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
             <Address value={address} compact />
           </div>
           <IconButton
+            className={css({ alignSelf: 'flex-end' })}
             label="Refresh profile"
-            variant="secondary"
+            variant="ghost"
+            size="sm"
             loading={profile.isValidating || inventory.isValidating}
             onClick={() => {
               void profile.mutate();
@@ -111,30 +113,36 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
             </div>
             <div className={stat}>
               <span className={statValue}>{member.voting_power}</span>
-              <span className={statLabel}>Votes</span>
+              <span className={statLabel}>
+                Votes{' '}
+                <HelpTip label="Votes">
+                  Votes include any delegated to this address and leave out their own if they delegated elsewhere.
+                  Delegating never moves a token. The directory can lag the chain a little.
+                </HelpTip>
+              </span>
             </div>
           </div>
-          {!member.delegated_to ? (
-            <p className={muted}>No delegate set.</p>
-          ) : member.delegated_to === member.address ? (
-            <div>
-              <Chip>Votes for themselves</Chip>
-            </div>
-          ) : (
+          {member.delegated_to && member.delegated_to !== member.address ? (
             <ListRow
               href={daoRoute(routeId, `members/${member.delegated_to}`)}
               media={<Avatar address={member.delegated_to} size="sm" />}
               title={shortAddress(member.delegated_to)}
-              meta="Their votes go to this delegate"
+              meta="Delegated"
             />
-          )}
-          <p className={muted}>
-            Votes include any delegated to this address and leave out their own if they delegated elsewhere. Delegating
-            never moves a token. The directory can lag the chain a little.
-          </p>
+          ) : null}
         </>
       ) : null}
 
+      {isViewer && inventory.data?.items[0] ? (
+        <div>
+          <ButtonLink
+            variant="secondary"
+            href={daoRoute(routeId, `token/${inventory.data.items[0].tokenId}?action=delegate`)}
+          >
+            Delegate votes
+          </ButtonLink>
+        </div>
+      ) : null}
       {address ? (
         <Section title="Tokens">
           {inventory.isLoading ? (

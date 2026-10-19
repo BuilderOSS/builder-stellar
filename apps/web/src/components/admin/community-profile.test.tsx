@@ -88,7 +88,8 @@ describe('CommunityProfileEditor', () => {
 
   it('lets the launch admin edit everything directly during setup, showing current values', () => {
     const html = render();
-    expect(html).toContain('During setup, changes apply right away.');
+    expect(html).toContain('aria-label="About profile changes"');
+    expect(html).not.toContain('During setup, changes apply right away.');
     expect(input(html, 'profile-name')).toContain('value="Lantern Club"');
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(html).toContain('value="https://lantern.club"');
@@ -101,7 +102,8 @@ describe('CommunityProfileEditor', () => {
     state.live = true;
     state.admin = TREASURY;
     const html = render();
-    expect(html).toContain('Changes go into a proposal for members to vote on.');
+    expect(html).toContain('aria-label="About profile changes"');
+    expect(html).not.toContain('Changes go into a proposal for members to vote on.');
     // Members can still draft every change; the vote decides.
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(html).not.toContain('Read only');

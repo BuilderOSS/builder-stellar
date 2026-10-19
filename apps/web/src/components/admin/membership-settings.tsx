@@ -11,7 +11,7 @@ import { PageSection } from '@/components/page-section';
 import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
 import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
 import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
-import { Badge, Callout, Card, FieldHelperText, Heading, Skeleton, Switch, Text } from '@/components/ui';
+import { Badge, Callout, Card, Chip, Heading, HelpTip, Skeleton, Switch } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { type MembershipState, useMembershipState } from '@/lib/membership-state';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
@@ -262,11 +262,7 @@ export function MembershipSettings() {
     <>
       <PageSection
         title="Membership"
-        description={
-          data.live
-            ? 'Requires DAO governance: each change here is added to a proposal draft.'
-            : 'Setup: the launch admin changes these directly.'
-        }
+        eyebrow={<Chip tone={data.live ? 'live' : 'yours'}>{data.live ? 'Needs a vote' : 'Setup'}</Chip>}
       >
         <Stack gap="4">
           {frozen ? (
@@ -303,7 +299,7 @@ export function MembershipSettings() {
                             <span className={settingLabel}>{entry.label}</span>
                             <Badge tone={enabled ? 'live' : 'neutral'}>{enabled ? 'On' : 'Off'}</Badge>
                           </span>
-                          <Text size="sm">{enabled ? entry.on : entry.off}</Text>
+                          <HelpTip label={entry.label}>{enabled ? entry.on : entry.off}</HelpTip>
                           <PendingValue
                             pending={queued}
                             describe={(action) => (action.enabled ? 'Turn on' : 'Turn off')}
@@ -329,8 +325,12 @@ export function MembershipSettings() {
                   return (
                     <Switch
                       key={entry.key}
-                      label={entry.label}
-                      description={enabled ? entry.on : entry.off}
+                      label={
+                        <>
+                          {entry.label}
+                          <HelpTip label={entry.label}>{enabled ? entry.on : entry.off}</HelpTip>
+                        </>
+                      }
                       checked={enabled}
                       disabled={!canAct || busy}
                       onCheckedChange={(next) => changeSwitch(entry, next)}
@@ -339,9 +339,10 @@ export function MembershipSettings() {
                 })
               )}
               {data.live && !data.settings.transfersLocked ? (
-                <FieldHelperText>
-                  Locking takes away every member’s way out by sale. The proposal review flags it.
-                </FieldHelperText>
+                <HelpTip label="Locked memberships">
+                  Locking prevents members from selling their tokens. They can return tokens to the treasury or transfer
+                  them through an authorised DAO vote.
+                </HelpTip>
               ) : null}
               {message?.where === 'switches' ? <Callout variant="info" title={message.text} /> : null}
             </Stack>

@@ -5,6 +5,7 @@ import { css } from 'styled-system/css';
 import { clampDurationParts, combineDuration, type DurationParts, formatDuration, splitDuration } from '@/lib/duration';
 
 import { FieldHelperText } from './field';
+import { HelpTip } from './help-tip';
 import { Input } from './input';
 
 type DurationKey = keyof DurationParts;
@@ -61,6 +62,7 @@ export function DurationInput({
   value,
   onChange,
   helperText,
+  helperAsTooltip = false,
   disabled,
   showSeconds = true,
   invalid
@@ -70,6 +72,7 @@ export function DurationInput({
   value: number | string | null | undefined;
   onChange: (seconds: number) => void;
   helperText?: string;
+  helperAsTooltip?: boolean;
   disabled?: boolean;
   showSeconds?: boolean;
   invalid?: boolean;
@@ -83,7 +86,14 @@ export function DurationInput({
 
   return (
     <fieldset className={fieldset} id={id}>
-      <legend className={legend}>{label}</legend>
+      <legend className={legend}>
+        {label}
+        {helperAsTooltip && helperText ? (
+          <HelpTip id={`${id}-help`} label={label}>
+            {helperText}
+          </HelpTip>
+        ) : null}
+      </legend>
       <div className={grid}>
         {inputs.map((input) => (
           <div key={input.key} className={part}>
@@ -120,7 +130,7 @@ export function DurationInput({
       {value !== '' && value != null && Number.isFinite(Number(value)) ? (
         <p className={total}>{formatDuration(Number(value), { style: 'long', maxUnits: 4 })}</p>
       ) : null}
-      {helperText ? <FieldHelperText>{helperText}</FieldHelperText> : null}
+      {helperText && !helperAsTooltip ? <FieldHelperText>{helperText}</FieldHelperText> : null}
     </fieldset>
   );
 }

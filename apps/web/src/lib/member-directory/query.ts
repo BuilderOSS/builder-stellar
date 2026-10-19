@@ -23,14 +23,15 @@ function mapMember(row: TokenMember): DirectoryMember {
 }
 export async function directoryMembers(
   daoId: string,
-  page: { limit: number; offset: number }
+  page: { limit: number; offset: number },
+  order: 'asc' | 'desc' = 'desc'
 ): Promise<DirectoryPage<DirectoryMember>> {
   const { deploymentId, daoId: token } = await directoryScope(daoId);
   const where = { deploymentId, daoId: token, contractId: token };
   const [rows, total] = await Promise.all([
     prisma.tokenMember.findMany({
       where,
-      orderBy: [{ votingPower: 'desc' }, { address: 'asc' }],
+      orderBy: [{ votingPower: order }, { address: 'asc' }],
       take: page.limit,
       skip: page.offset
     }),

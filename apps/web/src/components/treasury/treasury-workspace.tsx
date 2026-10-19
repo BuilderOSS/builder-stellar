@@ -13,7 +13,9 @@ import {
   EmptyState,
   IconButton,
   Pagination,
+  ScrollArea,
   Section,
+  SegmentedControl,
   Skeleton
 } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
@@ -90,6 +92,7 @@ export function TreasuryWorkspace() {
 function ScopedTreasuryWorkspace() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const [page, setPage] = useState(0);
+  const [action, setAction] = useState('fund');
   const [refreshError, setRefreshError] = useState('');
   const balances = useTreasuryBalances(config);
   const scope = clientTreasuryScope(daoId, config);
@@ -113,7 +116,7 @@ function ScopedTreasuryWorkspace() {
           <div className={head}>
             <div>
               <h2 id="treasury-balances-title" className={title}>
-                What the tribe holds
+                Treasury balances
               </h2>
               <p className={muted}>
                 {funded === undefined
@@ -176,7 +179,7 @@ function ScopedTreasuryWorkspace() {
 
         <TreasuryTokens />
 
-        <Section title="What the treasury ran" description="Every action members voted through, newest first">
+        <Section title="Execution history">
           {history.error ? (
             <Callout variant="error" role="alert" title="History didn't load" description={history.error.message} />
           ) : null}
@@ -192,24 +195,26 @@ function ScopedTreasuryWorkspace() {
                 {page === 0 ? 'When members vote to spend funds or change something, it shows up here.' : undefined}
               </EmptyState>
             ) : (
-              <ol className={historyList}>
-                {history.data.calls.map((call) => (
-                  <li key={call.eventId} className={historyItem}>
-                    <div className={head}>
-                      <p className={assetName}>{contractCallLabel(call.function)}</p>
-                      <span className={muted}>
-                        Action {call.index + 1}
-                        {call.at ? ` · ${new Date(call.at).toLocaleDateString()}` : ''}
-                      </span>
-                    </div>
-                    <Address value={call.target} label="Contract" compact />
-                    <Address value={call.transactionHash} label="Transaction" compact />
-                    <NextLink href={daoRoute(routeId, `proposals/${call.proposalId}`)} className={link}>
-                      View proposal
-                    </NextLink>
-                  </li>
-                ))}
-              </ol>
+              <ScrollArea label="Treasury execution history">
+                <ol className={historyList}>
+                  {history.data.calls.map((call) => (
+                    <li key={call.eventId} className={historyItem}>
+                      <div className={head}>
+                        <p className={assetName}>{contractCallLabel(call.function)}</p>
+                        <span className={muted}>
+                          Action {call.index + 1}
+                          {call.at ? ` · ${new Date(call.at).toLocaleDateString()}` : ''}
+                        </span>
+                      </div>
+                      <Address value={call.target} label="Contract" compact />
+                      <Address value={call.transactionHash} label="Transaction" compact />
+                      <NextLink href={daoRoute(routeId, `proposals/${call.proposalId}`)} className={link}>
+                        View proposal
+                      </NextLink>
+                    </li>
+                  ))}
+                </ol>
+              </ScrollArea>
             )
           ) : null}
           <Pagination
@@ -226,8 +231,23 @@ function ScopedTreasuryWorkspace() {
 
       {config.treasuryContractId ? (
         <div className={sideColumn}>
-          <FundTreasury key={`fund:${address}:${authStatus}`} scope={scope} onConfirmed={refresh} />
-          <TransferProposal key={`transfer:${address}:${authStatus}`} />
+          <SegmentedControl
+            id="treasury-action"
+            label="Treasury action"
+            fill
+            value={action}
+            onValueChange={setAction}
+            options={[
+              { value: 'fund', label: 'Add funds' },
+              { value: 'transfer', label: 'Send funds' }
+            ]}
+          />
+          <div hidden={action !== 'fund'}>
+            <FundTreasury key={`fund:${address}:${authStatus}`} scope={scope} onConfirmed={refresh} />
+          </div>
+          <div hidden={action !== 'transfer'}>
+            <TransferProposal key={`transfer:${address}:${authStatus}`} />
+          </div>
         </div>
       ) : null}
     </div>

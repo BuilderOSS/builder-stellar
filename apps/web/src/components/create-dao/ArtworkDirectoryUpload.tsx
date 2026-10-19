@@ -1,9 +1,9 @@
 'use client';
-import { FolderOpen } from 'lucide-react';
+import { Download, FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { Button, FieldLabel } from '@/components/ui';
+import { Button, ButtonLink, FieldLabel } from '@/components/ui';
 import { cidToUrls, UPLOAD_POLICIES, validateImageDimensions } from '@/lib/pinata-upload';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -92,6 +92,15 @@ export function ArtworkDirectoryUpload({
           <FolderOpen aria-hidden="true" />
           Choose a folder
         </Button>
+        <ButtonLink
+          href={{ pathname: '/samples/artwork-example.zip' }}
+          download="artwork-example.zip"
+          variant="ghost"
+          size="sm"
+        >
+          <Download aria-hidden="true" />
+          Download example folder
+        </ButtonLink>
         <span className={styles.muted}>
           {files.length ? `${files.length} ${files.length === 1 ? 'file' : 'files'} selected` : 'No folder chosen'}
         </span>
@@ -117,8 +126,9 @@ export function ArtworkDirectoryUpload({
         }}
       />
       <p className={styles.muted}>
-        One folder per layer, holding that layer&apos;s images (collection/layer/item.png). Layers stack in name order,
-        bottom first, so number them: 0-backgrounds, 1-bodies. One file type, up to 16 layers and 1,000 files.
+        Choose a collection folder containing one subfolder per layer, such as 0-backgrounds and 1-bodies. Put each
+        layer’s images in its subfolder. Number the folders in drawing order, from background to foreground. Use the
+        same image format throughout, with up to 16 layers and 1,000 images.
       </p>
       <Button
         type="button"

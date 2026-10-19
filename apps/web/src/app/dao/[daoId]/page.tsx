@@ -26,6 +26,8 @@ import {
   CrestStripe,
   Disclosure,
   EmptyState,
+  ExpandableList,
+  ScrollArea,
   Section,
   Skeleton,
   Text
@@ -197,7 +199,6 @@ export default function Page() {
         proposalsError={proposals.error}
         activeProposals={activeCount}
         runsAuctions={hasAuction(config)}
-        hasMarket={hasMarketplace(config)}
         assetCode={assetCode}
         now={now}
       />
@@ -212,9 +213,14 @@ export default function Page() {
           <Section
             title="Proposals"
             action={
-              <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm">
-                See all
-              </ButtonLink>
+              <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
+                <ButtonLink href={daoRoute(routeId, 'proposals/create')} variant="secondary" size="sm">
+                  Create proposal
+                </ButtonLink>
+                <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm">
+                  See all
+                </ButtonLink>
+              </div>
             }
           >
             {proposals.error ? (
@@ -226,7 +232,7 @@ export default function Page() {
                 <Skeleton className={css({ height: '16' })} />
               </div>
             ) : proposalPreview.length ? (
-              <div>
+              <ScrollArea label="Proposals">
                 {proposalPreview.map((item) => (
                   <ProposalRow
                     key={item.proposalId}
@@ -234,7 +240,7 @@ export default function Page() {
                     href={daoRoute(routeId, `proposals/${item.proposalNumber}`)}
                   />
                 ))}
-              </div>
+              </ScrollArea>
             ) : (
               <EmptyState title="No proposals yet">
                 When a member proposes something, everyone with a token can vote on it here.
@@ -254,19 +260,25 @@ export default function Page() {
               </div>
             ) : activity.data?.items.length ? (
               <>
-                <ActivityList items={activity.data.items} daoIdFor={() => daoId} />
-                {activity.data.hasMore ? (
-                  <div className={more}>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setActivityLimit((current) => current + ACTIVITY_PAGE_SIZE)}
-                      disabled={activity.isLoading}
-                    >
-                      Show more
-                    </Button>
-                  </div>
-                ) : null}
+                <ExpandableList
+                  label="Tribe activity"
+                  expandable={activity.data.items.length > 3 || activity.data.hasMore}
+                  preview={<ActivityList items={activity.data.items.slice(0, 3)} daoIdFor={() => daoId} />}
+                >
+                  <ActivityList items={activity.data.items} daoIdFor={() => daoId} />
+                  {activity.data.hasMore ? (
+                    <div className={more}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setActivityLimit((current) => current + ACTIVITY_PAGE_SIZE)}
+                        disabled={activity.isValidating}
+                      >
+                        Load older activity
+                      </Button>
+                    </div>
+                  ) : null}
+                </ExpandableList>
               </>
             ) : (
               <EmptyState title="Nothing yet">Proposals, votes, bids and sales show up here as they happen.</EmptyState>
@@ -289,11 +301,13 @@ export default function Page() {
               </div>
             ) : tokens.data?.items.length ? (
               <>
-                <div className={tokenGrid}>
-                  {tokenItems.map((token) => (
-                    <TokenCard key={token.tokenId} tokenId={token.tokenId} owner={token.owner} />
-                  ))}
-                </div>
+                <ScrollArea label="Tribe tokens">
+                  <div className={tokenGrid}>
+                    {tokenItems.map((token) => (
+                      <TokenCard key={token.tokenId} tokenId={token.tokenId} owner={token.owner} />
+                    ))}
+                  </div>
+                </ScrollArea>
                 {tokens.data.items.length > tokenLimit ? (
                   <div className={more}>
                     <Button

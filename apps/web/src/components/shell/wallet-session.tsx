@@ -17,6 +17,7 @@ import {
   verifyAuthProof,
   verifySep10Proof
 } from '@/lib/auth/client';
+import { restoredSessionAddress } from '@/lib/auth/restore-session';
 import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
 import { hasSeenWalletIntro, markWalletIntroSeen } from '@/lib/wallet-intro';
@@ -105,7 +106,12 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const setAuthStatus = useAuthSessionStore((state) => state.setAuthStatus);
   const setAuthenticatedAddress = useAuthSessionStore((state) => state.setAuthenticatedAddress);
   const resetAuth = useAuthSessionStore((state) => state.resetAuth);
-  const { data: authSession, mutate: mutateAuthSession } = useAuthSession();
+  const {
+    data: authSession,
+    error: authSessionError,
+    isLoading: restoringSession,
+    mutate: mutateAuthSession
+  } = useAuthSession();
   const [walletAddress, setWalletAddress] = useState<string | null | undefined>(undefined);
   const lastErrorRef = useRef('');
   const [introOpen, setIntroOpen] = useState(false);
@@ -113,14 +119,17 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const invalidateAuth = useCallback(async () => {
     try {
       await logoutAuth();
+    } catch (error) {
+      console.warn('Could not clear the remote sign-in session.', error);
     } finally {
       resetAuth();
-      await mutateAuthSession({ authenticated: false, address: null }, false);
+      await mutateAuthSession({ authenticated: false, address: null }, false).catch(() => undefined);
     }
   }, [mutateAuthSession, resetAuth]);
 
   const isAuthenticated = session.authStatus === 'authenticated' && Boolean(session.address);
   const isAuthBusy =
+    restoringSession ||
     session.authStatus === 'connecting-wallet' ||
     session.authStatus === 'requesting-challenge' ||
     session.authStatus === 'awaiting-signature' ||
@@ -133,9 +142,12 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     initializeWalletKit(network.name);
 
+    let disposed = false;
     const handleWalletAddress = (address: string) => {
+      if (disposed) return;
       setWalletAddress(address);
-      if (session.authStatus === 'authenticated' && session.address && session.address !== address) {
+      const current = useAuthSessionStore.getState();
+      if (current.authStatus === 'authenticated' && current.address && current.address !== address) {
         void invalidateAuth();
       }
     };
@@ -148,19 +160,22 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
 
     const onDisconnect = StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
       setWalletAddress(null);
-      if (session.authStatus === 'authenticated') void invalidateAuth();
+      if (useAuthSessionStore.getState().authStatus === 'authenticated') void invalidateAuth();
       else resetAuth();
     });
 
     void StellarWalletsKit.getAddress()
       .then(({ address }) => handleWalletAddress(address))
-      .catch(() => setWalletAddress(null));
+      .catch(() => {
+        /* Extensions may not be ready after a reload. Keep the verified server session. */
+      });
 
     return () => {
+      disposed = true;
       onStateUpdated();
       onDisconnect();
     };
-  }, [invalidateAuth, network.name, resetAuth, session.address, session.authStatus]);
+  }, [invalidateAuth, network.name, resetAuth]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -168,14 +183,35 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated, network, updateSession]);
 
   useEffect(() => {
-    if (!authSession?.authenticated || !authSession.address) return;
-    if (walletAddress === undefined) return;
-    if ((session.address && session.address !== authSession.address) || walletAddress !== authSession.address) {
-      void invalidateAuth();
+    if (authSessionError || !authSession) return;
+    // Signing in is explicit; a stale anonymous response must not interrupt it.
+    if (
+      ['connecting-wallet', 'requesting-challenge', 'awaiting-signature', 'verifying-signature'].includes(
+        session.authStatus
+      )
+    )
       return;
+    const restored = restoredSessionAddress(authSession, walletAddress);
+    if (restored) {
+      if (session.address && session.address !== restored) {
+        void invalidateAuth();
+        return;
+      }
+      setAuthenticatedAddress(restored);
+    } else if (restored === null && session.authStatus === 'authenticated') {
+      if (authSession.authenticated) void invalidateAuth();
+      else resetAuth();
     }
-    setAuthenticatedAddress(authSession.address);
-  }, [authSession, invalidateAuth, session.address, setAuthenticatedAddress, walletAddress]);
+  }, [
+    authSession,
+    authSessionError,
+    invalidateAuth,
+    resetAuth,
+    session.address,
+    session.authStatus,
+    setAuthenticatedAddress,
+    walletAddress
+  ]);
 
   // Sign-in failures used to be silent; surface them once.
   useEffect(() => {

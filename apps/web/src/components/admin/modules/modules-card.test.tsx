@@ -57,8 +57,8 @@ describe('ModulesCard', () => {
   it('lists each module by its name with its allowance and a way to add another', () => {
     const html = render({ modules: [auction, market, claims] });
     expect(html).toContain('Add a module');
-    expect(html).toContain('>Auction<');
-    expect(html).toContain('>Market<');
+    expect(html).toContain('>Auction contract<');
+    expect(html).toContain('>Market contract<');
     expect(html).toContain('>Claims<');
     expect(html).toContain('No limit');
     expect(html).toContain('0 to mint');

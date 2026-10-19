@@ -6,9 +6,8 @@ import NextLink from 'next/link';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { GlossaryTerm } from '@/components/help/glossary';
 import { PageSection } from '@/components/page-section';
-import { Avatar, ButtonLink, Callout, Chip, IconButton, Skeleton } from '@/components/ui';
+import { Avatar, ButtonLink, Callout, Chip, Disclosure, IconButton, ScrollArea, Skeleton } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -39,10 +38,18 @@ const art = css({
   '& img': { width: '100%', height: '100%', objectFit: 'cover' }
 });
 const side = css({ display: 'grid', gap: '5', minW: '0' });
-const traits = css({ display: 'flex', flexWrap: 'wrap', gap: '2', m: '0' });
-const trait = css({ display: 'grid', gap: '0.5', px: '3', py: '2', borderRadius: 'control', bg: 'hover' });
+const traits = css({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '3', m: '0' });
+const trait = css({
+  display: 'grid',
+  alignContent: 'start',
+  minW: '0',
+  gap: '1',
+  p: '3.5',
+  borderRadius: 'control',
+  bg: 'raised'
+});
 const traitName = css({ textStyle: 'micro', color: 'ink.muted' });
-const traitValue = css({ textStyle: 'label', color: 'ink', m: '0' });
+const traitValue = css({ textStyle: 'label', color: 'ink', m: '0', overflowWrap: 'anywhere' });
 const ownerRow = css({ display: 'flex', alignItems: 'center', gap: '3', textDecoration: 'none', color: 'ink' });
 const ownerName = css({ textStyle: 'subheading', m: '0' });
 const link = css({
@@ -137,23 +144,21 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
                     : 'Ownership is unavailable. The token may not exist yet, or the data source is offline.'}
                 </p>
               )}
-              <p className={muted}>
-                Each token is one vote. Holders can <GlossaryTerm term="delegate">delegate</GlossaryTerm> that vote
-                without giving up the token.
-              </p>
             </section>
 
             {data?.metadata?.attributes.length ? (
-              <section aria-label="Traits">
-                <dl className={traits}>
-                  {data.metadata.attributes.map((item, index) => (
-                    <div key={`${item.trait_type}:${index}`} className={trait}>
-                      <dt className={traitName}>{item.trait_type}</dt>
-                      <dd className={traitValue}>{item.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
+              <Disclosure title="Traits">
+                <ScrollArea label="Token traits">
+                  <dl className={traits}>
+                    {data.metadata.attributes.map((item, index) => (
+                      <div key={`${item.trait_type}:${index}`} className={trait}>
+                        <dt className={traitName}>{item.trait_type}</dt>
+                        <dd className={traitValue}>{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </ScrollArea>
+              </Disclosure>
             ) : null}
 
             <HolderControls

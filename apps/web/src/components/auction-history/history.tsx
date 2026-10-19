@@ -116,7 +116,6 @@ export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; da
         onNext={() => setPage(page + 1)}
         disabled={isLoading}
       />
-      <p className={note}>Recent results can take a moment to appear.</p>
     </Section>
   );
 }

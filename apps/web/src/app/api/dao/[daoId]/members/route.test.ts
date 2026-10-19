@@ -13,11 +13,19 @@ describe('members API', () => {
   });
   const request = (query: string, daoId = 'dao-a') =>
     GET(new Request(`http://localhost/api/dao/${daoId}/members?${query}`), { params: Promise.resolve({ daoId }) });
+  it('forwards ascending order and rejects unsupported values', async () => {
+    await request('order=asc');
+    expect(mocks.list.mock.calls[0][2]).toBe('asc');
+    mocks.list.mockClear();
+    const invalid = await request('order=invalid');
+    expect(invalid.status).toBe(400);
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
   it('passes pagination beyond 100 through and disables HTTP caches', async () => {
     const response = await request('limit=25&offset=100');
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(mocks.list).toHaveBeenCalledWith('dao-a', { limit: 25, offset: 100 });
+    expect(mocks.list).toHaveBeenCalledWith('dao-a', { limit: 25, offset: 100 }, 'desc');
     await request('limit=25&offset=0', 'dao-b');
     expect(mocks.list.mock.calls[1][0]).toBe('dao-b');
   });

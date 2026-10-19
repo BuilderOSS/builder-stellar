@@ -2,7 +2,7 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { FieldHelperText, FieldLabel, Input, Text } from '@/components/ui';
+import { FieldHelperText, FieldLabel, HelpTip, Input, Text } from '@/components/ui';
 
 type PercentageInputProps = {
   id: string;
@@ -10,6 +10,8 @@ type PercentageInputProps = {
   value: number | string | null | undefined;
   onChange: (bps: number) => void;
   helperText?: string;
+  helperAsTooltip?: boolean;
+  showSummary?: boolean;
   disabled?: boolean;
   min?: number;
   max?: number;
@@ -34,6 +36,8 @@ export function PercentageInput({
   value,
   onChange,
   helperText,
+  helperAsTooltip = false,
+  showSummary = true,
   disabled,
   min = 0,
   max = 100
@@ -55,8 +59,11 @@ export function PercentageInput({
   return (
     <Stack gap="2">
       <div>
-        <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        {helperText ? <FieldHelperText>{helperText}</FieldHelperText> : null}
+        <FieldLabel htmlFor={id}>
+          {label}
+          {helperAsTooltip && helperText ? <HelpTip label={label}>{helperText}</HelpTip> : null}
+        </FieldLabel>
+        {helperText && !helperAsTooltip ? <FieldHelperText>{helperText}</FieldHelperText> : null}
       </div>
 
       <Stack gap="2">
@@ -71,9 +78,11 @@ export function PercentageInput({
           disabled={disabled}
           placeholder="0.00"
         />
-        <Text size="sm" tone="muted">
-          {percentageValue}% ({bps} basis points)
-        </Text>
+        {showSummary ? (
+          <Text size="sm" tone="muted">
+            {percentageValue}% ({bps} basis points)
+          </Text>
+        ) : null}
       </Stack>
     </Stack>
   );

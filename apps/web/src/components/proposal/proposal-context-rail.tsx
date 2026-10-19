@@ -1,6 +1,7 @@
 'use client';
 
 import { RefreshCw } from 'lucide-react';
+import NextLink from 'next/link';
 import { type ReactNode, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
@@ -11,6 +12,7 @@ import {
   Avatar,
   Button,
   Callout,
+  HelpTip,
   ListRow,
   SearchInput,
   SegmentedControl,
@@ -127,6 +129,7 @@ function TreasuryPanel({ config }: { config: Parameters<typeof useTreasuryBalanc
 }
 
 function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
+  const { daoConfig: config } = useDaoContext();
   const [query, setQuery] = useState('');
   const { data, error, isLoading, mutate } = useGoldskyMemberList(daoTokenAddress, 100);
   const normalizedQuery = query.trim().toLowerCase();
@@ -156,7 +159,22 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
                 key={member.address}
                 media={<Avatar address={member.address} size="sm" />}
                 title={<span title={member.address}>{shortAddress(member.address)}</span>}
-                meta={`${formatNumber(member.voting_power)} votes`}
+                meta={
+                  <>
+                    {formatNumber(member.voting_power)} votes
+                    {member.voting_power === '0' ? (
+                      <HelpTip label="Voting power">
+                        {[config.treasuryContractId, config.auctionContractId, config.marketplaceContractId].includes(
+                          member.address
+                        )
+                          ? 'Tokens held by the treasury, auction, and marketplace contracts do not carry votes.'
+                          : member.delegated_to && member.delegated_to !== member.address
+                            ? 'This member delegated their votes to another address.'
+                            : 'No voting power is recorded for this address.'}
+                      </HelpTip>
+                    ) : null}
+                  </>
+                }
               />
             ))}
             {rows.length > 12 ? <p className={intro}>Showing the first 12 matches.</p> : null}
@@ -181,17 +199,20 @@ function HistoryPanel({ daoId }: { daoId: string }) {
       <p className={intro}>How this tribe decided similar things before.</p>
       <DataState loading={isLoading && !data} error={error} hasData={Boolean(data)}>
         {data?.items.length ? (
-          <div>
-            {data.items.map((proposal) => (
-              <ListRow
-                key={proposal.proposalId}
-                href={daoRoute(routeId, `proposals/${proposal.proposalNumber}`)}
-                title={proposal.metadata.title || 'Untitled proposal'}
-                meta={`#${proposal.proposalNumber}`}
-                trailing={<ProposalStateBadge label={proposal.stateLabel} />}
-              />
+          <p className={intro}>
+            {data.items.map((proposal, index) => (
+              <span key={proposal.proposalId}>
+                {index ? ' · ' : ''}
+                <NextLink
+                  href={daoRoute(routeId, `proposals/${proposal.proposalNumber}`)}
+                  className={css({ color: 'signal' })}
+                >
+                  #{proposal.proposalNumber} {proposal.metadata.title || 'Untitled proposal'}
+                </NextLink>{' '}
+                <ProposalStateBadge label={proposal.stateLabel} />
+              </span>
             ))}
-          </div>
+          </p>
         ) : (
           <Text size="sm">No proposals yet. Got an idea for the tribe? Put it to a vote.</Text>
         )}

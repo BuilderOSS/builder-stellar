@@ -70,6 +70,15 @@ describe('exact scoped directory reads', () => {
     expect(result.item?.owned_token_count).toBe('12');
     expect(result.item?.last_activity_ledger).toBeNull();
   });
+  it('sorts the full scoped directory before applying pagination', async () => {
+    await directoryMembers('dao-a', { limit: 25, offset: 25 }, 'asc');
+    expect(mocks.list).toHaveBeenCalledWith({
+      where: { deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'dao-a' },
+      orderBy: [{ votingPower: 'asc' }, { address: 'asc' }],
+      take: 25,
+      skip: 25
+    });
+  });
   it('rejects bad address before any DAO or indexed lookup', async () => {
     await expect(directoryMember('dao-a', "' OR 1=1 --")).rejects.toThrow('valid Stellar');
     expect(mocks.config).not.toHaveBeenCalled();

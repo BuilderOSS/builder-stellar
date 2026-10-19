@@ -45,10 +45,10 @@ const withinContractString = (value: string) => new TextEncoder().encode(value).
 const httpUrl = z
   .string()
   .refine(isValidHttpUrl, 'Enter an HTTP or HTTPS URL')
-  .refine(withinContractString, 'Use at most 256 UTF-8 bytes');
+  .refine(withinContractString, 'Use at most 256 bytes');
 const templatedUrl = httpUrl.refine(
   (value) => withinContractString(value.replaceAll('{daoId}', 'C'.repeat(56))),
-  'The resolved DAO URL must fit within 256 UTF-8 bytes'
+  'The resolved tribe URL must fit within 256 bytes'
 );
 const timing = (validate: (seconds: number) => string | null) =>
   z

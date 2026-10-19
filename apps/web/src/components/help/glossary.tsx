@@ -92,6 +92,7 @@ export function GlossaryTerm({ term, children }: { term: GlossaryKey; children?:
   const entry = GLOSSARY[term];
   return (
     <Popover
+      id={`glossary-${term}`}
       placement="top"
       label={entry.term}
       trigger={

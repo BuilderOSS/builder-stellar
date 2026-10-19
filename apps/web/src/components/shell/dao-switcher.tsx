@@ -19,7 +19,7 @@ const pill = css({
   maxW: '100%',
   minH: 'touch',
   pl: '1.5',
-  pr: '3',
+  pr: '1.5',
   py: '1',
   bg: 'surface',
   border: '0',
@@ -35,6 +35,7 @@ const pill = css({
   _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
 });
 const pillName = css({
+  minW: '0',
   textStyle: 'body',
   fontWeight: '700',
   fontFamily: 'display',
@@ -75,6 +76,7 @@ export function DaoSwitcher({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-label={`${current.name}. Switch tribe`}
+        title={current.name}
       >
         <Crest name={current.name} seed={current.seed} src={current.image} size="sm" />
         <span className={pillName}>{current.name}</span>

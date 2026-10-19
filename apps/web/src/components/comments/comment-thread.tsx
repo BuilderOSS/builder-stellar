@@ -11,6 +11,7 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
+  HelpTip,
   Markdown,
   MarkdownField,
   Section,
@@ -49,7 +50,10 @@ export function CommentInput({
   const over = used > maxBytes;
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>
+        {label}
+        {helper ? <HelpTip label={label}>{helper}</HelpTip> : null}
+      </FieldLabel>
       <Textarea
         id={id}
         rows={rows}
@@ -59,7 +63,7 @@ export function CommentInput({
         aria-invalid={over || undefined}
       />
       <FieldHelperText tone={over ? 'error' : undefined}>
-        {over ? 'Too long to post. Shorten it a little. ' : helper ? `${helper} ` : ''}
+        {over ? 'Comment is too long. ' : ''}
         <span className={counter}>
           {used.toLocaleString()} / {maxBytes.toLocaleString()}
         </span>
@@ -185,9 +189,7 @@ export function CommentThread({
                     invalid={used > compose.maxBytes}
                   />
                   <FieldHelperText tone={used > compose.maxBytes ? 'error' : undefined}>
-                    {used > compose.maxBytes
-                      ? 'Too long to post. Shorten it a little. '
-                      : "Everyone can read it, and it can't be edited or deleted. "}
+                    {used > compose.maxBytes ? 'Comment is too long. ' : ''}
                     <span className={counter}>
                       {used.toLocaleString()} / {compose.maxBytes.toLocaleString()}
                     </span>

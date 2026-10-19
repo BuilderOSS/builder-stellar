@@ -10,15 +10,18 @@ import { PageSection } from '@/components/page-section';
 import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
 import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
 import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
-import { Badge, ButtonLink, Callout, Card, Checkbox, FieldHelperText, Heading, Text } from '@/components/ui';
+import { Badge, ButtonLink, Callout, Card, Checkbox, FieldHelperText, Heading, HelpTip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
-import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
+import { batchMintFits, MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 import { daoRoute } from '@/lib/dao-routes';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
-import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
+import {
+  batchMintEntries,
+  type BatchMintGovernanceTokenData
+} from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
 import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
@@ -32,18 +35,20 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 export default function TokenAdminPage() {
   const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('1');
+  const [mintData, setMintData] = useState<BatchMintGovernanceTokenData>({ recipient: '', amount: '1' });
+  const entries = batchMintEntries(mintData);
+  const recipient = entries.map((row) => row.recipient).join(', ');
+  const amount = entries.every((row) => /^\d+$/.test(row.amount))
+    ? entries.reduce((sum, row) => sum + BigInt(row.amount), 0n).toString()
+    : '';
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const { propose } = useProposeChange();
   const pendingMints = usePendingChanges(['batch-mint-governance-token', 'mint-governance-token']);
   const editing = useEditingChange({
-    accepts: (action) => action.type === 'batch-mint-governance-token',
-    onLoad: (action) => {
-      setRecipient(String(action.recipient ?? ''));
-      setAmount(String(action.amount ?? '1'));
-    }
+    accepts: (action) => action.type === 'batch-mint-governance-token' || action.type === 'mint-governance-token',
+    // A single mint from before minting had one form loads into the same form.
+    onLoad: (action) => setMintData(getActionHandler('batch-mint-governance-token').deserialize(action))
   });
   const tx = useTransactionFeedback(config.name);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
@@ -87,7 +92,7 @@ export default function TokenAdminPage() {
     }
 
     const mintAmount = Number(amount);
-    if (!Number.isInteger(mintAmount) || mintAmount < 1 || mintAmount > MAX_BATCH_MINT) {
+    if (!Number.isInteger(mintAmount) || mintAmount < 1 || !batchMintFits(mintAmount, entries.length)) {
       setFormMessage(`Mint amount must be between 1 and ${MAX_BATCH_MINT} per transaction; mint more in several.`);
       return;
     }
@@ -97,20 +102,20 @@ export default function TokenAdminPage() {
     }
 
     try {
-      const validation = getActionHandler('batch-mint-governance-token').validate(
-        { recipient, amount },
-        { config, session: { address: session.address, kit: StellarWalletsKit } }
-      );
+      const validation = getActionHandler('batch-mint-governance-token').validate(mintData, {
+        config,
+        session: { address: session.address, kit: StellarWalletsKit }
+      });
       if (!validation.valid) {
         setFormMessage(validation.message);
         return;
       }
       if (!hasMintAccess && canProposeMint) {
         const handler = getActionHandler('batch-mint-governance-token');
-        const action = handler.serialize(
-          { recipient, amount },
-          { config, session: { address: session.address, kit: StellarWalletsKit } }
-        );
+        const action = handler.serialize(mintData, {
+          config,
+          session: { address: session.address, kit: StellarWalletsKit }
+        });
         const result = propose(
           {
             actions: [action],
@@ -121,8 +126,7 @@ export default function TokenAdminPage() {
           {
             onAdded: () => {
               setFormMessage('');
-              setRecipient('');
-              setAmount('1');
+              setMintData({ recipient: '', amount: '1' });
               editing.done();
             }
           }
@@ -150,8 +154,8 @@ export default function TokenAdminPage() {
 
       const assembled = await client.batch_mint({
         minter: session.address,
-        recipients: [recipient],
-        amounts: [BigInt(mintAmount)]
+        recipients: entries.map((row) => row.recipient.trim()),
+        amounts: entries.map((row) => BigInt(row.amount))
       });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
@@ -159,8 +163,7 @@ export default function TokenAdminPage() {
       tx.submitted(`Minting ${mintAmount} ${countLabel}`, hash);
       await waitForConfirmation(hash, config.rpcUrl);
       setFormMessage('');
-      setRecipient('');
-      setAmount('1');
+      setMintData({ recipient: '', amount: '1' });
       void token.mutate();
       tx.success(`Minted ${mintAmount} ${countLabel}`, hash);
     } catch (error) {
@@ -174,7 +177,7 @@ export default function TokenAdminPage() {
     <>
       <PageSection
         title="Mint tokens"
-        description="Create new membership tokens. Modules mint only within the allowances set under Membership."
+        help="Create membership tokens. Module minting is limited by the allowances under Membership."
       >
         <Stack gap="4">
           <Card p="5">
@@ -195,27 +198,23 @@ export default function TokenAdminPage() {
                 editing={editing.editing}
                 onCancel={() => {
                   editing.done();
-                  setRecipient('');
-                  setAmount('1');
+                  setMintData({ recipient: '', amount: '1' });
                 }}
               />
-              <Text size="sm">
+              <HelpTip label="Minting">
                 {hasMintAccess
-                  ? `Mint up to ${MAX_BATCH_MINT} tokens at a time straight to one wallet.`
+                  ? `Mint up to ${MAX_BATCH_MINT} tokens per transaction; multiple recipients share the event budget.`
                   : canProposeMint
-                    ? `Propose minting up to ${MAX_BATCH_MINT} tokens at a time to one wallet. It runs if the vote passes.`
+                    ? `Propose minting up to ${MAX_BATCH_MINT} tokens per transaction, across the listed recipients. It runs if the vote passes.`
                     : frozen
                       ? 'The launch drive froze minting: new tokens come only from its claim list until the tribe launches.'
                       : token.data?.live && !session.address
                         ? 'Connect a wallet to propose a mint. It runs if the vote passes.'
                         : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
-              </Text>
+              </HelpTip>
               <BatchMintGovernanceTokenForm
-                value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
-                onChange={(value) => {
-                  setRecipient(value.recipient);
-                  setAmount(value.amount);
-                }}
+                value={mintData}
+                onChange={setMintData}
                 disabled={busy || (!hasMintAccess && !canProposeMint)}
               />
               {pendingMints.map((action) => (

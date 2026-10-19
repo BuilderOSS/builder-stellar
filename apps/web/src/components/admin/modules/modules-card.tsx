@@ -12,6 +12,7 @@ import {
   Card,
   FieldHelperText,
   Heading,
+  HelpTip,
   IconButton,
   ListRow,
   Menu,
@@ -125,9 +126,9 @@ export function ModulesCard({
           <div className={header}>
             <Stack gap="1">
               <Heading size="heading">Modules</Heading>
-              <Text size="sm">
+              <HelpTip label="Modules">
                 Add-ons that let your tribe auction, sell or hand out memberships. Each mints only up to its allowance.
-              </Text>
+              </HelpTip>
             </Stack>
             <Button variant="secondary" size="sm" disabled={!editable} onClick={() => setAdding(true)}>
               <Plus aria-hidden="true" />
@@ -143,11 +144,17 @@ export function ModulesCard({
                 return (
                   <ListRow
                     key={module.address}
-                    title={kindLabel(module.kind)}
+                    title={
+                      module.kind === 'auction'
+                        ? 'Auction contract'
+                        : module.kind === 'marketplace'
+                          ? 'Market contract'
+                          : kindLabel(module.kind)
+                    }
                     meta={
                       // Badges sit under the contract, where they can wrap; the trailing slot never does.
                       <span className={moduleMeta}>
-                        <ShortId value={module.address} label="Contract" />
+                        <ShortId value={module.address} />
                         <span className={row}>
                           {state === 'open' ? <Badge tone="live">Open</Badge> : null}
                           {state === 'closed' ? <Badge tone="warning">Closed</Badge> : null}

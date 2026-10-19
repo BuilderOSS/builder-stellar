@@ -17,6 +17,7 @@ import {
   IconButton,
   Input,
   ListRow,
+  OptionSelect,
   Pagination,
   Skeleton
 } from '@/components/ui';
@@ -27,9 +28,13 @@ import { useDirectoryMembers } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-const finder = css({ display: 'grid', gap: '2', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end' });
+const finder = css({
+  display: 'grid',
+  gap: '2',
+  gridTemplateColumns: { base: 'minmax(0, 1fr) auto', md: 'minmax(0, 1fr) auto 200px' },
+  alignItems: 'end'
+});
 const summary = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
-const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const stats = css({ display: 'flex', alignItems: 'center', gap: '2', flexWrap: 'wrap', justifyContent: 'flex-end' });
 
 function formatCount(value: string) {
@@ -55,17 +60,14 @@ function MemberDirectory({ daoId }: { daoId: string }) {
     [daoConfig.marketplaceContractId]: 'Marketplace'
   };
   const [page, setPage] = useState(0);
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState('');
   const [lookup, setLookup] = useState('');
-  const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page);
+  const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page, order);
 
   return (
-    <PageSection
-      title="Members"
-      description="Everyone who holds a token or has votes delegated to them."
-      daoNote="Each membership is an NFT with one vote."
-    >
+    <PageSection title="Members" daoNote="Each membership is an NFT with one vote.">
       <form
         className={finder}
         onSubmit={(event) => {
@@ -98,6 +100,21 @@ function MemberDirectory({ daoId }: { daoId: string }) {
           <Search aria-hidden="true" />
           Find
         </Button>
+        <div className={css({ gridColumn: { base: '1 / -1', md: 'auto' } })}>
+          <OptionSelect
+            id="member-sort"
+            label="Sort by votes"
+            value={order}
+            options={[
+              { value: 'desc', label: 'Votes: highest first' },
+              { value: 'asc', label: 'Votes: lowest first' }
+            ]}
+            onValueChange={(value) => {
+              setOrder(value as 'asc' | 'desc');
+              setPage(0);
+            }}
+          />
+        </div>
         {message ? (
           <FieldHelperText tone="error" className={css({ gridColumn: '1 / -1' })}>
             {message}
@@ -143,9 +160,6 @@ function MemberDirectory({ daoId }: { daoId: string }) {
       {data && !error ? (
         <>
           <div className={summary}>
-            <p className={muted}>
-              {data.total} {data.total === 1 ? 'member' : 'members'} · most votes first
-            </p>
             <IconButton
               label="Refresh members"
               variant="secondary"
@@ -164,9 +178,9 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                 const delegation = system
                   ? 'Held by the tribe, no votes'
                   : !member.delegated_to
-                    ? 'No delegate set'
+                    ? ''
                     : member.delegated_to === member.address
-                      ? 'Votes for themselves'
+                      ? ''
                       : `Votes go to ${shortAddress(member.delegated_to)}`;
                 return (
                   <ListRow

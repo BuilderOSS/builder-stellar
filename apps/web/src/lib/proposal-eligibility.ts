@@ -56,7 +56,7 @@ export function useProposalEligibility(config: DaoNetworkConfig, address: string
   let message: string | undefined;
   if (!enabled) message = undefined;
   else if (!address) message = 'Connect a DAO member wallet to create proposals.';
-  else if (loading) message = 'Checking proposal eligibility…';
+  else if (loading) message = 'Loading your voting power…';
   else if (error) message = error.message;
   else if (!memberFound) message = 'Only DAO members can create proposals.';
   else if (!hasEnoughVotes) message = formatProposalEligibilityMessage(votingPower, settings?.proposalThreshold);

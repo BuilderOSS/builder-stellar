@@ -84,11 +84,11 @@ export function ListingCard({
       <p className={styles.price}>
         {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} <span>{asset}</span>
       </p>
-      <p className={styles.muted}>
-        {pool
-          ? `${pool.inStock.toLocaleString()} ready · ${(pool.size - pool.sold).toLocaleString()} of ${pool.size.toLocaleString()} left · at most ${pool.maxPerBuyer.toLocaleString()} per wallet · payments go to the treasury`
-          : `${(listing.feeBps / 100).toLocaleString()}% market fee, paid by the seller`}
-      </p>
+      {pool ? (
+        <p className={styles.price}>
+          {(pool.size - pool.sold).toLocaleString()} <span>available</span>
+        </p>
+      ) : null}
       {trading ? (
         <Button variant="secondary" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide details' : 'Details'}
@@ -139,6 +139,10 @@ export function ListingCard({
             ) : null}
             {pool ? (
               <>
+                <dt>Ready to buy</dt>
+                <dd>{pool.inStock.toLocaleString()}</dd>
+                <dt>Per wallet</dt>
+                <dd>{pool.maxPerBuyer.toLocaleString()}</dd>
                 <dt>Sold</dt>
                 <dd>{pool.sold.toLocaleString()}</dd>
                 <dt>Sales limit</dt>

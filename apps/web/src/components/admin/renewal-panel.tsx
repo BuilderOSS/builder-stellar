@@ -67,7 +67,7 @@ const CLASS_HINTS: Record<RenewalClass, string> = {
 const STATUS_TEXT: Record<TtlStatus, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: 'Healthy', tone: 'success' },
   soon: { label: 'Renew soon', tone: 'warning' },
-  critical: { label: 'Renew now', tone: 'danger' },
+  critical: { label: 'Expiring soon', tone: 'danger' },
   expired: { label: 'Expired', tone: 'danger' }
 };
 
@@ -228,8 +228,8 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
   return (
     <div className={stack}>
       <p className={muted}>
-        Stellar keeps a tribe&apos;s data for a paid stretch of time. Renewing pays for more, for everything below at
-        once. Anyone can renew; the wallet that signs pays the network fee.
+        Stellar storage expires unless renewed. Choose a renewal period below, get a price, and review the transaction.
+        Anyone can renew; the signing wallet pays the fee.
       </p>
       {inventory.bootstrap ? (
         <Callout

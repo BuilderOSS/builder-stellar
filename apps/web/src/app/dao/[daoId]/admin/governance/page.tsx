@@ -155,8 +155,8 @@ export default function GovernanceAdminPage() {
       title="Voting rules"
       description={
         hasGovernanceAccess
-          ? 'Setup: you change these directly as the launch admin.'
-          : 'Requires DAO governance: each change goes into your proposal for members to vote on.'
+          ? 'Setup: change one rule at a time, directly.'
+          : 'Requires DAO governance: change one rule at a time. Each change goes up for a vote.'
       }
     >
       <Stack gap="4">
@@ -165,7 +165,7 @@ export default function GovernanceAdminPage() {
             <div className={css({ display: 'flex', justifyContent: 'space-between', gap: '3', flexWrap: 'wrap' })}>
               <Stack gap="3">
                 <div>
-                  <Badge>Live values</Badge>
+                  <Badge tone="live">Live values</Badge>
                 </div>
                 <Heading size="heading">Current rules</Heading>
               </Stack>

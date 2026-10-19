@@ -256,6 +256,13 @@ describe('authenticated marketplace preparation lifecycle', () => {
     ).rejects.toThrow('deployment network');
     expect(mocks.dao).not.toHaveBeenCalled();
   });
+  it('allows buying new memberships from a tribe pool when holder transfers are locked', async () => {
+    mocks.token.transfers_locked.mockResolvedValue({ result: true });
+    mocks.listing.mockResolvedValue(poolListing);
+    await prepareMarketplaceAction('dao-a', actor, { action: 'buy', kind: 'pool', id: '4', eventId: 'pool-event' });
+    expect(mocks.client.buy_from_pool).toHaveBeenCalled();
+    expect(mocks.token.transfers_locked).not.toHaveBeenCalled();
+  });
   it('a pool purchase picks the first stocked token and its page, pays the Treasury and pins both', async () => {
     mocks.listing.mockResolvedValue(poolListing);
     const result = await prepareMarketplaceAction('dao-a', actor, {

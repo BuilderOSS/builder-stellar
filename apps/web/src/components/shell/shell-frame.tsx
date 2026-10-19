@@ -16,21 +16,34 @@ const topBar = css({
   display: 'flex',
   minH: '60px',
   pt: 'env(safe-area-inset-top)',
-  // One translucent layer, where it explains that content scrolls beneath.
-  bg: 'color-mix(in srgb, token(colors.canvas) 88%, transparent)',
-  backdropFilter: 'blur(12px)'
+  bg: 'transparent'
 });
-// The bar spans the window: the switcher sits at its start and the wallet at
-// the window's top-right corner, both with the content gutter.
+// On wide screens the switcher starts at the content's right edge. The spacer
+// yields when the controls need that room, keeping both targets on screen.
 const topInner = css({
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '3',
+  gap: '1',
   width: '100%',
-  px: 'clamp(16px, 4vw, 40px)'
+  px: { base: '4', md: '2' }
 });
-const topStart = css({ display: 'flex', alignItems: 'center', gap: '2', minW: '0', flex: '1' });
+const topSpacer = css({
+  minW: '0',
+  flexGrow: { base: '1', md: '0' },
+  flexShrink: '1',
+  flexBasis: {
+    base: '0%',
+    md: 'calc((100% + token(sizes.content)) / 2 - clamp(16px, 4vw, 40px) - token(spacing.1))'
+  }
+});
+const topStart = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2',
+  minW: '0',
+  flexShrink: { base: '1', md: '0' },
+  maxW: { base: '100%', md: '20rem' }
+});
 const topEnd = css({ display: 'flex', alignItems: 'center', gap: '2', flexShrink: '0' });
 const content = css({
   width: '100%',
@@ -88,6 +101,7 @@ export function ShellFrame({
       <div className={column}>
         <header className={topBar}>
           <div className={topInner}>
+            <div className={topSpacer} aria-hidden="true" />
             <div className={topStart}>{start}</div>
             <div className={topEnd}>{end}</div>
           </div>

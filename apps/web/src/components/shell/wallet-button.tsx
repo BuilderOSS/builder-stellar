@@ -14,8 +14,10 @@ const trigger = css({
   gap: '2',
   minW: 'touch',
   minH: 'touch',
-  p: '0',
-  bg: 'transparent',
+  p: '1',
+  bg: 'surface',
+  boxShadow: 'inset 0 0 0 1px token(colors.rule)',
+  position: 'relative',
   border: '0',
   borderRadius: 'full',
   color: 'ink.muted',
@@ -25,9 +27,22 @@ const trigger = css({
   transitionTimingFunction: 'ease, ease, token(easings.out)',
   _active: { scale: '0.96' },
   _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' },
-  md: { pl: '1.5', pr: '3.5', bg: 'surface', boxShadow: 'inset 0 0 0 1px token(colors.rule)' },
+  md: { pl: '1', pr: '3', bg: 'surface', boxShadow: 'inset 0 0 0 1px token(colors.rule)' },
   '@media (hover: hover) and (pointer: fine)': { _hover: { color: 'ink', md: { bg: 'hover' } } },
   _motionReduce: { _active: { scale: '1' } }
+});
+const connectTrigger = css({
+  width: 'calc(token(sizes.32) + token(spacing.2))',
+  minH: 'touch',
+  flexShrink: '0',
+  border: '0',
+  borderRadius: 'full',
+  bg: 'signal.wash',
+  color: 'signal',
+  boxShadow: 'inset 0 0 0 1px token(colors.signal.edge)',
+  '@media (hover: hover) and (pointer: fine)': {
+    _hover: { bg: 'signal.wash', color: 'signal', boxShadow: 'inset 0 0 0 1px token(colors.signal)' }
+  }
 });
 const avatarSlot = css({ position: 'relative', display: 'inline-grid', placeItems: 'center', flexShrink: '0' });
 // Always 4…4, so the pill never changes width and nothing in the bar shifts.
@@ -79,7 +94,14 @@ export function WalletButton({ onOpenYou }: { onOpenYou: () => void }) {
   }
 
   return (
-    <Button size="sm" onClick={() => void wallet.connect()} loading={wallet.isAuthBusy} aria-label="Connect wallet">
+    <Button
+      variant="secondary"
+      size="sm"
+      className={connectTrigger}
+      onClick={() => void wallet.connect()}
+      loading={wallet.isAuthBusy}
+      aria-label="Connect wallet"
+    >
       {wallet.isAuthBusy ? null : <Wallet aria-hidden="true" />}
       {wallet.isAuthBusy ? 'Check wallet' : 'Connect'}
     </Button>

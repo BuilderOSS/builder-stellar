@@ -102,7 +102,7 @@ export function ActionFormShell({
         <Button variant="ghost" onClick={onCancel}>
           {mode === 'edit' ? 'Cancel edit' : 'Discard'}
         </Button>
-        <Button onClick={onSave} disabled={disabled}>
+        <Button onClick={onSave} disabled={disabled || preconditionResult?.canExecute === false}>
           {mode === 'edit' ? 'Save in proposal' : 'Add to proposal'}
         </Button>
       </div>

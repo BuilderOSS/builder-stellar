@@ -20,11 +20,12 @@ import {
   Crest,
   FieldHelperText,
   FieldLabel,
+  HelpTip,
   Input,
   MarkdownField,
   Spinner
 } from '@/components/ui';
-import { card, muted, title } from '@/components/ui/panel-styles';
+import { card, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
@@ -399,13 +400,13 @@ export function CommunityProfileEditor() {
           <h2 id="profile-title" className={title}>
             How people see {config.tokenName || 'your tribe'}
           </h2>
-          <p className={muted}>
+          <HelpTip label="Profile changes">
             {direct
               ? 'During setup, changes apply right away.'
               : live
                 ? 'Changes go into a proposal for members to vote on.'
                 : 'Connect the launch admin wallet to change these during setup.'}
-          </p>
+          </HelpTip>
         </div>
 
         {!canAct && session.address ? (
@@ -441,7 +442,13 @@ export function CommunityProfileEditor() {
                 Upload image
               </Button>
             ) : (
-              <Button size="sm" variant="secondary" disabled={disabled} onClick={() => fileInput.current?.click()}>
+              <Button
+                size="sm"
+                variant="secondary"
+                className={css({ width: '40' })}
+                disabled={disabled}
+                onClick={() => fileInput.current?.click()}
+              >
                 Choose image
               </Button>
             )}
@@ -536,7 +543,7 @@ export function CommunityProfileEditor() {
                 disabled={disabled}
                 canUpload={Boolean(session.address)}
                 invalid={problems.length > 0 || undefined}
-                describedBy="profile-budget"
+                describedBy={bytes > MAX_PROFILE_BYTES ? 'profile-budget' : undefined}
                 onChange={(description) => setProfile({ description })}
               />
               <Changed show={profileChanged('description')} onUndo={() => resetProfile('description')} />
@@ -548,10 +555,11 @@ export function CommunityProfileEditor() {
               onChange={(links) => setProfile({ links })}
             />
             <Changed show={profileChanged('links')} onUndo={() => resetProfile('links')} />
-            <p id="profile-budget" className={bytes > MAX_PROFILE_BYTES ? error : hint}>
-              {bytes.toLocaleString()} of {MAX_PROFILE_BYTES.toLocaleString()} bytes used by the description, links and
-              image.
-            </p>
+            {bytes > MAX_PROFILE_BYTES ? (
+              <p id="profile-budget" className={error} role="alert">
+                Profile exceeds the {MAX_PROFILE_BYTES.toLocaleString()}-byte limit.
+              </p>
+            ) : null}
             {errors.profile ? <p className={error}>{errors.profile}</p> : null}
           </div>
         </div>

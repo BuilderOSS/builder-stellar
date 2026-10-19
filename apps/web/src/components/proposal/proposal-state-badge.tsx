@@ -1,4 +1,4 @@
-import { Ban, CircleCheck, CircleDot, Clock, Hourglass, Play, XCircle } from 'lucide-react';
+import { Ban, CircleCheck, CircleDot, Clock, Hourglass, XCircle } from 'lucide-react';
 
 import { Chip } from '@/components/ui';
 import { proposalStateDisplay, proposalStateTone } from '@/lib/proposal-state';
@@ -8,7 +8,7 @@ const ICONS: Record<string, typeof Clock> = {
   Active: CircleDot,
   Succeeded: CircleCheck,
   Queued: Hourglass,
-  Executed: Play,
+  Executed: CircleCheck,
   Defeated: XCircle,
   Canceled: Ban,
   Expired: Clock

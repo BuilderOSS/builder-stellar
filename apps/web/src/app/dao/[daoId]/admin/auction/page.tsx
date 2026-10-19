@@ -120,12 +120,11 @@ export default function AuctionAdminPage() {
                 </div>
                 <div className={fact}>
                   <dt className={factLabel}>Paid in</dt>
-                  <dd className={factValue}>
+                  <dd className={css({ m: '0', minW: '0', justifySelf: 'start', width: '100%' })}>
                     <Address value={data.config.payment_token} label={assetCode || 'Payment asset'} />
                   </dd>
                 </div>
               </dl>
-              <p className={muted}>The payment asset is fixed once the first auction starts.</p>
             </section>
 
             <AuctionSettingsBuilder

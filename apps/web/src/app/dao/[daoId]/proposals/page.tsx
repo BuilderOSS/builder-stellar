@@ -81,11 +81,9 @@ export default function ProposalsPage() {
 
   return (
     <PageSection
-      title="Proposals"
-      description={
+      title={
         <>
-          Members make <GlossaryTerm term="proposal">proposals</GlossaryTerm>, then vote on each one together. Each
-          token is one vote.
+          Proposals <GlossaryTerm term="proposal" />
         </>
       }
       actions={

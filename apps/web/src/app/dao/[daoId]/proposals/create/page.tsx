@@ -21,6 +21,7 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
+  HelpTip,
   Input,
   Markdown,
   MarkdownField,
@@ -48,6 +49,7 @@ import {
   proposalDescriptionBytes,
   validateProposalMetadataDraft
 } from '@/lib/proposal-metadata';
+import { markRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -85,6 +87,7 @@ const referenceTrigger = css({
 export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
   const router = useRouter();
+  const [openingProposal, setOpeningProposal] = useState(false);
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
@@ -212,7 +215,9 @@ export default function ProposalCreatePage() {
 
       txFeedback.success('Proposal created', hash);
 
-      // Reset store and navigate
+      // Keep a loading surface mounted while clearing the draft and navigating.
+      setOpeningProposal(true);
+      if (proposalId) markRecentProposal(daoId, proposalId);
       reset(session.address, daoId);
       router.push(proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals'));
     } catch (err: any) {
@@ -227,6 +232,15 @@ export default function ProposalCreatePage() {
     { id: 'write', label: 'Write' },
     { id: 'review', label: 'Review' }
   ];
+
+  if (openingProposal)
+    return (
+      <div role="status" aria-busy="true" className={stack}>
+        <PageHeader title="Opening your proposal" />
+        <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
+        <p>Your proposal is confirmed. Loading its details…</p>
+      </div>
+    );
 
   return (
     <>
@@ -299,7 +313,9 @@ export default function ProposalCreatePage() {
                 {step === 1 && (
                   <div className={stack}>
                     <Field>
-                      <FieldLabel htmlFor="title">Title</FieldLabel>
+                      <FieldLabel htmlFor="title">
+                        Title <HelpTip label="Proposal title">A title is required.</HelpTip>
+                      </FieldLabel>
                       <Input
                         id="title"
                         value={metadata.title}
@@ -335,8 +351,8 @@ export default function ProposalCreatePage() {
                         id="description-budget"
                         tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
                       >
-                        {descriptionBytes.toLocaleString()} of {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
-                        used. Images take only their link, about 70 bytes each.
+                        Required. Up to {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes (
+                        {descriptionBytes.toLocaleString()} used).
                       </FieldHelperText>
                       {queuedActions.length && whatItDoes !== metadata.description ? (
                         <div>

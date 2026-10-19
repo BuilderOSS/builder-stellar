@@ -2,7 +2,7 @@
 
 import { Popover as ArkPopover } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { css, cx } from 'styled-system/css';
 
 export const floatingPanel = css({
@@ -32,7 +32,8 @@ export function Popover({
   onOpenChange,
   placement = 'bottom-end',
   className,
-  label
+  label,
+  id
 }: {
   trigger: ReactNode;
   children: ReactNode;
@@ -42,9 +43,12 @@ export function Popover({
   className?: string;
   /** Accessible title when the content has no visible heading. */
   label?: string;
+  id?: string;
 }) {
+  const fallbackId = useId();
   return (
     <ArkPopover.Root
+      id={id ?? fallbackId}
       open={open}
       onOpenChange={onOpenChange ? (details) => onOpenChange(details.open) : undefined}
       positioning={{ placement, gutter: 8 }}

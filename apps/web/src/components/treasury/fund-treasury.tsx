@@ -311,7 +311,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
             loading={busy}
             onClick={prepared ? sign : prepare}
           >
-            {busy ? 'One moment' : prepared ? 'Sign and send' : 'Check amount'}
+            {busy ? 'One moment' : prepared ? 'Sign and send' : 'Review contribution'}
           </Button>
           {prepared ? (
             <Button

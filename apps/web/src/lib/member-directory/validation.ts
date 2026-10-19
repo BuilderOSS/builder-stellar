@@ -27,3 +27,9 @@ export function holderTokenId(value: string): number {
   if (!Number.isInteger(id) || id > 0xffffffff) throw new Error('Token ID is outside the u32 range.');
   return id;
 }
+
+export function memberSort(search: URLSearchParams): 'asc' | 'desc' {
+  const order = search.get('order') ?? 'desc';
+  if (order !== 'asc' && order !== 'desc') throw new Error('Choose ascending or descending vote order.');
+  return order;
+}

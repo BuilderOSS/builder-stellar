@@ -49,12 +49,14 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
   const setValidationErrors = useProposalComposerStore((s) => s.setValidationErrors);
   const setFormMessage = useProposalComposerStore((s) => s.setFormMessage);
 
-  const handler = editingState ? getActionHandler(editingState.actionType) : null;
+  // A single mint saved before minting had one form opens in that form.
+  const formActionType =
+    editingState?.actionType === 'mint-governance-token' ? 'batch-mint-governance-token' : editingState?.actionType;
+  const handler = formActionType ? getActionHandler(formActionType) : null;
   const preconditionResult = handler?.checkPreconditions?.(context) ?? { canExecute: true };
 
   const handleSave = useCallback(() => {
-    if (!editingState) return;
-    const handler = getActionHandler(editingState.actionType);
+    if (!editingState || !handler) return;
     const validation = handler.validate(editingState.draftData, context);
     if (!validation.valid) {
       setValidationErrors(address, daoId, validation);
@@ -81,6 +83,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
     address,
     daoId,
     editingState,
+    handler,
     context,
     queuedActions,
     values,
@@ -101,11 +104,12 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
   }, [handleBack, onDone]);
 
   if (!editingState || !handler) return null;
+  const formType = formActionType!;
 
-  const FormComponent = ACTION_CATALOG[editingState.actionType].Form ?? handler.FormComponent;
-  const meta = getActionMeta(editingState.actionType);
+  const FormComponent = ACTION_CATALOG[formType].Form ?? handler.FormComponent;
+  const meta = getActionMeta(formType);
   const current = meta.currentValue?.(values);
-  const home = actionHome(editingState.actionType);
+  const home = actionHome(formType);
   const isDisabled = busy || !preconditionResult.canExecute;
 
   return (
@@ -121,7 +125,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
       onSave={handleSave}
       onCancel={handleCancel}
     >
-      <ActionErrorBoundary actionType={editingState.actionType}>
+      <ActionErrorBoundary actionType={formType}>
         <Suspense
           fallback={
             <div role="status" aria-busy="true" className={css({ display: 'grid', gap: '2.5' })}>

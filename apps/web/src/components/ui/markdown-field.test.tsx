@@ -14,7 +14,7 @@ describe('MarkdownField', () => {
     }
     expect(html).toContain('Write');
     expect(html).toContain('Preview');
-    expect(html).toContain('Drop or paste images to add them.');
+    expect(html).not.toContain('Drop or paste images to add them.');
     expect(html).not.toContain('Markdown works');
   });
 
