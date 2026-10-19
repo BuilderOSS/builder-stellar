@@ -4,6 +4,7 @@
 export * from './components/action-error-boundary';
 export * from './components/action-form-shell';
 export * from './components/action-form-wrapper';
+export * from './components/action-picker-sheet';
 export * from './components/proposal-action-queue';
 export * from './context';
 export * from './registry';

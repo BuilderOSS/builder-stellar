@@ -4,13 +4,15 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import { type AuthNode, Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
 import { useState } from 'react';
 
-import { Button, Callout, Field, FieldLabel, Input } from '@/components/ui';
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { Callout, Field, FieldLabel, Input } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { readSource } from '@/lib/dao-config';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
+import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 import { authNodeSpecValue, describeAuthNodes, treasuryPurchaseAuthNodes } from '@/lib/treasury-authorize';
-import type { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 
 import styles from './marketplace-styles';
 
@@ -21,13 +23,12 @@ import styles from './marketplace-styles';
  * validated by simulating Treasury.check_authorization before it is drafted.
  */
 export function TreasuryPurchase({
-  daoId,
   enabled,
-  proposal
+  propose
 }: {
   daoId: string;
   enabled: boolean;
-  proposal: ReturnType<typeof useAdminProposalDraft>;
+  propose: (request: ChangeRequest) => ProposeResult;
 }) {
   const { daoConfig: config } = useDaoContext();
   const [tokenId, setTokenId] = useState('');
@@ -70,27 +71,17 @@ export function TreasuryPurchase({
       const authorize = getActionHandler('treasury-authorize');
       const buy = getActionHandler('treasury-buy-listing');
       const amount = formatMarketplaceAmount(price);
-      proposal.requestAddBatch({
-        daoId,
-        requests: [
-          {
-            daoId,
-            action: authorize.serialize({ nodes }, context),
-            source: 'Marketplace administration',
-            metadata: {
-              title: `Treasury buys listed token #${tokenId}`,
-              description: `Authorize the Treasury payment, then buy token #${tokenId} for at most ${amount} (listing price). Authorized calls: ${describeAuthNodes(nodes).join('; ')}. The purchase fails if the price rises or the listing closes before execution.`,
-              url: ''
-            }
-          },
-          {
-            daoId,
-            action: buy.serialize({ tokenId, maxPrice: price.toString() }, context),
-            source: 'Marketplace administration',
-            metadata: { title: `Treasury buys listed token #${tokenId}`, description: '', url: '' }
-          }
-        ]
+      // Authorize must sit right before the purchase it pays for, so the two only move together.
+      const result = propose({
+        actions: [
+          authorize.serialize({ nodes }, context),
+          buy.serialize({ tokenId, maxPrice: price.toString() }, context)
+        ],
+        bundle: planBundle(`Treasury buys listed token #${tokenId}`, 2),
+        source: CHANGE_SOURCES.marketplace,
+        note: `The treasury pays for and buys token #${tokenId} for at most ${amount}, the listing price. Authorized calls: ${describeAuthNodes(nodes).join('; ')}. The purchase fails if the price rises or the listing closes before it runs.`
       });
+      if (result.outcome === 'invalid') setMessage(result.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to prepare the Treasury purchase.');
     } finally {
@@ -118,9 +109,14 @@ export function TreasuryPurchase({
           />
         </Field>
         <div>
-          <Button variant="secondary" disabled={!enabled} loading={busy} onClick={() => void prepare()}>
-            Add Treasury purchase to proposal
-          </Button>
+          <ChangeSubmit
+            direct={false}
+            what="the purchase"
+            variant="secondary"
+            disabled={!enabled}
+            loading={busy}
+            onClick={() => void prepare()}
+          />
         </div>
         {message ? <Callout variant="warning" title={message} role="alert" /> : null}
       </div>

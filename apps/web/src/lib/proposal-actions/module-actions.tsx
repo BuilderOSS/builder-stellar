@@ -64,7 +64,7 @@ export const createModuleHandler: ActionHandler<CreateModuleDraft> = {
   type: 'create-module',
   label: 'Add a module',
   description: 'Deploy an auction, market or claims module for this tribe',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: ({ value }: ActionFormProps<CreateModuleDraft>) => (
     <Summary
       lines={[
@@ -138,7 +138,7 @@ export const registerModuleHandler: ActionHandler<RegisterModuleDraft> = {
   type: 'register-module',
   label: 'Register a module',
   description: 'Make a deployed module part of the tribe',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: ({ value }: ActionFormProps<RegisterModuleDraft>) => (
     <Summary
       lines={[
@@ -182,7 +182,7 @@ export const unregisterModuleHandler: ActionHandler<UnregisterModuleDraft> = {
   type: 'unregister-module',
   label: 'Remove a module',
   description: 'Take a module out of the tribe. Its mint allowance goes with it.',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: ({ value }: ActionFormProps<UnregisterModuleDraft>) => (
     <Summary
       lines={[
@@ -231,7 +231,7 @@ export const openModuleHandler: ActionHandler<OpenModuleDraft> = {
   type: 'open-module',
   label: 'Open a module',
   description: 'Start the first auction, or let sales in the market begin',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: ({ value }: ActionFormProps<OpenModuleDraft>) => (
     <Summary
       lines={[

@@ -2,9 +2,12 @@
 
 import { GlossaryTerm } from '@/components/help/glossary';
 import { PageSection } from '@/components/page-section';
+import { DraftDock } from '@/components/proposal-changes/draft-dock';
 import { TreasuryWorkspace } from '@/components/treasury/treasury-workspace';
+import { useDaoContext } from '@/contexts/dao-context';
 
 export default function TreasuryPage() {
+  const { daoId } = useDaoContext();
   return (
     <PageSection
       title="Treasury"
@@ -15,6 +18,7 @@ export default function TreasuryPage() {
         </>
       }
     >
+      <DraftDock daoId={daoId} />
       <TreasuryWorkspace />
     </PageSection>
   );

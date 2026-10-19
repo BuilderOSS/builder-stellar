@@ -50,3 +50,47 @@ describe('artwork wording', () => {
     expect(artworkAdditionTitle(0, 3)).toBe('Add 3 images to the artwork');
   });
 });
+
+describe('composer and proposal page labels', () => {
+  it('names every proposal action’s call with its handler’s own label', async () => {
+    const { getAllActionHandlers } = await import('@/lib/proposal-actions/registry');
+    const { config } = await import('@/lib/proposal-changes/test-fixtures');
+    const { getDeploymentConfig } = await import('@/lib/deployment-config');
+    const { contractCallLabel, contractRole } = await import('./contract-call-labels');
+    const context = {
+      config,
+      governorContractId: config.governorContractId,
+      tokenContractId: config.tokenContractId,
+      treasuryAddress: config.treasuryContractId
+    };
+    // Reads with its own, more specific title on the proposal page: the payment, the amount and the asset;
+    // the module and its release; or a module the same proposal creates.
+    const ownTitle = new Set([
+      'transfer-sac-token',
+      'upgrade-dao-module',
+      'migrate-dao-module',
+      'open-module',
+      'open-claim-list'
+    ]);
+    const checked: string[] = [];
+    for (const handler of getAllActionHandlers()) {
+      if (ownTitle.has(handler.type)) continue;
+      const call = handler.buildCallVector(handler.getDefaultValues(), context as never);
+      const role = contractRole(call.target, config, getDeploymentConfig().managerAddress);
+      expect(role, handler.type).toBeDefined();
+      expect(contractCallLabel(call.function, role), handler.type).toBe(handler.label);
+      checked.push(handler.type);
+    }
+    expect(checked.length).toBeGreaterThan(35);
+  });
+
+  it('calls the Token’s set_metadata a rename, not a profile update', async () => {
+    const { contractCallLabel } = await import('./contract-call-labels');
+    expect(contractCallLabel('set_metadata')).toBe('Rename the tribe');
+    expect(contractCallLabel('pause', 'marketplace')).toBe('Pause the market');
+    expect(contractCallLabel('pause')).toBe('Pause');
+    expect(contractCallLabel('transfer')).toBe('Send funds');
+    expect(contractCallLabel('transfer', 'token')).toBe('Give a treasury token');
+    expect(contractCallLabel('some_new_call')).toBe('Some new call');
+  });
+});

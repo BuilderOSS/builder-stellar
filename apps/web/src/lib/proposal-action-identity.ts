@@ -1,3 +1,4 @@
+import type { DaoNetworkConfig } from '@/lib/dao-config';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 export type ProposalActionIdentity = {
@@ -213,6 +214,168 @@ const NEEDS_PAUSED_AUCTION = new Set([
   'cancel-auction'
 ]);
 
+/**
+ * What the draft rules know about the tribe as it is now, from the indexed config. Each field is
+ * optional: a rule that needs an unknown value falls back to checking the draft alone.
+ */
+export type ProposalDraftState = Partial<
+  Pick<
+    DaoNetworkConfig,
+    'auctionPaused' | 'tokenSettings' | 'auctionContractId' | 'marketplaceContractId' | 'claimsContractId'
+  >
+>;
+
+const sameAddress = (a: unknown, b: unknown) =>
+  Boolean(a) &&
+  String(a).trim().toUpperCase() ===
+    String(b ?? '')
+      .trim()
+      .toUpperCase();
+
+/** The module a mint allowance, transfer agent or opening names. */
+const moduleOf = (action: ProposalQueuedAction) => String(action.module || action.address || action.recipient || '');
+
+/** Calls the Treasury makes on itself: `authorize` and its own upgrade or migration. */
+const isTreasuryCall = (action: ProposalQueuedAction) =>
+  action.type === 'treasury-authorize' ||
+  ((action.type === 'upgrade-dao-module' || action.type === 'migrate-dao-module') && action.module === 'treasury');
+
+/** The membership switches and the indexed setting each one changes. */
+const SWITCH_SETTINGS: Partial<
+  Record<ProposalQueuedAction['type'], keyof NonNullable<ProposalDraftState['tokenSettings']>>
+> = {
+  'set-transfers-locked': 'transfersLocked',
+  'set-members-only-delegation': 'membersOnlyDelegation',
+  'set-dao-recovery': 'daoRecovery'
+};
+
+const AUTHORIZE_LAST =
+  'Authorizing applies to the action right after it, and nothing follows. Add the purchase after it, or remove it.';
+
+/**
+ * Modules the tribe has registered, as far as the index knows. A custom module can be registered
+ * without showing here, so a miss is a warning, not an error.
+ */
+function knownModules(state: ProposalDraftState) {
+  return [state.auctionContractId, state.marketplaceContractId, state.claimsContractId].filter(Boolean) as string[];
+}
+
+/** Whether the module at `address` is registered after the earlier actions run; null when the index cannot say. */
+function moduleRegistered(address: string, existing: ProposalQueuedAction[], state?: ProposalDraftState) {
+  for (let index = existing.length - 1; index >= 0; index -= 1) {
+    const candidate = existing[index];
+    if (candidate.type === 'register-module' && sameAddress(moduleOf(candidate), address)) return true;
+    if (candidate.type === 'unregister-module' && sameAddress(moduleOf(candidate), address)) return false;
+  }
+  if (!state) return null;
+  return knownModules(state).some((known) => sameAddress(known, address));
+}
+
+/** The module an action mints from when it opens: a pool's market, a claim list, a new auction. */
+function mintingModule(action: ProposalQueuedAction, state?: ProposalDraftState): string | null | undefined {
+  if (action.type === 'open-pool') return state?.marketplaceContractId || null;
+  if (action.type === 'open-claim-list') return String(action.claimsContractId || '') || null;
+  if (action.type === 'open-module' && action.kind === 'auction') return moduleOf(action);
+  return undefined;
+}
+
+/** Prerequisites and ordering the contracts enforce when the proposal runs. */
+function prerequisiteFindings(
+  action: ProposalQueuedAction,
+  existing: ProposalQueuedAction[],
+  state?: ProposalDraftState
+): ProposalDraftFinding[] {
+  const findings: ProposalDraftFinding[] = [];
+  const order = (severity: ProposalDraftFinding['severity'], message: string, existingActionIndexes: number[] = []) =>
+    findings.push({ severity, kind: 'order', message, existingActionIndexes });
+  const previous = existing.length - 1;
+
+  // Treasury.execute hands an authorize's trees to the next action, which must be an outside call
+  // (InvalidAuthorization, 7605 otherwise).
+  if (previous >= 0 && existing[previous].type === 'treasury-authorize' && isTreasuryCall(action))
+    order(
+      'error',
+      'The action before this authorizes the next outside call, and this one is the Treasury’s own. Put the purchase right after the authorization.',
+      [previous]
+    );
+  if (action.type === 'treasury-buy-listing' && (previous < 0 || existing[previous].type !== 'treasury-authorize'))
+    order(
+      'error',
+      'The treasury pays for a listing only with an authorization right before the purchase. Add it again from the Treasury page.'
+    );
+
+  // Auction setters and cancel run only while auctions are paused (`when_paused`).
+  if (
+    NEEDS_PAUSED_AUCTION.has(action.type) &&
+    lastToggleIndex('auction:pause-state', existing) < 0 &&
+    state?.auctionPaused !== true
+  )
+    order(
+      'warning',
+      state?.auctionPaused === false
+        ? 'Auctions are running, and this needs them paused. Add Pause auctions before it.'
+        : 'This needs auctions paused. Add Pause auctions before it unless they are paused already.'
+    );
+
+  // Opening a pool, a claim list or a new auction mints from that module's allowance.
+  const minter = mintingModule(action, state);
+  if (minter !== undefined) {
+    const granted = existing.some(
+      (candidate) =>
+        candidate.type === 'change-mint-allowance' &&
+        candidate.direction !== 'decrease' &&
+        (minter === null || sameAddress(moduleOf(candidate), minter))
+    );
+    if (!granted)
+      order(
+        'warning',
+        'This mints from the module’s allowance. Raise its mint allowance earlier in this proposal unless it already has enough.'
+      );
+  }
+
+  // Allowances and transfer agents are for registered modules only (NotAModule, 7209).
+  if (action.type === 'change-mint-allowance' || action.type === 'set-transfer-agent') {
+    if (moduleRegistered(moduleOf(action), existing, state) === false)
+      order(
+        'warning',
+        'This module is not registered with the tribe, so the proposal would fail. Register it earlier in this proposal.'
+      );
+  }
+
+  // A membership switch set to the value it already has reverts (SettingUnchanged, 7217).
+  const setting = SWITCH_SETTINGS[action.type];
+  if (setting && typeof action.enabled === 'boolean' && state?.tokenSettings?.[setting] === action.enabled)
+    order(
+      'warning',
+      action.enabled
+        ? 'This is on already, and setting it again would fail the proposal.'
+        : 'This is off already, and setting it again would fail the proposal.'
+    );
+
+  // A recovery transfer needs DAO recovery on (RecoveryOff, 7218).
+  if (action.type === 'dao-transfer') {
+    let recovery = state?.tokenSettings?.daoRecovery;
+    let switchIndex = -1;
+    for (let index = existing.length - 1; index >= 0; index -= 1) {
+      if (existing[index].type === 'set-dao-recovery') {
+        recovery = existing[index].enabled === true;
+        switchIndex = index;
+        break;
+      }
+    }
+    if (recovery !== true)
+      order(
+        'warning',
+        recovery === false
+          ? 'DAO recovery is off at this point, so this transfer would fail. Turn DAO recovery on earlier in this proposal.'
+          : 'This needs DAO recovery on. Turn it on earlier in this proposal unless it is on already.',
+        switchIndex >= 0 ? [switchIndex] : []
+      );
+  }
+
+  return findings;
+}
+
 /** Index of the nearest earlier action that pauses or resumes the same module, or -1. */
 function lastToggleIndex(resourceKey: string, existing: ProposalQueuedAction[]) {
   for (let index = existing.length - 1; index >= 0; index -= 1) {
@@ -221,9 +384,13 @@ function lastToggleIndex(resourceKey: string, existing: ProposalQueuedAction[]) 
   return -1;
 }
 
-export function analyzeProposalAction(action: ProposalQueuedAction, existing: ProposalQueuedAction[]) {
+export function analyzeProposalAction(
+  action: ProposalQueuedAction,
+  existing: ProposalQueuedAction[],
+  state?: ProposalDraftState
+) {
   const identity = getProposalActionIdentity(action);
-  const findings: ProposalDraftFinding[] = [];
+  const findings: ProposalDraftFinding[] = prerequisiteFindings(action, existing, state);
 
   // Pausing and resuming are ordered steps, not competing values: "pause → change → resume" is one
   // valid proposal. Only the same step twice in a row (with nothing undoing it in between) repeats.
@@ -238,6 +405,19 @@ export function analyzeProposalAction(action: ProposalQueuedAction, existing: Pr
           : 'This already resumes at this point in the draft.',
         existingActionIndexes: [previous]
       });
+    // Pausing a paused auction, or resuming a running one, reverts the whole proposal.
+    if (previous < 0 && action.type.endsWith('-auction') && typeof state?.auctionPaused === 'boolean') {
+      const pausing = action.type === 'pause-auction';
+      if (state.auctionPaused === pausing)
+        findings.push({
+          severity: 'warning',
+          kind: 'order',
+          message: pausing
+            ? 'Auctions are paused already, so pausing them again would fail the proposal.'
+            : 'Auctions are running already, so resuming them would fail the proposal.',
+          existingActionIndexes: []
+        });
+    }
     if (isHighRiskProposalAction(action))
       findings.push({
         severity: 'warning',
@@ -305,5 +485,21 @@ export function analyzeProposalAction(action: ProposalQueuedAction, existing: Pr
     });
   }
 
+  return findings;
+}
+
+/**
+ * Every finding for a whole draft, in order: each action against the ones before it, then the
+ * rules that need what follows (an authorize at the very end has nothing to apply to).
+ */
+export function analyzeProposalDraft(actions: ProposalQueuedAction[], state?: ProposalDraftState) {
+  const findings = actions.flatMap((action, index) => analyzeProposalAction(action, actions.slice(0, index), state));
+  if (actions.at(-1)?.type === 'treasury-authorize')
+    findings.push({
+      severity: 'error',
+      kind: 'order',
+      message: AUTHORIZE_LAST,
+      existingActionIndexes: [actions.length - 1]
+    });
   return findings;
 }

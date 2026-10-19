@@ -54,13 +54,19 @@ vi.mock('@/lib/community-link', async (load) => ({
   useManagerLink: () => ({ data: state.link, mutate: vi.fn() }),
   useLinkAvailability: () => undefined
 }));
-vi.mock('@/lib/use-admin-proposal-draft', () => ({
-  useAdminProposalDraft: () => ({ pending: null, requestAddBatch: vi.fn(), cancel: vi.fn(), resolve: vi.fn() })
+vi.mock('@/lib/proposal-changes/use-propose-change', () => ({
+  useProposeChange: () => ({ propose: vi.fn(() => ({ outcome: 'added' })), canPropose: true })
+}));
+vi.mock('@/lib/proposal-changes/use-editing-change', () => ({
+  useEditingChange: () => ({ editing: null, bundle: [], replaces: undefined, done: vi.fn() })
+}));
+vi.mock('@/components/proposal-changes/pending-value', () => ({
+  PendingValue: () => null,
+  usePendingChanges: () => []
 }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
-vi.mock('@/components/admin/admin-proposal-draft-dialog', () => ({ AdminProposalDraftDialog: () => null }));
 vi.mock('@/components/create-dao/dao-image-upload', () => ({ prepareDaoImage: vi.fn(), uploadDaoImage: vi.fn() }));
 
 import { CommunityProfileEditor } from './community-profile';

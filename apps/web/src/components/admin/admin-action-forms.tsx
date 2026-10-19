@@ -2,15 +2,15 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { Callout, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { expiryInputValue } from '@/lib/expiry-time';
 import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { feePercentText } from '@/lib/marketplace/amount';
 import { marketplaceAssetCodes, marketplaceAssets } from '@/lib/marketplace/readiness';
-import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
+import type { ActionFormProps } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };
@@ -40,12 +40,10 @@ export function AuthorityActionForm({
   onChange,
   disabled,
   validationErrors,
-  showEnabled = true,
-  draftPreview
-}: ActionFormProps<AdminAuthorityDraft> & { showEnabled?: boolean; draftPreview?: ProposalQueuedAction }) {
+  showEnabled = true
+}: ActionFormProps<AdminAuthorityDraft> & { showEnabled?: boolean }) {
   return (
     <Stack gap="2">
-      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <FieldLabel htmlFor="admin-authority">Authority</FieldLabel>
       <Input
         id="admin-authority"
@@ -87,13 +85,11 @@ export function AdminValueForm({
   onChange,
   disabled,
   validationErrors,
-  draftPreview,
   hint
-}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction; hint?: string }) {
+}: ActionFormProps<AdminValueDraft> & { hint?: string }) {
   const error = validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined;
   return (
     <Stack gap="2">
-      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <FieldLabel htmlFor="admin-value">New value</FieldLabel>
       <Input
         id="admin-value"
@@ -146,12 +142,10 @@ export function AdminReservePriceForm({
   value,
   onChange,
   disabled,
-  validationErrors,
-  draftPreview
-}: ActionFormProps<AdminReservePriceDraft> & { draftPreview?: ProposalQueuedAction }) {
+  validationErrors
+}: ActionFormProps<AdminReservePriceDraft>) {
   return (
     <Stack gap="1">
-      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <AuctionReservePriceField
         value={value.reservePrice}
         onChange={(reservePrice) => onChange({ reservePrice })}
@@ -168,12 +162,10 @@ export function AdminPaymentTokenForm({
   onChange,
   disabled,
   validationErrors,
-  network = getConfiguredAuctionNetwork(),
-  draftPreview
-}: ActionFormProps<AdminPaymentTokenDraft> & { draftPreview?: ProposalQueuedAction }) {
+  network = getConfiguredAuctionNetwork()
+}: ActionFormProps<AdminPaymentTokenDraft>) {
   return (
     <Stack gap="1">
-      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <AuctionPaymentTokenSelect
         network={network}
         value={value.paymentToken}
@@ -331,7 +323,7 @@ export function OpenPoolForm({
       <Input
         id="pool-expires"
         type="datetime-local"
-        value={value.expiresAt}
+        value={expiryInputValue(value.expiresAt)}
         onChange={(event) => set({ expiresAt: event.target.value })}
         disabled={disabled}
       />

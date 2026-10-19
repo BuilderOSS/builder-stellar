@@ -25,13 +25,19 @@ vi.mock('@/contexts/dao-context', () => ({
   })
 }));
 vi.mock('@/stores/auth-session-store', () => ({ useAuthSessionStore: () => ({ address: state.address }) }));
-vi.mock('@/lib/use-admin-proposal-draft', () => ({
-  useAdminProposalDraft: () => ({ pending: null, requestAddBatch: vi.fn(), cancel: vi.fn(), resolve: vi.fn() })
+vi.mock('@/lib/proposal-changes/use-propose-change', () => ({
+  useProposeChange: () => ({ propose: vi.fn(() => ({ outcome: 'added' })), canPropose: true })
+}));
+vi.mock('@/lib/proposal-changes/use-editing-change', () => ({
+  useEditingChange: () => ({ editing: null, bundle: [], replaces: undefined, done: vi.fn() })
+}));
+vi.mock('@/components/proposal-changes/pending-value', () => ({
+  PendingValue: () => null,
+  usePendingChanges: () => []
 }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
-vi.mock('@/components/admin/admin-proposal-draft-dialog', () => ({ AdminProposalDraftDialog: () => null }));
 vi.mock('@/lib/use-module-updates', () => ({
   upgradeModuleDirectly: vi.fn(),
   useModuleUpdates: () => {
@@ -93,8 +99,8 @@ describe('ContractUpdates', () => {
     state.modules = [{ module: 'token' }, { module: 'auction' }, { module: 'governor' }];
     const html = render();
     expect(html).toContain('3 upgrades available');
-    expect(html).toContain('Add 3 upgrades to your proposal');
-    expect(html).not.toContain('Propose upgrading');
+    expect(html).toContain('Add 3 upgrades to proposal');
+    expect(html).not.toContain('upgrade to proposal');
     expect(html).not.toContain('Apply ');
   });
 
@@ -103,8 +109,8 @@ describe('ContractUpdates', () => {
     state.admin = TREASURY;
     state.modules = [{ module: 'auction' }, { module: 'treasury' }];
     const html = render();
-    expect(html).toContain('Add 1 upgrade to your proposal');
-    expect(html).toContain('Propose upgrading the treasury');
+    expect(html).toContain('Add 1 upgrade to proposal');
+    expect(html).toContain('Add the treasury upgrade to proposal');
     expect(html).toContain('its upgrade goes in its own proposal');
   });
 

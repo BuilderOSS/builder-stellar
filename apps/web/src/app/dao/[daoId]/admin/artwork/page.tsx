@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { artworkAppendPlan } from '@/components/admin/artwork-admin-plan';
 import { ArtworkLayers } from '@/components/admin/artwork-layers';
 import { UnseededTokens } from '@/components/admin/unseeded-tokens';
@@ -15,6 +14,7 @@ import type { ArtworkPlan } from '@/components/create-dao/artwork-configuration'
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { PageSection } from '@/components/page-section';
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
 import {
   Button,
   Callout,
@@ -36,10 +36,11 @@ import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/adm
 import { daoAdminRoute } from '@/lib/dao-routes';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -53,7 +54,7 @@ export default function ArtworkAdminPage() {
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
-  const proposal = useAdminProposalDraft();
+  const { propose } = useProposeChange();
   const tx = useTransactionFeedback(config.name);
   const [renderer, setRenderer] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -93,16 +94,15 @@ export default function ArtworkAdminPage() {
     } catch (error) {
       return setMessage((error as Error).message);
     }
-    proposal.requestAdd({
-      daoId,
-      action: handler.serialize({ value: nextRenderer }, context),
-      source: 'admin/artwork/set-artwork-renderer',
-      metadata: {
-        title: 'Change where token images are drawn',
-        description: `Every token's image will be drawn from ${nextRenderer} instead of ${currentRenderer || 'the current renderer'}.\n\nWhy: ${reason.trim()}`,
-        url: ''
-      }
-    });
+    const result = propose(
+      {
+        actions: [handler.serialize({ value: nextRenderer }, context)],
+        source: CHANGE_SOURCES.artwork,
+        note: `Every token's image will be drawn from ${nextRenderer} instead of ${currentRenderer || 'the current renderer'}. Why: ${reason.trim()}`
+      },
+      { onAdded: () => setRenderer(null) }
+    );
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
 
   async function applyRenderer() {
@@ -148,23 +148,14 @@ export default function ArtworkAdminPage() {
         if (!validation.valid) throw new Error(validation.message);
         assertAdminCallSupported(appendHandler, batch, context);
       }
-      proposal.requestAddBatch({
-        daoId,
-        requests: batches.map((batch, index) => ({
-          daoId,
-          action: appendHandler.serialize(batch, context),
-          source: 'admin/artwork/add-artwork-properties',
-          metadata: {
-            title: 'Add new artwork layers',
-            description: `Part ${index + 1} of ${batches.length} of a new artwork upload (${upload.baseUri}). It adds to the ${fresh.properties.length} existing layers and changes none of them. If another artwork proposal runs first, this one fails rather than numbering layers wrongly.`,
-            url: ''
-          }
-        })),
-        onAdded: () =>
-          setMessage(
-            `Added the new layers to your proposal draft${batches.length > 1 ? ` in ${batches.length} parts` : ''}.`
-          )
+      // The parts of one upload only make sense together, so they go in and come out as one item.
+      const result = propose({
+        actions: batches.map((batch) => appendHandler.serialize(batch, context)),
+        bundle: planBundle('Add new artwork layers', batches.length),
+        source: CHANGE_SOURCES.artwork,
+        note: `Add a new artwork upload (${upload.baseUri}) to the ${fresh.properties.length} existing layers, changing none of them${batches.length > 1 ? `, in ${batches.length} parts` : ''}. If another artwork proposal runs first, this one fails rather than numbering layers wrongly.`
       });
+      if (result.outcome === 'invalid') setMessage(result.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The new layers couldn't be added to a proposal.");
     } finally {
@@ -174,7 +165,6 @@ export default function ArtworkAdminPage() {
 
   return (
     <>
-      <AdminProposalDraftDialog pending={proposal.pending} onCancel={proposal.cancel} onResolve={proposal.resolve} />
       <PageSection
         title="Artwork"
         description="The layers every token is drawn from. Add them during setup; change them by vote after launch."
@@ -237,7 +227,7 @@ export default function ArtworkAdminPage() {
               direct={direct}
               canPropose={canPropose}
               hasArtwork={artwork.data.properties.length > 0}
-              proposal={proposal}
+              propose={propose}
             />
           ) : null}
 
@@ -280,13 +270,12 @@ export default function ArtworkAdminPage() {
                   </Text>
                 ) : null}
                 <div>
-                  <Button
-                    type="button"
+                  <ChangeSubmit
+                    direct={false}
+                    what="the new layers"
                     disabled={busy || !upload || !networkReady}
                     onClick={() => void proposeUpload()}
-                  >
-                    Add the new layers to a proposal
-                  </Button>
+                  />
                 </div>
               </Stack>
             </Card>
@@ -372,13 +361,12 @@ export default function ArtworkAdminPage() {
                           }
                         />
                       ) : (
-                        <Button
+                        <ChangeSubmit
+                          direct={false}
                           variant="secondary"
                           disabled={busy || !networkReady || !rendererChanged || !reasonReady}
                           onClick={proposeRenderer}
-                        >
-                          Add to proposal
-                        </Button>
+                        />
                       )}
                     </div>
                   </>

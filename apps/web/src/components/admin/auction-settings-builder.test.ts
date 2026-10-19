@@ -13,15 +13,20 @@ vi.mock('@/stores/auth-session-store', () => ({ useAuthSessionStore: () => sessi
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
-vi.mock('@/lib/use-admin-proposal-draft', () => ({
-  useAdminProposalDraft: () => ({ pending: null, requestAddBatch: vi.fn(), cancel: vi.fn(), resolve: vi.fn() })
+vi.mock('@/lib/proposal-changes/use-propose-change', () => ({
+  useProposeChange: () => ({ propose: vi.fn(() => ({ outcome: 'added' })), canPropose: true })
 }));
-vi.mock('@/components/admin/admin-proposal-draft-dialog', () => ({ AdminProposalDraftDialog: () => null }));
+vi.mock('@/lib/proposal-changes/use-editing-change', () => ({
+  useEditingChange: () => ({ editing: null, bundle: [], replaces: undefined, done: vi.fn() })
+}));
+vi.mock('@/components/proposal-changes/pending-value', () => ({
+  PendingValue: () => null,
+  usePendingChanges: () => []
+}));
 
 import { AuctionSettingsBuilder } from './auction-settings-builder';
 
 const props = {
-  daoId: 'dao',
   config: { name: 'testnet', passphrase: 'test' } as DaoNetworkConfig,
   live: true,
   paused: false,
@@ -49,9 +54,9 @@ describe('auction settings builder', () => {
 
   it('lets members edit settings while auctions are running', () => {
     const html = render();
-    expect(input(html, 'auction-min-increment')).not.toContain('disabled');
-    expect(input(html, 'auction-reserve-price')).not.toContain('disabled');
-    expect(html).toContain('for="auction-min-increment"');
+    expect(input(html, 'setting-auction-min-bid')).not.toContain('disabled');
+    expect(input(html, 'setting-starting-price')).not.toContain('disabled');
+    expect(html).toContain('for="setting-auction-min-bid"');
     expect(html).toContain('Minimum bid increase (%)');
   });
 
@@ -72,7 +77,7 @@ describe('auction settings builder', () => {
 
   it('disables every field without authority', () => {
     const html = render({ canPropose: false });
-    expect(input(html, 'auction-min-increment')).toContain('disabled');
-    expect(input(html, 'auction-reserve-price')).toContain('disabled');
+    expect(input(html, 'setting-auction-min-bid')).toContain('disabled');
+    expect(input(html, 'setting-starting-price')).toContain('disabled');
   });
 });

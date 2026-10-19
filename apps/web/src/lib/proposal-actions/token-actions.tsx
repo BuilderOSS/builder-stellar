@@ -74,7 +74,7 @@ export const setTokenMetadataHandler: ActionHandler<TokenMetadataDraft> = {
   type: 'set-token-metadata',
   label: 'Rename the tribe',
   description: 'Change the token name and symbol members see everywhere',
-  group: 'Administration',
+  group: 'Tribe',
   FormComponent: TokenMetadataForm,
   getDefaultValues: () => ({ name: '', symbol: '' }),
   validate: (data) => validateTokenMetadata(data),

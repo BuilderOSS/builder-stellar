@@ -1,38 +1,32 @@
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import type { AdminProposalRequest } from '@/lib/use-admin-proposal-draft';
+import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
 
 import type { PlanStep } from './plans';
 
 /**
- * A plan as the requests the draft takes: each step through its own handler, so what is added is
- * exactly what the composer would have built, and any step the handler refuses stops the whole batch.
+ * A plan as one change: each step through its own handler, so what is added is exactly what the composer
+ * would have built, and any step the handler refuses stops the whole plan. Its steps go in as one bundle.
  */
-export function planRequests({
+export function planChange({
   steps,
   config,
   address,
-  daoId,
   title,
-  description
+  note
 }: {
   steps: PlanStep[];
   config: DaoNetworkConfig;
   address: string | null;
-  daoId: string;
   title: string;
-  description: string;
-}): AdminProposalRequest[] {
+  note: string;
+}): ChangeRequest {
   const context = { config, session: { address, kit: null } };
-  return steps.map((entry) => {
+  const actions = steps.map((entry) => {
     const handler = getActionHandler(entry.type);
     const check = handler.validate(entry.values, context);
     if (!check.valid) throw new Error(check.message ?? 'Check the values.');
-    return {
-      daoId,
-      action: handler.serialize(entry.values, context),
-      source: `admin/membership/modules/${entry.type}`,
-      metadata: { title, description, url: '' }
-    };
+    return handler.serialize(entry.values, context);
   });
+  return { actions, bundle: planBundle(title, actions.length), source: CHANGE_SOURCES.membership, note };
 }

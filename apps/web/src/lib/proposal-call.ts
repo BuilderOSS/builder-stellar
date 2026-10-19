@@ -263,7 +263,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
   if (action.type === 'open-pool')
-    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${action.expiresAt}`;
+    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${/^\d+$/.test(String(action.expiresAt)) ? new Date(Number(action.expiresAt) * 1000).toISOString() : action.expiresAt}`;
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
   if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {

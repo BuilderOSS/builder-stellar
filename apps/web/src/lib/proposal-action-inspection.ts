@@ -2,7 +2,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
 import type { UpgradeModule } from '@/lib/admin-module-versions';
-import { artworkAdditionTitle } from '@/lib/contract-call-labels';
+import { artworkAdditionTitle, contractCallLabel } from '@/lib/contract-call-labels';
 import { parseProfile } from '@/lib/dao-profile';
 import { moduleLabelInSentence } from '@/lib/module-updates';
 import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
@@ -125,7 +125,8 @@ export function inspectProposalAdminCall(
   };
   if (!labels[fn]) return null;
   return {
-    title: `Update ${labels[fn]!.toLowerCase()}`,
+    // The composer's own words for the call, so it reads the same before and after it's proposed.
+    title: contractCallLabel(fn, 'metadata'),
     risk: 'High risk: changes collection metadata or its external renderer/content reference. Authority is Metadata’s own admin (the Treasury after launch).',
     fields: [{ label: `New ${labels[fn]!.toLowerCase()}`, value: scValToNative(encoded[0]!) as string }]
   };

@@ -1,3 +1,5 @@
+import { Asset } from '@stellar/stellar-sdk';
+
 import {
   type AdminPaymentTokenDraft,
   AdminPaymentTokenForm,
@@ -13,7 +15,9 @@ import {
   ResaleFeeForm
 } from '@/components/admin/admin-action-forms';
 import type { NetworkName } from '@/config/networks';
+import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
+import { expiryToUnixSeconds } from '@/lib/expiry-time';
 import {
   MAX_MARKETPLACE_FEE_BPS,
   validateAuctionTimeBuffer,
@@ -25,9 +29,8 @@ import {
 } from '@/lib/governance-limits';
 import { feeBpsFromPercent, feePercentText } from '@/lib/marketplace/amount';
 import { marketplaceAsset, marketplaceAssetCodes } from '@/lib/marketplace/readiness';
-import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 
-import type { ActionHandler, ValidationResult } from './types';
+import type { ActionHandler, FormContext, ValidationResult } from './types';
 
 type EmptyDraft = Record<string, never>;
 
@@ -62,13 +65,8 @@ function wholeNumber(value: string, label: string): ValidationResult {
   return valid();
 }
 
-/** datetime-local string (local time) -> unix seconds, or null when unparseable. */
-export function parseExpiryToUnixSeconds(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const ms = new Date(trimmed).getTime();
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
-}
+/** datetime-local string (local time) or unix seconds -> unix seconds, or null when unparseable. */
+export const parseExpiryToUnixSeconds = expiryToUnixSeconds;
 
 function decimalPrice(value: string): ValidationResult {
   const error = validateReservePrice(value);
@@ -92,7 +90,7 @@ function settingHandler(
     type,
     label,
     description,
-    group: 'Administration',
+    group: 'Rules',
     FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
@@ -132,7 +130,7 @@ function auctionDurationHandler(
     type,
     label,
     description,
-    group: 'Administration',
+    group: 'Selling',
     FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
@@ -261,7 +259,7 @@ function emptyAuctionHandler(
     type,
     label,
     description,
-    group: 'Administration',
+    group: 'Selling',
     FormComponent: () => null,
     getDefaultValues: () => ({}),
     validate: () => valid(),
@@ -290,7 +288,7 @@ export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft
   type: 'set-auction-reserve-price',
   label: 'Change the starting price',
   description: 'Change the lowest opening bid while auctions are paused',
-  group: 'Administration',
+  group: 'Selling',
   FormComponent: AdminReservePriceForm,
   getDefaultValues: () => ({ reservePrice: '' }),
   validate: (data) => decimalPrice(data.reservePrice),
@@ -309,21 +307,37 @@ export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft
   })
 };
 
+/** Winning bids go to the treasury, so bids are paid in an asset the treasury holds and shows. */
+function treasuryAssetResult(context: FormContext, asset: string): ValidationResult {
+  const { name, passphrase } = context.config;
+  const known = getTreasuryAssets(name).some(
+    (candidate) =>
+      (candidate.contractId || (candidate.isNative && passphrase ? Asset.native().contractId(passphrase) : '')) ===
+      asset.trim()
+  );
+  if (known) return valid();
+  const message = `Choose one of the treasury’s assets: ${getTreasuryAssets(name)
+    .map((candidate) => candidate.code)
+    .join(', ')}.`;
+  return { valid: false, message, fields: { paymentToken: message } };
+}
+
+const PAYMENT_TOKEN_LOCKED =
+  'The auction has taken a bid, which fixes its payment asset for good. A vote cannot change it now.';
+
 export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   type: 'set-auction-payment-token',
   label: 'Change the auction payment asset',
-  description: 'Change the asset bids are paid in while auctions are paused',
-  group: 'Administration',
+  description: 'Change the asset bids are paid in, while auctions are paused. The first bid fixes it for good.',
+  group: 'Selling',
   FormComponent: AdminPaymentTokenForm,
   getDefaultValues: () => ({ paymentToken: '' }),
-  validate: (data) => {
-    const requiredResult = required(data.paymentToken, 'paymentToken', 'Payment token contract address');
+  validate: (data, context) => {
+    const requiredResult = required(data.paymentToken, 'paymentToken', 'Payment asset');
     if (!requiredResult.valid) return requiredResult;
-    if (!isValidStellarAddress(data.paymentToken.trim())) {
-      const message = getStellarAddressError(data.paymentToken.trim()) ?? 'Invalid payment token contract address';
-      return { valid: false, message, fields: { paymentToken: message } };
-    }
-    return valid();
+    if (context.auctionPaymentTokenLocked === true)
+      return { valid: false, message: PAYMENT_TOKEN_LOCKED, fields: { paymentToken: PAYMENT_TOKEN_LOCKED } };
+    return treasuryAssetResult(context, data.paymentToken);
   },
   serialize: (data) => ({
     id: crypto.randomUUID(),
@@ -337,7 +351,13 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
     target: context.config.auctionContractId,
     function: 'set_payment_token',
     args: [data.paymentToken.trim()]
-  })
+  }),
+  // The auction keeps a PaymentTokenLocked flag from its first bid on (contracts/auction storage.rs);
+  // the composer reads it over RPC (lib/chain-reads/auction-payment-lock.ts).
+  checkPreconditions: (context) =>
+    context.auctionPaymentTokenLocked === true
+      ? { canExecute: false, reason: PAYMENT_TOKEN_LOCKED }
+      : { canExecute: true }
 };
 
 /** The market can only take XLM or USDC, so a price in anything else could never be paid. */
@@ -354,6 +374,7 @@ export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenD
   label: 'Change the market payment asset',
   description: 'Change the asset buyers pay in. Open listings keep the asset they were listed in.',
   FormComponent: MarketPaymentAssetForm,
+  checkPreconditions: undefined,
   validate: (data, context) => marketAssetResult(context.config.name, data.paymentToken, 'paymentToken'),
   serialize: (data) => ({
     id: crypto.randomUUID(),
@@ -379,7 +400,7 @@ function boundedModuleValueHandler(
     type,
     label,
     description,
-    group: 'Administration',
+    group: 'Selling',
     FormComponent: adminValueFormWithHint(hint),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => {
@@ -470,7 +491,7 @@ function emptyModuleHandler(
     type,
     label,
     description,
-    group: 'Administration',
+    group: 'Selling',
     FormComponent: () => null,
     getDefaultValues: () => ({}),
     validate: () => valid(),
@@ -519,7 +540,7 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
   type: 'open-pool',
   label: 'Open a quick-buy pool',
   description: 'Sell newly minted tokens at a fixed price, with per-wallet and per-period limits',
-  group: 'Membership',
+  group: 'Selling',
   FormComponent: OpenPoolForm,
   getDefaultValues: () => ({
     price: '',
@@ -548,6 +569,8 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
     }
     return valid();
   },
+  // The closing time is queued as unix seconds, fixed in the zone it was typed in. Drafts queued
+  // before this keep their datetime-local text, which is still read in the browser's zone.
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'open-pool',
@@ -559,7 +582,7 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
     maxPerBuyer: data.maxPerBuyer.trim(),
     maxSoldPerPeriod: data.maxSoldPerPeriod.trim(),
     periodHours: data.periodHours.trim(),
-    expiresAt: data.expiresAt.trim()
+    expiresAt: String(parseExpiryToUnixSeconds(data.expiresAt) ?? data.expiresAt.trim())
   }),
   deserialize: (action) => ({
     price: action.price || action.amount || '',
@@ -568,7 +591,7 @@ export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
     maxPerBuyer: String(action.maxPerBuyer ?? ''),
     maxSoldPerPeriod: String(action.maxSoldPerPeriod ?? ''),
     periodHours: String(action.periodHours ?? ''),
-    expiresAt: action.expiresAt || ''
+    expiresAt: String(action.expiresAt ?? '')
   }),
   buildCallVector: (data, context) => ({
     target: context.config.marketplaceContractId,
@@ -594,7 +617,7 @@ function poolIdHandler(
     type,
     label,
     description,
-    group: 'Membership',
+    group: 'Selling',
     FormComponent: PoolIdForm,
     getDefaultValues: () => ({ poolId: '' }),
     validate: (data) => {

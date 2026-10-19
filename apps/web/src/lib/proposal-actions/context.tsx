@@ -4,6 +4,7 @@
 
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
 
+import { useAuctionPaymentTokenLocked } from '@/lib/chain-reads/auction-payment-lock';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
@@ -23,6 +24,7 @@ export interface ActionFormProviderProps {
  */
 export function ActionFormProvider({ children, config, session }: ActionFormProviderProps) {
   const { data: balances, isLoading: balancesLoading, error: balancesError } = useTreasuryBalances(config);
+  const { data: auctionPaymentTokenLocked } = useAuctionPaymentTokenLocked(config);
 
   const contextValue = useMemo<FormContext>(
     () => ({
@@ -30,9 +32,10 @@ export function ActionFormProvider({ children, config, session }: ActionFormProv
       session,
       balances,
       balancesLoading,
-      balancesError: balancesError?.message
+      balancesError: balancesError?.message,
+      auctionPaymentTokenLocked
     }),
-    [config, session, balances, balancesLoading, balancesError]
+    [config, session, balances, balancesLoading, balancesError, auctionPaymentTokenLocked]
   );
 
   return <ActionFormContext.Provider value={contextValue}>{children}</ActionFormContext.Provider>;

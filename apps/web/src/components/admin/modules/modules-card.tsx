@@ -20,7 +20,8 @@ import {
 } from '@/components/ui';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { isModuleKind, MODULE_COPY, type ModuleKind, UNLIMITED_ALLOWANCE } from '@/lib/modules/kinds';
-import type { AdminProposalBatchRequest } from '@/lib/use-admin-proposal-draft';
+import type { ChangeRequest } from '@/lib/proposal-changes/change-request';
+import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 
 import { AddModuleSheet } from './add-module-sheet';
 import { AllowanceSheet } from './allowance-sheet';
@@ -83,7 +84,7 @@ export function ModulesCard({
   frozen,
   busy,
   message,
-  addBatch,
+  propose,
   onMessage,
   onChanged,
   onChangeAllowance,
@@ -98,7 +99,7 @@ export function ModulesCard({
   frozen: boolean;
   busy: boolean;
   message: string | null;
-  addBatch: (request: AdminProposalBatchRequest) => void;
+  propose: (request: ChangeRequest) => ProposeResult;
   onMessage: (text: string) => void;
   onChanged: () => void;
   /** Returns a problem to show, or null once the change was signed or added to the draft. */
@@ -237,8 +238,8 @@ export function ModulesCard({
         live={live}
         present={present}
         registered={modules.length}
-        addBatch={addBatch}
-        onAdded={onMessage}
+        propose={propose}
+        onMessage={onMessage}
         onChanged={onChanged}
       />
       <RemoveModuleSheet
@@ -248,8 +249,8 @@ export function ModulesCard({
         daoId={daoId}
         address={address}
         module={removing && isModuleKind(removing.kind) ? { ...removing, kind: removing.kind } : null}
-        addBatch={addBatch}
-        onAdded={onMessage}
+        propose={propose}
+        onMessage={onMessage}
       />
       <AllowanceSheet
         open={allowing !== null}

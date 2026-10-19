@@ -1,3 +1,7 @@
+import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
+
 import { decimalToStroops, formatStroops } from './auction-values';
 import { formatDuration } from './duration';
 
@@ -125,4 +129,21 @@ export function buildAuctionChangePlan({
   if (wantsResume && (needsPause || paused))
     steps.push({ type: 'unpause-auction', values: {}, title: 'Resume auctions', detail: '' });
   return steps;
+}
+
+/** An auction plan as one change: its steps go in, and come out, together as "Change the auction". */
+export function auctionChangeRequest(
+  steps: AuctionStep[],
+  config: DaoNetworkConfig,
+  address: string | null,
+  replaces?: string[]
+): ChangeRequest {
+  const context = { config, session: { address, kit: null } };
+  return {
+    actions: steps.map((step) => getActionHandler(step.type).serialize(step.values, context)),
+    bundle: planBundle('Change the auction', steps.length),
+    source: CHANGE_SOURCES.auction,
+    note: `${steps.map((step) => (step.detail ? `${step.title}: ${step.detail}` : step.title)).join('. ')}.`,
+    replaces
+  };
 }

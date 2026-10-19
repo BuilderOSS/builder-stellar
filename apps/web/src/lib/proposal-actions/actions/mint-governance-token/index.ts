@@ -10,7 +10,7 @@ export const mintGovernanceTokenHandler: ActionHandler<MintGovernanceTokenData> 
   label: 'Mint a membership token',
   description: 'Mint one membership token to a wallet',
   order: 1,
-  group: 'Governance',
+  group: 'Membership',
 
   FormComponent: MintGovernanceTokenForm,
 

@@ -6,7 +6,6 @@ import { Buffer } from 'buffer';
 import { useDeferredValue, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import {
   Button,
   Callout,
@@ -22,7 +21,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { parseMarketplaceAmount } from '@/lib/marketplace/amount';
-import { claimListQueueActions } from '@/lib/minter/allocation-proposal';
+import { claimListChange } from '@/lib/minter/allocation-proposal';
 import { claimEntries, parseClaimCsv } from '@/lib/minter/claim-csv';
 import { claimMinterClient } from '@/lib/minter/client';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
@@ -31,9 +30,9 @@ import { claimFetch } from '@/lib/minter/hooks';
 import { type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 import { buildClaimTree, type ClaimEntry, claimTreeJson, MAX_TREE_CLAIMS } from '@/lib/minter/tree';
 import type { ClaimState } from '@/lib/minter/types';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { uploadFile } from '@/lib/upload-image';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { combineDuplicates, walletRowsCsv } from '@/lib/wallet-csv';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -77,10 +76,10 @@ type Published = { root: string; list: number; treeUri: string; gatewayUrl: stri
  * - Live: the allowance grant and the list go into a proposal.
  */
 export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; onOpened: () => void }) {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
-  const proposal = useAdminProposalDraft();
+  const { propose } = useProposeChange();
   const tx = useTransactionFeedback(config.name);
   const launchAdmin = Boolean(state && address && !state.live && state.admin === address);
   const governed = Boolean(state?.live && state.admin === config.treasuryContractId);
@@ -250,25 +249,10 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       at = 'open';
       stage('open', 'active');
       if (mode === 'proposal') {
-        const actions = claimListQueueActions(draft, fresh, config, DEPLOYMENT_ID);
-        const title = `Open a claim list for ${draft.total.toLocaleString()} tokens`;
-        proposal.requestAddBatch({
-          daoId,
-          requests: actions.map((action) => ({
-            daoId,
-            action,
-            source: 'claims/lists',
-            metadata: {
-              title,
-              description: `Lets the claims module mint the list total, then opens the list for ${entries.length.toLocaleString()} wallets. The full list is published at ${draft.treeUri} so anyone can check who can claim and how much.`,
-              url: ''
-            }
-          })),
-          onAdded: () => {
-            stage('open', 'done');
-            setMessage(`${title}: added to your proposal draft.`);
-          }
+        const result = propose(claimListChange(draft, fresh, config, DEPLOYMENT_ID, entries.length), {
+          onAdded: () => stage('open', 'done')
         });
+        if (result.outcome === 'invalid') throw new Error(result.message);
         return;
       }
       if (mode === 'free') await openFree(draft, fresh.claimsContractId!);
@@ -439,12 +423,12 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       ) : null}
       <div>
         <Button
-          disabled={!ready || !entries || !!proposal.pending}
+          disabled={!ready || !entries}
           loading={busy}
           onClick={() => (mode === 'drive' ? reviewDrive() : void submit())}
         >
           {mode === 'proposal'
-            ? 'Publish the list and add it to a proposal'
+            ? 'Publish the list and add to proposal'
             : mode === 'drive'
               ? 'Review the launch drive'
               : 'Publish the list and open it'}
@@ -479,14 +463,6 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
           {message}
         </p>
       ) : null}
-      <AdminProposalDraftDialog
-        pending={proposal.pending}
-        onCancel={() => {
-          proposal.cancel();
-          stage('open', 'idle');
-        }}
-        onResolve={proposal.resolve}
-      />
       <Dialog
         open={Boolean(confirmDrive)}
         onOpenChange={(open) => (open ? null : setConfirmDrive(null))}

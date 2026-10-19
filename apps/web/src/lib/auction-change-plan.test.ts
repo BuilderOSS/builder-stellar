@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { type AuctionSettings, buildAuctionChangePlan } from './auction-change-plan';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { config } from '@/lib/proposal-changes/test-fixtures';
+
+import { auctionChangeRequest, type AuctionSettings, buildAuctionChangePlan } from './auction-change-plan';
 
 const current: AuctionSettings = { reservePrice: '10000000', duration: 86400, timeBuffer: 900, minBidIncrement: 10 };
 const base = { live: true, paused: false, mode: 'proposal' as const, current, assetCode: 'XLM' };
@@ -82,5 +85,17 @@ describe('buildAuctionChangePlan', () => {
         })
       )
     ).toEqual(['set-auction-duration']);
+  });
+});
+
+describe('auctionChangeRequest', () => {
+  it('adds the whole plan as one "Change the auction" item from Manage → Auction', () => {
+    const steps = buildAuctionChangePlan({ ...base, edits: { reservePrice: '5' }, after: 'resume' });
+    const change = auctionChangeRequest(steps, config, null, ['old']);
+    expect(types(change.actions)).toEqual(['pause-auction', 'set-auction-reserve-price', 'unpause-auction']);
+    expect(change.bundle?.label).toBe('Change the auction: 3 steps');
+    expect(change.source).toEqual(CHANGE_SOURCES.auction);
+    expect(change.note).toBe('Pause auctions. Change the starting price: 1 XLM → 5 XLM. Resume auctions.');
+    expect(change.replaces).toEqual(['old']);
   });
 });

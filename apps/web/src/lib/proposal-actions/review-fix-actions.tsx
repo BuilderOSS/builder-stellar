@@ -20,7 +20,7 @@ export const treasuryAuthorizeHandler: ActionHandler<TreasuryAuthorizeDraft> = {
   type: 'treasury-authorize',
   label: 'Authorize the next action (Treasury)',
   description: 'Attach a nested Treasury authorization tree to the following action',
-  group: 'Treasury',
+  group: 'Advanced',
   FormComponent: ({ value }: ActionFormProps<TreasuryAuthorizeDraft>) => (
     <>
       <Text>Prepared by a guided flow. The tree applies only to the next action in this proposal.</Text>
@@ -84,7 +84,7 @@ export const regenerateTokenHandler: ActionHandler<RegenerateTokenDraft> = {
   type: 'regenerate-token-traits',
   label: 'Seed traits for a token',
   description: 'Assign traits to a token minted before the artwork existed (Metadata regenerate)',
-  group: 'Artwork',
+  group: 'Membership',
   FormComponent: ({ value }: ActionFormProps<RegenerateTokenDraft>) => <Readonly lines={[`Token #${value.tokenId}`]} />,
   getDefaultValues: () => ({ tokenId: '' }),
   validate: (data) => (/^\d+$/.test(data.tokenId) ? valid() : invalid('Enter a token id.')),
@@ -109,7 +109,10 @@ export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
   type: 'migrate-dao-module',
   label: 'Migrate module storage',
   description: 'Run a module’s storage migration (right after an upgrade that changes storage)',
-  group: 'Administration',
+  group: 'System',
+  // Every contract is at storage version 1, so a migration fails with NothingToMigrate. It only
+  // belongs after an upgrade that changes storage, never picked by hand.
+  pickable: false,
   FormComponent: ({ value }: ActionFormProps<MigrateModuleDraft>) => (
     <Readonly lines={[`Module: ${value.module || 'none'}`]} />
   ),

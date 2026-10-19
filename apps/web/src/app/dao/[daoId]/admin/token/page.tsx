@@ -6,9 +6,11 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, ButtonLink, Callout, Card, Checkbox, Heading, Text } from '@/components/ui';
+import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { Badge, ButtonLink, Callout, Card, Checkbox, FieldHelperText, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
@@ -18,23 +20,31 @@ import { daoRoute } from '@/lib/dao-routes';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
 import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function TokenAdminPage() {
-  const { daoId, daoConfig: config, routeId } = useDaoContext();
+  const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const proposalDraft = useAdminProposalDraft();
-  const draftStatus = useAdminDraftStatus(daoId, ['batch-mint-governance-token']);
+  const { propose } = useProposeChange();
+  const pendingMints = usePendingChanges(['batch-mint-governance-token', 'mint-governance-token']);
+  const editing = useEditingChange({
+    accepts: (action) => action.type === 'batch-mint-governance-token',
+    onLoad: (action) => {
+      setRecipient(String(action.recipient ?? ''));
+      setAmount(String(action.amount ?? '1'));
+    }
+  });
   const tx = useTransactionFeedback(config.name);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const token = useAdminTokenState(config, session.address);
@@ -101,28 +111,23 @@ export default function TokenAdminPage() {
           { recipient, amount },
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
-        proposalDraft.requestAddBatch({
-          daoId,
-          requests: [
-            {
-              daoId,
-              action,
-              source: 'admin/token',
-              metadata: {
-                title: `Mint ${amount} membership token${amount === '1' ? '' : 's'}`,
-                description: `Mint ${amount} membership token${amount === '1' ? '' : 's'} to ${recipient}.`,
-                url: ''
-              }
+        const result = propose(
+          {
+            actions: [action],
+            source: CHANGE_SOURCES.token,
+            note: `Mint ${amount} membership token${amount === '1' ? '' : 's'} to ${recipient}.`,
+            replaces: editing.replaces
+          },
+          {
+            onAdded: () => {
+              setFormMessage('');
+              setRecipient('');
+              setAmount('1');
+              editing.done();
             }
-          ],
-          onAdded: () => {
-            setFormMessage(
-              `Added minting ${amount} membership token${amount === '1' ? '' : 's'} to your proposal draft.`
-            );
-            setRecipient('');
-            setAmount('1');
           }
-        });
+        );
+        if (result.outcome === 'invalid') setFormMessage(result.message);
         return;
       }
 
@@ -167,11 +172,6 @@ export default function TokenAdminPage() {
 
   return (
     <>
-      <AdminProposalDraftDialog
-        pending={proposalDraft.pending}
-        onCancel={proposalDraft.cancel}
-        onResolve={proposalDraft.resolve}
-      />
       <PageSection
         title="Mint tokens"
         description="Create new membership tokens. Modules mint only within the allowances set under Membership."
@@ -191,6 +191,14 @@ export default function TokenAdminPage() {
                 </Badge>
               </div>
               <Heading size="heading">Mint membership tokens</Heading>
+              <EditingChangeNotice
+                editing={editing.editing}
+                onCancel={() => {
+                  editing.done();
+                  setRecipient('');
+                  setAmount('1');
+                }}
+              />
               <Text size="sm">
                 {hasMintAccess
                   ? `Mint up to ${MAX_BATCH_MINT} tokens at a time straight to one wallet.`
@@ -209,8 +217,10 @@ export default function TokenAdminPage() {
                   setAmount(value.amount);
                 }}
                 disabled={busy || (!hasMintAccess && !canProposeMint)}
-                draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'batch-mint-governance-token')}
               />
+              {pendingMints.map((action) => (
+                <PendingValue key={action.id} pending={action} />
+              ))}
               {noArtwork ? (
                 <>
                   <Callout
@@ -227,18 +237,21 @@ export default function TokenAdminPage() {
                 </>
               ) : null}
               <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
-                <Button
-                  type="button"
+                <ChangeSubmit
+                  direct={hasMintAccess}
+                  editing={Boolean(editing.editing)}
+                  directLabel={`Mint ${tokensLabel}`}
                   onClick={handleMint}
                   loading={busy}
                   disabled={busy || (!hasMintAccess && !canProposeMint)}
-                >
-                  {hasMintAccess ? `Mint ${tokensLabel}` : `Propose minting ${tokensLabel}`}
-                </Button>
+                />
                 <ButtonLink href={daoRoute(routeId, 'admin/owner')} variant="secondary">
                   Module allowances
                 </ButtonLink>
               </div>
+              {hasMintAccess || canProposeMint ? (
+                <FieldHelperText>{changeAuthorityText(hasMintAccess)}</FieldHelperText>
+              ) : null}
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
               {token.error ? (
                 <Callout variant="error" title="Couldn't check who can mint" description={token.error.message} />

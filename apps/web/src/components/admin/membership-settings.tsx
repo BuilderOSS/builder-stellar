@@ -5,21 +5,23 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
-import useSWR from 'swr';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { ModulesCard } from '@/components/admin/modules/modules-card';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, FieldHelperText, Heading, Skeleton, Switch, Text } from '@/components/ui';
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { Badge, Callout, Card, FieldHelperText, Heading, Skeleton, Switch, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { adminReadOptions } from '@/lib/admin-surfaces';
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type MembershipState, useMembershipState } from '@/lib/membership-state';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ProposalActionType } from '@/lib/proposal-actions/types';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -66,67 +68,6 @@ function assemble(client: TokenClient, call: DirectCall) {
   }
 }
 
-type ModuleView = {
-  kind: string;
-  /** The index lists it as this DAO's module of its kind: the Manager deployed it. */
-  vouched: boolean;
-  address: string;
-  nonVoting: boolean;
-  allowance: number;
-  agent: boolean;
-  /** Votes the module holds, its own and delegated to it (review 2 C3: modules can be delegates). */
-  votes: bigint;
-};
-type MembershipState = {
-  admin: string;
-  live: boolean;
-  settings: { transfersLocked: boolean; membersOnlyDelegation: boolean; daoRecovery: boolean };
-  modules: ModuleView[];
-};
-
-/** Live reads: the switches, every registered module with its allowance, and the transfer agents. */
-function useMembershipState(config: DaoNetworkConfig, address?: string | null) {
-  return useSWR(
-    config.tokenContractId ? ['membership-state', config.tokenContractId, config.rpcUrl, address || ''] : null,
-    async (): Promise<MembershipState> => {
-      const token = new TokenClient(adminReadOptions(config, config.tokenContractId, address));
-      const [admin, live, settings, modules, agents] = await Promise.all([
-        token.admin(),
-        token.is_live(),
-        token.settings(),
-        token.modules(),
-        token.transfer_agents()
-      ]);
-      const [allowances, votes] = await Promise.all([
-        Promise.all(
-          modules.result.map((entry) => token.mint_allowance({ module: entry.address }).then((tx) => tx.result))
-        ),
-        Promise.all(modules.result.map((entry) => token.get_votes({ account: entry.address }).then((tx) => tx.result)))
-      ]);
-      return {
-        admin: admin.result,
-        live: live.result,
-        settings: {
-          transfersLocked: settings.result.transfers_locked,
-          membersOnlyDelegation: settings.result.members_only_delegation,
-          daoRecovery: settings.result.dao_recovery
-        },
-        modules: modules.result.map((entry, index) => ({
-          kind: entry.kind,
-          vouched: [config.auctionContractId, config.marketplaceContractId, config.claimsContractId].includes(
-            entry.address
-          ),
-          address: entry.address,
-          nonVoting: entry.non_voting,
-          allowance: allowances[index] ?? 0,
-          agent: agents.result.includes(entry.address),
-          votes: votes[index] ?? 0n
-        }))
-      };
-    }
-  );
-}
-
 function kindLabel(kind: string) {
   return KIND_LABELS[kind] ?? kind.replace(/^custom_/, '').replace(/_/g, ' ');
 }
@@ -168,7 +109,13 @@ export function MembershipSettings() {
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const state = useMembershipState(config, address);
-  const proposalDraft = useAdminProposalDraft();
+  const { propose: proposeChange } = useProposeChange();
+  const pendingSwitches = usePendingChanges(SWITCHES.map((entry) => entry.type));
+  // Edit from a queued switch: the page shows which one, and adding the other value replaces it.
+  const editing = useEditingChange({
+    accepts: (action) => SWITCHES.some((entry) => entry.type === action.type),
+    onLoad: () => undefined
+  });
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   // Shown beside the card whose action produced it, not at the top of a long page.
@@ -233,9 +180,9 @@ export function MembershipSettings() {
   function propose(
     type: ProposalActionType,
     values: Record<string, unknown>,
-    title: string,
-    description: string,
-    where: 'switches' | 'modules'
+    note: string,
+    where: 'switches' | 'modules',
+    replaces?: string[]
   ) {
     if (!address) return;
     const handler = getActionHandler(type);
@@ -245,24 +192,28 @@ export function MembershipSettings() {
       setMessage({ where, text: validation.message ?? 'Check the values.' });
       return;
     }
-    proposalDraft.requestAddBatch({
-      daoId,
-      requests: [
-        {
-          daoId,
-          action: handler.serialize(values, context),
-          source: `admin/membership/${type}`,
-          metadata: { title, description, url: '' }
-        }
-      ],
-      onAdded: () => setMessage({ where, text: `${title}: added to the proposal draft.` })
-    });
+    setMessage(null);
+    const result = proposeChange(
+      { actions: [handler.serialize(values, context)], source: CHANGE_SOURCES.membership, note, replaces },
+      { onAdded: () => editing.done() }
+    );
+    if (result.outcome === 'invalid') setMessage({ where, text: result.message });
   }
 
   function changeSwitch(entry: (typeof SWITCHES)[number], enabled: boolean) {
     const verb = enabled ? 'Turn on' : 'Turn off';
     const label = `${verb} ${entry.label.toLowerCase()}`;
-    if (!isLaunchAdmin) return propose(entry.type, { enabled }, label, enabled ? entry.on : entry.off, 'switches');
+    if (!isLaunchAdmin) {
+      // A switch already in the proposal is flipped back by replacing it, not by adding a second one.
+      const queued = pendingSwitches.find((action) => action.type === entry.type);
+      return propose(
+        entry.type,
+        { enabled },
+        `${label}. ${enabled ? entry.on : entry.off}`,
+        'switches',
+        queued ? [queued.id] : undefined
+      );
+    }
     void direct(
       entry.fn === 'set_transfers_locked'
         ? { fn: entry.fn, args: { locked: enabled } }
@@ -286,8 +237,7 @@ export function MembershipSettings() {
       propose(
         'change-mint-allowance',
         { module: module.address, amount: String(amount), direction },
-        title,
-        `Lets the ${name} module (${module.address}) mint ${amount} ${more} ${amount === 1 ? 'token' : 'tokens'}.`,
+        `${title}: the ${name} module (${module.address}) can mint ${amount} ${more} ${amount === 1 ? 'token' : 'tokens'}.`,
         'modules'
       );
       return null;
@@ -304,23 +254,12 @@ export function MembershipSettings() {
 
   function proposeOpen(kind: 'auction' | 'marketplace') {
     if (kind === 'auction')
-      propose(
-        'unpause-auction',
-        {},
-        'Start auctions',
-        'Starts the first auction of this tribe’s auction module.',
-        'modules'
-      );
-    else propose('unpause-marketplace', {}, 'Reopen the market', 'Lets sales in the market begin.', 'modules');
+      propose('unpause-auction', {}, 'Start the first auction of this tribe’s auction module.', 'modules');
+    else propose('unpause-marketplace', {}, 'Open the market so sales can begin.', 'modules');
   }
 
   return (
     <>
-      <AdminProposalDraftDialog
-        pending={proposalDraft.pending}
-        onCancel={proposalDraft.cancel}
-        onResolve={proposalDraft.resolve}
-      />
       <PageSection
         title="Membership"
         description={
@@ -351,8 +290,12 @@ export function MembershipSettings() {
               {data.live ? (
                 // Once Live a change is a proposal, so show the state and a propose button, not a toggle.
                 <div>
+                  <EditingChangeNotice editing={editing.editing} onCancel={editing.done} />
                   {SWITCHES.map((entry) => {
                     const enabled = data.settings[entry.key];
+                    const queued = pendingSwitches.find((action) => action.type === entry.type);
+                    // With a change waiting, the button offers the other value of what the proposal will set.
+                    const next = queued ? queued.enabled !== true : !enabled;
                     return (
                       <div key={entry.key} className={settingRow}>
                         <div className={settingText}>
@@ -361,15 +304,21 @@ export function MembershipSettings() {
                             <Badge tone={enabled ? 'live' : 'neutral'}>{enabled ? 'On' : 'Off'}</Badge>
                           </span>
                           <Text size="sm">{enabled ? entry.on : entry.off}</Text>
+                          <PendingValue
+                            pending={queued}
+                            describe={(action) => (action.enabled ? 'Turn on' : 'Turn off')}
+                          />
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={!canAct || busy}
-                          onClick={() => changeSwitch(entry, !enabled)}
-                        >
-                          {enabled ? 'Propose turning off' : 'Propose turning on'}
-                        </Button>
+                        {queued && queued.enabled !== enabled ? null : (
+                          <ChangeSubmit
+                            direct={false}
+                            variant="secondary"
+                            size="sm"
+                            proposeLabel={next ? 'Turn on in proposal' : 'Turn off in proposal'}
+                            disabled={!canAct || busy}
+                            onClick={() => changeSwitch(entry, next)}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -408,7 +357,7 @@ export function MembershipSettings() {
             frozen={frozen}
             busy={busy}
             message={message?.where === 'modules' ? message.text : null}
-            addBatch={proposalDraft.requestAddBatch}
+            propose={proposeChange}
             onMessage={(text) => setMessage({ where: 'modules', text })}
             onChanged={() => void state.mutate()}
             onChangeAllowance={changeAllowance}

@@ -4,23 +4,20 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { FieldHelperText, FieldLabel, Input } from '@/components/ui';
 import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 
-import type { ActionFormProps, ProposalQueuedAction } from '../../types';
+import type { ActionFormProps } from '../../types';
 import type { BatchMintGovernanceTokenData } from './types';
 
 export function BatchMintGovernanceTokenForm({
   value,
   onChange,
   disabled,
-  validationErrors,
-  draftPreview
-}: ActionFormProps<BatchMintGovernanceTokenData> & { draftPreview?: ProposalQueuedAction }) {
+  validationErrors
+}: ActionFormProps<BatchMintGovernanceTokenData>) {
   return (
     <Stack gap="3">
-      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <Stack gap="2">
         <FieldLabel htmlFor="recipient">Recipient</FieldLabel>
         <Input

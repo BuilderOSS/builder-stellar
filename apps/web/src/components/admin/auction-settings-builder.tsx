@@ -6,22 +6,15 @@ import { Pause, Play } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import {
-  ActionBar,
-  AmountInput,
-  Button,
-  Callout,
-  Checkbox,
-  Chip,
-  ChoiceGroup,
-  DurationInput,
-  FieldLabel,
-  Input
-} from '@/components/ui';
+import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { ActionBar, Button, Callout, Checkbox, Chip, ChoiceGroup, FieldHelperText } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import {
+  auctionChangeRequest,
   type AuctionEdits,
   type AuctionSettings,
   type AuctionStep,
@@ -32,10 +25,13 @@ import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/duration';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
+import { settingForm } from '@/lib/proposal-changes/catalog';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -99,6 +95,12 @@ const stepTitle = css({ textStyle: 'body', fontWeight: '600', color: 'ink', line
 const stepDetail = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink.muted', overflowWrap: 'anywhere' });
 const footer = css({ display: 'flex', justifyContent: 'flex-end', gap: '2', flexWrap: 'wrap' });
 
+// The same forms the composer shows for these settings.
+const ReserveForm = settingForm('set-auction-reserve-price');
+const DurationForm = settingForm('set-auction-duration');
+const BufferForm = settingForm('set-auction-time-buffer');
+const IncrementForm = settingForm('set-auction-min-bid-increment');
+
 function SettingField({
   now,
   showNow = true,
@@ -133,6 +135,33 @@ function SettingField({
   );
 }
 
+const AUCTION_STEP_TYPES = new Set<string>([
+  'pause-auction',
+  'cancel-auction',
+  'set-auction-reserve-price',
+  'set-auction-duration',
+  'set-auction-time-buffer',
+  'set-auction-min-bid-increment',
+  'unpause-auction'
+]);
+
+/** A queued auction change, as the edits, cancel and resume choice that built it. */
+function editsFromSteps(steps: ProposalQueuedAction[]) {
+  const edits: AuctionEdits = {};
+  for (const step of steps) {
+    const value = String(step.value ?? step.amount ?? '');
+    if (step.type === 'set-auction-reserve-price') edits.reservePrice = String(step.reservePrice ?? step.amount ?? '');
+    if (step.type === 'set-auction-duration') edits.duration = Number(value);
+    if (step.type === 'set-auction-time-buffer') edits.timeBuffer = Number(value);
+    if (step.type === 'set-auction-min-bid-increment') edits.minBidIncrement = Number(value);
+  }
+  return {
+    edits,
+    cancel: steps.some((step) => step.type === 'cancel-auction'),
+    after: steps.some((step) => step.type === 'unpause-auction') ? ('resume' as const) : ('keep' as const)
+  };
+}
+
 function stepIconFor(type: AuctionStep['type']) {
   if (type === 'pause-auction') return <Pause aria-hidden="true" strokeWidth={1.75} />;
   if (type === 'unpause-auction') return <Play aria-hidden="true" strokeWidth={1.75} />;
@@ -144,7 +173,6 @@ function stepIconFor(type: AuctionStep['type']) {
  * auction gets "pause" first and, if chosen, "resume" last, all inside the same proposal.
  */
 export function AuctionSettingsBuilder({
-  daoId,
   config,
   live,
   paused,
@@ -158,7 +186,6 @@ export function AuctionSettingsBuilder({
   onBusyChange: setBusy,
   refresh
 }: {
-  daoId: string;
   config: DaoNetworkConfig;
   live: boolean;
   paused: boolean;
@@ -174,7 +201,17 @@ export function AuctionSettingsBuilder({
   refresh: () => Promise<unknown>;
 }) {
   const session = useAuthSessionStore();
-  const draft = useAdminProposalDraft();
+  const { propose } = useProposeChange();
+  const pending = usePendingChanges((action) => AUCTION_STEP_TYPES.has(action.type));
+  const editing = useEditingChange({
+    accepts: (action) => AUCTION_STEP_TYPES.has(action.type),
+    onLoad: (_action, bundle) => {
+      const loaded = editsFromSteps(bundle);
+      setEdits(loaded.edits);
+      setCancel(loaded.cancel);
+      setAfter(loaded.after);
+    }
+  });
   const tx = useTransactionFeedback(config.name);
   const [edits, setEdits] = useState<AuctionEdits>({});
   const [cancel, setCancel] = useState(false);
@@ -228,23 +265,14 @@ export function AuctionSettingsBuilder({
 
   function addToProposal() {
     if (!steps.length || !validate()) return;
-    draft.requestAddBatch({
-      daoId,
-      requests: steps.map((step) => ({
-        daoId,
-        action: getActionHandler(step.type).serialize(step.values, context),
-        source: `admin/auction/${step.type}`,
-        metadata: {
-          title: step.title,
-          description: step.detail ? `${step.title}: ${step.detail}.` : `${step.title}.`,
-          url: ''
-        }
-      })),
+    const result = propose(auctionChangeRequest(steps, config, session.address, editing.replaces), {
       onAdded: () => {
         setEdits({});
         setCancel(false);
+        editing.done();
       }
     });
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
 
   async function applyDirectly() {
@@ -295,27 +323,23 @@ export function AuctionSettingsBuilder({
     }
   }
 
-  const submitLabel = direct
-    ? steps.length
-      ? `Apply ${steps.length} ${steps.length === 1 ? 'change' : 'changes'}`
-      : 'Apply changes'
-    : steps.length
-      ? `Add ${steps.length} ${steps.length === 1 ? 'step' : 'steps'} to your proposal`
-      : 'Add to your proposal';
+  const count = steps.length
+    ? `${steps.length} ${steps.length === 1 ? (direct ? 'change' : 'step') : direct ? 'changes' : 'steps'}`
+    : undefined;
   const submit = (
-    <Button
-      type="button"
+    <ChangeSubmit
+      direct={direct}
+      what={count}
+      editing={Boolean(editing.editing)}
       disabled={disabled || !steps.length || reserveInvalid || (direct && !networkReady)}
       loading={busy && Boolean(progress)}
       onClick={() => (direct ? void applyDirectly() : addToProposal())}
-    >
-      {submitLabel}
-    </Button>
+    />
   );
+  const queuedBundle = pending.length && !editing.editing ? pending : [];
 
   return (
     <>
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <section className={card} aria-labelledby="auction-settings-title">
         <div>
           <h2 id="auction-settings-title" className={title}>
@@ -330,77 +354,66 @@ export function AuctionSettingsBuilder({
           </p>
         </div>
 
-        <div className={fieldGrid}>
-          <SettingField
-            now={`${formatStroops(current.reservePrice)}${unit}`}
-            changed={changed.reservePrice}
-            onUndo={() => reset('reservePrice')}
-          >
-            <FieldLabel htmlFor="auction-reserve-price">Starting price</FieldLabel>
-            <AmountInput
-              id="auction-reserve-price"
-              unit={assetCode || 'units'}
-              placeholder={formatStroops(current.reservePrice)}
-              value={edits.reservePrice ?? ''}
-              disabled={disabled}
-              aria-invalid={reserveInvalid || undefined}
-              onChange={(event) => set({ reservePrice: event.target.value })}
-            />
-          </SettingField>
-          <SettingField
-            now={`${current.minBidIncrement}%`}
-            changed={changed.minBidIncrement}
-            onUndo={() => reset('minBidIncrement')}
-          >
-            <FieldLabel htmlFor="auction-min-increment">Minimum bid increase (%)</FieldLabel>
-            <Input
-              id="auction-min-increment"
-              name="auction-min-increment"
-              type="number"
-              inputMode="numeric"
-              autoComplete="off"
-              min={1}
-              max={100}
-              step={1}
-              value={edits.minBidIncrement ?? current.minBidIncrement}
-              disabled={disabled}
-              onChange={(event) =>
-                set({ minBidIncrement: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })
-              }
-            />
-          </SettingField>
-          <SettingField
-            now={long(current.duration)}
-            showNow={false}
-            changed={changed.duration}
-            onUndo={() => reset('duration')}
-          >
-            <DurationInput
-              id="auction-duration"
-              label="Each auction runs for"
-              value={edits.duration ?? current.duration}
-              disabled={disabled}
-              showSeconds={false}
-              helperText={`Now: ${long(current.duration)}. Between 5 minutes and 30 days.`}
-              onChange={(duration) => set({ duration })}
-            />
-          </SettingField>
-          <SettingField
-            now={long(current.timeBuffer)}
-            showNow={false}
-            changed={changed.timeBuffer}
-            onUndo={() => reset('timeBuffer')}
-          >
-            <DurationInput
-              id="auction-time-buffer"
-              label="A late bid adds"
-              value={edits.timeBuffer ?? current.timeBuffer}
-              disabled={disabled}
-              helperText={`Now: ${long(current.timeBuffer)}. Up to 1 day; bids near the end extend the auction so everyone gets a fair chance.`}
-              onChange={(timeBuffer) => set({ timeBuffer })}
-            />
-          </SettingField>
-        </div>
+        <EditingChangeNotice
+          editing={editing.editing}
+          bundle={editing.bundle}
+          onCancel={() => {
+            editing.done();
+            setEdits({});
+            setCancel(false);
+          }}
+        />
+        {queuedBundle.length ? (
+          <PendingValue
+            pending={queuedBundle[0]}
+            describe={(action) => String(action.bundleLabel || action.note || '')}
+          />
+        ) : null}
+
+        <SettingValuesContext.Provider value={{ auction: { assetCode } as never }}>
+          <div className={fieldGrid}>
+            <SettingField
+              now={`${formatStroops(current.reservePrice)}${unit}`}
+              changed={changed.reservePrice}
+              onUndo={() => reset('reservePrice')}
+            >
+              <ReserveForm
+                value={{ reservePrice: edits.reservePrice ?? formatStroops(current.reservePrice) }}
+                disabled={disabled}
+                onChange={(value: { reservePrice: string }) => set({ reservePrice: value.reservePrice })}
+              />
+            </SettingField>
+            <SettingField
+              now={`${current.minBidIncrement}%`}
+              changed={changed.minBidIncrement}
+              onUndo={() => reset('minBidIncrement')}
+            >
+              <IncrementForm
+                value={{ value: String(edits.minBidIncrement ?? current.minBidIncrement) }}
+                disabled={disabled}
+                onChange={(value: { value: string }) => set({ minBidIncrement: Number(value.value) || 0 })}
+              />
+            </SettingField>
+            <SettingField now={long(current.duration)} changed={changed.duration} onUndo={() => reset('duration')}>
+              <DurationForm
+                value={{ value: String(edits.duration ?? current.duration) }}
+                disabled={disabled}
+                onChange={(value: { value: string }) => set({ duration: Number(value.value) })}
+              />
+            </SettingField>
+            <SettingField
+              now={long(current.timeBuffer)}
+              changed={changed.timeBuffer}
+              onUndo={() => reset('timeBuffer')}
+            >
+              <BufferForm
+                value={{ value: String(edits.timeBuffer ?? current.timeBuffer) }}
+                disabled={disabled}
+                onChange={(value: { value: string }) => set({ timeBuffer: Number(value.value) })}
+              />
+            </SettingField>
+          </div>
+        </SettingValuesContext.Provider>
 
         {live && !direct && cancellable ? (
           <Checkbox
@@ -455,7 +468,10 @@ export function AuctionSettingsBuilder({
           </p>
         ) : null}
 
-        <div className={footer}>{submit}</div>
+        <div className={footer}>
+          <FieldHelperText>{changeAuthorityText(direct)}</FieldHelperText>
+          {submit}
+        </div>
       </section>
       {steps.length ? <ActionBar mobileOnly>{submit}</ActionBar> : null}
     </>

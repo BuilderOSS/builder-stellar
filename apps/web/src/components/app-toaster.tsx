@@ -2,13 +2,14 @@
 
 import { Portal } from '@ark-ui/react/portal';
 import { Toast, Toaster } from '@ark-ui/react/toast';
-import { ArrowUpRight, CircleAlert, CircleCheck, Info, LoaderCircle, X } from 'lucide-react';
+import { ArrowUpRight, CircleAlert, CircleCheck, Info, LoaderCircle, Undo2, X } from 'lucide-react';
 import { css, sva } from 'styled-system/css';
 
+import type { ToastUndo } from '@/lib/proposal-changes/change-toast';
 import { toaster } from '@/lib/toaster';
 
 const toast = sva({
-  slots: ['root', 'title', 'icon', 'description', 'action', 'close'],
+  slots: ['root', 'title', 'icon', 'description', 'actions', 'action', 'close'],
   base: {
     root: {
       position: 'relative',
@@ -33,6 +34,7 @@ const toast = sva({
       transitionTimingFunction: 'out',
       '@media (prefers-reduced-motion: reduce)': { transitionProperty: 'opacity', transitionDuration: '150ms' }
     },
+    actions: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: '4', rowGap: '1' },
     title: { display: 'flex', alignItems: 'center', gap: '2', textStyle: 'subheading', fontSize: '0.9375rem' },
     icon: { width: '4.5', height: '4.5', flexShrink: '0' },
     description: { textStyle: 'caption', fontSize: '0.875rem', color: 'ink.muted', overflowWrap: 'anywhere' },
@@ -92,6 +94,41 @@ function ToastIcon({ type, className = '' }: { type: string | undefined; classNa
   }
 }
 
+/** The main action, plus an Undo from `meta.undo` for changes that can be taken back. */
+function ToastActions({
+  item,
+  classes
+}: {
+  item: { id?: string; action?: { label: string }; meta?: Record<string, unknown> };
+  classes: ReturnType<typeof toast>;
+}) {
+  const undo = item.meta?.undo as ToastUndo | undefined;
+  if (!item.action && !undo) return null;
+  return (
+    <div className={classes.actions}>
+      {undo ? (
+        <button
+          type="button"
+          className={classes.action}
+          onClick={() => {
+            undo.onClick();
+            if (item.id) toaster.dismiss(item.id);
+          }}
+        >
+          <Undo2 aria-hidden="true" />
+          {undo.label}
+        </button>
+      ) : null}
+      {item.action ? (
+        <Toast.ActionTrigger className={classes.action}>
+          {item.action.label}
+          <ArrowUpRight aria-hidden="true" />
+        </Toast.ActionTrigger>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppToaster() {
   const classes = toast();
   return (
@@ -106,12 +143,7 @@ export function AppToaster() {
             {item.description ? (
               <Toast.Description className={classes.description}>{item.description}</Toast.Description>
             ) : null}
-            {item.action ? (
-              <Toast.ActionTrigger className={classes.action}>
-                {item.action.label}
-                <ArrowUpRight aria-hidden="true" />
-              </Toast.ActionTrigger>
-            ) : null}
+            <ToastActions item={item} classes={classes} />
             <Toast.CloseTrigger aria-label="Dismiss notification" className={classes.close}>
               <X aria-hidden="true" />
             </Toast.CloseTrigger>

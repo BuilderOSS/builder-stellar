@@ -22,12 +22,22 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
+import { isRegisteredActionType } from '@/lib/proposal-actions/registry';
+import type { ProposalActionType } from '@/lib/proposal-actions/types';
+import { getActionMeta } from '@/lib/proposal-changes/catalog';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
 import { ProposalStateBadge } from './proposal-state-badge';
 import type { ProposalListResponse } from './types';
 
 type ContextTab = 'treasury' | 'members' | 'contracts' | 'history';
+
+/** The rail opens on what the change being set up touches: the treasury, the members, or the contracts. */
+function contextTabFor(type: string | undefined): ContextTab {
+  if (!type || !isRegisteredActionType(type)) return 'members';
+  const part = getActionMeta(type as ProposalActionType).part;
+  return part === 'Treasury' ? 'treasury' : part === 'Membership' || part === 'Tribe' ? 'members' : 'contracts';
+}
 
 type ProposalContextRailProps = {
   activeActionType?: string;
@@ -192,7 +202,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
 
 function ContextContent({ activeActionType, id }: { activeActionType?: string; id: string }) {
   const { daoId, daoTokenAddress, daoConfig: config } = useDaoContext();
-  const [tab, setTab] = useState<ContextTab>(activeActionType?.includes('transfer') ? 'treasury' : 'members');
+  const [tab, setTab] = useState<ContextTab>(() => contextTabFor(activeActionType));
   return (
     <div className={css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '4', minW: '0' })}>
       <SegmentedControl

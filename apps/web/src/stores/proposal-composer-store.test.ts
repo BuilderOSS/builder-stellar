@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createEmptyDraft,
   sanitizeDrafts,
+  selectCanProceedToStep2,
   selectDraft,
   selectHasDraft,
   useProposalComposerStore
@@ -22,9 +23,7 @@ describe('proposal composer wallet scoping', () => {
     clearDraft(walletA);
     clearDraft(walletB);
 
-    useProposalComposerStore.getState().replaceDraft(walletA, daoId, {
-      metadata: { title: 'Wallet A draft', description: '', url: '' }
-    });
+    useProposalComposerStore.getState().updateMetadata(walletA, daoId, { title: 'Wallet A draft' });
 
     const state = useProposalComposerStore.getState();
     expect(selectHasDraft(walletA.toLowerCase(), daoId)(state)).toBe(true);
@@ -34,6 +33,53 @@ describe('proposal composer wallet scoping', () => {
 
     clearDraft(walletA);
     clearDraft(walletB);
+  });
+});
+
+describe('proposal composer v4 actions', () => {
+  const wallet = 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC';
+  const queued = (id: string, extra: Record<string, unknown> = {}) =>
+    ({ id, type: 'pause-auction', recipient: '', amount: '', ...extra }) as any;
+
+  it('adds changes without moving the step, replaces by id in place, and restores for undo', () => {
+    clearDraft(wallet);
+    const store = useProposalComposerStore.getState();
+    store.setStep(wallet, daoId, 2);
+    store.addChanges(wallet, daoId, [queued('a'), queued('b'), queued('c')]);
+    store.replaceById(wallet, daoId, ['b'], [queued('b2')]);
+    let draft = selectDraft(wallet, daoId)(useProposalComposerStore.getState());
+    expect(draft.step).toBe(2);
+    expect(draft.queuedActions.map((action) => action.id)).toEqual(['a', 'b2', 'c']);
+    const before = draft.queuedActions;
+    store.removeById(wallet, daoId, 'a');
+    store.restore(wallet, daoId, before);
+    draft = selectDraft(wallet, daoId)(useProposalComposerStore.getState());
+    expect(draft.queuedActions.map((action) => action.id)).toEqual(['a', 'b2', 'c']);
+    clearDraft(wallet);
+  });
+
+  it('removes and moves a bundle as one row', () => {
+    clearDraft(wallet);
+    const store = useProposalComposerStore.getState();
+    store.addChanges(wallet, daoId, [queued('x'), queued('p', { bundleId: 'B' }), queued('q', { bundleId: 'B' })]);
+    store.moveItem(wallet, daoId, 1, 0);
+    expect(selectDraft(wallet, daoId)(useProposalComposerStore.getState()).queuedActions.map((a) => a.id)).toEqual([
+      'p',
+      'q',
+      'x'
+    ]);
+    store.removeById(wallet, daoId, 'q');
+    expect(selectDraft(wallet, daoId)(useProposalComposerStore.getState()).queuedActions.map((a) => a.id)).toEqual([
+      'x'
+    ]);
+    clearDraft(wallet);
+  });
+
+  it('can move on from the actions step before the why is written', () => {
+    clearDraft(wallet);
+    useProposalComposerStore.getState().addChanges(wallet, daoId, [queued('only')]);
+    expect(selectCanProceedToStep2(wallet, daoId)(useProposalComposerStore.getState())).toBe(true);
+    clearDraft(wallet);
   });
 });
 

@@ -2,12 +2,13 @@
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { ChevronLeft } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import useSWR from 'swr';
 
 import type { OpenPoolDraft } from '@/components/admin/admin-action-forms';
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
 import {
   Address,
   AmountInput,
@@ -22,29 +23,35 @@ import {
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import { daoRoute } from '@/lib/dao-routes';
+import { expiryInputValue } from '@/lib/expiry-time';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/marketplace/governance';
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { largestBuyerShare } from '@/lib/marketplace/pool-share';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import type { ActionHandler } from '@/lib/proposal-actions/types';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
+import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-changes/catalog';
+import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
+const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
+
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const { daoConfig, routeId } = useDaoContext();
-  const proposal = useAdminProposalDraft();
+  const { propose } = useProposeChange();
+  const pendingPools = usePendingChanges((action) => POOL_TYPES.has(action.type));
   const { data, error, isLoading } = useDaoMarketplace(daoId, 'kind=pool&status=open');
   // Closing needs a pool that is still open; sweeping one that has closed. List both to pick from.
   const allPools = useDaoMarketplace(daoId, 'kind=pool&status=all');
   const pools = allPools.data?.listings.filter((listing) => listing.kind === 'pool') ?? [];
   const address = useAuthSessionStore((s) => s.address);
   const authenticated = useAuthSessionStore((s) => s.authStatus === 'authenticated');
-  const router = useRouter();
   const [pool, setPool] = useState({
     price: '',
     size: '',
@@ -55,6 +62,22 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   });
   const [poolId, setPoolId] = useState('');
   const [message, setMessage] = useState('');
+  const editing = useEditingChange({
+    accepts: (action) =>
+      action.type === 'open-pool' || (action.type === 'change-mint-allowance' && Boolean(action.bundleId)),
+    onLoad: (_action, bundle) => {
+      const open = bundle.find((step: ProposalQueuedAction) => step.type === 'open-pool');
+      if (!open) return;
+      setPool({
+        price: String(open.price ?? ''),
+        size: String(open.size ?? ''),
+        maxPerBuyer: String(open.maxPerBuyer ?? '1'),
+        maxSoldPerPeriod: String(open.maxSoldPerPeriod ?? ''),
+        periodHours: String(open.periodHours ?? '24'),
+        expiresAt: expiryInputValue(String(open.expiresAt ?? ''))
+      });
+    }
+  });
   const votingSupply = useSWR(['voting-supply', daoConfig.tokenContractId, daoConfig.rpcUrl], async () => {
     const token = new TokenClient(adminReadOptions(daoConfig, daoConfig.tokenContractId, address));
     return (await token.voting_supply_at_previous_ledger()).result;
@@ -94,49 +117,35 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         const grant = { action: allowance.serialize(grantDraft, context) };
         const open = marketplaceGovernanceAction(daoConfig, address, getActionHandler('open-pool'), draft);
         const unit = marketplaceAssetLabel(data.network, data.config.paymentAsset);
-        proposal.requestAddBatch({
-          daoId,
-          requests: [
-            {
-              daoId,
-              action: { ...grant.action, targetRole: 'token' },
-              metadata: {
-                title: `Let the market mint ${pool.size} tokens`,
-                description: `Raise the marketplace's mint allowance by ${pool.size} tokens for a quick-buy pool.`,
-                url: ''
-              },
-              source: 'Marketplace administration'
-            },
-            {
-              daoId,
-              action: { ...open.action, targetRole: 'marketplace' },
-              metadata: {
-                title: 'Open a quick-buy pool',
-                description: `Sell ${pool.size} new tokens at ${formatMarketplaceAmount(amount)} ${unit} each, at most ${pool.maxPerBuyer} per wallet and ${pool.maxSoldPerPeriod} every ${pool.periodHours}h, until ${new Date(expiry).toISOString()}. Proceeds go to the Treasury. Each token sold adds a vote: a pool larger than the voting supply could let buyers outvote today's members.${shareText ? ` ${shareText}` : ''}`,
-                url: ''
-              },
-              source: 'Marketplace administration'
-            }
-          ]
-        });
+        // The allowance and the pool only work together: one item, removed as one.
+        const result = propose(
+          {
+            actions: [
+              { ...grant.action, targetRole: 'token' },
+              { ...open.action, targetRole: 'marketplace' }
+            ],
+            bundle: planBundle('Open a quick-buy pool', 2),
+            source: CHANGE_SOURCES.marketplace,
+            note: `Sell ${pool.size} new tokens at ${formatMarketplaceAmount(amount)} ${unit} each, at most ${pool.maxPerBuyer} per wallet and ${pool.maxSoldPerPeriod} every ${pool.periodHours}h, until ${new Date(expiry).toISOString()}. The market may mint them first. Proceeds go to the treasury. Each token sold adds a vote: a pool larger than the voting supply could let buyers outvote today's members.${shareText ? ` ${shareText}` : ''}`,
+            replaces: editing.replaces
+          },
+          { onAdded: () => editing.done() }
+        );
+        if (result.outcome === 'invalid') setMessage(result.message);
         return;
       }
       marketplaceId(poolId, 'pool');
       const handler = getActionHandler(kind === 'close' ? 'close-pool' : 'sweep-pool');
       const { action } = marketplaceGovernanceAction(daoConfig, address, handler, { poolId });
-      proposal.requestAdd({
-        daoId,
-        action: { ...action, targetRole: 'marketplace' },
-        metadata: {
-          title: `${kind === 'close' ? 'Close' : 'Sweep'} pool #${poolId}`,
-          description:
-            kind === 'close'
-              ? `Stop pool #${poolId}'s sales now. Tokens it never minted go back to the marketplace's mint allowance.`
-              : `Move closed pool #${poolId}'s unsold tokens to the Treasury.`,
-          url: ''
-        },
-        source: 'Marketplace administration'
+      const result = propose({
+        actions: [{ ...action, targetRole: 'marketplace' }],
+        source: CHANGE_SOURCES.marketplace,
+        note:
+          kind === 'close'
+            ? `Stop pool #${poolId}'s sales now. Tokens it never minted go back to the market's mint allowance.`
+            : `Move closed pool #${poolId}'s unsold tokens to the treasury.`
       });
+      if (result.outcome === 'invalid') setMessage(result.message);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Unable to prepare the proposal draft.');
     }
@@ -186,6 +195,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <section className={styles.panel}>
           <div className={styles.stack}>
             <h2>Propose a quick-buy pool</h2>
+            <EditingChangeNotice editing={editing.editing} bundle={editing.bundle} onCancel={editing.done} />
             <p>
               A pool sells new tokens at a fixed price. Anyone can stock it once it opens; buyers take one token at a
               time, within the per-wallet and per-period limits. Choose a closing time that leaves room for the vote.
@@ -259,10 +269,17 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               title="Each token sold adds a vote"
               description={`A pool larger than the current voting supply could let buyers outvote today's members. Keep pools small and the per-wallet limit low.${shareText ? ` ${shareText}` : ' Enter the pool size and per-wallet limit to see the largest share one wallet could buy.'}`}
             />
-            <div>
-              <Button disabled={!enabled} onClick={() => queue('open')}>
-                Add the pool to the proposal
-              </Button>
+            <div className={styles.stack}>
+              <div>
+                <ChangeSubmit
+                  direct={false}
+                  what="the pool"
+                  editing={Boolean(editing.editing)}
+                  disabled={!enabled}
+                  onClick={() => queue('open')}
+                />
+              </div>
+              <FieldHelperText>{changeAuthorityText(false)}</FieldHelperText>
             </div>
             {!enabled ? (
               <FieldHelperText>
@@ -312,17 +329,24 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               Closing stops sales now and hands back the tokens it never minted. Sweeping a closed pool moves its unsold
               tokens to the treasury.
             </p>
+            {pendingPools.map((action) => (
+              <PendingValue key={action.id} pending={action} />
+            ))}
             <div className={styles.row}>
-              <Button variant="secondary" disabled={!enabled || pickedClosed} onClick={() => queue('close')}>
-                Add closing to the proposal
-              </Button>
-              <Button
+              <ChangeSubmit
+                direct={false}
+                what="closing"
+                variant="secondary"
+                disabled={!enabled || pickedClosed}
+                onClick={() => queue('close')}
+              />
+              <ChangeSubmit
+                direct={false}
+                what="sweeping"
                 variant="secondary"
                 disabled={!enabled || Boolean(picked && (!pickedClosed || pickedUnsold === 0))}
                 onClick={() => queue('sweep')}
-              >
-                Add sweeping to the proposal
-              </Button>
+              />
             </div>
             {picked && !pickedClosed ? (
               <FieldHelperText>Pool #{picked.id} is still open: close it first, then sweep it.</FieldHelperText>
@@ -331,26 +355,24 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             ) : null}
           </div>
         </section>
-        <TreasuryPurchase daoId={daoId} enabled={enabled} proposal={proposal} />
+        <TreasuryPurchase daoId={daoId} enabled={enabled} propose={propose} />
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}
-          onQueue={(handler, draft) => {
+          values={{ marketplace: data?.config ?? undefined }}
+          onQueue={(handler, draft, replaces) => {
             try {
               if (!enabled || !data) throw new Error('Connect your wallet and wait for the market to load.');
               const { call, action } = marketplaceGovernanceAction(daoConfig, address, handler, draft);
               if (call.target !== data?.community.marketplaceContract)
                 throw new Error('This governance action does not target this marketplace.');
-              proposal.requestAdd({
-                daoId,
-                action,
-                metadata: {
-                  title: handler.label,
-                  description: `${handler.label}. The treasury makes the change on the market (${call.target}) when the proposal runs.`,
-                  url: ''
-                },
-                source: 'Marketplace administration'
+              const result = propose({
+                actions: [action],
+                source: CHANGE_SOURCES.marketplace,
+                note: `${handler.label}. The treasury makes the change on the market when the proposal runs.`,
+                replaces
               });
+              if (result.outcome === 'invalid') setMessage(result.message);
             } catch (e) {
               setMessage(e instanceof Error ? e.message : 'Unable to queue marketplace setting.');
             }
@@ -360,14 +382,6 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
           <p>Connect your wallet to add these to a proposal. Whether you can submit it is checked when you do.</p>
         ) : null}
         {message ? <Callout variant="warning" title={message} role="alert" /> : null}
-        <AdminProposalDraftDialog
-          pending={proposal.pending}
-          onCancel={proposal.cancel}
-          onResolve={(resolution) => {
-            proposal.resolve(resolution);
-            router.push(`/dao/${routeId}/proposals/create`);
-          }}
-        />
       </div>
     </div>
   );
@@ -377,11 +391,13 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
 function MarketplaceSettings({
   daoId,
   enabled,
+  values,
   onQueue
 }: {
   daoId: string;
   enabled: boolean;
-  onQueue: (handler: ActionHandler, draft: unknown) => void;
+  values: SettingValues;
+  onQueue: (handler: ActionHandler, draft: unknown, replaces?: string[]) => void;
 }) {
   const { daoConfig, routeId } = useDaoContext();
   const handlers = marketplaceSettingHandlers(daoConfig);
@@ -397,6 +413,7 @@ function MarketplaceSettings({
               handler={handler}
               enabled={enabled}
               network={daoConfig.name}
+              values={values}
               onQueue={onQueue}
             />
           ))
@@ -417,24 +434,48 @@ function MarketplaceSetting({
   handler,
   enabled,
   network,
+  values,
   onQueue
 }: {
   handler: ActionHandler;
   enabled: boolean;
   network: 'local' | 'testnet' | 'public';
-  onQueue: (handler: ActionHandler, draft: unknown) => void;
+  values: SettingValues;
+  onQueue: (handler: ActionHandler, draft: unknown, replaces?: string[]) => void;
 }) {
-  const [draft, setDraft] = useState(() => handler.getDefaultValues());
-  const Form = handler.FormComponent;
+  const current = getActionMeta(handler.type).currentValue?.(values) ?? null;
+  const [draft, setDraft] = useState<unknown>(null);
+  const pending = usePendingChanges(handler.type).at(-1);
+  const editing = useEditingChange({
+    accepts: (action) => action.type === handler.type,
+    onLoad: (action) => setDraft(handler.deserialize(action))
+  });
+  // The same form the composer shows for this setting, starting from the market's live value.
+  const Form = ACTION_CATALOG[handler.type].Form ?? handler.FormComponent;
   return (
     <div className={styles.notice}>
       <div className={styles.stack}>
         <h3>{handler.label}</h3>
-        <Form value={draft} onChange={setDraft} disabled={!enabled} network={network} />
+        <EditingChangeNotice editing={editing.editing} onCancel={editing.done} />
+        <PendingValue now={current?.text} pending={editing.editing ? undefined : pending} />
+        <Form
+          value={draft ?? current?.draft ?? handler.getDefaultValues()}
+          onChange={setDraft}
+          disabled={!enabled}
+          network={network}
+        />
         <div>
-          <Button variant="secondary" disabled={!enabled} onClick={() => onQueue(handler, draft)}>
-            Add to proposal
-          </Button>
+          <ChangeSubmit
+            direct={false}
+            variant="secondary"
+            editing={Boolean(editing.editing)}
+            disabled={!enabled}
+            onClick={() => {
+              onQueue(handler, draft ?? current?.draft ?? handler.getDefaultValues(), editing.replaces);
+              setDraft(null);
+              editing.done();
+            }}
+          />
         </div>
       </div>
     </div>

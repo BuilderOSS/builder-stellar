@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
 
-import { claimListQueueActions } from './allocation-proposal';
+import { claimListChange, claimListQueueActions } from './allocation-proposal';
 import type { ClaimListDraft } from './proposal-actions';
 import { CLAIMS, config, state, TOKEN, TREASURY, XLM } from './test-fixtures';
 
@@ -55,5 +56,14 @@ describe('claim list proposals', () => {
       { expiresAt: 1 }
     ])
       expect(() => claimListQueueActions({ ...draft, ...bad }, state, config, 'deployment-a')).toThrow();
+  });
+
+  it('adds the allowance and the list as one change from Claim lists, with a note for members', () => {
+    const change = claimListChange(draft, state, config, 'deployment-a', 7);
+    expect(change.actions.map((action) => action.type)).toEqual(['change-mint-allowance', 'open-claim-list']);
+    expect(change.bundle?.label).toBe('Open a claim list for 12 tokens: 2 steps');
+    expect(change.source).toEqual(CHANGE_SOURCES.claims);
+    expect(change.note).toContain('7 wallets');
+    expect(change.note).toContain(draft.treeUri);
   });
 });

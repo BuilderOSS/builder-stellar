@@ -4,8 +4,8 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { css } from 'styled-system/css';
 
-import { ManageDraftTray } from '@/components/admin/manage-draft-tray';
 import { ManageNav } from '@/components/admin/manage-nav';
+import { DraftDock } from '@/components/proposal-changes/draft-dock';
 import { ButtonLink, Callout } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -50,7 +50,8 @@ export default function ManageLayout({ children }: { children: ReactNode }) {
             </div>
           </Callout>
         ) : null}
-        {isOverview ? null : <ManageDraftTray daoId={daoId} />}
+        {/* The overview shows the dock in its own place, with the queue open. */}
+        {isOverview ? null : <DraftDock daoId={daoId} />}
         {children}
       </div>
     </div>
