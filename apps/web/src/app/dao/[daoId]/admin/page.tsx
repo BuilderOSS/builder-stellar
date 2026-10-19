@@ -5,7 +5,7 @@ import { css } from 'styled-system/css';
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
 import { PlatformUpgrades } from '@/components/admin/platform-upgrades';
 import { PageSection } from '@/components/page-section';
-import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
+import { DraftDock } from '@/components/proposal-changes/draft-dock';
 import { Avatar, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
@@ -119,7 +119,9 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <ProposalDraftPanel daoId={daoId} />
+      <Section title="Your proposal draft">
+        <DraftDock daoId={daoId} overview />
+      </Section>
 
       <Section title="Sections">
         <div>

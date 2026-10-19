@@ -4,7 +4,7 @@
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { BookOpen, ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
@@ -12,6 +12,7 @@ import { css } from 'styled-system/css';
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
+import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
 import {
   Button,
   ButtonLink,
@@ -31,9 +32,12 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
 import { createCallsIn, resolvePendingModules } from '@/lib/modules/pending';
-import { analyzeProposalAction } from '@/lib/proposal-action-identity';
-import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
-import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
+import { ActionFormProvider, ActionPickerSheet, ProposalActionQueue } from '@/lib/proposal-actions';
+import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
+import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-changes/compose-metadata';
+import { changeCountText } from '@/lib/proposal-changes/queue';
+import { analyzeQueue } from '@/lib/proposal-changes/review';
+import { useSettingValues } from '@/lib/proposal-changes/use-setting-values';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
 import {
@@ -70,19 +74,7 @@ const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
-const reviewList = css({ display: 'grid', gap: '2', listStyle: 'none', m: '0', p: '0' });
-const reviewItem = css({ display: 'flex', alignItems: 'flex-start', gap: '2.5', textStyle: 'body' });
-const reviewIndex = css({
-  display: 'grid',
-  placeItems: 'center',
-  flexShrink: '0',
-  width: '6',
-  height: '6',
-  borderRadius: 'full',
-  bg: 'hover',
-  textStyle: 'micro',
-  color: 'ink.muted'
-});
+const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
 const referenceTrigger = css({
   display: { base: 'inline-flex', lg: 'none' },
   position: 'fixed',
@@ -106,8 +98,9 @@ export default function ProposalCreatePage() {
 
   const setStep = useProposalComposerStore((s) => s.setStep);
   const updateMetadata = useProposalComposerStore((s) => s.updateMetadata);
-  const beginCreate = useProposalComposerStore((s) => s.beginCreate);
   const reset = useProposalComposerStore((s) => s.reset);
+  const settingValues = useSettingValues();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Queries
   const eligibility = useProposalEligibility(config, session.address);
@@ -131,9 +124,7 @@ export default function ProposalCreatePage() {
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);
-  const allDraftFindings = queuedActions.flatMap((action, index) =>
-    analyzeProposalAction(action, queuedActions.slice(0, index))
-  );
+  const allDraftFindings = [...analyzeQueue(queuedActions).values()].flat();
   const draftFindings = allDraftFindings.filter((finding) => finding.severity === 'error');
   const hasBlockingDraftFindings = draftFindings.length > 0;
   // Ordering problems still submit, but the vote would fail at execution, so say so before signing.
@@ -143,14 +134,23 @@ export default function ProposalCreatePage() {
   const metadataValidation = validateProposalMetadataDraft(metadata);
   const descriptionBytes = proposalDescriptionBytes(metadata);
 
+  const suggestedTitle = suggestTitle(queuedActions);
+  const whatItDoes = applyWhatThisDoes(queuedActions, metadata);
+  const hasWhatItDoes = metadata.description.includes(WHAT_THIS_DOES_HEADING);
+
+  // Changes come first; the why can follow. Arriving at the why fills an empty title and description from
+  // the changes, and the member edits from there.
   const handleProceedToStep2 = () => {
-    if (metadataValidation.valid) {
-      setStep(session.address, daoId, 2);
-    }
+    if (!canProceed || actionCountError) return;
+    const patch: Partial<typeof metadata> = {};
+    if (!metadata.title.trim() && suggestedTitle) patch.title = suggestedTitle;
+    if (!metadata.description.trim()) patch.description = whatItDoes;
+    if (Object.keys(patch).length) updateMetadata(session.address, daoId, patch);
+    setStep(session.address, daoId, 2);
   };
 
   const handleProceedToStep3 = () => {
-    if (canProceed && queuedActions.length > 0 && !actionCountError) {
+    if (metadataValidation.valid && queuedActions.length > 0 && !actionCountError) {
       setStep(session.address, daoId, 3);
     }
   };
@@ -236,8 +236,8 @@ export default function ProposalCreatePage() {
   };
 
   const steps = [
-    { id: 'details', label: 'What and why' },
-    { id: 'actions', label: 'What it does' },
+    { id: 'changes', label: 'What changes' },
+    { id: 'why', label: 'Why' },
     { id: 'review', label: 'Review' }
   ];
 
@@ -269,7 +269,7 @@ export default function ProposalCreatePage() {
           />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Say what you want to change and why, add what happens if it passes, then sign. Drafts save on this browser."
+            meta="Pick what changes, say why, then sign. Changes you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -309,6 +309,49 @@ export default function ProposalCreatePage() {
                 />
 
                 {step === 1 && (
+                  <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
+                    <SettingValuesContext.Provider value={settingValues.values}>
+                      <div className={stack}>
+                        <p className={hint}>
+                          Add up to {MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote
+                          passes.
+                        </p>
+                        <div>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setPickerOpen(true)}
+                            disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS || Boolean(editingState)}
+                          >
+                            <Plus aria-hidden="true" />
+                            Add a change
+                          </Button>
+                        </div>
+                        {actionCountError ? <Callout variant="error" title={actionCountError} /> : null}
+                        <Section
+                          title={
+                            queuedActions.length
+                              ? `In this proposal (${changeCountText(queuedActions)})`
+                              : 'In this proposal'
+                          }
+                          level={3}
+                        >
+                          <ProposalActionQueue daoId={daoId} />
+                        </Section>
+                        <div className={actions}>
+                          <Button variant="ghost" onClick={() => router.back()}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleProceedToStep2} disabled={!canProceed || Boolean(actionCountError)}>
+                            Next: why
+                          </Button>
+                        </div>
+                      </div>
+                      <ActionPickerSheet daoId={daoId} open={pickerOpen} onOpenChange={setPickerOpen} />
+                    </SettingValuesContext.Provider>
+                  </ActionFormProvider>
+                )}
+
+                {step === 2 && (
                   <div className={stack}>
                     <Field>
                       <FieldLabel htmlFor="title">Title</FieldLabel>
@@ -316,11 +359,20 @@ export default function ProposalCreatePage() {
                         id="title"
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
-                        placeholder="Fund the winter tool library"
+                        placeholder={suggestedTitle || 'Fund the winter tool library'}
                         aria-invalid={!metadataValidation.valid && metadata.title.length > 0 ? true : undefined}
                       />
-                      {!metadataValidation.valid ? (
-                        <FieldHelperText>{metadataValidation.message}</FieldHelperText>
+                      {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
+                        <div className={suggestion}>
+                          <FieldHelperText>Suggested from the changes: {suggestedTitle}</FieldHelperText>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            onClick={() => updateMetadata(session.address, daoId, { title: suggestedTitle })}
+                          >
+                            Use it
+                          </Button>
+                        </div>
                       ) : null}
                     </Field>
                     <Field>
@@ -342,6 +394,18 @@ export default function ProposalCreatePage() {
                         {descriptionBytes.toLocaleString()} of {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
                         used. Images take only their link, about 70 bytes each.
                       </FieldHelperText>
+                      {queuedActions.length && whatItDoes !== metadata.description ? (
+                        <div>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => updateMetadata(session.address, daoId, { description: whatItDoes })}
+                          >
+                            <Sparkles aria-hidden="true" />
+                            {hasWhatItDoes ? 'Update “What this does”' : 'Add “What this does” from the changes'}
+                          </Button>
+                        </div>
+                      ) : null}
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="url">Discussion link (optional)</FieldLabel>
@@ -353,54 +417,21 @@ export default function ProposalCreatePage() {
                         inputMode="url"
                       />
                     </Field>
+                    {!metadataValidation.valid && (metadata.title || metadata.description) ? (
+                      <FieldHelperText tone="error">{metadataValidation.message}</FieldHelperText>
+                    ) : null}
                     <div className={actions}>
-                      <Button variant="ghost" onClick={() => router.back()}>
-                        Cancel
+                      <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
+                        Back
                       </Button>
-                      <Button onClick={handleProceedToStep2} disabled={!metadataValidation.valid}>
-                        Next: what it does
+                      <Button
+                        onClick={handleProceedToStep3}
+                        disabled={!metadataValidation.valid || !queuedActions.length}
+                      >
+                        Next: review
                       </Button>
                     </div>
                   </div>
-                )}
-
-                {step === 2 && (
-                  <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
-                    <div className={stack}>
-                      <p className={hint}>
-                        Add up to {MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote
-                        passes.
-                      </p>
-                      {!editingState && (
-                        <div>
-                          <Button
-                            variant="secondary"
-                            onClick={() => beginCreate(session.address, daoId)}
-                            disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS}
-                          >
-                            <Plus aria-hidden="true" />
-                            Add an action
-                          </Button>
-                        </div>
-                      )}
-                      {actionCountError ? <Callout variant="error" title={actionCountError} /> : null}
-                      <ActionFormWrapper daoId={daoId} />
-                      <Section title={`Actions (${queuedActions.length})`} level={3}>
-                        <ProposalActionQueue daoId={daoId} />
-                      </Section>
-                      <div className={actions}>
-                        <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
-                          Back
-                        </Button>
-                        <Button
-                          onClick={handleProceedToStep3}
-                          disabled={!canProceed || queuedActions.length === 0 || Boolean(actionCountError)}
-                        >
-                          Next: review
-                        </Button>
-                      </div>
-                    </div>
-                  </ActionFormProvider>
                 )}
 
                 {step === 3 && (
@@ -408,19 +439,22 @@ export default function ProposalCreatePage() {
                     {actionCountError ? (
                       <Callout variant="error" badge="Fix before submitting" title={actionCountError} />
                     ) : null}
+                    {!metadataValidation.valid ? (
+                      <Callout variant="error" badge="Fix before submitting" title={metadataValidation.message} />
+                    ) : null}
                     {hasBlockingDraftFindings ? (
                       <Callout
                         variant="error"
                         badge="Fix before submitting"
-                        title="Some actions repeat or conflict"
-                        description="Go back and remove or replace the flagged action."
+                        title="Some changes repeat or clash"
+                        description="Go back and remove or replace the flagged change."
                       />
                     ) : null}
                     {orderWarnings.map((message) => (
                       <Callout
                         key={message}
                         variant="warning"
-                        title="Check the order of actions"
+                        title="Check the order of changes"
                         description={message}
                       />
                     ))}
@@ -435,18 +469,7 @@ export default function ProposalCreatePage() {
                       <h3 className={reviewHeading}>
                         {queuedActions.length === 1 ? 'If it passes, this runs' : 'If it passes, these run in order'}
                       </h3>
-                      <ol className={reviewList}>
-                        {queuedActions.map((action, i) => (
-                          <li key={action.id} className={reviewItem}>
-                            {queuedActions.length > 1 ? (
-                              <span className={reviewIndex} aria-hidden="true">
-                                {i + 1}
-                              </span>
-                            ) : null}
-                            {getProposalActionSummary(action)}
-                          </li>
-                        ))}
-                      </ol>
+                      <ProposalActionQueue daoId={daoId} variant="review" />
                     </section>
                     <Callout
                       title="Your wallet shows the exact transaction"
@@ -458,7 +481,12 @@ export default function ProposalCreatePage() {
                       </Button>
                       <Button
                         onClick={handleOpenConfirmDialog}
-                        disabled={proposalCreationLocked || hasBlockingDraftFindings || Boolean(actionCountError)}
+                        disabled={
+                          proposalCreationLocked ||
+                          hasBlockingDraftFindings ||
+                          Boolean(actionCountError) ||
+                          !metadataValidation.valid
+                        }
                         loading={transactionBusy}
                       >
                         {transactionBusy ? 'Submitting' : 'Submit proposal'}

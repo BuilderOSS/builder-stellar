@@ -2,11 +2,16 @@
 
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useContext } from 'react';
 import { css } from 'styled-system/css';
 
-import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
-import { Skeleton } from '@/components/ui';
+import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { Callout, Skeleton } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
+import { daoRoute } from '@/lib/dao-routes';
+import { ACTION_CATALOG, actionHome, getActionMeta } from '@/lib/proposal-changes/catalog';
+import { composerChange } from '@/lib/proposal-changes/composer-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import {
   normalizeWalletAddress,
@@ -16,149 +21,128 @@ import {
 
 import { useActionFormContext } from '../context';
 import { getActionHandler } from '../registry';
-import type { ProposalActionType } from '../types';
 import { ActionErrorBoundary } from './action-error-boundary';
 import { ActionFormShell } from './action-form-shell';
 
-type ConfirmDialogState = {
-  open: boolean;
-  title: string;
-  message: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-} | null;
+const EMPTY: never[] = [];
 
 /**
- * ActionFormWrapper consumes Zustand store directly
- * NO PROPS needed - all state comes from store
+ * The change being set up in the composer, from the store. It uses the setting's own form (the one its
+ * Manage page shows), starts from the live value, and saves through the same pipeline as every page.
  */
-export function ActionFormWrapper({ daoId }: { daoId: string }) {
+export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: () => void }) {
+  const { routeId } = useDaoContext();
   const context = useActionFormContext();
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
+  const values = useContext(SettingValuesContext);
+  const { propose } = useProposeChange();
   const address = useAuthSessionStore((state) => state.address);
   const walletKey = normalizeWalletAddress(address);
 
-  // Subscribe to only what we need (performance optimization)
   const editingState = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.editingState ?? null);
+  const queuedActions = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.queuedActions ?? EMPTY);
   const validationErrors = useProposalComposerStore(selectValidationErrors(address || null, daoId));
   const busy = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.busy ?? false);
+  const formMessage = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.formMessage ?? '');
 
-  // Actions
   const updateDraft = useProposalComposerStore((s) => s.updateDraft);
-  const saveAction = useProposalComposerStore((s) => s.saveAction);
   const cancelEdit = useProposalComposerStore((s) => s.cancelEdit);
-  const changeActionType = useProposalComposerStore((s) => s.changeActionType);
   const setValidationErrors = useProposalComposerStore((s) => s.setValidationErrors);
+  const setFormMessage = useProposalComposerStore((s) => s.setFormMessage);
 
-  // Check preconditions for current action
   const handler = editingState ? getActionHandler(editingState.actionType) : null;
   const preconditionResult = handler?.checkPreconditions?.(context) ?? { canExecute: true };
 
   const handleSave = useCallback(() => {
     if (!editingState) return;
-
     const handler = getActionHandler(editingState.actionType);
     const validation = handler.validate(editingState.draftData, context);
-
     if (!validation.valid) {
       setValidationErrors(address, daoId, validation);
       return;
     }
-
-    const action = handler.serialize(editingState.draftData, context);
-    saveAction(address, daoId, action);
     setValidationErrors(address, daoId, null);
-  }, [address, daoId, editingState, context, saveAction, setValidationErrors]);
-
-  const handleActionTypeChange = useCallback(
-    (newType: ProposalActionType) => {
-      if (!editingState) return;
-
-      const handler = getActionHandler(editingState.actionType);
-      const hasChanges = JSON.stringify(editingState.draftData) !== JSON.stringify(handler.getDefaultValues());
-
-      if (hasChanges) {
-        setConfirmDialog({
-          open: true,
-          title: 'Switch action type?',
-          message: 'Switching clears what you entered for this action.',
-          confirmLabel: 'Switch',
-          onConfirm: () => {
-            changeActionType(address, daoId, newType);
-            setValidationErrors(address, daoId, null);
-            setConfirmDialog(null);
-          }
-        });
-        return;
+    const action = handler.serialize(editingState.draftData, context);
+    const editingId =
+      editingState.mode === 'edit' && editingState.index !== undefined
+        ? queuedActions[editingState.index]?.id
+        : undefined;
+    const result = propose(
+      composerChange(action, queuedActions, { editingId, auctionPaused: values.auction?.paused }),
+      {
+        onAdded: () => {
+          cancelEdit(address, daoId);
+          onDone?.();
+        }
       }
+    );
+    if (result.outcome === 'invalid') setFormMessage(address, daoId, result.message);
+    if (result.outcome === 'no-wallet') setFormMessage(address, daoId, 'Connect a wallet to add changes.');
+  }, [
+    address,
+    daoId,
+    editingState,
+    context,
+    queuedActions,
+    values,
+    propose,
+    cancelEdit,
+    onDone,
+    setValidationErrors,
+    setFormMessage
+  ]);
 
-      changeActionType(address, daoId, newType);
-      setValidationErrors(address, daoId, null);
-    },
-    [address, daoId, editingState, changeActionType, setValidationErrors]
-  );
-
-  const handleCancel = useCallback(() => {
+  const handleBack = useCallback(() => {
     cancelEdit(address, daoId);
     setValidationErrors(address, daoId, null);
   }, [address, daoId, cancelEdit, setValidationErrors]);
+  const handleCancel = useCallback(() => {
+    handleBack();
+    onDone?.();
+  }, [handleBack, onDone]);
 
-  // No editing state - show empty state
-  if (!editingState) {
-    return null;
-  }
+  if (!editingState || !handler) return null;
 
-  const FormComponent = handler!.FormComponent;
+  const FormComponent = ACTION_CATALOG[editingState.actionType].Form ?? handler.FormComponent;
+  const meta = getActionMeta(editingState.actionType);
+  const current = meta.currentValue?.(values);
+  const home = actionHome(editingState.actionType);
   const isDisabled = busy || !preconditionResult.canExecute;
 
   return (
-    <>
-      <ActionFormShell
-        mode={editingState.mode}
-        actionType={editingState.actionType}
-        actionLabel={handler!.label}
-        disabled={isDisabled}
-        preconditionResult={preconditionResult}
-        onActionTypeChange={handleActionTypeChange}
-        onSave={handleSave}
-        onCancel={handleCancel}
-      >
-        <ActionErrorBoundary actionType={editingState.actionType}>
-          <Suspense
-            fallback={
-              <div role="status" aria-busy="true" className={css({ display: 'grid', gap: '2.5' })}>
-                <span className="sr-only">Loading the form</span>
-                <Skeleton className={css({ width: '24', height: '3.5' })} />
-                <Skeleton className={css({ height: '11' })} />
-                <Skeleton className={css({ width: '40', height: '3.5' })} />
-                <Skeleton className={css({ height: '11' })} />
-              </div>
-            }
-          >
-            {/* Note: draftPreview is intentionally NOT passed here.
-                Admin forms show draft previews to alert users when a setting change is already queued
-                (preventing duplicate submissions). In proposal creation, the full action queue is
-                visible separately below the form, giving users complete visibility. Draft previews
-                would be redundant here and create visual clutter. */}
-            <FormComponent
-              value={editingState.draftData}
-              onChange={(value) => updateDraft(address, daoId, value)}
-              disabled={isDisabled}
-              validationErrors={validationErrors || undefined}
-              network={context.config.name}
-            />
-          </Suspense>
-        </ActionErrorBoundary>
-      </ActionFormShell>
-      <ProposalActionConfirmDialog
-        open={confirmDialog?.open ?? false}
-        title={confirmDialog?.title ?? ''}
-        message={confirmDialog?.message ?? ''}
-        confirmLabel={confirmDialog?.confirmLabel ?? 'Confirm'}
-        busy={false}
-        onConfirm={confirmDialog?.onConfirm ?? (() => {})}
-        onCancel={() => setConfirmDialog(null)}
-      />
-    </>
+    <ActionFormShell
+      mode={editingState.mode}
+      actionLabel={handler.label}
+      description={handler.description}
+      now={current?.text}
+      home={home.surface === 'composer' ? undefined : { label: home.label, href: daoRoute(routeId, home.href) }}
+      disabled={isDisabled}
+      preconditionResult={preconditionResult}
+      onBack={handleBack}
+      onSave={handleSave}
+      onCancel={handleCancel}
+    >
+      <ActionErrorBoundary actionType={editingState.actionType}>
+        <Suspense
+          fallback={
+            <div role="status" aria-busy="true" className={css({ display: 'grid', gap: '2.5' })}>
+              <span className="sr-only">Loading the form</span>
+              <Skeleton className={css({ width: '24', height: '3.5' })} />
+              <Skeleton className={css({ height: '11' })} />
+            </div>
+          }
+        >
+          <FormComponent
+            value={editingState.draftData}
+            onChange={(value: unknown) => updateDraft(address, daoId, value)}
+            disabled={isDisabled}
+            validationErrors={validationErrors || undefined}
+            network={context.config.name}
+          />
+        </Suspense>
+      </ActionErrorBoundary>
+      {formMessage && formMessage !== 'Action added' && formMessage !== 'Action updated' ? (
+        <Callout variant="warning" title={formMessage} />
+      ) : null}
+    </ActionFormShell>
   );
 }
