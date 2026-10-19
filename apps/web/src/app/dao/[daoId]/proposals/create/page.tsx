@@ -31,7 +31,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
 import { createCallsIn, resolvePendingModules } from '@/lib/modules/pending';
-import { analyzeProposalAction } from '@/lib/proposal-action-identity';
+import { analyzeProposalDraft } from '@/lib/proposal-action-identity';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
@@ -131,9 +131,7 @@ export default function ProposalCreatePage() {
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);
-  const allDraftFindings = queuedActions.flatMap((action, index) =>
-    analyzeProposalAction(action, queuedActions.slice(0, index))
-  );
+  const allDraftFindings = analyzeProposalDraft(queuedActions, config);
   const draftFindings = allDraftFindings.filter((finding) => finding.severity === 'error');
   const hasBlockingDraftFindings = draftFindings.length > 0;
   // Ordering problems still submit, but the vote would fail at execution, so say so before signing.
