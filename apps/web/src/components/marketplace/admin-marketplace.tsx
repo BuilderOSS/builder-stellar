@@ -23,6 +23,7 @@ import {
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import { daoRoute } from '@/lib/dao-routes';
+import { expiryInputValue } from '@/lib/expiry-time';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/marketplace/governance';
@@ -38,15 +39,6 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
-
-/** A pool's closing time as the datetime-local input shows it, from unix seconds or an earlier local string. */
-function localExpiry(value: unknown) {
-  const text = String(value ?? '').trim();
-  if (!/^\d+$/.test(text)) return text;
-  const date = new Date(Number(text) * 1000);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
 
 const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
@@ -82,7 +74,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         maxPerBuyer: String(open.maxPerBuyer ?? '1'),
         maxSoldPerPeriod: String(open.maxSoldPerPeriod ?? ''),
         periodHours: String(open.periodHours ?? '24'),
-        expiresAt: localExpiry(open.expiresAt)
+        expiresAt: expiryInputValue(String(open.expiresAt ?? ''))
       });
     }
   });

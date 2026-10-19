@@ -1,4 +1,9 @@
-import { analyzeProposalAction, type ProposalDraftFinding } from '@/lib/proposal-action-identity';
+import {
+  analyzeProposalAction,
+  analyzeProposalDraft,
+  type ProposalDraftFinding,
+  type ProposalDraftState
+} from '@/lib/proposal-action-identity';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 import { type ChangeRequest, stampChange, withoutChangeMeta } from './change-request';
@@ -13,18 +18,33 @@ export type ChangeResolution = 'add' | 'replace' | 'keep' | 'skip';
 const REVIEW_KINDS = new Set<ProposalDraftFinding['kind']>(['duplicate', 'conflict', 'high-risk']);
 
 /** Findings for one action against the ones before it. Where a change came from never makes it different. */
-export function analyzeAgainst(action: ProposalQueuedAction, before: ProposalQueuedAction[]) {
-  return analyzeProposalAction(withoutChangeMeta(action), before.map(withoutChangeMeta));
+export function analyzeAgainst(
+  action: ProposalQueuedAction,
+  before: ProposalQueuedAction[],
+  state?: ProposalDraftState
+) {
+  return analyzeProposalAction(withoutChangeMeta(action), before.map(withoutChangeMeta), state);
 }
 
-/** Every queued action's findings against the actions before it, keyed by action id. */
-export function analyzeQueue(actions: ProposalQueuedAction[]) {
-  return new Map(actions.map((action, index) => [action.id, analyzeAgainst(action, actions.slice(0, index))]));
+/** Every finding for the whole draft, as the contracts will see it when the proposal runs. */
+export function analyzeDraft(actions: ProposalQueuedAction[], state?: ProposalDraftState) {
+  return analyzeProposalDraft(actions.map(withoutChangeMeta), state);
 }
 
-/** Where the change's actions go: the replaced actions' place, or the end. */
-function projectedQueue(existing: ProposalQueuedAction[], request: ChangeRequest) {
-  return request.replaces?.length ? replaceInQueue(existing, request.replaces, []) : existing;
+/**
+ * Every queued action's findings, keyed by action id: each against the actions before it, plus the
+ * whole-draft rules (an authorize left last), on the action they name.
+ */
+export function analyzeQueue(actions: ProposalQueuedAction[], state?: ProposalDraftState) {
+  const byAction = new Map(
+    actions.map((action, index) => [action.id, analyzeAgainst(action, actions.slice(0, index), state)])
+  );
+  const perAction = [...byAction.values()].reduce((total, findings) => total + findings.length, 0);
+  for (const finding of analyzeDraft(actions, state).slice(perAction)) {
+    const id = actions[finding.existingActionIndexes[0] ?? actions.length - 1]?.id;
+    if (id) byAction.get(id)!.push(finding);
+  }
+  return byAction;
 }
 
 /**
@@ -43,19 +63,20 @@ function replaceStep(queue: ProposalQueuedAction[], ids: string[], action: Propo
 }
 
 /** What adding this change finds: duplicates, clashes, high-risk steps and order problems. */
-export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAction[]) {
-  const base = projectedQueue(existing, request);
-  const projected = [...base];
+export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAction[], state?: ProposalDraftState) {
+  const base = request.replaces?.length ? replaceInQueue(existing, request.replaces, []) : existing;
+  // The draft as it would be with every new step in its real place, analyzed the way it will run.
+  const projected = resolveChange(request, existing, [], 'keep');
+  const incoming = new Set(request.actions.map((action) => action.id));
   const findings: ChangeFinding[] = [];
-  for (const action of request.actions) {
-    for (const finding of analyzeAgainst(action, projected))
-      findings.push({
-        ...finding,
-        actionId: action.id,
-        existingIds: finding.existingActionIndexes.map((index) => projected[index]?.id).filter(Boolean) as string[]
-      });
-    projected.push(action);
-  }
+  for (const [actionId, found] of analyzeQueue(projected, state))
+    if (incoming.has(actionId))
+      for (const finding of found)
+        findings.push({
+          ...finding,
+          actionId,
+          existingIds: finding.existingActionIndexes.map((index) => projected[index]?.id).filter(Boolean) as string[]
+        });
   // Findings against the queue already there ask the member; within a bundle, the producer already ordered it.
   // A step the proposal already had (an edited bundle keeps its other steps) was reviewed when it was added.
   const existingIds = new Set(base.map((action) => action.id));

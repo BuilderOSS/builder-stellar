@@ -82,7 +82,7 @@ export function proposeChange({
   const problem = validateChange(request, config, address);
   if (problem) return { outcome: 'invalid', message: problem };
 
-  const { findings, needsReview } = reviewChange(request, queueOf(address, daoId));
+  const { findings, needsReview } = reviewChange(request, queueOf(address, daoId), config);
   if (needsReview) {
     usePendingChangeStore.getState().open({
       address,

@@ -1,3 +1,4 @@
+import { expiryToUnixSeconds } from '@/lib/expiry-time';
 import type { ProposalActionType, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 import { CHANGE_SOURCES, defaultSourceKey, legacySourceKey } from './change-request';
@@ -5,9 +6,8 @@ import { CHANGE_SOURCES, defaultSourceKey, legacySourceKey } from './change-requ
 /** A datetime-local string ("2026-11-01T12:00", local time) as unix seconds, or the value unchanged. */
 function expiryAsUnixSeconds(value: unknown) {
   const text = String(value ?? '').trim();
-  if (!text || /^\d+$/.test(text)) return text;
-  const ms = new Date(text).getTime();
-  return Number.isFinite(ms) ? String(Math.floor(ms / 1000)) : text;
+  const seconds = expiryToUnixSeconds(text);
+  return seconds === null ? text : String(seconds);
 }
 
 /**

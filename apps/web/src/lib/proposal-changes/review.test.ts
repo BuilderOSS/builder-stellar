@@ -155,3 +155,15 @@ describe('reviewing an edit from its page', () => {
     expect(widened.actions).toHaveLength(3);
   });
 });
+
+describe('whole-draft rules from the contracts', () => {
+  it('flags an authorize left as the last action, on its own row and when it is added', async () => {
+    const { analyzeQueue } = await import('./review');
+    const authorize = action('treasury-authorize', { nodes: [] });
+    const queue = [setting('set-quorum-bps', '1000'), authorize];
+    const onRow = analyzeQueue(queue).get(authorize.id) ?? [];
+    expect(onRow.some((finding) => finding.kind === 'order' && finding.severity === 'error')).toBe(true);
+    const { findings } = reviewChange(request([action('treasury-authorize', { nodes: [] })]), [queue[0]]);
+    expect(findings.some((finding) => finding.kind === 'order' && finding.severity === 'error')).toBe(true);
+  });
+});

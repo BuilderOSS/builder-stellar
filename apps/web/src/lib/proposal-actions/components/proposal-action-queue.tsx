@@ -148,7 +148,7 @@ export function ProposalActionQueue({
   /** `composer` edits inline and reorders; `compact` (the dock) and `review` only list and remove. */
   variant?: 'composer' | 'compact' | 'review';
 }) {
-  const { routeId } = useDaoContext();
+  const { routeId, daoConfig } = useDaoContext();
   const router = useRouter();
   const address = useAuthSessionStore((state) => state.address);
   const walletKey = normalizeWalletAddress(address);
@@ -163,7 +163,7 @@ export function ProposalActionQueue({
   const rows = useRef<Array<HTMLLIElement | null>>([]);
 
   const items = queueItems(queuedActions);
-  const findings = analyzeQueue(queuedActions);
+  const findings = analyzeQueue(queuedActions, daoConfig);
   const editingIndex = editingState?.mode === 'edit' ? editingState.index : undefined;
   const reorderable = variant === 'composer' && items.length > 1;
 
