@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { Button, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
+import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { ChoiceGroup, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
 import { Sheet } from '@/components/ui/sheet';
 import { UNLIMITED_ALLOWANCE } from '@/lib/modules/kinds';
 
 const stack = css({ display: 'grid', gap: '4' });
-const buttons = css({ display: 'flex', gap: '2', flexWrap: 'wrap' });
+const buttons = css({ display: 'grid', gap: '2', justifyItems: 'start' });
 
 /**
  * Change how many memberships a module may still mint. It adds the amount up or down rather than
@@ -30,6 +31,7 @@ export function AllowanceSheet({
   onChange: (direction: 'increase' | 'decrease', amount: string) => string | null;
 }) {
   const [amount, setAmount] = useState('');
+  const [direction, setDirection] = useState<'increase' | 'decrease'>('increase');
   const [error, setError] = useState('');
 
   function handleOpenChange(next: boolean) {
@@ -37,11 +39,12 @@ export function AllowanceSheet({
     if (!next)
       setTimeout(() => {
         setAmount('');
+        setDirection('increase');
         setError('');
       }, 250);
   }
 
-  function submit(direction: 'increase' | 'decrease') {
+  function submit() {
     const problem = onChange(direction, amount.trim());
     if (problem) setError(problem);
     else handleOpenChange(false);
@@ -73,13 +76,22 @@ export function AllowanceSheet({
           </FieldHelperText>
           {error ? <FieldHelperText tone="error">{error}</FieldHelperText> : null}
         </Field>
+        <ChoiceGroup
+          label="Change"
+          value={direction}
+          onValueChange={(value) => setDirection(value as 'increase' | 'decrease')}
+          options={[
+            { value: 'increase', label: 'Raise the allowance' },
+            { value: 'decrease', label: 'Lower the allowance' }
+          ]}
+        />
         <div className={buttons}>
-          <Button type="button" onClick={() => submit('increase')}>
-            {live ? 'Propose raising it' : 'Raise allowance'}
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => submit('decrease')}>
-            {live ? 'Propose lowering it' : 'Lower allowance'}
-          </Button>
+          <ChangeSubmit
+            direct={!live}
+            directLabel={direction === 'increase' ? 'Raise allowance' : 'Lower allowance'}
+            onClick={submit}
+          />
+          <FieldHelperText>{changeAuthorityText(!live)}</FieldHelperText>
         </div>
       </div>
     </Sheet>

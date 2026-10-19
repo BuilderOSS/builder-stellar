@@ -7,6 +7,7 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 import { getProposalActionResourceKey, isHighRiskProposalAction } from '@/lib/proposal-action-identity';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
 import {
@@ -21,6 +22,7 @@ import {
 } from './kinds';
 import { actionCount, buildAttachPlan, buildDetachPlan, type PlanStep } from './plans';
 import { type ModuleFacts, moduleReadiness } from './readiness';
+import { planChange } from './requests';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));
 const ASSET = contract(9);
@@ -354,5 +356,29 @@ describe('the attach batch as a proposal', () => {
     // Registering and removing one contract in one proposal is a conflict.
     expect(getProposalActionResourceKey(removal)).toBe(`token:module:${contract(7)}`);
     expect(isHighRiskProposalAction(removal)).toBe(true);
+  });
+});
+
+describe('module plans as one change', () => {
+  it('adds an attach plan as one bundle from Manage → Membership, in plan order', () => {
+    const steps = buildAttachPlan({
+      kind: 'marketplace',
+      config: market as never,
+      moduleNumber: 2,
+      predicted: PREDICTED,
+      open: true
+    });
+    const change = planChange({ steps, config, address: null, title: 'Add a market', note: 'Adds a market.' });
+    expect(change.actions.map((action) => action.type)).toEqual(steps.map((step) => step.type));
+    expect(change.bundle?.label).toBe(`Add a market: ${steps.length} steps`);
+    expect(change.source).toEqual(CHANGE_SOURCES.membership);
+    expect(change.note).toBe('Adds a market.');
+  });
+
+  it('adds a one-step detach on its own, without a bundle', () => {
+    const steps = buildDetachPlan({ kind: 'claims', address: config.claimsContractId });
+    const change = planChange({ steps, config, address: null, title: 'Remove claims', note: 'Removes it.' });
+    expect(change.actions.map((action) => action.type)).toEqual(['unregister-module']);
+    expect(change.bundle).toBeUndefined();
   });
 });

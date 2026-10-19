@@ -17,7 +17,7 @@ const advanced = css({
 });
 
 export default function ModuleVersionsPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config } = useDaoContext();
   return (
     <PageSection title="Contract upgrades" description="Keep your tribe's contracts on their latest approved releases.">
       <div className={page}>
@@ -28,7 +28,7 @@ export default function ModuleVersionsPage() {
             {(Object.keys(moduleAddressKeys) as UpgradeModule[])
               .filter((module) => config[moduleAddressKeys[module]])
               .map((module) => (
-                <ModuleVersionCard key={module} daoId={daoId} config={config} module={module} />
+                <ModuleVersionCard key={module} config={config} module={module} />
               ))}
           </div>
         </Disclosure>

@@ -5,8 +5,8 @@ import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { Address, Button, Callout, Chip, Disclosure, Skeleton } from '@/components/ui';
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { Address, Callout, Chip, Disclosure, Skeleton } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
@@ -19,10 +19,11 @@ import {
   upgradeProposalMetadata
 } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { releaseNote } from '@/lib/release-notes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { upgradeModuleDirectly, useModuleUpdates } from '@/lib/use-module-updates';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -86,10 +87,10 @@ const arrow = (update: ModuleUpdate) => `${update.current} → ${update.next?.ve
  * to do it. In setup the launch admin applies updates directly; after launch they go into proposals.
  */
 export function ContractUpdates() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { rows, plan, isLoading, error, mutate } = useModuleUpdates(config, session.address);
-  const draft = useAdminProposalDraft();
+  const { propose: proposeChange } = useProposeChange();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -106,22 +107,22 @@ export function ContractUpdates() {
   function propose(updates: ModuleUpdate[]) {
     setMessage('');
     try {
-      // The draft takes its title and description from the first change, so every change in the
-      // batch carries the same combined text.
+      // A release's upgrades go together, as one item with the release notes as its note.
       const metadata = upgradeProposalMetadata(updates);
-      const requests = updates.map((update) => {
+      const actions = updates.map((update) => {
         const values = { module: update.module, fromHash: update.fromHash, toHash: update.next!.hash };
         const valid = handler.validate(values, context);
         if (!valid.valid) throw new Error(valid.message);
         assertAdminCallSupported(handler, values, context);
-        return {
-          daoId,
-          action: handler.serialize(values, context),
-          source: `admin/upgrades/${update.module}`,
-          metadata
-        };
+        return handler.serialize(values, context);
       });
-      draft.requestAddBatch({ daoId, requests });
+      const result = proposeChange({
+        actions,
+        bundle: planBundle(metadata.title, actions.length),
+        source: CHANGE_SOURCES.upgrades,
+        note: metadata.description
+      });
+      if (result.outcome === 'invalid') setMessage(result.message);
     } catch (failure) {
       setMessage((failure as Error).message);
     }
@@ -159,7 +160,6 @@ export function ContractUpdates() {
 
   return (
     <>
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <section className={card} aria-labelledby="updates-title" aria-busy={isLoading || undefined}>
         {isLoading && !rows.length ? (
           <>
@@ -218,21 +218,27 @@ export function ContractUpdates() {
             {count ? (
               direct ? (
                 <div className={actions}>
-                  <Button loading={busy} onClick={() => void applyAll()}>
-                    Apply {plural(count)}
-                  </Button>
+                  <ChangeSubmit direct what={plural(count)} loading={busy} onClick={() => void applyAll()} />
                 </div>
               ) : canPropose ? (
                 <div className={actions}>
                   {plan.batch.length ? (
-                    <Button disabled={busy} onClick={() => propose(plan.batch)}>
-                      Add {plural(plan.batch.length)} to your proposal
-                    </Button>
+                    <ChangeSubmit
+                      direct={false}
+                      what={plural(plan.batch.length)}
+                      disabled={busy}
+                      onClick={() => propose(plan.batch)}
+                    />
                   ) : null}
                   {plan.separate.map((update) => (
-                    <Button key={update.module} variant="secondary" disabled={busy} onClick={() => propose([update])}>
-                      Propose upgrading {moduleLabelInSentence(update.module)}
-                    </Button>
+                    <ChangeSubmit
+                      key={update.module}
+                      direct={false}
+                      what={`${moduleLabelInSentence(update.module)} upgrade`}
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => propose([update])}
+                    />
                   ))}
                 </div>
               ) : (

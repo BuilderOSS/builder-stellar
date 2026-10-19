@@ -40,10 +40,11 @@ import {
   validateModuleConfig
 } from '@/lib/modules/kinds';
 import { actionCount, buildAttachPlan, type PlanStep } from '@/lib/modules/plans';
-import { planRequests } from '@/lib/modules/requests';
+import { planChange } from '@/lib/modules/requests';
 import { checkAttach, useAttachReads } from '@/lib/modules/use-module-reads';
+import type { ChangeRequest } from '@/lib/proposal-changes/change-request';
+import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import type { AdminProposalBatchRequest } from '@/lib/use-admin-proposal-draft';
 
 import { afterTheVote, type CheckState, ModuleCheck, PlanList, useSafetyDelay } from './module-parts';
 
@@ -71,8 +72,8 @@ export function AddModuleSheet({
   live,
   present,
   registered,
-  addBatch,
-  onAdded,
+  propose,
+  onMessage,
   onChanged
 }: {
   open: boolean;
@@ -84,8 +85,9 @@ export function AddModuleSheet({
   live: boolean;
   present: ReadonlySet<ModuleKind>;
   registered: number;
-  addBatch: (request: AdminProposalBatchRequest) => void;
-  onAdded: (text: string) => void;
+  propose: (request: ChangeRequest) => ProposeResult;
+  /** A problem to show beside the card, when the change could not be added. */
+  onMessage: (text: string) => void;
   onChanged: () => void;
 }) {
   const assets = useMemo(() => creationAssets(config.name), [config.name]);
@@ -242,19 +244,19 @@ export function AddModuleSheet({
       return;
     }
     try {
-      const requests = planRequests({
+      const request = planChange({
         steps,
         config,
         address,
-        daoId,
         title,
-        description: `${steps.map((entry) => entry.title).join('. ')}.`
+        note: `${steps.map((entry) => entry.title).join('. ')}.`
       });
       handleOpenChange(false);
-      // The draft asks for its own confirmation, so let this sheet finish closing first.
-      requestAnimationFrame(() =>
-        addBatch({ daoId, requests, onAdded: () => onAdded(`${title}: added to the proposal draft.`) })
-      );
+      // A review dialog may follow, so let this sheet finish closing first.
+      requestAnimationFrame(() => {
+        const result = propose(request);
+        if (result.outcome === 'invalid') onMessage(result.message);
+      });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Check the values.');
     }

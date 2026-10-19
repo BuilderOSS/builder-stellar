@@ -5,11 +5,14 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
 import { Button, Callout, FieldHelperText, FieldLabel, Input, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type TreasuryTokensResponse = { items: Array<{ tokenId: string; owner: string }>; total: number };
@@ -31,10 +34,18 @@ const fetchTokens = async (url: string): Promise<TreasuryTokensResponse> => {
 export function TreasuryTokens() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
-  const draft = useAdminProposalDraft();
+  const { propose } = useProposeChange();
+  const pending = usePendingChanges('transfer-dao-token');
   const [giving, setGiving] = useState<string | null>(null);
   const [recipient, setRecipient] = useState('');
   const [error, setError] = useState('');
+  const editing = useEditingChange({
+    accepts: (action) => action.type === 'transfer-dao-token',
+    onLoad: (action) => {
+      setGiving(String(action.tokenId ?? ''));
+      setRecipient(String(action.recipient ?? ''));
+    }
+  });
   const { data } = useSWR(
     config.treasuryContractId && config.status === 'operational'
       ? `/api/dao/${encodeURIComponent(daoId)}/tokens?owner=${config.treasuryContractId}&limit=50&offset=0`
@@ -49,20 +60,22 @@ export function TreasuryTokens() {
     const values = { tokenId, recipient };
     const result = handler.validate(values, context);
     if (!result.valid) return setError(result.message);
-    draft.requestAdd({
-      daoId,
-      action: handler.serialize(values, context),
-      source: 'treasury/transfer-dao-token',
-      metadata: {
-        title: `Give token #${tokenId}`,
-        description: `Give token #${tokenId} from the treasury to ${recipient}.`,
-        url: ''
+    const outcome = propose(
+      {
+        actions: [handler.serialize(values, context)],
+        source: CHANGE_SOURCES.treasury,
+        note: `Give token #${tokenId} from the treasury to ${recipient}.`,
+        replaces: editing.editing?.tokenId === tokenId ? editing.replaces : undefined
       },
-      onAdded: () => {
-        setGiving(null);
-        setRecipient('');
+      {
+        onAdded: () => {
+          setGiving(null);
+          setRecipient('');
+          editing.done();
+        }
       }
-    });
+    );
+    if (outcome.outcome === 'invalid') setError(outcome.message);
   };
 
   return (
@@ -70,7 +83,6 @@ export function TreasuryTokens() {
       title="Tokens the treasury holds"
       description="Members can vote to give any of these to someone, for example one from an auction nobody bid on."
     >
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <div>
         {data.items.map((item) => (
           <div key={item.tokenId}>
@@ -94,6 +106,7 @@ export function TreasuryTokens() {
                 )
               }
             />
+            <PendingValue pending={pending.find((action) => String(action.tokenId) === item.tokenId)} />
             {giving === item.tokenId ? (
               <div className={form}>
                 <FieldLabel htmlFor={`give-${item.tokenId}`}>Give token #{item.tokenId} to</FieldLabel>
@@ -109,10 +122,20 @@ export function TreasuryTokens() {
                       setError('');
                     }}
                   />
-                  <Button size="sm" onClick={() => add(item.tokenId)}>
-                    Add to your proposal
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setGiving(null)}>
+                  <ChangeSubmit
+                    direct={false}
+                    size="sm"
+                    editing={editing.editing?.tokenId === item.tokenId}
+                    onClick={() => add(item.tokenId)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setGiving(null);
+                      editing.done();
+                    }}
+                  >
                     Cancel
                   </Button>
                 </div>

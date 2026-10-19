@@ -4,32 +4,24 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { Badge, Button, Callout, Card, Field, FieldLabel, Heading, Input, ShortId, Text } from '@/components/ui';
 import { readAdminModuleVersion, type UpgradeModule, useAdminModuleVersion } from '@/lib/admin-module-versions';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-export function ModuleVersionCard({
-  daoId,
-  config,
-  module
-}: {
-  daoId: string;
-  config: DaoNetworkConfig;
-  module: UpgradeModule;
-}) {
+export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig; module: UpgradeModule }) {
   const session = useAuthSessionStore();
   const [hashInput, setHashInput] = useState('');
   const [targetHash, setTargetHash] = useState<string>();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const state = useAdminModuleVersion(config, module, session.address, targetHash);
-  const draft = useAdminProposalDraft();
+  const { propose: proposeChange } = useProposeChange();
   const handler = getAllActionHandlers().find((item) => String(item.type) === 'upgrade-dao-module');
   const canPropose = Boolean(state.data && session.address && treasuryIsAdmin(config, state.data.admin));
   async function propose() {
@@ -51,16 +43,12 @@ export function ModuleVersionCard({
       const valid = handler.validate(values, context);
       if (!valid.valid) throw new Error(valid.message);
       assertAdminCallSupported(handler, values, context);
-      draft.requestAdd({
-        daoId,
-        action: handler.serialize(values, context),
-        source: `admin/upgrades/${module}`,
-        metadata: {
-          title: `Upgrade ${module} to ${current.target!.version}`,
-          description: `Manager-approved transition ${current.fromHash} → ${current.target!.hash}. Review this release before execution.`,
-          url: ''
-        }
+      const result = proposeChange({
+        actions: [handler.serialize(values, context)],
+        source: CHANGE_SOURCES.upgrades,
+        note: `Upgrade ${module} to ${current.target!.version}: the Manager-approved transition ${current.fromHash} → ${current.target!.hash}.`
       });
+      if (result.outcome === 'invalid') setMessage(result.message);
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -72,20 +60,15 @@ export function ModuleVersionCard({
     const migrate = getAllActionHandlers().find((item) => String(item.type) === 'migrate-dao-module');
     if (!migrate) return setMessage('Storage migration is not registered in this build.');
     const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
-    draft.requestAdd({
-      daoId,
-      action: migrate.serialize({ module }, context),
-      source: `admin/upgrades/${module}/migrate`,
-      metadata: {
-        title: `Migrate ${module} storage`,
-        description: `Run the ${module} storage migration (current storage version ${state.data.storageVersion}). Add it right after an upgrade whose release changes storage; it fails with NothingToMigrate otherwise.`,
-        url: ''
-      }
+    const result = proposeChange({
+      actions: [migrate.serialize({ module }, context)],
+      source: CHANGE_SOURCES.upgrades,
+      note: `Run the ${module} storage migration (storage version ${state.data.storageVersion} now). It belongs right after an upgrade whose release changes storage, and fails otherwise.`
     });
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
   return (
     <>
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <Card p="5">
         <Stack gap="3">
           <Heading size="heading" textTransform="capitalize">
@@ -178,7 +161,7 @@ export function ModuleVersionCard({
               }
               onClick={() => void propose()}
             >
-              Review upgrade proposal
+              Add upgrade to proposal
             </Button>
           ) : null}
           {canPropose ? (

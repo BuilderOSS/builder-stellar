@@ -43,7 +43,7 @@ function render(props: Partial<React.ComponentProps<typeof ModulesCard>> = {}) {
       frozen={false}
       busy={false}
       message={null}
-      addBatch={vi.fn()}
+      propose={vi.fn()}
       onMessage={vi.fn()}
       onChanged={vi.fn()}
       onChangeAllowance={() => null}

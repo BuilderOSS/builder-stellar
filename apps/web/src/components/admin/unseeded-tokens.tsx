@@ -5,15 +5,17 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
+import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
 import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
+import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import type { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 
 type UnseededResponse = { tokenIds: string[]; hasMore?: boolean; message?: string };
@@ -30,7 +32,7 @@ export function UnseededTokens({
   direct,
   canPropose,
   hasArtwork,
-  proposal
+  propose
 }: {
   daoId: string;
   config: DaoNetworkConfig;
@@ -38,7 +40,7 @@ export function UnseededTokens({
   direct: boolean;
   canPropose: boolean;
   hasArtwork: boolean;
-  proposal: ReturnType<typeof useAdminProposalDraft>;
+  propose: (request: ChangeRequest) => ProposeResult;
 }) {
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
@@ -77,23 +79,17 @@ export function UnseededTokens({
     }
   }
 
-  function propose() {
+  function proposeSeeding() {
     const handler = getActionHandler('regenerate-token-traits');
     const context = { config, session: { address, kit: null } };
     const batch = ids.slice(0, MAX_PROPOSAL_ACTIONS);
-    proposal.requestAddBatch({
-      daoId,
-      requests: batch.map((tokenId) => ({
-        daoId,
-        action: handler.serialize({ tokenId }, context),
-        source: 'admin/artwork/regenerate',
-        metadata: {
-          title: 'Seed traits for unseeded tokens',
-          description: `Assign traits to tokens minted before the artwork existed: ${batch.map((id) => `#${id}`).join(', ')}.`,
-          url: ''
-        }
-      }))
+    const result = propose({
+      actions: batch.map((tokenId) => handler.serialize({ tokenId }, context)),
+      bundle: planBundle('Seed traits for unseeded tokens', batch.length),
+      source: CHANGE_SOURCES.artwork,
+      note: `Assign traits to tokens minted before the artwork existed: ${batch.map((id) => `#${id}`).join(', ')}.`
     });
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
 
   return (
@@ -113,9 +109,15 @@ export function UnseededTokens({
             {busy ? 'Seeding…' : `Seed ${ids.length} token${ids.length === 1 ? '' : 's'} (one signature each)`}
           </Button>
         ) : canPropose ? (
-          <Button type="button" disabled={busy || !hasArtwork} onClick={propose}>
-            Add seeding to proposal (up to {MAX_PROPOSAL_ACTIONS} tokens per proposal)
-          </Button>
+          <>
+            <ChangeSubmit
+              direct={false}
+              what={`seeding ${Math.min(ids.length, MAX_PROPOSAL_ACTIONS)} ${Math.min(ids.length, MAX_PROPOSAL_ACTIONS) === 1 ? 'token' : 'tokens'}`}
+              disabled={busy || !hasArtwork}
+              onClick={proposeSeeding}
+            />
+            <Text size="sm">One proposal seeds up to {MAX_PROPOSAL_ACTIONS} tokens.</Text>
+          </>
         ) : (
           <Text>The Metadata admin can seed them (governance after launch).</Text>
         )}

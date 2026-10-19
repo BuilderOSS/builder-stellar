@@ -7,24 +7,39 @@ import { Check, ImageUp, X } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { ProfileLinksEditor } from '@/components/admin/profile-links-editor';
 import { prepareDaoImage, uploadDaoImage } from '@/components/create-dao/dao-image-upload';
-import { ActionBar, Button, Callout, Chip, Crest, FieldLabel, Input, MarkdownField, Spinner } from '@/components/ui';
+import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
+import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import {
+  ActionBar,
+  Button,
+  Callout,
+  Chip,
+  Crest,
+  FieldHelperText,
+  FieldLabel,
+  Input,
+  MarkdownField,
+  Spinner
+} from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { checkNewLink, managerClient, useLinkAvailability, useManagerLink } from '@/lib/community-link';
 import { buildProfilePlan, type CommunityProfile, type ProfileStep } from '@/lib/community-profile-plan';
-import { type DaoProfile, MAX_PROFILE_BYTES, profileBytes, profileProblems } from '@/lib/dao-profile';
+import { type DaoProfile, MAX_PROFILE_BYTES, parseProfile, profileBytes, profileProblems } from '@/lib/dao-profile';
 import { validateDaoProfileDraft } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { getProposalActionSummary } from '@/lib/proposal-call';
+import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
+import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
+import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { MAX_TOKEN_NAME_BYTES, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -111,7 +126,18 @@ export function CommunityProfileEditor() {
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
-  const draft = useAdminProposalDraft();
+  const { propose } = useProposeChange();
+  const PROFILE_TYPES = ['set-token-metadata', 'update-dao-profile', 'change-dao-slug'] as const;
+  const pending = usePendingChanges([...PROFILE_TYPES]);
+  const editing = useEditingChange({
+    accepts: (action) => (PROFILE_TYPES as readonly string[]).includes(action.type),
+    onLoad: (action) => {
+      if (action.type === 'set-token-metadata')
+        setEdits({ name: String(action.name ?? ''), symbol: String(action.symbol ?? '') });
+      if (action.type === 'update-dao-profile') setProfileDraft(parseProfile(String(action.profile ?? '')));
+      if (action.type === 'change-dao-slug') setLinkEdit(String(action.slug ?? ''));
+    }
+  });
   const tx = useTransactionFeedback(config.name);
   const [edits, setEdits] = useState<NameEdits>({});
   const [profileDraft, setProfileDraft] = useState<DaoProfile | null>(null);
@@ -221,17 +247,17 @@ export function CommunityProfileEditor() {
   function proposeLink() {
     if (!linkReady) return;
     const action = getActionHandler('change-dao-slug').serialize({ slug: nextLink }, context);
-    draft.requestAdd({
-      daoId,
-      action,
-      source: 'admin/profile/change-dao-slug',
-      metadata: {
-        title: `Change our link to /dao/${nextLink}`,
-        description: getProposalActionSummary(action),
-        url: ''
-      },
-      onAdded: () => setLinkEdit(undefined)
-    });
+    const replaces = editing.editing?.type === 'change-dao-slug' ? editing.replaces : undefined;
+    const result = propose(
+      { actions: [action], source: CHANGE_SOURCES.profile, note: getProposalActionSummary(action), replaces },
+      {
+        onAdded: () => {
+          setLinkEdit(undefined);
+          if (replaces) editing.done();
+        }
+      }
+    );
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
 
   async function addToProposal() {
@@ -242,22 +268,27 @@ export function CommunityProfileEditor() {
       setMessage(failure instanceof Error ? failure.message : 'Could not check the current profile');
       return;
     }
-    draft.requestAddBatch({
-      daoId,
-      requests: steps.map((step) => {
-        const handler = getActionHandler(step.type);
-        return {
-          daoId,
-          action: handler.serialize(step.values, context),
-          source: `admin/profile/${step.type}`,
-          metadata: { title: step.title, description: `${step.title}: ${step.detail}.`, url: '' }
-        };
-      }),
-      onAdded: () => {
-        setEdits({});
-        setProfileDraft(null);
+    // A rename and a profile update are separate changes, each with its own note, so either can be removed.
+    const replaces = editing.editing && editing.editing.type !== 'change-dao-slug' ? editing.replaces : undefined;
+    const result = propose(
+      {
+        actions: steps.map((step) => ({
+          ...getActionHandler(step.type).serialize(step.values, context),
+          note: `${step.title}: ${step.detail}.`
+        })),
+        source: CHANGE_SOURCES.profile,
+        note: steps.map((step) => step.title).join('. '),
+        replaces
+      },
+      {
+        onAdded: () => {
+          setEdits({});
+          setProfileDraft(null);
+          editing.done();
+        }
       }
-    });
+    );
+    if (result.outcome === 'invalid') setMessage(result.message);
   }
 
   /** The chain's profile revision right now; a stale one would make update_profile fail. */
@@ -341,21 +372,29 @@ export function CommunityProfileEditor() {
   const count = shownSteps.length
     ? `${shownSteps.length} ${shownSteps.length === 1 ? 'change' : 'changes'}`
     : 'changes';
-  const submitLabel = direct ? `Apply ${count}` : `Add ${count} to your proposal`;
   const submit = (
-    <Button
+    <ChangeSubmit
+      direct={direct}
+      what={count}
+      editing={Boolean(editing.editing && editing.editing.type !== 'change-dao-slug')}
       disabled={disabled || !shownSteps.length || blocked || (direct && !networkReady)}
       loading={busy}
       onClick={() => void (direct ? applyDirectly() : addToProposal())}
-    >
-      {submitLabel}
-    </Button>
+    />
   );
 
   return (
     <>
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <section className={card} aria-labelledby="profile-title">
+        <EditingChangeNotice
+          editing={editing.editing}
+          onCancel={() => {
+            editing.done();
+            setEdits({});
+            setProfileDraft(null);
+            setLinkEdit(undefined);
+          }}
+        />
         <div>
           <h2 id="profile-title" className={title}>
             How people see {config.tokenName || 'your tribe'}
@@ -517,6 +556,11 @@ export function CommunityProfileEditor() {
           </div>
         </div>
 
+        {pending
+          .filter((action) => action.id !== editing.editing?.id)
+          .map((action) => (
+            <PendingValue key={action.id} pending={action} />
+          ))}
         <div className={planBox} aria-live="polite">
           <h3 className={css({ textStyle: 'subheading', m: '0' })}>
             {direct ? 'This will' : 'If the proposal passes, it will'}
@@ -549,9 +593,14 @@ export function CommunityProfileEditor() {
                 another link.
               </p>
               <div>
-                <Button variant={steps.length ? 'secondary' : 'primary'} disabled={busy} onClick={proposeLink}>
-                  Propose the new link
-                </Button>
+                <ChangeSubmit
+                  direct={false}
+                  what="the new link"
+                  editing={editing.editing?.type === 'change-dao-slug'}
+                  variant={steps.length ? 'secondary' : 'primary'}
+                  disabled={busy}
+                  onClick={proposeLink}
+                />
               </div>
             </div>
           ) : null}
@@ -559,7 +608,12 @@ export function CommunityProfileEditor() {
 
         {message ? <Callout variant="warning" title={message} role="alert" /> : null}
         {/* With only a new link after launch, its own button is the one action. */}
-        {shownSteps.length || !linkStep ? <div className={footer}>{submit}</div> : null}
+        {shownSteps.length || !linkStep ? (
+          <div className={footer}>
+            <FieldHelperText>{changeAuthorityText(direct)}</FieldHelperText>
+            {submit}
+          </div>
+        ) : null}
       </section>
       {shownSteps.length ? <ActionBar mobileOnly>{submit}</ActionBar> : null}
     </>
