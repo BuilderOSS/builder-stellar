@@ -27,7 +27,7 @@ export function safeMarkdownUrl(url: string) {
   return SAFE_URL.test(trimmed) ? trimmed : null;
 }
 
-/** What a comment may use: inline formatting, links, lists, quotes and images. No headings or tables. */
+/** Comments support formatting, demoted headings, tables, images, and disabled task-list checkboxes. */
 const COMMENT_ELEMENTS = [
   'p',
   'br',
@@ -178,7 +178,7 @@ const COMMENT_COMPONENTS: Components = RICH_COMPONENTS;
 
 /**
  * Member-written markdown (proposal descriptions, proposal comments). `rich` allows headings,
- * images and tables; `comment` keeps inline formatting, links, lists, quotes and images and unwraps the rest.
+ * images and tables; `comment` uses a bounded presentation and a restricted element allowlist.
  */
 export function Markdown({
   source,

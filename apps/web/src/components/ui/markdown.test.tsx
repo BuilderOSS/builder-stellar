@@ -54,6 +54,16 @@ describe('Markdown', () => {
     expect(html).toContain('Big');
     expect(html).toContain('<strong>ok</strong>');
   });
+  it('keeps comment task-list checkboxes disabled and rejects raw form controls', () => {
+    const html = render('- [ ] Pending\n- [x] Done\n\n<input type="text" value="editable">', 'comment');
+    const inputs = html.match(/<input\b[^>]*>/g) ?? [];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input).toContain('type="checkbox"');
+      expect(input).toContain('disabled=""');
+    }
+    expect(html).not.toContain('editable');
+  });
 });
 
 describe('safeMarkdownUrl', () => {

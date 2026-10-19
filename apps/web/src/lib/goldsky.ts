@@ -285,11 +285,15 @@ export async function getGoldskyProposalList(
   };
 }
 
-/**
- * Proposal Detail
- *
- * Returns detailed information about a specific proposal
- */
+/** Distinguishes a missing scoped proposal from an unavailable read model. */
+export class GoldskyProposalNotFoundError extends Error {
+  constructor(proposalId: string) {
+    super(`Proposal not found: ${proposalId}`);
+    this.name = 'GoldskyProposalNotFoundError';
+  }
+}
+
+/** Returns proposal details within the configured deployment and DAO scope. */
 export async function getGoldskyProposalDetail(daoId: string, proposalId: string) {
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
@@ -306,7 +310,7 @@ export async function getGoldskyProposalDetail(daoId: string, proposalId: string
   });
 
   if (!row) {
-    throw new Error(`Proposal not found: ${proposalId}`);
+    throw new GoldskyProposalNotFoundError(proposalId);
   }
 
   return {

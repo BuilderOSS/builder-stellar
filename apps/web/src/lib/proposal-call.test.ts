@@ -33,6 +33,50 @@ const config: ProposalEncodingContext = {
 const encode = (target: string, fn: string, args: unknown[]) =>
   encodeProposalCallArgs([target], [fn], [args], config)[0] as xdr.ScVal[];
 
+describe('restored mint allocation summaries', () => {
+  it.each([undefined, '', 'not-a-number', '-1', '0'])(
+    'keeps an incomplete amount %s from crashing the queue',
+    (amount) => {
+      const action = {
+        id: 'restored',
+        type: 'batch-mint-governance-token' as const,
+        recipient,
+        amount: '1',
+        allocations: [{ recipient, amount }]
+      };
+      expect(getProposalActionSummary(action)).toBe('Mint membership tokens (check recipients and amounts)');
+    }
+  );
+  it('handles null rows and missing recipient fields', () => {
+    for (const allocation of [null, { amount: '2' }, { recipient: '', amount: '2' }]) {
+      expect(
+        getProposalActionSummary({
+          id: 'restored',
+          type: 'batch-mint-governance-token',
+          recipient,
+          amount: '1',
+          allocations: [allocation]
+        })
+      ).toBe('Mint membership tokens (check recipients and amounts)');
+    }
+  });
+  it('keeps complete multi-recipient summaries', () => {
+    const summary = getProposalActionSummary({
+      id: 'restored',
+      type: 'batch-mint-governance-token',
+      recipient,
+      amount: '1',
+      allocations: [
+        { recipient, amount: '2' },
+        { recipient: 'another-wallet', amount: '3' }
+      ]
+    });
+    expect(summary).toContain('5');
+    expect(summary).toContain('2');
+    expect(summary).not.toContain('check recipients');
+  });
+});
+
 describe('current proposal ABI encoding', () => {
   it('builds vector batch_mint, matching the immutable generated token spec', () => {
     const handler = getActionHandler('batch-mint-governance-token');

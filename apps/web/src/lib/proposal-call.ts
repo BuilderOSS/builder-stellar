@@ -268,13 +268,23 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
   if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {
-    if (Array.isArray(action.allocations) && action.allocations.length)
+    if (Array.isArray(action.allocations) && action.allocations.length) {
+      const complete = action.allocations.every(
+        (row) =>
+          typeof row?.recipient === 'string' &&
+          row.recipient.trim().length > 0 &&
+          typeof row?.amount === 'string' &&
+          /^\d+$/.test(row.amount.trim()) &&
+          BigInt(row.amount) > 0n
+      );
+      if (!complete) return 'Mint membership tokens (check recipients and amounts)';
       return mintTitle(
         action.allocations.map((row: { recipient: string; amount: string }) => ({
           recipient: row.recipient,
           amount: BigInt(row.amount)
         }))
       );
+    }
     return /^\d+$/.test(String(action.amount))
       ? mintTitle([{ recipient: action.recipient, amount: BigInt(action.amount) }])
       : `Mint ${action.amount} membership tokens to ${action.recipient}`;

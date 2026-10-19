@@ -6,7 +6,7 @@ import { css } from 'styled-system/css';
 
 import { AuctionSettingsBuilder } from '@/components/admin/auction-settings-builder';
 import { PageSection } from '@/components/page-section';
-import { Address, Callout, Chip, IconButton, Skeleton } from '@/components/ui';
+import { Address, Callout, Chip, HelpTip, IconButton, Skeleton } from '@/components/ui';
 import { card, fact, facts, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
@@ -119,7 +119,9 @@ export default function AuctionAdminPage() {
                   <dd className={factValue}>{data.config.min_bid_increment_percent}%</dd>
                 </div>
                 <div className={fact}>
-                  <dt className={factLabel}>Paid in</dt>
+                  <dt className={factLabel}>
+                    Paid in <HelpTip label="Payment asset">Fixed after the first bid.</HelpTip>
+                  </dt>
                   <dd className={css({ m: '0', minW: '0', justifySelf: 'start', width: '100%' })}>
                     <Address value={data.config.payment_token} label={assetCode || 'Payment asset'} />
                   </dd>

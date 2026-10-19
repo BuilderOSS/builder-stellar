@@ -17,6 +17,7 @@ import {
   verifyAuthProof,
   verifySep10Proof
 } from '@/lib/auth/client';
+import { completeSignIn } from '@/lib/auth/complete-sign-in';
 import { restoredSessionAddress } from '@/lib/auth/restore-session';
 import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
@@ -276,9 +277,10 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
         await verifySep10Proof(signedTxXdr);
       }
 
-      setAuthenticatedAddress(result.address);
-      updateSession({ status: `Connected on ${network.label} via ${authMethod.toUpperCase()}` });
-      await mutateAuthSession();
+      await completeSignIn({ authenticated: true, address: result.address, authMethod }, mutateAuthSession, () => {
+        setAuthenticatedAddress(result.address);
+        updateSession({ status: `Connected on ${network.label} via ${authMethod.toUpperCase()}` });
+      });
     } catch (error) {
       resetAuth();
       try {

@@ -84,7 +84,7 @@ export function ListingCard({
       <p className={styles.price}>
         {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} <span>{asset}</span>
       </p>
-      {pool ? (
+      {pool && listing.status === 'open' ? (
         <p className={styles.price}>
           {(pool.size - pool.sold).toLocaleString()} <span>available</span>
         </p>

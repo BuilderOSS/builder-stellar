@@ -171,7 +171,7 @@ export default function ProposalDetailPage() {
     config.passphrase
   ].join(':');
 
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR<ProposalPageData, Error & { status?: number }>(
     proposalId ? (['proposal-detail', DEPLOYMENT_ID, daoId, proposalId] as const) : null,
     fetchProposalPageData,
     { shouldRetryOnError: false, revalidateOnFocus: true, refreshInterval: 5000 }
@@ -602,7 +602,7 @@ export default function ProposalDetailPage() {
         </div>
       ) : null}
 
-      {isLoading && !detail ? (
+      {isLoading && !detail && !waitingForIndex ? (
         <div className={loading} role="status" aria-busy="true">
           <span className="sr-only">Loading proposal</span>
           <Skeleton className={css({ width: '28', height: '6' })} />

@@ -427,7 +427,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 {auction.highest_bidder
                   ? 'Settlement sends the token to the winner and the bid to the treasury.'
                   : 'There were no bids. Settlement sends the token to the treasury.'}{' '}
-                {data.paused ? 'Auctions are paused, so no new auction starts.' : 'Settlement starts the next auction.'}
+                {data.paused ? 'Auctions are paused, so no new auction starts.' : 'Settlement starts the next auction.'}{' '}
+                Anyone can settle an ended auction. A token with no bids is not burned.
               </HelpTip>
             ) : null}
             {canSettle ? (

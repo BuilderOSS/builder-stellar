@@ -177,7 +177,10 @@ export function CommentThread({
             <>
               {format === 'markdown' ? (
                 <Field>
-                  <FieldLabel htmlFor={`${id}-comment`}>Add a comment</FieldLabel>
+                  <FieldLabel htmlFor={`${id}-comment`}>
+                    Add a comment
+                    <HelpTip label="Add a comment">Everyone can read it, and it can't be edited or deleted.</HelpTip>
+                  </FieldLabel>
                   <MarkdownField
                     id={`${id}-comment`}
                     variant="comment"

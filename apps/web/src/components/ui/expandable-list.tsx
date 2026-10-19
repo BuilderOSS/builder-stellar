@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useId, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { Button } from './button';
@@ -15,9 +15,17 @@ const scroll = css({
   _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px', borderRadius: 'sm' }
 });
 
-export function ScrollArea({ label, children }: { label: string; children: ReactNode }) {
+export function ScrollArea({
+  label,
+  children,
+  regionRef
+}: {
+  label: string;
+  children: ReactNode;
+  regionRef?: React.RefObject<HTMLDivElement | null>;
+}) {
   return (
-    <div className={scroll} role="region" aria-label={label} tabIndex={0}>
+    <div ref={regionRef} className={scroll} role="region" aria-label={label} tabIndex={0}>
       {children}
     </div>
   );
@@ -36,11 +44,20 @@ export function ExpandableList({
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const regionRef = useRef<HTMLDivElement>(null);
   const id = useId();
   if (!expandable) return <>{preview}</>;
   return (
     <div>
-      <div id={id}>{expanded ? <ScrollArea label={label}>{children}</ScrollArea> : preview}</div>
+      <div id={id}>
+        {expanded ? (
+          <ScrollArea label={label} regionRef={regionRef}>
+            {children}
+          </ScrollArea>
+        ) : (
+          preview
+        )}
+      </div>
       <div className={css({ display: 'flex', justifyContent: 'center', pt: '3' })}>
         <Button
           type="button"
@@ -48,7 +65,13 @@ export function ExpandableList({
           size="sm"
           aria-expanded={expanded}
           aria-controls={id}
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => {
+            if (!expanded) {
+              // The region mounts after this event; focus it before the next Tab.
+              setExpanded(true);
+              requestAnimationFrame(() => regionRef.current?.focus());
+            } else setExpanded(false);
+          }}
         >
           {expanded ? 'Show less' : 'Show more'}
         </Button>

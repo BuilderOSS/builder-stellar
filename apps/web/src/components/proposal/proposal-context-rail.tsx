@@ -199,10 +199,9 @@ function HistoryPanel({ daoId }: { daoId: string }) {
       <p className={intro}>How this tribe decided similar things before.</p>
       <DataState loading={isLoading && !data} error={error} hasData={Boolean(data)}>
         {data?.items.length ? (
-          <p className={intro}>
-            {data.items.map((proposal, index) => (
-              <span key={proposal.proposalId}>
-                {index ? ' · ' : ''}
+          <ul className={css({ display: 'grid', gap: '2', listStyle: 'none', m: '0', p: '0' })}>
+            {data.items.map((proposal) => (
+              <li key={proposal.proposalId}>
                 <NextLink
                   href={daoRoute(routeId, `proposals/${proposal.proposalNumber}`)}
                   className={css({ color: 'signal' })}
@@ -210,9 +209,9 @@ function HistoryPanel({ daoId }: { daoId: string }) {
                   #{proposal.proposalNumber} {proposal.metadata.title || 'Untitled proposal'}
                 </NextLink>{' '}
                 <ProposalStateBadge label={proposal.stateLabel} />
-              </span>
+              </li>
             ))}
-          </p>
+          </ul>
         ) : (
           <Text size="sm">No proposals yet. Got an idea for the tribe? Put it to a vote.</Text>
         )}

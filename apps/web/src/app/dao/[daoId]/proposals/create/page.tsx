@@ -21,7 +21,6 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
-  HelpTip,
   Input,
   Markdown,
   MarkdownField,
@@ -88,6 +87,7 @@ export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
   const router = useRouter();
   const [openingProposal, setOpeningProposal] = useState(false);
+  const [confirmedProposalHref, setConfirmedProposalHref] = useState<ReturnType<typeof daoRoute> | null>(null);
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
@@ -152,6 +152,7 @@ export default function ProposalCreatePage() {
 
   const handleConfirmSubmit = async () => {
     if (!session.address) return;
+    let confirmedHref: ReturnType<typeof daoRoute> | null = null;
 
     try {
       setTransactionBusy(true);
@@ -213,16 +214,19 @@ export default function ProposalCreatePage() {
       txFeedback.submitted('Proposal sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
 
+      confirmedHref = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
+      setConfirmedProposalHref(confirmedHref);
       txFeedback.success('Proposal created', hash);
 
       // Keep a loading surface mounted while clearing the draft and navigating.
       setOpeningProposal(true);
       if (proposalId) markRecentProposal(daoId, proposalId);
       reset(session.address, daoId);
-      router.push(proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals'));
+      router.push(confirmedHref);
     } catch (err: any) {
+      setOpeningProposal(false);
       console.error('Proposal creation error:', err);
-      txFeedback.fail(err, 'Proposal failed', 'governor');
+      if (!confirmedHref) txFeedback.fail(err, 'Proposal failed', 'governor');
     } finally {
       setTransactionBusy(false);
     }
@@ -239,6 +243,20 @@ export default function ProposalCreatePage() {
         <PageHeader title="Opening your proposal" />
         <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
         <p>Your proposal is confirmed. Loading its details…</p>
+        {confirmedProposalHref ? <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink> : null}
+      </div>
+    );
+
+  if (confirmedProposalHref)
+    return (
+      <div className={stack}>
+        <PageHeader title="Your proposal was created" />
+        <Callout
+          variant="warning"
+          title="We couldn't open it automatically"
+          description="Your transaction is confirmed. Open the proposal below; its details may take a moment to appear."
+        />
+        <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink>
       </div>
     );
 
@@ -313,11 +331,10 @@ export default function ProposalCreatePage() {
                 {step === 1 && (
                   <div className={stack}>
                     <Field>
-                      <FieldLabel htmlFor="title">
-                        Title <HelpTip label="Proposal title">A title is required.</HelpTip>
-                      </FieldLabel>
+                      <FieldLabel htmlFor="title">Title (required)</FieldLabel>
                       <Input
                         id="title"
+                        required
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
                         placeholder={suggestedTitle || 'Fund the winter tool library'}

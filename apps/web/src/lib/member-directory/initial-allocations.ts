@@ -15,7 +15,19 @@ export async function initialAllocations(daoId: string, page: { limit: number; o
     ORDER BY amount DESC, t.to_address ASC
     LIMIT ${page.limit} OFFSET ${page.offset}
   `;
-  const total = Number(rows[0]?.total ?? 0n);
+  const count =
+    rows[0]?.total ??
+    (
+      await prisma.$queryRaw<Array<{ total: bigint }>>`
+    SELECT count(DISTINCT t.to_address)::bigint AS total
+    FROM token.transfers t
+    JOIN manager.dao_launches l ON l.deployment_id = t.deployment_id AND l.dao_id = t.dao_id
+    WHERE t.deployment_id = ${deploymentId} AND t.dao_id = ${token} AND t.contract_id = ${token}
+      AND t.transfer_type = 'mint' AND t.pos < l.launched_pos AND t.to_address IS NOT NULL
+  `
+    )[0]?.total ??
+    0n;
+  const total = Number(count);
   return {
     deploymentId,
     daoId: token,

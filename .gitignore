@@ -6,6 +6,7 @@ target
 
 # JavaScript / frontend artifacts
 node_modules
+.pnpm-store/
 .next
 apps/web/.env*.local
 apps/web/styled-system
