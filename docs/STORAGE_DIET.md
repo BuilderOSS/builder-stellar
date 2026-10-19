@@ -323,9 +323,10 @@ returned as `data:application/json;base64,<…>`.
 - Cost: a read-only call, so simulation only; CPU for ≤ 16 traits plus base64 of a document of a few KB. Needs a
   small base64 routine in `common` (no host function). § 10 gates both CPU and the return-value size against the
   live network limits; the name cap exists so the maximum document is known at compile time.
-- The spec says `token_uri` "returns an url". A `data:` URL follows ERC-721 practice; which Stellar wallets and
-  marketplaces render it is open question 1 (§ 12). If one does not, `renderer_base` can serve HTTPS JSON
-  without a contract change.
+- The spec says `token_uri` "returns an url". A `data:` URL follows ERC-721 practice, but Freighter (extension and
+  mobile) only fetches `https:` metadata and rejects `data:` URIs, so its collectibles view shows these tokens as
+  placeholders without the document's name, image or attributes (open question 1, § 12). `renderer_base` can
+  serve HTTPS JSON without a contract change.
 
 ## 6. Profile JSON
 
@@ -593,6 +594,15 @@ within budget and their measured per-call fees are published.
 
 1. **`data:` URIs in Stellar wallets.** Which wallets and marketplaces render a `data:application/json;base64`
    `token_uri`? Test with the ones that matter before relying on it; HTTPS fallback exists either way.
+   - **Freighter: no** (checked 2026-10-19 in source). Both clients load collectible metadata from `token_uri`
+     through `fetchMetadataJson`, which throws unless the URL scheme is `https:`
+     ([extension](https://github.com/stellar/freighter/blob/e0f36ea149fa23dd007ee35fcc1533de7af2f30e/@shared/api/helpers/fetchMetadataJson.ts#L58),
+     [mobile](https://github.com/stellar/freighter-mobile/blob/bcb3559bbe0db014d1b02591a32ea748f4636000/src/helpers/fetchMetadataJson.ts#L60)); the extension's tests assert
+     ["rejects data: URIs"](https://github.com/stellar/freighter/blob/e0f36ea149fa23dd007ee35fcc1533de7af2f30e/@shared/api/helpers/__tests__/fetchMetadataJson.test.ts#L113).
+     On failure the extension's `fetchCollectibleMetadata` returns `null` and mobile
+     [falls back](https://github.com/stellar/freighter-mobile/blob/bcb3559bbe0db014d1b02591a32ea748f4636000/src/helpers/collectibles.ts#L281-L308) to a generic token name with no image or traits.
+     For Freighter to show the § 5 document, `token_uri` has to point at it over HTTPS (`renderer_base`).
+   - Other wallets and marketplaces: still open.
 2. **Profile `v` policy.** Read `v: 1` forever (default) or a one-time rewrite proposal per DAO on schema change.
 3. **Renewal cadence.** Should the app nudge members when any DAO class drops under 45 days, as it does for
    artwork today? Default: yes, same thresholds, one button.
