@@ -6,7 +6,8 @@ import { Address, Chip, Section, shortenId } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
-import { contractCallLabel, mintGrants, mintTitle } from '@/lib/contract-call-labels';
+import { contractCallLabel, contractRole, mintGrants, mintTitle } from '@/lib/contract-call-labels';
+import { getDeploymentConfig } from '@/lib/deployment-config';
 import { usePendingModules } from '@/lib/modules/pending';
 import { inspectProposalAdminCall, type ProposalCallInspection } from '@/lib/proposal-action-inspection';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
@@ -97,13 +98,14 @@ function describeAction(
   args: ProposalCallArg[],
   tokenContractId: string | undefined,
   network: 'testnet' | 'local' | 'public',
-  passphrase: string
+  passphrase: string,
+  role?: ReturnType<typeof contractRole>
 ): ActionDescription {
   if (target === tokenContractId && (functionName === 'mint' || functionName === 'batch_mint')) {
     const grants = mintGrants(functionName, args);
     if (!grants) {
       return {
-        title: contractCallLabel(functionName),
+        title: contractCallLabel(functionName, role),
         recipients: [],
         failure:
           functionName === 'batch_mint'
@@ -131,7 +133,7 @@ function describeAction(
       recipients: [{ address: recipient, label: 'Recipient' }]
     };
   }
-  return { title: contractCallLabel(functionName), recipients: [] };
+  return { title: contractCallLabel(functionName, role), recipients: [] };
 }
 
 function pauseTitle(
@@ -252,7 +254,8 @@ export function ProposalActionPreview({
                     actionArgs,
                     tokenContractId,
                     daoConfig.name,
-                    daoConfig.passphrase
+                    daoConfig.passphrase,
+                    contractRole(target, daoConfig, getDeploymentConfig().managerAddress)
                   );
               title = inspection?.title ?? pauseTitle(target, functionName, daoConfig) ?? description?.title ?? title;
             } catch {

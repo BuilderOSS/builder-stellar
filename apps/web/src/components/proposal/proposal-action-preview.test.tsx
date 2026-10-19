@@ -151,7 +151,7 @@ describe('proposal admin-call inspector rendering', () => {
     });
     it('says a batch the Token would reject fails, instead of titling it', () => {
       const html = render(['batch_mint'], [[state.config.treasuryContractId, [alice, bob], ['5']]]);
-      expect(html).toContain('Mint tokens');
+      expect(html).toContain('Mint membership tokens');
       expect(html).toContain('The token rejects this call when it runs');
       expect(html).not.toContain('Recipient');
     });
