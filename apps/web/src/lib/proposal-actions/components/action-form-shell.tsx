@@ -3,6 +3,7 @@
 'use client';
 
 import { ArrowUpRight, ChevronLeft } from 'lucide-react';
+import type { Route } from 'next';
 import type { ReactNode } from 'react';
 import { css } from 'styled-system/css';
 
@@ -17,7 +18,7 @@ export interface ActionFormShellProps {
   /** The live value, "3 days", when the setting can be read. */
   now?: string;
   /** Where the change lives in Manage, for "Open in Manage". */
-  home?: { label: string; href: string };
+  home?: { label: string; href: Route };
   disabled: boolean;
   preconditionResult?: PreconditionResult;
   /** Back to choosing another change (create) or out of the edit. */

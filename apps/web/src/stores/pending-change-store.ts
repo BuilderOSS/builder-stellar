@@ -17,12 +17,15 @@ export type PendingChange = {
 
 type PendingChangeStore = {
   pending: PendingChange | null;
+  /** Bumps with each review, so the dialog mounts above any sheet that is open when it asks. */
+  openCount: number;
   open: (pending: PendingChange) => void;
   close: () => void;
 };
 
 export const usePendingChangeStore = create<PendingChangeStore>()((set) => ({
   pending: null,
-  open: (pending) => set({ pending }),
+  openCount: 0,
+  open: (pending) => set((state) => ({ pending, openCount: state.openCount + 1 })),
   close: () => set({ pending: null })
 }));

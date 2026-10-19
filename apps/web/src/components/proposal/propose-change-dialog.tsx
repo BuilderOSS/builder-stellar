@@ -36,6 +36,7 @@ function groupFindings(findings: ChangeFinding[]) {
  */
 export function ProposeChangeDialog() {
   const pending = usePendingChangeStore((state) => state.pending);
+  const openCount = usePendingChangeStore((state) => state.openCount);
   const resolve = useResolvePendingChange();
   const findings = pending?.findings ?? [];
   const actions = pending?.request.actions ?? [];
@@ -55,6 +56,8 @@ export function ProposeChangeDialog() {
 
   return (
     <Dialog
+      // A fresh mount per review puts it above a sheet opened since (the composer's picker).
+      key={openCount}
       open={Boolean(pending)}
       onOpenChange={(open) => {
         if (!open) resolve('cancel');

@@ -309,7 +309,9 @@ export function ProposalActionQueue({
                 </p>
                 <div className={metaRow}>
                   {source && source.surface !== 'composer' ? (
-                    <Chip tone="outline">{pickable ? source.label : `Prepared in ${source.label}`}</Chip>
+                    <Chip tone="outline">
+                      {isPickable(getActionHandler(first.type)) ? source.label : `Prepared in ${source.label}`}
+                    </Chip>
                   ) : null}
                   {entry.bundleId ? (
                     <button

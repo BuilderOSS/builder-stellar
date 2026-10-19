@@ -57,11 +57,21 @@ export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAct
     projected.push(action);
   }
   // Findings against the queue already there ask the member; within a bundle, the producer already ordered it.
+  // A step the proposal already had (an edited bundle keeps its other steps) was reviewed when it was added.
   const existingIds = new Set(base.map((action) => action.id));
+  const alreadyQueued = new Set(existing.map((action) => action.id));
+  // An edit rebuilt on its page has new ids; its high-risk steps were reviewed when the change was first added.
+  const replaced = request.replaces?.length ? expandToBundles(existing, request.replaces) : new Set<string>();
+  const reviewedKinds = new Set<string>(
+    existing.filter((action) => replaced.has(action.id)).map((action) => action.type)
+  );
   const needsReview = findings.some(
     (finding) =>
       REVIEW_KINDS.has(finding.kind) &&
-      (finding.kind === 'high-risk' || finding.existingIds.some((id) => existingIds.has(id)))
+      (finding.kind === 'high-risk'
+        ? !alreadyQueued.has(finding.actionId) &&
+          !reviewedKinds.has(request.actions.find((action) => action.id === finding.actionId)?.type ?? '')
+        : finding.existingIds.some((id) => existingIds.has(id)))
   );
   return { findings, needsReview };
 }

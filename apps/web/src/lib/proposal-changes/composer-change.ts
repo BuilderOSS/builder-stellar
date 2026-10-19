@@ -69,7 +69,8 @@ export function composerChange(
       actions: steps,
       bundle: { id: open.bundleId!, label: bundleLabel(AUCTION_BUNDLE, steps.length) },
       source: (open.actions[0].source as ChangeRequest['source']) ?? base.source,
-      note: `${String(open.actions[0].note ?? '').replace(/\.$/, '')}${open.actions[0].note ? '. ' : ''}${note}`,
+      // The note lists the steps in the order they run, the new one before the resume.
+      note: `${steps.map((step) => getProposalActionSummary(step).replace(/\.$/, '')).join('. ')}.`,
       replaces: [open.actions[0].id]
     };
   }

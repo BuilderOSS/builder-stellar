@@ -118,3 +118,40 @@ describe('composer changes', () => {
     expect(new Set(edited.map((entry) => entry.bundleId)).size).toBe(1);
   });
 });
+
+describe('reviewing an edited bundle', () => {
+  it('does not ask again about high-risk steps the proposal already had', async () => {
+    const { composerChange } = await import('./composer-change');
+    const first = composerChange(setting('set-auction-duration', '600'), []);
+    expect(reviewChange(first, []).needsReview).toBe(true);
+    const queued = resolveChange(first, [], [], 'add');
+    const joined = composerChange(setting('set-auction-time-buffer', '120'), queued);
+    expect(reviewChange(joined, queued).needsReview).toBe(false);
+  });
+});
+
+describe('reviewing an edit from its page', () => {
+  it('does not ask again about high-risk kinds the replaced change already had', () => {
+    const bundle = [action('pause-auction'), setting('set-auction-duration', '600'), action('unpause-auction')].map(
+      (entry) => ({ ...entry, bundleId: 'b', bundleLabel: 'Change the auction: 3 steps' })
+    );
+    const rebuilt = request(
+      [action('pause-auction'), setting('set-auction-duration', '900'), action('unpause-auction')],
+      {
+        bundle: { id: 'b2', label: 'Change the auction: 3 steps' },
+        replaces: [bundle[0].id]
+      }
+    );
+    expect(reviewChange(rebuilt, bundle).needsReview).toBe(false);
+    const widened = request([action('pause-auction'), action('cancel-auction'), action('unpause-auction')], {
+      bundle: { id: 'b3', label: 'Change the auction: 3 steps' },
+      replaces: [bundle[0].id]
+    });
+    expect(resolveChange(rebuilt, bundle, [], 'add').map((entry) => entry.value ?? entry.type)).toEqual([
+      'pause-auction',
+      '900',
+      'unpause-auction'
+    ]);
+    expect(widened.actions).toHaveLength(3);
+  });
+});

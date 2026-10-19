@@ -97,6 +97,20 @@ const empty = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 
 type Entry = { handler: ActionHandler; meta: (typeof ACTION_CATALOG)[ProposalActionType] };
 
+/** What members do most comes first: paying someone, then adding members. */
+const INTENT_ORDER: ProposalActionType[] = [
+  'transfer-sac-token',
+  'batch-mint-governance-token',
+  'mint-governance-token',
+  'transfer-dao-token',
+  'treasury-buy-listing',
+  'dao-transfer'
+];
+const intentRank = (entry: Entry) => {
+  const rank = INTENT_ORDER.indexOf(entry.handler.type);
+  return rank < 0 ? INTENT_ORDER.length : rank;
+};
+
 function matches(entry: Entry, query: string) {
   if (!query) return true;
   const text = `${entry.meta.intent ?? ''} ${entry.handler.label} ${entry.handler.description} ${entry.meta.keywords ?? ''}`;
@@ -138,7 +152,9 @@ export function ActionPickerSheet({
     []
   );
   const shown = entries.filter((entry) => matches(entry, query.trim()));
-  const intentEntries = [...shown.filter((entry) => entry.meta.section === 'intent')];
+  const intentEntries = shown
+    .filter((entry) => entry.meta.section === 'intent')
+    .sort((a, b) => intentRank(a) - intentRank(b));
   const shownElsewhere = elsewhereIntents.filter((entry) => matches(entry, query.trim()));
   const settings = shown.filter((entry) => entry.meta.section === 'setting');
   const advanced = shown.filter((entry) => entry.meta.section === 'advanced');
@@ -228,7 +244,7 @@ export function ActionPickerSheet({
                     >
                       <span className={tileTitle}>{entry.meta.intent}</span>
                       <span className={tileMeta}>
-                        {availability.available ? entry.handler.label : availability.reason}
+                        {availability.available ? entry.handler.description : availability.reason}
                       </span>
                     </button>
                   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useEffectEvent, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { useDaoContext } from '@/contexts/dao-context';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
@@ -53,10 +53,10 @@ export function useEditingChange({
   // The server render has no URL query; the client reads it after hydrating.
   const id = useSyncExternalStore(subscribe, readChangeParam, () => null);
   const loaded = useRef<string | null>(null);
-  const load = useEffectEvent((action: ProposalQueuedAction, steps: ProposalQueuedAction[]) => {
-    if (!accepts(action)) return;
-    loaded.current = action.id;
-    onLoad(action, steps);
+  // The latest callbacks, for the load effect; Next's bundled React has no useEffectEvent yet.
+  const latest = useRef({ accepts, onLoad });
+  useEffect(() => {
+    latest.current = { accepts, onLoad };
   });
 
   const found = id ? (queued.find((action) => action.id === id) ?? null) : null;
@@ -68,8 +68,12 @@ export function useEditingChange({
       : [];
 
   useEffect(() => {
-    if (!found || loaded.current === found.id) return;
-    load(found, found.bundleId ? queued.filter((action) => action.bundleId === found.bundleId) : [found]);
+    if (!found || loaded.current === found.id || !latest.current.accepts(found)) return;
+    loaded.current = found.id;
+    latest.current.onLoad(
+      found,
+      found.bundleId ? queued.filter((action) => action.bundleId === found.bundleId) : [found]
+    );
   }, [found, queued]);
 
   /** Stop editing: after the change is saved, or when the member cancels. */
