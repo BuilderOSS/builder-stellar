@@ -79,7 +79,7 @@ const action = (id: string, data = batch): ProposalQueuedAction => ({
 });
 
 describe('Metadata and module upgrade registry integration', () => {
-  it('exposes append, all four settings, and upgrade in composer options, never reset', () => {
+  it('exposes append, the renderer setting, and upgrade in composer options, never reset', () => {
     const types = getAllActionHandlers().map((handler) => handler.type);
     expect(types).toEqual(
       expect.arrayContaining(['add-artwork-properties', ...Object.keys(artworkSettingMethods), 'upgrade-dao-module'])
@@ -158,7 +158,7 @@ describe('Metadata and module upgrade registry integration', () => {
   it('encodes every metadata setting as String and accepts legitimate admin calls without invented caller fields', () => {
     for (const [type, method] of Object.entries(artworkSettingMethods)) {
       const handler = getAllActionHandlers().find((item) => item.type === type)!;
-      const value = type === 'set-artwork-description' ? '007' : 'https://metadata.example/path';
+      const value = 'https://metadata.example/path';
       expect(handler.validate({ value }, context).valid).toBe(true);
       const call = handler.buildCallVector({ value }, build);
       expect(call).toEqual({ target: config.metadataContractId, function: method, args: [value] });

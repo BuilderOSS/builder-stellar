@@ -6,7 +6,7 @@ export type ModuleUpgradeDraft = { module: UpgradeModule; fromHash: string; toHa
 export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgrade-dao-module'> = {
   type: 'upgrade-dao-module',
   label: 'Upgrade a module',
-  group: 'Administration',
+  group: 'System',
   description: 'Upgrade a current module along a Manager-approved transition. Approval is checked again on-chain.',
   FormComponent: ({ value, onChange, disabled }) => (
     <>

@@ -83,6 +83,29 @@ describe('quick-buy pool proposal actions', () => {
     expect(call.args.slice(3)).toEqual([10, 2, 5, String(24 * 3600)]);
   });
 
+  it('queues the closing time as unix seconds and reads older local-time drafts the same way', () => {
+    const data = {
+      price: '1.5',
+      asset: ASSET,
+      size: '10',
+      maxPerBuyer: '2',
+      maxSoldPerPeriod: '5',
+      periodHours: '24',
+      expiresAt: '2030-01-01T00:00'
+    };
+    const seconds = String(Math.floor(new Date(data.expiresAt).getTime() / 1000));
+    const action = openPoolHandler.serialize(data, formContext);
+    expect(action.expiresAt).toBe(seconds);
+    const reopened = openPoolHandler.deserialize(action);
+    expect(reopened.expiresAt).toBe(seconds);
+    expect(openPoolHandler.validate(reopened, formContext).valid).toBe(true);
+    expect(openPoolHandler.buildCallVector(reopened, buildContext).args[2]).toBe(seconds);
+    // A draft queued before this kept the datetime-local text; it still builds.
+    const legacy = openPoolHandler.deserialize({ ...action, expiresAt: '2030-01-01T00:00' });
+    expect(openPoolHandler.buildCallVector(legacy, buildContext).args[2]).toBe(seconds);
+    expect(getProposalActionSummary(action)).toContain(new Date(Number(seconds) * 1000).toISOString());
+  });
+
   it('rejects an invalid price, asset, count or a past closing time', () => {
     const base = {
       price: '1',
@@ -209,10 +232,33 @@ describe('current marketplace/governor/auction administration registry', () => {
         valid: false,
         fields: { paymentToken: 'Choose the asset buyers pay in: XLM or USDC.' }
       });
-    // The auction can still take any token.
+    // The auction takes any treasury asset, EURC included.
     expect(
       getActionHandler('set-auction-payment-token').validate({ paymentToken: testnetAsset('EURC') }, formContext).valid
     ).toBe(true);
+  });
+
+  it('limits the auction payment asset to the treasury’s assets and stops once a bid has fixed it', () => {
+    const auction = getActionHandler('set-auction-payment-token');
+    const context = { ...formContext, config: { ...config, passphrase: 'Test SDF Network ; September 2015' } };
+    for (const code of ['XLM', 'USDC', 'EURC'])
+      expect(auction.validate({ paymentToken: testnetAsset(code) }, context).valid).toBe(true);
+    // A wallet or an unknown contract could never pay out a bid.
+    for (const paymentToken of [`G${'A'.repeat(55)}`, `C${'A'.repeat(55)}`, 'invalid'])
+      expect(auction.validate({ paymentToken }, context)).toMatchObject({
+        valid: false,
+        fields: { paymentToken: 'Choose one of the treasury’s assets: XLM, USDC, EURC.' }
+      });
+    const locked = { ...context, auctionPaymentTokenLocked: true };
+    expect(auction.checkPreconditions?.(locked)).toMatchObject({ canExecute: false });
+    expect(auction.validate({ paymentToken: testnetAsset('USDC') }, locked).valid).toBe(false);
+    expect(auction.checkPreconditions?.({ ...context, auctionPaymentTokenLocked: false })).toEqual({
+      canExecute: true
+    });
+    // Unknown (the read failed or is loading): the vote is still checked by the contract.
+    expect(auction.checkPreconditions?.(context)).toEqual({ canExecute: true });
+    // The market's handler is built from the auction's and must not inherit the auction lock.
+    expect(getActionHandler('set-marketplace-payment-token').checkPreconditions).toBeUndefined();
   });
 
   it('stores and calls the resale fee in basis points, and shows a queued one as a percent again', () => {

@@ -7,6 +7,7 @@ import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { Callout, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { expiryInputValue } from '@/lib/expiry-time';
 import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { feePercentText } from '@/lib/marketplace/amount';
 import { marketplaceAssetCodes, marketplaceAssets } from '@/lib/marketplace/readiness';
@@ -331,7 +332,7 @@ export function OpenPoolForm({
       <Input
         id="pool-expires"
         type="datetime-local"
-        value={value.expiresAt}
+        value={expiryInputValue(value.expiresAt)}
         onChange={(event) => set({ expiresAt: event.target.value })}
         disabled={disabled}
       />

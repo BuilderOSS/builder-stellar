@@ -122,7 +122,7 @@ export const changeMintAllowanceHandler: ActionHandler<MintAllowanceDraft> = {
   type: 'change-mint-allowance',
   label: 'Change a mint allowance',
   description: 'Let a module (a pool, a claim list) mint more or fewer tokens',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: MintAllowanceForm,
   getDefaultValues: () => ({ module: '', amount: '', direction: 'increase' }),
   validate: (data) => {
@@ -185,7 +185,7 @@ function switchHandler(spec: SwitchSpec): ActionHandler<SwitchDraft> {
     type: spec.type,
     label: spec.label,
     description: spec.description,
-    group: 'Membership',
+    group: 'Rules',
     FormComponent: SwitchForm,
     getDefaultValues: () => ({ enabled: true }),
     validate: (data) =>
@@ -271,7 +271,7 @@ export const setTransferAgentHandler: ActionHandler<TransferAgentDraft> = {
   type: 'set-transfer-agent',
   label: 'Change a transfer agent',
   description: 'Let a registered module move memberships with the member’s signature',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: TransferAgentForm,
   getDefaultValues: () => ({ module: '', enabled: true }),
   validate: (data) =>
@@ -337,7 +337,7 @@ export const daoTransferHandler: ActionHandler<DaoTransferDraft> = {
   type: 'dao-transfer',
   label: 'Recover a membership',
   description: 'Move a member’s token to a new wallet by vote (DAO recovery)',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: DaoTransferForm,
   getDefaultValues: () => ({ tokenId: '', to: '' }),
   validate: (data) =>
@@ -411,7 +411,7 @@ export const approvedTransferHandler: ActionHandler<ApprovedTransferDraft> = {
   type: 'approved-transfer',
   label: 'Approve a membership transfer',
   description: 'Move a member’s token to someone new with their approval (locked memberships)',
-  group: 'Membership',
+  group: 'Rules',
   FormComponent: ApprovedTransferForm,
   getDefaultValues: () => ({ from: '', to: '', tokenId: '' }),
   validate: (data) =>
