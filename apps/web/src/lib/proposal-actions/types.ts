@@ -150,6 +150,8 @@ export interface ActionHandler<TData = any> {
   description: string;
   order?: number; // Display order in dropdown (default: 0)
   group?: string; // Grouping (e.g., "Treasury", "Governance")
+  /** False for actions only ever prepared on their own page, never picked in the composer. */
+  pickable?: boolean;
 
   // Form component
   FormComponent: ComponentType<ActionFormProps<TData>>;

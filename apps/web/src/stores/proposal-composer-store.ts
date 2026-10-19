@@ -4,6 +4,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { ProposalActionType, ProposalQueuedAction, ValidationResult } from '@/lib/proposal-actions/types';
+import { migrateDraftsV3 } from '@/lib/proposal-changes/migrate-drafts';
+import { moveQueueItem, removeFromQueue, replaceInQueue } from '@/lib/proposal-changes/queue';
 
 export type ProposalMetadata = {
   title: string;
@@ -26,7 +28,6 @@ export type ProposalDraft = {
   validationErrors: ValidationResult | null;
   formMessage: string;
   busy: boolean;
-  prepopulatedFrom?: string;
   updatedAt: number;
 };
 
@@ -35,7 +36,8 @@ type ProposalComposerActions = {
   nextStep: (address: string, daoId: string) => void;
   prevStep: (address: string, daoId: string) => void;
   updateMetadata: (address: string, daoId: string, patch: Partial<ProposalMetadata>) => void;
-  beginCreate: (address: string, daoId: string, actionType?: ProposalActionType) => void;
+  /** Start a new action of a type the member picked, from its live value when known. Nothing is pre-selected. */
+  beginCreate: (address: string, daoId: string, actionType: ProposalActionType, draftData?: unknown) => void;
   beginEdit: (address: string, daoId: string, index: number) => void;
   updateDraft: (address: string, daoId: string, draftData: any) => void;
   changeActionType: (address: string, daoId: string, actionType: ProposalActionType) => void;
@@ -44,18 +46,20 @@ type ProposalComposerActions = {
   cancelEdit: (address: string, daoId: string) => void;
   removeAction: (address: string, daoId: string, index: number) => void;
   reorderActions: (address: string, daoId: string, fromIndex: number, toIndex: number) => void;
-  addAdminAction: (data: {
-    address: string;
-    daoId: string;
-    metadata: ProposalMetadata;
-    action: ProposalQueuedAction;
-    source?: string;
-  }) => void;
-  replaceDraft: (
-    address: string,
-    daoId: string,
-    data: { metadata: ProposalMetadata; action?: ProposalQueuedAction; source?: string }
-  ) => void;
+  /**
+   * Add changes to the proposal. Never moves the composer to another step and never touches the
+   * proposal's title or description. With `replaces`, the new actions take the replaced ones' place.
+   */
+  addChanges: (address: string, daoId: string, actions: ProposalQueuedAction[], replaces?: string[]) => void;
+  /** Swap queued actions (a bundle as a whole) for new ones, keeping their position. */
+  replaceById: (address: string, daoId: string, ids: string[], actions: ProposalQueuedAction[]) => void;
+  /** Take an action out; an action inside a bundle takes its whole bundle with it. */
+  removeById: (address: string, daoId: string, id: string) => void;
+  removeBundle: (address: string, daoId: string, bundleId: string) => void;
+  /** Move a queue row (a bundle with all its steps) to another row's place. */
+  moveItem: (address: string, daoId: string, fromItem: number, toItem: number) => void;
+  /** Put back an earlier queue, for undo. */
+  restore: (address: string, daoId: string, queuedActions: ProposalQueuedAction[]) => void;
   setValidationErrors: (address: string, daoId: string, errors: ValidationResult | null) => void;
   clearValidationErrors: (address: string, daoId: string) => void;
   setFormMessage: (address: string, daoId: string, message: string) => void;
@@ -79,7 +83,6 @@ export const createEmptyDraft = (): ProposalDraft => ({
   validationErrors: null,
   formMessage: '',
   busy: false,
-  prepopulatedFrom: undefined,
   updatedAt: 0
 });
 
@@ -130,13 +133,42 @@ const memoryStorage = {
   removeItem: (_name: string) => undefined
 };
 
-const LEGACY_STORAGE_KEY = 'dao.proposal-drafts.v2';
+export const STORAGE_KEY = 'dao.proposal-drafts.v4';
+const V3_STORAGE_KEY = 'dao.proposal-drafts.v3';
+const V2_STORAGE_KEY = 'dao.proposal-drafts.v2';
+
+/** A saved v3 store as v4, or null when there is nothing to carry over. */
+export function migrateStoredV3(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { state?: { draftsByWallet?: Record<string, Record<string, any>> } };
+    return JSON.stringify({ state: { draftsByWallet: migrateDraftsV3(parsed.state?.draftsByWallet) }, version: 0 });
+  } catch {
+    return null;
+  }
+}
+
 const storage = createJSONStorage(() => {
   if (typeof window === 'undefined') return memoryStorage;
+  const local = window.localStorage;
 
-  // v3 intentionally discards unscoped v2 drafts rather than assigning them to an unknown wallet.
-  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  return window.localStorage;
+  // v3 intentionally discarded unscoped v2 drafts rather than assigning them to an unknown wallet.
+  local.removeItem(V2_STORAGE_KEY);
+  return {
+    getItem: (name: string) => {
+      const current = local.getItem(name);
+      if (current !== null || name !== STORAGE_KEY) return current;
+      // v4 stamps each action with its source and stores open-pool closing times as unix seconds.
+      const migrated = migrateStoredV3(local.getItem(V3_STORAGE_KEY));
+      if (migrated) {
+        local.setItem(STORAGE_KEY, migrated);
+        local.removeItem(V3_STORAGE_KEY);
+      }
+      return migrated;
+    },
+    setItem: (name: string, value: string) => local.setItem(name, value),
+    removeItem: (name: string) => local.removeItem(name)
+  };
 });
 
 function withUpdatedAt(draft: ProposalDraft, patch: Partial<ProposalDraft>): ProposalDraft {
@@ -188,12 +220,12 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
           withUpdatedAt(draft, { metadata: { ...draft.metadata, ...patch } })
         ),
 
-      beginCreate: async (address, daoId, actionType = 'mint-governance-token') => {
+      beginCreate: async (address, daoId, actionType, draftData) => {
         const { getActionHandler } = await import('@/lib/proposal-actions/registry');
         const handler = getActionHandler(actionType);
         updateDaoDraft(set, address, daoId, (draft) =>
           withUpdatedAt(draft, {
-            editingState: { mode: 'create', actionType, draftData: handler.getDefaultValues() },
+            editingState: { mode: 'create', actionType, draftData: draftData ?? handler.getDefaultValues() },
             validationErrors: null,
             formMessage: ''
           })
@@ -288,29 +320,58 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
           return withUpdatedAt(draft, { queuedActions });
         }),
 
-      addAdminAction: ({ address, daoId, metadata, action, source }) =>
+      addChanges: (address, daoId, actions, replaces) =>
         updateDaoDraft(set, address, daoId, (draft) =>
           withUpdatedAt(draft, {
-            metadata:
-              draft.queuedActions.length > 0 ||
-              draft.editingState !== null ||
-              Object.values(draft.metadata).some(Boolean)
-                ? draft.metadata
-                : metadata,
-            queuedActions: [...draft.queuedActions, action],
-            step: 1,
-            validationErrors: null,
-            formMessage: 'Action added to proposal draft',
-            prepopulatedFrom: source
+            queuedActions: replaces?.length
+              ? replaceInQueue(draft.queuedActions, replaces, actions)
+              : [...draft.queuedActions, ...actions],
+            validationErrors: null
           })
         ),
 
-      replaceDraft: (address, daoId, { metadata, action, source }) =>
-        updateDaoDraft(set, address, daoId, () =>
-          withUpdatedAt(createEmptyDraft(), {
-            metadata,
-            queuedActions: action ? [action] : [],
-            prepopulatedFrom: source
+      replaceById: (address, daoId, ids, actions) =>
+        updateDaoDraft(set, address, daoId, (draft) =>
+          withUpdatedAt(draft, { queuedActions: replaceInQueue(draft.queuedActions, ids, actions) })
+        ),
+
+      removeById: (address, daoId, id) =>
+        updateDaoDraft(set, address, daoId, (draft) => {
+          const queuedActions = removeFromQueue(draft.queuedActions, [id]);
+          // An edit of a removed action has nothing left to save into.
+          const editingIndex = draft.editingState?.index;
+          const editedId = editingIndex === undefined ? undefined : draft.queuedActions[editingIndex]?.id;
+          const editingState =
+            editedId === undefined
+              ? draft.editingState
+              : queuedActions.some((action) => action.id === editedId)
+                ? { ...draft.editingState!, index: queuedActions.findIndex((action) => action.id === editedId) }
+                : null;
+          return withUpdatedAt(draft, { queuedActions, editingState });
+        }),
+
+      removeBundle: (address, daoId, bundleId) =>
+        updateDaoDraft(set, address, daoId, (draft) =>
+          withUpdatedAt(draft, {
+            queuedActions: draft.queuedActions.filter((action) => action.bundleId !== bundleId),
+            editingState: draft.editingState?.mode === 'edit' ? null : draft.editingState
+          })
+        ),
+
+      moveItem: (address, daoId, fromItem, toItem) =>
+        updateDaoDraft(set, address, daoId, (draft) =>
+          withUpdatedAt(draft, {
+            queuedActions: moveQueueItem(draft.queuedActions, fromItem, toItem),
+            // Indices move with the rows; an open edit would save into the wrong place.
+            editingState: draft.editingState?.mode === 'edit' ? null : draft.editingState
+          })
+        ),
+
+      restore: (address, daoId, queuedActions) =>
+        updateDaoDraft(set, address, daoId, (draft) =>
+          withUpdatedAt(draft, {
+            queuedActions,
+            editingState: draft.editingState?.mode === 'edit' ? null : draft.editingState
           })
         ),
 
@@ -337,7 +398,7 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
         )
     }),
     {
-      name: 'dao.proposal-drafts.v3',
+      name: STORAGE_KEY,
       storage,
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -358,7 +419,6 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
                   metadata: draft.metadata,
                   queuedActions: draft.queuedActions,
                   editingState: draft.editingState,
-                  prepopulatedFrom: draft.prepopulatedFrom,
                   updatedAt: draft.updatedAt,
                   validationErrors: null,
                   formMessage: '',
@@ -390,14 +450,12 @@ export const selectHasDraft = (address: string | null, daoId: string) => (state:
   return proposalDraftHasContent(state.draftsByWallet[normalizeWalletAddress(address)]?.[daoId]);
 };
 
-export const selectCanProceedToStep2 = (address: string | null, daoId: string) => (state: ProposalComposerStore) => {
-  const draft = selectDraft(address, daoId)(state);
-  return (
-    draft.metadata.title.trim().length > 0 &&
-    draft.metadata.description.trim().length > 0 &&
-    draft.queuedActions.length > 0
-  );
-};
+/**
+ * Whether the composer can move on to Review. Changes can come before the "why": only a change is needed
+ * here, and Review asks for the title and description before anything is signed.
+ */
+export const selectCanProceedToStep2 = (address: string | null, daoId: string) => (state: ProposalComposerStore) =>
+  selectDraft(address, daoId)(state).queuedActions.length > 0;
 
 export const selectIsEditing = (address: string | null, daoId: string) => (state: ProposalComposerStore) =>
   selectDraft(address, daoId)(state).editingState?.mode === 'edit';
