@@ -3,7 +3,6 @@
 import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
-import useSWR from 'swr';
 
 import { AuctionSettingsBuilder } from '@/components/admin/auction-settings-builder';
 import { PageSection } from '@/components/page-section';
@@ -14,28 +13,10 @@ import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { paymentAssetCode } from '@/lib/assets-config';
+import { useAuctionStatus } from '@/lib/auction-status';
 import { formatStroops } from '@/lib/auction-values';
 import { formatDuration } from '@/lib/duration';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-
-type AuctionStatus = {
-  status: 'not-launched' | 'paused' | 'active';
-  paused: boolean;
-  auction: { token_id: string; settled: boolean } | null;
-  config: {
-    duration: string | number;
-    reserve_price: string;
-    time_buffer: string | number;
-    payment_token: string;
-    min_bid_increment_percent: number;
-  };
-};
-async function fetcher(url: string): Promise<AuctionStatus> {
-  const response = await fetch(url, { cache: 'no-store' });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Auction status unavailable');
-  return payload;
-}
 
 const page = css({ display: 'grid', gap: '5' });
 const cardHead = css({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '3' });
@@ -46,10 +27,7 @@ export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const [busy, setBusy] = useState(false);
-  const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
-    config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
-    fetcher
-  );
+  const { data, error, mutate, isLoading } = useAuctionStatus(daoId, config);
   const token = useAdminTokenState(config, session.address);
   const admin = useContractAdmin(config, 'auction', session.address || config.launchAdmin);
   const direct = Boolean(session.address && admin.data === session.address);
@@ -152,7 +130,6 @@ export default function AuctionAdminPage() {
 
             <AuctionSettingsBuilder
               key={`${data.paused}-${data.config.reserve_price}-${data.config.duration}-${data.config.time_buffer}-${data.config.min_bid_increment_percent}`}
-              daoId={daoId}
               config={config}
               live={live}
               paused={data.paused}

@@ -54,9 +54,9 @@ export function useMarketplaceOffers(query: string, enabled: boolean) {
     options
   );
 }
-export function useDaoMarketplace(daoId: string, query = '') {
+export function useDaoMarketplace(daoId: string, query = '', enabled = true) {
   return useSWR<DaoMarketplace>(
-    marketplaceKey(daoId, 'dao', `/api/dao/${encodeURIComponent(daoId)}/marketplace?${query}`),
+    enabled ? marketplaceKey(daoId, 'dao', `/api/dao/${encodeURIComponent(daoId)}/marketplace?${query}`) : null,
     fetchKey,
     options
   );
