@@ -75,7 +75,7 @@ function propertiesHandler(
       type === 'add-artwork-properties'
         ? 'Add new layers and images from an IPFS directory. Prepare them in Manage → Artwork.'
         : 'Replace every layer and image. This can break existing token images.',
-    group: 'Artwork',
+    group: 'Membership',
     FormComponent: PropertiesForm,
     getDefaultValues: () => ({ names: [], items: [], ipfsGroup: { base_uri: '', extension: '.png' } }),
     validate: validateArtworkProperties,
@@ -120,7 +120,7 @@ export const artworkSettingHandlers = (Object.keys(artworkSettingMethods) as Art
     type,
     label: artworkSettingLabels[type],
     description: 'Change where token images are drawn from. Existing token images can change too.',
-    group: 'Artwork',
+    group: 'Membership',
     FormComponent: ({ value, onChange, disabled }) => (
       <Field>
         <FieldLabel htmlFor={`artwork-setting-${type}`}>New value</FieldLabel>
@@ -165,7 +165,7 @@ export const updateDaoProfileHandler: PendingAdminHandler<DaoProfileDraft, 'upda
   type: 'update-dao-profile',
   label: 'Update the tribe profile',
   description: 'Replace the description, links and image people see. Prepare it in Manage → Tribe profile.',
-  group: 'Administration',
+  group: 'Tribe',
   FormComponent: ({ value }) => (
     <>
       <Text>Edit the profile in Manage → Tribe profile; this shows what the proposal will write.</Text>

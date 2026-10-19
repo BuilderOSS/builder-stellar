@@ -52,7 +52,7 @@ export const changeDaoSlugHandler: ActionHandler<DaoSlugDraft> = {
   type: 'change-dao-slug',
   label: 'Change the tribe link',
   description: 'Move the tribe to a new /dao/ link',
-  group: 'Administration',
+  group: 'Tribe',
   FormComponent: DaoSlugForm,
   getDefaultValues: () => ({ slug: '' }),
   validate: (data, context) => validateDaoSlug(data, context),

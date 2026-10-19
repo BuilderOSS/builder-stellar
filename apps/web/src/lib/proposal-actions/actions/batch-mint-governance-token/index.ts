@@ -12,7 +12,7 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
   label: 'Mint membership tokens',
   description: `Mint 1 to ${MAX_BATCH_MINT} membership tokens to one wallet`,
   order: 2,
-  group: 'Governance',
+  group: 'Membership',
 
   FormComponent: BatchMintGovernanceTokenForm,
 

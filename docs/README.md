@@ -32,6 +32,7 @@ Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tr
 
 - [Database view catalog](DATABASE_SCHEMA.md)
 - [Security and authority model](SECURITY_MODEL.md): admin model, voting supply, batch budget, error codes
+- [Proposal actions](PROPOSAL_ACTIONS.md): each composer action's contract call, who authorizes it, its prerequisites, failure codes and tests
 - [Storage design and decisions](STORAGE_DIET.md): the chain-only rule, what lives in events, the profile JSON, one-sweep renewal, and the decision log (D1–D43) the code cites
 - [Membership models (design)](designs/membership-models.md): mint allowances, the module registry, ClaimMinter, the assurance launch and quick-buy pools; retires the shared Minter
 - [Membership token settings (design)](designs/locked-tokens.md): locked transfers, members-only delegation, DAO recovery and transfer agents

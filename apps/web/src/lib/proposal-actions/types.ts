@@ -106,6 +106,8 @@ export interface FormContext {
   balances?: AssetBalance[];
   balancesLoading?: boolean;
   balancesError?: string;
+  /** True once the auction has taken a bid, which fixes its payment asset; undefined when unknown. */
+  auctionPaymentTokenLocked?: boolean;
   // Allow custom extensions per action type
   [key: string]: any;
 }
@@ -140,6 +142,18 @@ export interface ActionFormProps<TData> {
   network?: DaoNetworkConfig['name'];
 }
 
+/** The Manage sections (lib/manage-sections.ts), plus Treasury and Advanced: where a change lives. */
+export const PROPOSAL_ACTION_GROUPS = [
+  'Tribe',
+  'Membership',
+  'Rules',
+  'Selling',
+  'Treasury',
+  'System',
+  'Advanced'
+] as const;
+export type ProposalActionGroup = (typeof PROPOSAL_ACTION_GROUPS)[number];
+
 /**
  * Core action handler interface
  */
@@ -149,9 +163,7 @@ export interface ActionHandler<TData = any> {
   label: string;
   description: string;
   order?: number; // Display order in dropdown (default: 0)
-  group?: string; // Grouping (e.g., "Treasury", "Governance")
-  /** False for actions only ever prepared on their own page, never picked in the composer. */
-  pickable?: boolean;
+  group?: ProposalActionGroup;
 
   // Form component
   FormComponent: ComponentType<ActionFormProps<TData>>;
@@ -167,6 +179,9 @@ export interface ActionHandler<TData = any> {
 
   // Precondition check - determines if action can be executed at all (independent of form data)
   checkPreconditions?: (context: FormContext) => PreconditionResult;
+
+  /** False for actions the picker does not offer (prepared elsewhere, or failing as things stand). Default true. */
+  pickable?: boolean;
 
   // Optional metadata
 }

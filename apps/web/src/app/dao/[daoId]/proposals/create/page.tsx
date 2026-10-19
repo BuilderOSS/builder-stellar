@@ -36,7 +36,7 @@ import { ActionFormProvider, ActionPickerSheet, ProposalActionQueue } from '@/li
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-changes/compose-metadata';
 import { changeCountText } from '@/lib/proposal-changes/queue';
-import { analyzeQueue } from '@/lib/proposal-changes/review';
+import { analyzeDraft } from '@/lib/proposal-changes/review';
 import { useSettingValues } from '@/lib/proposal-changes/use-setting-values';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
@@ -124,7 +124,7 @@ export default function ProposalCreatePage() {
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);
-  const allDraftFindings = [...analyzeQueue(queuedActions).values()].flat();
+  const allDraftFindings = analyzeDraft(queuedActions, config);
   const draftFindings = allDraftFindings.filter((finding) => finding.severity === 'error');
   const hasBlockingDraftFindings = draftFindings.length > 0;
   // Ordering problems still submit, but the vote would fail at execution, so say so before signing.

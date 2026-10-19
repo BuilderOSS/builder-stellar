@@ -48,7 +48,7 @@ export const openClaimListHandler: ActionHandler<ScopedDraft> = {
   type: 'open-claim-list',
   label: 'Open a claim list',
   description: 'Prepare the list in Claims admin: it grants the claims module an allowance and opens the list.',
-  group: 'Allocations',
+  group: 'Membership',
   FormComponent: ClaimListSummary,
   getDefaultValues: () => ({
     type: 'open-claim-list',
