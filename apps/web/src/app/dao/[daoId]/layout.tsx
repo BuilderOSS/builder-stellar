@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { ProposeChangeDialog } from '@/components/proposal/propose-change-dialog';
 import { DaoShell } from '@/components/shell/dao-shell';
 import { DaoProvider } from '@/contexts/dao-context';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
@@ -44,6 +45,8 @@ export default async function DaoLayout({ children, params }: DaoLayoutProps) {
   return (
     <DaoProvider daoId={daoId} daoConfig={daoConfig}>
       <DaoShell>{children}</DaoShell>
+      {/* One review for changes added from any page of the tribe. */}
+      <ProposeChangeDialog />
     </DaoProvider>
   );
 }
