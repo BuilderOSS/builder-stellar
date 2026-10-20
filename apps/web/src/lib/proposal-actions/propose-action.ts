@@ -25,7 +25,7 @@ export function validateAction(request: ActionRequest, config: DaoNetworkConfig,
   if (!request.actions.length) return 'There is nothing to add.';
   const context: FormContext = { config, session: { address, kit: null } };
   for (const action of request.actions) {
-    if (!isRegisteredActionType(action.type)) return 'This change is not supported.';
+    if (!isRegisteredActionType(action.type)) return 'This action is not supported.';
     const handler = getActionHandler(action.type);
     try {
       const data = handler.deserialize(action);

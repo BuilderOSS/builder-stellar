@@ -2,7 +2,7 @@ import { validateProposalActionCount } from '@/lib/governance-limits';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { type ProposalMetadataDraft, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
 
-export type ReviewGap = 'title' | 'why' | 'change';
+export type ReviewGap = 'title' | 'why' | 'action';
 
 export type ReviewReadiness = {
   ready: boolean;
@@ -20,7 +20,7 @@ export function reviewReadiness(metadata: ProposalMetadataDraft, actions: Propos
   const missing: ReviewGap[] = [];
   if (!metadata.title.trim()) missing.push('title');
   if (!metadata.description.trim()) missing.push('why');
-  if (!actions.length) missing.push('change');
+  if (!actions.length) missing.push('action');
   if (missing.length) return { ready: false, missing, problem: null };
 
   const countError = validateProposalActionCount(actions.length);
@@ -30,9 +30,9 @@ export function reviewReadiness(metadata: ProposalMetadataDraft, actions: Propos
   return { ready: true, missing, problem: null };
 }
 
-const GAP_TEXT: Record<ReviewGap, string> = { title: 'a title', why: 'why', change: 'at least one change' };
+const GAP_TEXT: Record<ReviewGap, string> = { title: 'a title', why: 'why', action: 'at least one action' };
 
-/** "Add a title, why and at least one change to review." */
+/** "Add a title, why and at least one action to review." */
 export function reviewGapText({ missing, problem }: ReviewReadiness) {
   if (problem) return problem;
   if (!missing.length) return '';

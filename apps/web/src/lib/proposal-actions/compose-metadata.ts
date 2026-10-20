@@ -36,8 +36,9 @@ export function suggestTitle(actions: ProposalQueuedAction[]) {
   const first = items[0];
   const summary = first.bundleId ? bundleName(first.bundleLabel) : getProposalActionSummary(first.actions[0]);
   const lead = summary.length <= SHORT_TITLE ? summary : getProposalActionLabel(first.actions[0].type);
-  const rest = items.length - 1;
-  return rest ? `${lead} and ${rest} more ${rest === 1 ? 'change' : 'changes'}` : lead;
+  // Every step counts, a bundle's too, as the composer's "N actions" does.
+  const rest = actions.length - first.actions.length;
+  return rest ? `${lead} and ${rest} more ${rest === 1 ? 'action' : 'actions'}` : lead;
 }
 
 /**
@@ -47,16 +48,19 @@ export function suggestTitle(actions: ProposalQueuedAction[]) {
 export function whatThisDoes(actions: ProposalQueuedAction[], metadata: ProposalMetadataDraft) {
   const lines = actionLines(actions);
   if (!lines.length) return '';
+  // Steps per line, so lines left out are counted the way the composer counts actions.
+  const steps = queueItems(actions).map((item) => item.actions.length);
   const base = stripWhatThisDoes(metadata.description);
   const build = (shown: string[], hidden: number) =>
     [
       WHAT_THIS_DOES_HEADING,
       '',
       ...shown.map((line) => `- ${line}`),
-      ...(hidden ? [`- And ${hidden} more ${hidden === 1 ? 'change' : 'changes'}, listed with the proposal.`] : [])
+      ...(hidden ? [`- And ${hidden} more ${hidden === 1 ? 'action' : 'actions'}, listed with the proposal.`] : [])
     ].join('\n');
   for (let shown = lines.length; shown >= 0; shown -= 1) {
-    const section = build(lines.slice(0, shown), lines.length - shown);
+    const hidden = steps.slice(shown).reduce((sum, count) => sum + count, 0);
+    const section = build(lines.slice(0, shown), hidden);
     const description = withSection(base, section);
     if (proposalDescriptionBytes({ ...metadata, description }) <= PROPOSAL_DESCRIPTION_MAX_BYTES) return section;
   }

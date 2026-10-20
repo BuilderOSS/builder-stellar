@@ -9,7 +9,7 @@ import { Button, Chip, Disclosure, HelpTip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions/components/proposal-action-queue';
-import { queuedActionCount, queueItems } from '@/lib/proposal-actions/queue';
+import { queueItems } from '@/lib/proposal-actions/queue';
 import { getProposalActionSummary } from '@/lib/proposal-call';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
@@ -60,7 +60,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
   const hasDraft = useProposalComposerStore(selectHasDraft(address || null, daoId));
   const reset = useProposalComposerStore((state) => state.reset);
   const [confirmClear, setConfirmClear] = useState(false);
-  const count = queuedActionCount(draft.queuedActions);
+  const count = draft.queuedActions.length;
   const last = queueItems(draft.queuedActions).at(-1);
 
   if (!count) {
@@ -80,10 +80,10 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
         <div className={lead}>
           <Chip tone="live">{count}</Chip>
           <p className={titleText}>
-            {count === 1 ? 'change' : 'changes'} waiting for a vote
+            {count === 1 ? 'action' : 'actions'} waiting for a vote
             {overview ? null : (
               <HelpTip label="Proposal draft">
-                These changes go up for a vote together. Add a title and why, then submit.
+                These actions go up for a vote together. Add a title and why, then submit.
               </HelpTip>
             )}
           </p>
@@ -100,7 +100,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
         </div>
       </div>
       {lastText ? <p className={latest}>Latest: {lastText}</p> : null}
-      <Disclosure title="See changes" defaultOpen={overview}>
+      <Disclosure title="See actions" defaultOpen={overview}>
         <ProposalActionQueue daoId={daoId} variant="compact" />
       </Disclosure>
       <DiscardDraftDialog

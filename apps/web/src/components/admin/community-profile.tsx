@@ -370,9 +370,9 @@ export function CommunityProfileEditor() {
   }
 
   const disabled = busy || !canAct;
-  const count = shownSteps.length
-    ? `${shownSteps.length} ${shownSteps.length === 1 ? 'change' : 'changes'}`
-    : 'changes';
+  // Applied directly they are changes; in a proposal, each is an action.
+  const noun = (n: number) => (direct ? (n === 1 ? 'change' : 'changes') : n === 1 ? 'action' : 'actions');
+  const count = shownSteps.length ? `${shownSteps.length} ${noun(shownSteps.length)}` : noun(2);
   const submit = (
     <ActionSubmit
       direct={direct}

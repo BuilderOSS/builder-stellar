@@ -17,7 +17,7 @@ export type ManageModules = { auction: boolean; marketplace: boolean; claims: bo
 export const MANAGE_GROUPS: Array<{ title: string; items: ManageSection[] }> = [
   {
     title: 'Overview',
-    items: [{ key: 'overview', label: 'Overview', meta: 'Your access and pending changes', section: '', exact: true }]
+    items: [{ key: 'overview', label: 'Overview', meta: 'Your access and pending actions', section: '', exact: true }]
   },
   {
     title: 'Tribe',

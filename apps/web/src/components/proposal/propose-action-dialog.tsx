@@ -12,9 +12,9 @@ const summaryBox = css({ display: 'grid', gap: '1.5', p: '3.5', borderRadius: 'c
 const summaryText = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const FINDING_TITLE = {
-  'high-risk': 'High-risk change',
+  'high-risk': 'High-risk action',
   duplicate: 'Already in your proposal',
-  conflict: 'Changes the same thing as another change',
+  conflict: 'Changes the same thing as another action',
   order: 'Check the order'
 } as const;
 
@@ -62,7 +62,7 @@ export function ProposeActionDialog() {
       onOpenChange={(open) => {
         if (!open) resolve('cancel');
       }}
-      title={conflict ? 'Replace the change already in your proposal?' : 'Add this to your proposal?'}
+      title={conflict ? 'Replace the action already in your proposal?' : 'Add this to your proposal?'}
       description="It joins your proposal on this browser. Your wallet isn't asked to sign anything yet."
       footer={
         pending ? (
@@ -95,7 +95,7 @@ export function ProposeActionDialog() {
               {bundle
                 ? bundle.label
                 : actions.length > 1
-                  ? `${actions.length} changes`
+                  ? `${actions.length} actions`
                   : getProposalActionLabel(actions[0].type)}
             </Chip>
           </div>

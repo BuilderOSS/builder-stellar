@@ -20,14 +20,18 @@ const auction = [action('pause-auction'), setting('set-auction-duration', '600')
   })
 );
 
-describe('proposal text from its changes', () => {
-  it('suggests a title from the first change and counts the rest', () => {
+describe('proposal text from its actions', () => {
+  it('suggests a title from the first action and counts the rest', () => {
     expect(suggestTitle([])).toBe('');
     expect(suggestTitle([setting('set-quorum-bps', '1000')])).toBe('Change the quorum to 10%');
-    expect(suggestTitle([...auction, setting('set-quorum-bps', '1000')])).toBe('Change the auction and 1 more change');
+    expect(suggestTitle([...auction, setting('set-quorum-bps', '1000')])).toBe('Change the auction and 1 more action');
+    // A bundle after the lead counts every step, like the composer's count.
+    expect(suggestTitle([setting('set-quorum-bps', '1000'), ...auction])).toBe(
+      `Change the quorum to 10% and ${auction.length} more actions`
+    );
   });
 
-  it('writes one line per change, from its note when it has one', () => {
+  it('writes one line per action, from its note when it has one', () => {
     const quorum = { ...setting('set-quorum-bps', '1000'), note: 'Lower the bar to 10%.' };
     expect(actionLines([...auction, quorum, setting('set-voting-period', '86400')])).toEqual([
       'Change the auction. Each auction runs 10 minutes.',
@@ -56,6 +60,6 @@ describe('proposal text from its changes', () => {
     const metadata = { title: 'T', description: 'Why.', url: '' };
     const description = applyWhatThisDoes(long, metadata);
     expect(proposalDescriptionBytes({ ...metadata, description })).toBeLessThanOrEqual(PROPOSAL_DESCRIPTION_MAX_BYTES);
-    expect(description).toMatch(/And \d+ more changes, listed with the proposal\./);
+    expect(description).toMatch(/And \d+ more actions, listed with the proposal\./);
   });
 });

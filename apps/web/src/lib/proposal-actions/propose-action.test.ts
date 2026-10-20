@@ -8,7 +8,7 @@ import { proposeAction, resolvePendingAction, validateAction } from './propose-a
 import { config, wallet } from './test-fixtures';
 
 const address = wallet(1);
-const daoId = 'propose-change-test';
+const daoId = 'propose-action-test';
 const queue = () => selectDraft(address, daoId)(useProposalComposerStore.getState()).queuedActions;
 const governance = (type: 'set-voting-period' | 'set-quorum-bps', value: string): ActionRequest => ({
   actions: [{ id: crypto.randomUUID(), type, recipient: '', amount: value, value }],
@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe('proposeAction', () => {
-  it('adds a clean change at once, stamped with its source and note, without touching the step or text', () => {
+  it('adds a clean action at once, stamped with its source and note, without touching the step or text', () => {
     const store = useProposalComposerStore.getState();
     store.updateMetadata(address, daoId, { title: 'Mine' });
     store.setStep(address, daoId, 2);
@@ -48,7 +48,7 @@ describe('proposeAction', () => {
     expect(queue().map((entry) => entry.type)).toEqual(['set-voting-period']);
   });
 
-  it('hands a clash to the dialog, and replace keeps the change’s place', () => {
+  it('hands a clash to the dialog, and replace keeps the action’s place', () => {
     const notify = vi.fn();
     proposeAction({ address, daoId, config, request: governance('set-quorum-bps', '1000'), notify });
     proposeAction({ address, daoId, config, request: governance('set-voting-period', '86400'), notify });

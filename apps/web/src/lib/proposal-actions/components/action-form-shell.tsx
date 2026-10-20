@@ -88,7 +88,7 @@ export function ActionFormShell({
       ) : null}
       {preconditionResult && !preconditionResult.canExecute && preconditionResult.loading ? (
         <div role="status" aria-busy="true">
-          <span className="sr-only">Checking what this change needs</span>
+          <span className="sr-only">Checking what this action needs</span>
           <Skeleton className={css({ width: '56', height: '4' })} />
         </div>
       ) : null}

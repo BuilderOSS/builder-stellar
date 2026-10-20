@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { moveQueueItem, queuedActionCount, queueItems, removeFromQueue, replaceInQueue } from './queue';
+import { actionCountText, moveQueueItem, queueItems, removeFromQueue, replaceInQueue } from './queue';
 import { action, setting } from './test-fixtures';
 
 const bundled = (bundleId: string, ...actions: ReturnType<typeof action>[]) =>
@@ -20,7 +20,9 @@ describe('queue rows', () => {
     expect(items.map((item) => item.key)).toEqual([quorum.id, 'b1', pay.id]);
     expect(items[1].actions).toHaveLength(3);
     expect(items[1].start).toBe(1);
-    expect(queuedActionCount([quorum, ...auction, pay])).toBe(3);
+    // A bundle is one row but counts every step, as the 20-action limit does.
+    expect(actionCountText([quorum, ...auction, pay])).toBe('5 actions');
+    expect(actionCountText([pay])).toBe('1 action');
   });
 
   it('moves a whole bundle when its row moves', () => {

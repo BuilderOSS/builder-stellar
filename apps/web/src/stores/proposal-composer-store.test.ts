@@ -41,7 +41,7 @@ describe('proposal composer v4 actions', () => {
   const queued = (id: string, extra: Record<string, unknown> = {}) =>
     ({ id, type: 'pause-auction', recipient: '', amount: '', ...extra }) as any;
 
-  it('adds changes without moving the step, replaces by id in place, and restores for undo', () => {
+  it('adds actions without moving the step, replaces by id in place, and restores for undo', () => {
     clearDraft(wallet);
     const store = useProposalComposerStore.getState();
     store.setStep(wallet, daoId, 2);
@@ -75,7 +75,7 @@ describe('proposal composer v4 actions', () => {
     clearDraft(wallet);
   });
 
-  it('needs a title, a why and a change for Review, written in either order', () => {
+  it('needs a title, a why and an action for Review, written in either order', () => {
     const canReview = () => selectCanReview(wallet, daoId)(useProposalComposerStore.getState());
     const store = useProposalComposerStore.getState();
 

@@ -63,7 +63,7 @@ export function collectDrafts({
         title: draft.metadata.title.trim() || 'Untitled proposal',
         meta: [
           community?.name ?? shortId(daoId),
-          count ? `${count} ${count === 1 ? 'change' : 'changes'}` : 'no changes yet',
+          count ? `${count} ${count === 1 ? 'action' : 'actions'}` : 'no actions yet',
           saved(draft.updatedAt, now)
         ].join(' · '),
         href: daoRoute(community?.routeId ?? daoId, 'proposals/create'),

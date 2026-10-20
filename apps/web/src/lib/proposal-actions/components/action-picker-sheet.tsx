@@ -121,7 +121,7 @@ function matches(entry: Entry, query: string) {
 }
 
 /**
- * Adding a change to the proposal, in two screens: choose what to change, then set it up. Choosing starts
+ * Adding an action to the proposal, in two screens: choose what to change, then set it up. Choosing starts
  * from what a member wants ("Pay someone"), then every setting by tribe part with its live value. Changes
  * prepared on their own page link there instead.
  */
@@ -215,16 +215,16 @@ export function ActionPickerSheet({
     <Sheet
       open={open || Boolean(editingState)}
       onOpenChange={close}
-      title={choosing ? 'Add a change' : editingState.mode === 'edit' ? 'Edit a change' : 'Set up the change'}
+      title={choosing ? 'Add an action' : editingState.mode === 'edit' ? 'Edit an action' : 'Set up the action'}
       description={
         choosing
-          ? 'Changes run in order, all together, only if the vote passes. Nothing is signed until you submit.'
+          ? 'Actions run in order, all together, only if the vote passes. Nothing is signed until you submit.'
           : undefined
       }
     >
       {choosing ? (
         <div className={stack}>
-          <SearchInput value={query} onValueChange={setQuery} label="Find a change" placeholder="Find a change" />
+          <SearchInput value={query} onValueChange={setQuery} label="Find an action" placeholder="Find an action" />
 
           {intentEntries.length || shownElsewhere.length ? (
             <section className={group} aria-labelledby="picker-intents">
@@ -282,7 +282,7 @@ export function ActionPickerSheet({
           ) : null}
 
           {!intentEntries.length && !shownElsewhere.length && !parts.length && !advanced.length ? (
-            <p className={empty}>No change matches “{query.trim()}”. Try a plainer word, like “pay” or “quorum”.</p>
+            <p className={empty}>No action matches “{query.trim()}”. Try a plainer word, like “pay” or “quorum”.</p>
           ) : null}
         </div>
       ) : (

@@ -22,7 +22,7 @@ export function EditingActionNotice({
   return (
     <Callout
       variant="info"
-      title="Editing a change in your proposal"
+      title="Editing an action in your proposal"
       description={`${what.replace(/\.$/, '')}. Saving puts it back in the same place.`}
     >
       <div>

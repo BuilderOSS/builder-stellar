@@ -288,7 +288,7 @@ export default function ProposalCreatePage() {
           />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Say why, add what changes, then sign. Changes you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
+            meta="Say why, add the actions, then sign. Actions you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -341,7 +341,7 @@ export default function ProposalCreatePage() {
                       />
                       {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
                         <div className={suggestion}>
-                          <FieldHelperText>Suggested from the changes: {suggestedTitle}</FieldHelperText>
+                          <FieldHelperText>Suggested from the actions: {suggestedTitle}</FieldHelperText>
                           <Button
                             variant="link"
                             size="sm"
@@ -379,7 +379,7 @@ export default function ProposalCreatePage() {
                             onClick={() => updateMetadata(session.address, daoId, { description: whatItDoes })}
                           >
                             <Sparkles aria-hidden="true" />
-                            {hasWhatItDoes ? 'Update “What this does”' : 'Add “What this does” from the changes'}
+                            {hasWhatItDoes ? 'Update “What this does”' : 'Add “What this does” from the actions'}
                           </Button>
                         </div>
                       ) : null}
@@ -415,7 +415,7 @@ export default function ProposalCreatePage() {
                                 disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS || Boolean(editingState)}
                               >
                                 <Plus aria-hidden="true" />
-                                Add a change
+                                Add an action
                               </Button>
                             </div>
                           </div>
@@ -467,15 +467,15 @@ export default function ProposalCreatePage() {
                       <Callout
                         variant="error"
                         badge="Fix before submitting"
-                        title="Some changes repeat or clash"
-                        description="Go back and remove or replace the flagged change."
+                        title="Some actions repeat or clash"
+                        description="Go back and remove or replace the flagged action."
                       />
                     ) : null}
                     {orderWarnings.map((message) => (
                       <Callout
                         key={message}
                         variant="warning"
-                        title="Check the order of changes"
+                        title="Check the order of actions"
                         description={message}
                       />
                     ))}

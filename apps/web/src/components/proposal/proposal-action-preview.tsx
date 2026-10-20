@@ -230,7 +230,7 @@ export function ProposalActionPreview({
   return (
     <Section title={copy.title} description={functions.length ? copy.description : undefined}>
       {!functions.length ? (
-        <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>This proposal makes no changes.</p>
+        <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>This proposal has no actions.</p>
       ) : (
         <ol className={css({ listStyle: 'none', m: '0', p: '0' })}>
           {functions.map((functionName, index) => {

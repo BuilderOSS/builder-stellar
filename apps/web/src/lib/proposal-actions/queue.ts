@@ -77,12 +77,7 @@ export function removeFromQueue(actions: ProposalQueuedAction[], ids: string[]) 
   return actions.filter((action) => !removed.has(action.id));
 }
 
-/** How many separate things the proposal does: a bundle counts once. */
-export function queuedActionCount(actions: ProposalQueuedAction[]) {
-  return queueItems(actions).length;
-}
-
+/** "4 actions": every step counts, a bundle's too, the way the 20-action limit counts them. */
 export function actionCountText(actions: ProposalQueuedAction[]) {
-  const count = queuedActionCount(actions);
-  return `${count} ${count === 1 ? 'change' : 'changes'}`;
+  return `${actions.length} ${actions.length === 1 ? 'action' : 'actions'}`;
 }

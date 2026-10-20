@@ -78,7 +78,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
       }
     );
     if (result.outcome === 'invalid') setFormMessage(address, daoId, result.message);
-    if (result.outcome === 'no-wallet') setFormMessage(address, daoId, 'Connect a wallet to add changes.');
+    if (result.outcome === 'no-wallet') setFormMessage(address, daoId, 'Connect a wallet to add actions.');
   }, [
     address,
     daoId,

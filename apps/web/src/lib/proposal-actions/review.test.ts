@@ -11,7 +11,7 @@ const request = (actions: ActionRequest['actions'], extra: Partial<ActionRequest
   ...extra
 });
 
-describe('reviewing a change', () => {
+describe('reviewing an action', () => {
   it('asks when a setting already in the proposal is set again, and replace swaps it in place', () => {
     const existing = [
       setting('set-quorum-bps', '1000'),
@@ -78,7 +78,7 @@ describe('reviewing a change', () => {
   });
 });
 
-describe('composer changes', () => {
+describe('composer actions', () => {
   it('wraps a lone auction setting in pause and resume', async () => {
     const { composerAction } = await import('./composer-action');
     const proposed = composerAction(setting('set-auction-duration', '600'), []);
@@ -131,7 +131,7 @@ describe('reviewing an edited bundle', () => {
 });
 
 describe('reviewing an edit from its page', () => {
-  it('does not ask again about high-risk kinds the replaced change already had', () => {
+  it('does not ask again about high-risk kinds the replaced action already had', () => {
     const bundle = [action('pause-auction'), setting('set-auction-duration', '600'), action('unpause-auction')].map(
       (entry) => ({ ...entry, bundleId: 'b', bundleLabel: 'Change the auction: 3 steps' })
     );

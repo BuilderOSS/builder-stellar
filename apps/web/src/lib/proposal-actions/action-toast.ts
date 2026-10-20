@@ -30,7 +30,7 @@ export function showAddedToast(notice: AddedNotice, review?: () => void) {
     description: `${actionCountText(notice.next)} waiting for a vote. Nothing is signed until you submit it.`,
     duration: UNDO_DURATION,
     action: review ? { label: 'Review proposal', onClick: review } : undefined,
-    meta: { undo: undoTo(notice.address, notice.daoId, notice.previous, 'Change taken back out') }
+    meta: { undo: undoTo(notice.address, notice.daoId, notice.previous, 'Action taken back out') }
   });
 }
 
@@ -51,6 +51,6 @@ export function showRemovedToast({
     title: 'Removed from your proposal',
     description: label,
     duration: UNDO_DURATION,
-    meta: { undo: undoTo(address, daoId, previous, 'Change put back') }
+    meta: { undo: undoTo(address, daoId, previous, 'Action put back') }
   });
 }

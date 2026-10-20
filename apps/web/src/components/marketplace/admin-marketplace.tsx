@@ -405,7 +405,7 @@ function MarketplaceSettings({
     <section className={styles.panel}>
       <div className={styles.stack}>
         <h2>Payment, fee and pause changes</h2>
-        <p>Each change runs when its proposal passes. Listings already open keep their asset and fee.</p>
+        <p>Each action runs when its proposal passes. Listings already open keep their asset and fee.</p>
         {handlers.length ? (
           handlers.map((handler) => (
             <MarketplaceSetting
