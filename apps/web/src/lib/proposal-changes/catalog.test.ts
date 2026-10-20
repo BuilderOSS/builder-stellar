@@ -98,7 +98,7 @@ describe('one form per setting', () => {
     expect(getActionMeta('set-quorum-bps').currentValue!(values)?.text).toBe('10%');
     expect(getActionMeta('set-voting-period').currentValue!(values)?.text).toBe('3 days');
     expect(getActionMeta('set-auction-reserve-price').currentValue!(values)).toEqual({
-      draft: { reservePrice: '1' },
+      draft: { reservePrice: '1', assetCode: 'XLM' },
       text: '1 XLM'
     });
     expect(getActionMeta('set-transfers-locked').currentValue!(values)).toEqual({

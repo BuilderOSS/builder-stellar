@@ -232,6 +232,19 @@ describe('admin draft wording', () => {
     }
   });
 
+  it('names the asset a new starting price is paid in', () => {
+    const price = {
+      id: 'p',
+      type: 'set-auction-reserve-price',
+      recipient: '',
+      amount: '150',
+      reservePrice: '150'
+    } as const;
+    expect(getProposalActionSummary({ ...price, assetCode: 'XLM' })).toBe('Change the starting price to 150 XLM');
+    // A draft saved before the asset was recorded still reads.
+    expect(getProposalActionSummary(price)).toBe('Change the starting price to 150');
+  });
+
   it('summarises settings as sentences with units', () => {
     expect(getProposalActionSummary(setting('set-voting-delay', '3600'))).toBe(
       'Change the wait before voting opens to 1 hour'

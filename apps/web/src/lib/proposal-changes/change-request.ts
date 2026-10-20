@@ -36,6 +36,11 @@ export const CHANGE_META_FIELDS = ['source', 'note', 'bundleId', 'bundleLabel'] 
 /** The action's call data, without where it came from: what identity and duplicate checks compare. */
 export function withoutChangeMeta(action: ProposalQueuedAction): ProposalQueuedAction {
   const { source: _source, note: _note, bundleId: _bundleId, bundleLabel: _bundleLabel, ...call } = action;
+  // A starting price's asset is only there to read "to 150 XLM"; the call sends the number alone.
+  if (call.type === 'set-auction-reserve-price') {
+    const { assetCode: _assetCode, ...price } = call;
+    return price as ProposalQueuedAction;
+  }
   return call as ProposalQueuedAction;
 }
 

@@ -297,9 +297,13 @@ export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft
     type: 'set-auction-reserve-price',
     recipient: '',
     amount: data.reservePrice.trim(),
-    reservePrice: data.reservePrice.trim()
+    reservePrice: data.reservePrice.trim(),
+    ...(data.assetCode ? { assetCode: data.assetCode } : {})
   }),
-  deserialize: (action) => ({ reservePrice: action.reservePrice || action.amount || '' }),
+  deserialize: (action) => ({
+    reservePrice: action.reservePrice || action.amount || '',
+    ...(action.assetCode ? { assetCode: String(action.assetCode) } : {})
+  }),
   buildCallVector: (data, context) => ({
     target: context.config.auctionContractId,
     function: 'set_reserve_price',

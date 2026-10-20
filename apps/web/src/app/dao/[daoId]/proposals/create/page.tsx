@@ -14,6 +14,7 @@ import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-acti
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
 import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
 import {
+  ActionBar,
   Button,
   ButtonLink,
   Callout,
@@ -37,6 +38,7 @@ import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal
 import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-changes/compose-metadata';
 import { changeCountText } from '@/lib/proposal-changes/queue';
 import { analyzeDraft } from '@/lib/proposal-changes/review';
+import { reviewGapText, reviewReadiness } from '@/lib/proposal-changes/review-readiness';
 import { useSettingValues } from '@/lib/proposal-changes/use-setting-values';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
@@ -51,12 +53,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-import {
-  selectCanProceedToStep2,
-  selectDraft,
-  selectHasDraft,
-  useProposalComposerStore
-} from '@/stores/proposal-composer-store';
+import { selectDraft, selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 const layout = css({
   display: 'grid',
@@ -69,12 +66,13 @@ const back = css({ ml: '-3' });
 const topRow = css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2' });
 const stack = css({ display: 'grid', gap: '5' });
 const actions = css({ display: 'flex', justifyContent: 'space-between', gap: '2', pt: '2' });
-const hint = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
 const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
+const wideOnly = css({ display: { base: 'none', md: 'block' } });
+const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
 const referenceTrigger = css({
   display: { base: 'inline-flex', lg: 'none' },
   position: 'fixed',
@@ -94,7 +92,6 @@ export default function ProposalCreatePage() {
   const draft = useProposalComposerStore(selectDraft(session.address || null, daoId));
   const { step, metadata, queuedActions, editingState } = draft;
   const hasDraft = useProposalComposerStore(selectHasDraft(session.address || null, daoId));
-  const canProceed = useProposalComposerStore(selectCanProceedToStep2(session.address || null, daoId));
 
   const setStep = useProposalComposerStore((s) => s.setStep);
   const updateMetadata = useProposalComposerStore((s) => s.updateMetadata);
@@ -134,25 +131,16 @@ export default function ProposalCreatePage() {
   const metadataValidation = validateProposalMetadataDraft(metadata);
   const descriptionBytes = proposalDescriptionBytes(metadata);
 
+  const readiness = reviewReadiness(metadata, queuedActions);
+  const readinessText = reviewGapText(readiness);
+
   const suggestedTitle = suggestTitle(queuedActions);
   const whatItDoes = applyWhatThisDoes(queuedActions, metadata);
   const hasWhatItDoes = metadata.description.includes(WHAT_THIS_DOES_HEADING);
 
-  // Changes come first; the why can follow. Arriving at the why fills an empty title and description from
-  // the changes, and the member edits from there.
-  const handleProceedToStep2 = () => {
-    if (!canProceed || actionCountError) return;
-    const patch: Partial<typeof metadata> = {};
-    if (!metadata.title.trim() && suggestedTitle) patch.title = suggestedTitle;
-    if (!metadata.description.trim()) patch.description = whatItDoes;
-    if (Object.keys(patch).length) updateMetadata(session.address, daoId, patch);
-    setStep(session.address, daoId, 2);
-  };
-
-  const handleProceedToStep3 = () => {
-    if (metadataValidation.valid && queuedActions.length > 0 && !actionCountError) {
-      setStep(session.address, daoId, 3);
-    }
+  // The why and the changes are one page, written in either order. Nothing is filled in for the member.
+  const handleReview = () => {
+    if (readiness.ready) setStep(session.address, daoId, 2);
   };
 
   const handleOpenConfirmDialog = () => {
@@ -236,8 +224,7 @@ export default function ProposalCreatePage() {
   };
 
   const steps = [
-    { id: 'changes', label: 'What changes' },
-    { id: 'why', label: 'Why' },
+    { id: 'write', label: 'Write' },
     { id: 'review', label: 'Review' }
   ];
 
@@ -269,7 +256,7 @@ export default function ProposalCreatePage() {
           />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Pick what changes, say why, then sign. Changes you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
+            meta="Say why, add what changes, then sign. Changes you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -305,53 +292,11 @@ export default function ProposalCreatePage() {
                 <ProgressSteps
                   steps={steps}
                   current={step - 1}
-                  onSelect={(index) => setStep(session.address, daoId, (index + 1) as 1 | 2 | 3)}
+                  onSelect={(index) => setStep(session.address, daoId, (index + 1) as 1 | 2)}
+                  canSelect={(index) => index === 0 || readiness.ready}
                 />
 
                 {step === 1 && (
-                  <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
-                    <SettingValuesContext.Provider value={settingValues.values}>
-                      <div className={stack}>
-                        <p className={hint}>
-                          Add up to {MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote
-                          passes.
-                        </p>
-                        <div>
-                          <Button
-                            variant="secondary"
-                            onClick={() => setPickerOpen(true)}
-                            disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS || Boolean(editingState)}
-                          >
-                            <Plus aria-hidden="true" />
-                            Add a change
-                          </Button>
-                        </div>
-                        {actionCountError ? <Callout variant="error" title={actionCountError} /> : null}
-                        <Section
-                          title={
-                            queuedActions.length
-                              ? `In this proposal (${changeCountText(queuedActions)})`
-                              : 'In this proposal'
-                          }
-                          level={3}
-                        >
-                          <ProposalActionQueue daoId={daoId} />
-                        </Section>
-                        <div className={actions}>
-                          <Button variant="ghost" onClick={() => router.back()}>
-                            Cancel
-                          </Button>
-                          <Button onClick={handleProceedToStep2} disabled={!canProceed || Boolean(actionCountError)}>
-                            Next: why
-                          </Button>
-                        </div>
-                      </div>
-                      <ActionPickerSheet daoId={daoId} open={pickerOpen} onOpenChange={setPickerOpen} />
-                    </SettingValuesContext.Provider>
-                  </ActionFormProvider>
-                )}
-
-                {step === 2 && (
                   <div className={stack}>
                     <Field>
                       <FieldLabel htmlFor="title">Title</FieldLabel>
@@ -360,7 +305,6 @@ export default function ProposalCreatePage() {
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
                         placeholder={suggestedTitle || 'Fund the winter tool library'}
-                        aria-invalid={!metadataValidation.valid && metadata.title.length > 0 ? true : undefined}
                       />
                       {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
                         <div className={suggestion}>
@@ -381,7 +325,7 @@ export default function ProposalCreatePage() {
                         id="description"
                         value={metadata.description}
                         onChange={(description) => updateMetadata(session.address, daoId, { description })}
-                        placeholder="What changes, who it helps, and what it costs"
+                        placeholder="The problem, who it helps, and what it costs"
                         rows={9}
                         canUpload={session.authStatus === 'authenticated'}
                         invalid={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES}
@@ -417,24 +361,68 @@ export default function ProposalCreatePage() {
                         inputMode="url"
                       />
                     </Field>
-                    {!metadataValidation.valid && (metadata.title || metadata.description) ? (
-                      <FieldHelperText tone="error">{metadataValidation.message}</FieldHelperText>
-                    ) : null}
+                    <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
+                      <SettingValuesContext.Provider value={settingValues.values}>
+                        <Section
+                          title={
+                            queuedActions.length
+                              ? `In this proposal (${changeCountText(queuedActions)})`
+                              : 'In this proposal'
+                          }
+                          description={`Up to ${MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote passes.`}
+                          level={3}
+                        >
+                          <div className={stack}>
+                            {actionCountError ? <Callout variant="error" title={actionCountError} /> : null}
+                            <ProposalActionQueue daoId={daoId} />
+                            <div>
+                              <Button
+                                variant="secondary"
+                                onClick={() => setPickerOpen(true)}
+                                disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS || Boolean(editingState)}
+                              >
+                                <Plus aria-hidden="true" />
+                                Add a change
+                              </Button>
+                            </div>
+                          </div>
+                        </Section>
+                        <ActionPickerSheet daoId={daoId} open={pickerOpen} onOpenChange={setPickerOpen} />
+                      </SettingValuesContext.Provider>
+                    </ActionFormProvider>
                     <div className={actions}>
-                      <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
-                        Back
+                      <Button variant="ghost" onClick={() => router.back()}>
+                        Cancel
                       </Button>
+                      <div className={wideOnly}>
+                        <Button onClick={handleReview} disabled={!readiness.ready}>
+                          Next: review
+                        </Button>
+                      </div>
+                    </div>
+                    {readinessText ? (
+                      <p className={gap} role="status">
+                        {readinessText}
+                      </p>
+                    ) : null}
+                    <ActionBar mobileOnly>
                       <Button
-                        onClick={handleProceedToStep3}
-                        disabled={!metadataValidation.valid || !queuedActions.length}
+                        variant="secondary"
+                        onClick={() => setContextRailOpen(true)}
+                        ref={contextTriggerRef}
+                        aria-haspopup="dialog"
                       >
+                        <BookOpen aria-hidden="true" />
+                        Reference
+                      </Button>
+                      <Button onClick={handleReview} disabled={!readiness.ready}>
                         Next: review
                       </Button>
-                    </div>
+                    </ActionBar>
                   </div>
                 )}
 
-                {step === 3 && (
+                {step === 2 && (
                   <div className={stack}>
                     {actionCountError ? (
                       <Callout variant="error" badge="Fix before submitting" title={actionCountError} />
@@ -476,7 +464,7 @@ export default function ProposalCreatePage() {
                       description="Check the contracts, recipients and amounts there before you sign. Proposing is free; your wallet pays a small network fee."
                     />
                     <div className={actions}>
-                      <Button variant="ghost" onClick={() => setStep(session.address, daoId, 2)}>
+                      <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
                         Back
                       </Button>
                       <Button
@@ -506,16 +494,18 @@ export default function ProposalCreatePage() {
           mobileTriggerRef={contextTriggerRef}
         />
       </div>
-      <Button
-        variant="secondary"
-        className={referenceTrigger}
-        onClick={() => setContextRailOpen(true)}
-        ref={contextTriggerRef}
-        aria-haspopup="dialog"
-      >
-        <BookOpen aria-hidden="true" />
-        Reference
-      </Button>
+      {step === 1 ? null : (
+        <Button
+          variant="secondary"
+          className={referenceTrigger}
+          onClick={() => setContextRailOpen(true)}
+          ref={contextTriggerRef}
+          aria-haspopup="dialog"
+        >
+          <BookOpen aria-hidden="true" />
+          Reference
+        </Button>
+      )}
 
       <ProposalActionConfirmDialog
         open={confirmDialogOpen}

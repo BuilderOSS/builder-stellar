@@ -4,8 +4,9 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { ProposalActionType, ProposalQueuedAction, ValidationResult } from '@/lib/proposal-actions/types';
-import { migrateDraftsV3 } from '@/lib/proposal-changes/migrate-drafts';
+import { clampComposerStep, type ComposerStep, migrateDraftsV3 } from '@/lib/proposal-changes/migrate-drafts';
 import { moveQueueItem, removeFromQueue, replaceInQueue } from '@/lib/proposal-changes/queue';
+import { reviewReadiness } from '@/lib/proposal-changes/review-readiness';
 
 export type ProposalMetadata = {
   title: string;
@@ -21,7 +22,8 @@ export type EditingState = {
 };
 
 export type ProposalDraft = {
-  step: 1 | 2 | 3;
+  /** 1: write the why and the changes, in either order. 2: review and sign. */
+  step: ComposerStep;
   metadata: ProposalMetadata;
   queuedActions: ProposalQueuedAction[];
   editingState: EditingState | null;
@@ -32,7 +34,7 @@ export type ProposalDraft = {
 };
 
 type ProposalComposerActions = {
-  setStep: (address: string, daoId: string, step: 1 | 2 | 3) => void;
+  setStep: (address: string, daoId: string, step: ComposerStep) => void;
   nextStep: (address: string, daoId: string) => void;
   prevStep: (address: string, daoId: string) => void;
   updateMetadata: (address: string, daoId: string, patch: Partial<ProposalMetadata>) => void;
@@ -95,8 +97,9 @@ const emptyDraft = createEmptyDraft();
 export function sanitizeDrafts(
   draftsByWallet: Record<string, Record<string, ProposalDraft>>,
   isKnownType: (type: string) => boolean
-): { draftsByWallet: Record<string, Record<string, ProposalDraft>>; removed: number } {
+): { draftsByWallet: Record<string, Record<string, ProposalDraft>>; removed: number; changed: boolean } {
   let removed = 0;
+  let changed = false;
   const result: Record<string, Record<string, ProposalDraft>> = {};
   for (const [wallet, drafts] of Object.entries(draftsByWallet ?? {})) {
     result[wallet] = {};
@@ -113,18 +116,24 @@ export function sanitizeDrafts(
         editingState = null;
       }
       removed += dropped;
+      // Drafts saved while the composer had three steps can point past Review.
+      const step = clampComposerStep(draft.step);
+      if (dropped > 0 || step !== draft.step) changed = true;
       result[wallet][daoId] =
         dropped > 0
           ? {
               ...draft,
+              step,
               queuedActions: kept,
               editingState,
               formMessage: `${dropped} unsupported action${dropped === 1 ? ' was' : 's were'} removed from this draft`
             }
-          : draft;
+          : step !== draft.step
+            ? { ...draft, step }
+            : draft;
     }
   }
-  return { draftsByWallet: result, removed };
+  return { draftsByWallet: result, removed, changed };
 }
 
 const memoryStorage = {
@@ -208,11 +217,11 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
       setStep: (address, daoId, step) => updateDaoDraft(set, address, daoId, (draft) => withUpdatedAt(draft, { step })),
       nextStep: (address, daoId) =>
         updateDaoDraft(set, address, daoId, (draft) =>
-          withUpdatedAt(draft, { step: Math.min(3, draft.step + 1) as 1 | 2 | 3 })
+          withUpdatedAt(draft, { step: clampComposerStep(draft.step + 1) })
         ),
       prevStep: (address, daoId) =>
         updateDaoDraft(set, address, daoId, (draft) =>
-          withUpdatedAt(draft, { step: Math.max(1, draft.step - 1) as 1 | 2 | 3 })
+          withUpdatedAt(draft, { step: clampComposerStep(draft.step - 1) })
         ),
 
       updateMetadata: (address, daoId, patch) =>
@@ -403,8 +412,8 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         void import('@/lib/proposal-actions/registry').then(({ isRegisteredActionType }) => {
-          const { draftsByWallet, removed } = sanitizeDrafts(state.draftsByWallet, isRegisteredActionType);
-          if (removed > 0) useProposalComposerStore.setState({ draftsByWallet });
+          const { draftsByWallet, changed } = sanitizeDrafts(state.draftsByWallet, isRegisteredActionType);
+          if (changed) useProposalComposerStore.setState({ draftsByWallet });
         });
       },
       partialize: (state) => ({
@@ -451,11 +460,12 @@ export const selectHasDraft = (address: string | null, daoId: string) => (state:
 };
 
 /**
- * Whether the composer can move on to Review. Changes can come before the "why": only a change is needed
- * here, and Review asks for the title and description before anything is signed.
+ * Whether the draft can go to Review: a title, a why and at least one change, written in any order.
  */
-export const selectCanProceedToStep2 = (address: string | null, daoId: string) => (state: ProposalComposerStore) =>
-  selectDraft(address, daoId)(state).queuedActions.length > 0;
+export const selectCanReview = (address: string | null, daoId: string) => (state: ProposalComposerStore) => {
+  const draft = selectDraft(address, daoId)(state);
+  return reviewReadiness(draft.metadata, draft.queuedActions).ready;
+};
 
 export const selectIsEditing = (address: string | null, daoId: string) => (state: ProposalComposerStore) =>
   selectDraft(address, daoId)(state).editingState?.mode === 'edit';

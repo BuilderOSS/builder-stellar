@@ -103,7 +103,9 @@ export function StartingPriceSettingForm(props: ActionFormProps<AdminReservePric
         value={props.value.reservePrice}
         disabled={props.disabled}
         aria-invalid={error ? true : undefined}
-        onChange={(event) => props.onChange({ reservePrice: event.target.value })}
+        onChange={(event) =>
+          props.onChange({ ...props.value, reservePrice: event.target.value, ...(unit ? { assetCode: unit } : {}) })
+        }
       />
       <FieldHelperText tone={error ? 'error' : undefined}>
         {error ?? `At least ${MIN_RESERVE_PRICE_TOKENS}, up to 7 decimal places.`}
