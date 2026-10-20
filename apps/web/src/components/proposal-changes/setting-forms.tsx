@@ -5,7 +5,7 @@ import { Stack } from 'styled-system/jsx';
 
 import type { AdminReservePriceDraft, AdminValueDraft } from '@/components/admin/admin-action-forms';
 import { PercentageInput } from '@/components/admin/percentage-input';
-import { AmountInput, DurationInput, FieldHelperText, FieldLabel, Input } from '@/components/ui';
+import { AmountInput, DurationInput, FieldHelperText, FieldLabel, HelpTip, Input } from '@/components/ui';
 import { MIN_RESERVE_PRICE_TOKENS } from '@/lib/auction-values';
 import type { ActionFormProps } from '@/lib/proposal-actions/types';
 import type { SettingValues } from '@/lib/proposal-changes/catalog';
@@ -39,6 +39,7 @@ export function durationSettingForm({
           value={props.value.value}
           disabled={props.disabled}
           showSeconds={showSeconds}
+          helperAsTooltip
           helperText={helper}
           onChange={(seconds) => props.onChange({ value: String(seconds) })}
         />
@@ -59,6 +60,7 @@ export function QuorumSettingForm(props: ActionFormProps<AdminValueDraft>) {
         value={props.value.value}
         disabled={props.disabled}
         min={0.01}
+        helperAsTooltip
         helperText="Share of all votes that must be For or Abstain for a proposal to pass. With 100 votes, 10% means at least 10."
         onChange={(bps) => props.onChange({ value: String(bps) })}
       />
@@ -73,7 +75,10 @@ export function wholeNumberSettingForm({ id, label, helper }: { id: string; labe
     const error = fieldError(props);
     return (
       <Stack gap="2">
-        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <FieldLabel htmlFor={id}>
+          {label}
+          <HelpTip label={label}>{helper}</HelpTip>
+        </FieldLabel>
         <Input
           id={id}
           inputMode="numeric"
@@ -83,7 +88,7 @@ export function wholeNumberSettingForm({ id, label, helper }: { id: string; labe
           aria-invalid={error ? true : undefined}
           onChange={(event) => props.onChange({ value: event.target.value })}
         />
-        <FieldHelperText tone={error ? 'error' : undefined}>{error ?? helper}</FieldHelperText>
+        {error ? <FieldHelperText tone="error">{error}</FieldHelperText> : null}
       </Stack>
     );
   };

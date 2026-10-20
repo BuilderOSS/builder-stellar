@@ -154,6 +154,21 @@ const FIXTURES: Fixture[] = [
     expected: { minter: config.treasuryContractId, recipients: [alice], amounts: [3n] }
   },
   {
+    name: 'batch-mint-governance-token (several wallets)',
+    type: 'batch-mint-governance-token',
+    draft: {
+      recipient: alice,
+      amount: '2',
+      allocations: [
+        { recipient: alice, amount: '2' },
+        { recipient: bob, amount: '1' }
+      ]
+    },
+    target: 'token',
+    fn: 'batch_mint',
+    expected: { minter: config.treasuryContractId, recipients: [alice, bob], amounts: [2n, 1n] }
+  },
+  {
     type: 'transfer-sac-token',
     draft: { recipient: alice, amount: '12.5', assetCode: 'XLM' },
     target: 'xlm',

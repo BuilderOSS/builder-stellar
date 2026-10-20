@@ -111,7 +111,17 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <Section title="Your proposal draft">
+      <Section
+        title={
+          <>
+            Proposal draft
+            <HelpTip label="Proposal draft">
+              Changes that require a vote collect in your proposal draft on this browser. Review them together before
+              submitting.
+            </HelpTip>
+          </>
+        }
+      >
         <DraftDock daoId={daoId} overview />
       </Section>
 

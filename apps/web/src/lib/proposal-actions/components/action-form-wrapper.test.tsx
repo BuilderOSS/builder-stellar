@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 const form = vi.hoisted(() => ({
-  save: vi.fn(),
+  propose: vi.fn(() => ({ outcome: 'added' })),
   onSave: undefined as undefined | (() => void),
   data: {
     recipient: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
@@ -25,10 +25,14 @@ vi.mock('@/stores/proposal-composer-store', () => ({
           }
         }
       },
-      saveAction: form.save,
+      cancelEdit: vi.fn(),
+      updateDraft: vi.fn(),
+      setFormMessage: vi.fn(),
       setValidationErrors: vi.fn()
     })
 }));
+vi.mock('@/contexts/dao-context', () => ({ useDaoContext: () => ({ routeId: 'dao' }) }));
+vi.mock('@/lib/proposal-changes/use-propose-change', () => ({ useProposeChange: () => ({ propose: form.propose }) }));
 vi.mock('../context', () => ({
   useActionFormContext: () => ({ config: { treasuryContractId: 'treasury', adminAddress: 'treasury' } })
 }));
@@ -49,13 +53,16 @@ describe('existing single-mint drafts in the unified form', () => {
     const html = renderToStaticMarkup(<ActionFormWrapper daoId="dao" />);
     expect(html).toContain(form.data.recipient);
     expect(html).toContain('Add recipient');
-    expect(form.save).not.toHaveBeenCalled();
+    expect(form.propose).not.toHaveBeenCalled();
 
     form.onSave!();
-    expect(form.save).toHaveBeenCalledWith(
-      'wallet',
-      'dao',
-      expect.objectContaining({ type: 'batch-mint-governance-token', recipient: form.data.recipient, amount: '1' })
+    expect(form.propose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({ type: 'batch-mint-governance-token', recipient: form.data.recipient, amount: '1' })
+        ]
+      }),
+      expect.anything()
     );
   });
 });

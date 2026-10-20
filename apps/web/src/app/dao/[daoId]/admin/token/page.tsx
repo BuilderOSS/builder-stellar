@@ -193,7 +193,20 @@ export default function TokenAdminPage() {
                         : 'Read only'}
                 </Badge>
               </div>
-              <Heading size="heading">Mint membership tokens</Heading>
+              <Heading size="heading">
+                Mint membership tokens
+                <HelpTip label="Minting">
+                  {hasMintAccess
+                    ? `Mint up to ${MAX_BATCH_MINT} tokens per transaction; multiple recipients share the event budget.`
+                    : canProposeMint
+                      ? `Propose minting up to ${MAX_BATCH_MINT} tokens per transaction, across the listed recipients. It runs if the vote passes.`
+                      : frozen
+                        ? 'The launch drive froze minting: new tokens come only from its claim list until the tribe launches.'
+                        : token.data?.live && !session.address
+                          ? 'Connect a wallet to propose a mint. It runs if the vote passes.'
+                          : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
+                </HelpTip>
+              </Heading>
               <EditingChangeNotice
                 editing={editing.editing}
                 onCancel={() => {
@@ -201,17 +214,6 @@ export default function TokenAdminPage() {
                   setMintData({ recipient: '', amount: '1' });
                 }}
               />
-              <HelpTip label="Minting">
-                {hasMintAccess
-                  ? `Mint up to ${MAX_BATCH_MINT} tokens per transaction; multiple recipients share the event budget.`
-                  : canProposeMint
-                    ? `Propose minting up to ${MAX_BATCH_MINT} tokens per transaction, across the listed recipients. It runs if the vote passes.`
-                    : frozen
-                      ? 'The launch drive froze minting: new tokens come only from its claim list until the tribe launches.'
-                      : token.data?.live && !session.address
-                        ? 'Connect a wallet to propose a mint. It runs if the vote passes.'
-                        : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
-              </HelpTip>
               <BatchMintGovernanceTokenForm
                 value={mintData}
                 onChange={setMintData}

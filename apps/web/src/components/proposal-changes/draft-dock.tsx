@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
-import { Button, Chip, Disclosure, Text } from '@/components/ui';
+import { Button, Chip, Disclosure, HelpTip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions/components/proposal-action-queue';
@@ -45,10 +45,12 @@ const latest = css({
   whiteSpace: 'nowrap'
 });
 const buttons = css({ display: 'flex', gap: '2', flexWrap: 'wrap' });
+const empty = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 /**
  * The one visible proposal draft, on every page that can add a change: how many changes are waiting, the
- * latest one, the queue, and the way to the composer. With `overview` it also explains itself when empty.
+ * latest one, the queue, and the way to the composer. Explanations sit behind a help tip rather than in the
+ * page; on the overview, the section heading carries it.
  */
 export function DraftDock({ daoId, overview = false }: { daoId: string; overview?: boolean }) {
   const { routeId } = useDaoContext();
@@ -62,12 +64,8 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
   const last = queueItems(draft.queuedActions).at(-1);
 
   if (!count) {
-    return overview ? (
-      <Text size="sm">
-        Changes you make in Manage that need a vote collect in one proposal draft on this browser, so members can
-        approve them together.
-      </Text>
-    ) : null;
+    // On the overview the section heading names the draft and explains it; elsewhere an empty draft hides.
+    return overview ? <p className={empty}>Nothing waiting for a vote.</p> : null;
   }
 
   const lastText = last
@@ -81,7 +79,14 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
       <div className={head}>
         <div className={lead}>
           <Chip tone="live">{count}</Chip>
-          <p className={titleText}>{count === 1 ? 'change' : 'changes'} waiting for a vote</p>
+          <p className={titleText}>
+            {count === 1 ? 'change' : 'changes'} waiting for a vote
+            {overview ? null : (
+              <HelpTip label="Proposal draft">
+                These changes go up for a vote together. Add a title and why, then submit.
+              </HelpTip>
+            )}
+          </p>
         </div>
         <div className={buttons}>
           {overview && hasDraft ? (
