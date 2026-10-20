@@ -11,6 +11,7 @@
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+import { contractLabel, coreContracts, type DaoContract } from '@/lib/contract-search';
 import { type DaoProfile, EMPTY_PROFILE } from '@/lib/dao-profile';
 import { type ProfileView, verifyProfiles } from '@/lib/dao-profile-server';
 import { buyableOfferWhere } from '@/lib/marketplace/query';
@@ -292,6 +293,34 @@ function mapDaoConfig(row: DaoRow, network: NetworkName, view: ProfileView | und
     finalized_tx_hash: row.launchedTxHash,
     indexed_at: row.indexedAt?.toISOString() ?? null
   };
+}
+
+/**
+ * Every contract of each DAO that search can find it by: the contracts on its
+ * record plus each module registered now (external ones included). A failed
+ * module read falls back to the record's contracts.
+ */
+export async function getDaoContracts(daos: DaoConfig[]): Promise<Record<string, DaoContract[]>> {
+  const index = new Map(daos.map((dao) => [dao.dao_id, coreContracts(dao)]));
+  if (!daos.length) return {};
+  try {
+    const modules = await prisma.managerDaoModule.findMany({
+      where: { deploymentId: DEPLOYMENT_ID, registered: true, daoId: { in: [...index.keys()] } },
+      select: { daoId: true, moduleRole: true, kind: true, moduleContract: true }
+    });
+    for (const registered of modules) {
+      const contracts = index.get(registered.daoId);
+      if (!contracts || contracts.some((contract) => contract.id === registered.moduleContract)) continue;
+      contracts.push({
+        role: registered.moduleRole,
+        label: contractLabel(registered.moduleRole, registered.kind),
+        id: registered.moduleContract
+      });
+    }
+  } catch (error) {
+    console.error('[dao-db] module registry read failed; searching record contracts only', error);
+  }
+  return Object.fromEntries(index);
 }
 
 /**

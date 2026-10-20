@@ -4,7 +4,7 @@ import NextLink from 'next/link';
 import { css, sva } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { Chip, Countdown, Crest, crestHueStyle, FallbackImage } from '@/components/ui';
+import { Chip, Countdown, Crest, crestHueStyle, FallbackImage, shortenId } from '@/components/ui';
 import { useNow } from '@/hooks/use-now';
 import { activeNetworkName } from '@/lib/active-network';
 import { paymentAssetCode } from '@/lib/assets-config';
@@ -28,6 +28,8 @@ export type CommunitySummary = {
   forSale?: number;
   /** e.g. "Home" or "Launch admin"; shown as a brass chip. */
   yours?: string;
+  /** The contract a Discover search found this community by. */
+  match?: { label: string; id: string };
 };
 
 type CardAuction = {
@@ -50,7 +52,7 @@ async function fetchJson<T>(url: string) {
 }
 
 const card = sva({
-  slots: ['root', 'art', 'fallback', 'liveTag', 'body', 'name', 'meta', 'description', 'footer'],
+  slots: ['root', 'art', 'fallback', 'liveTag', 'body', 'name', 'meta', 'description', 'match', 'footer'],
   base: {
     root: {
       display: 'grid',
@@ -90,11 +92,13 @@ const card = sva({
     name: { textStyle: 'heading', fontSize: '1.0625rem', m: '0', overflowWrap: 'anywhere' },
     meta: { textStyle: 'caption', color: 'ink.muted', m: '0', fontVariantNumeric: 'tabular-nums' },
     description: { textStyle: 'caption', fontSize: '0.875rem', color: 'ink.muted', m: '0', lineClamp: '2' },
+    match: { textStyle: 'caption', color: 'ink.muted', m: '0', overflowWrap: 'anywhere' },
     footer: { display: 'flex', flexWrap: 'wrap', gap: '1.5', mt: '1' }
   }
 });
 
 const strong = css({ color: 'ink', fontWeight: '600' });
+const mono = css({ textStyle: 'mono', color: 'ink' });
 
 /**
  * Art-first community card. The live auction token's art leads when there is
@@ -171,6 +175,11 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
           <p className={classes.description}>{community.description}</p>
         ) : community.symbol ? (
           <p className={classes.meta}>{community.symbol}</p>
+        ) : null}
+        {community.match ? (
+          <p className={classes.match} title={community.match.id}>
+            {community.match.label} · <span className={mono}>{shortenId(community.match.id)}</span>
+          </p>
         ) : null}
         <div className={classes.footer}>
           {community.yours ? <Chip tone="yours">{community.yours}</Chip> : null}

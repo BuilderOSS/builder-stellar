@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 import { CommunityGrid } from '@/components/community/community-grid';
 import { PageSection } from '@/components/page-section';
 import { ButtonLink, Callout } from '@/components/ui';
-import { type DaoConfig, getAllDaosFromDatabase, withLiveAvailability } from '@/lib/dao-db';
+import type { DaoContract } from '@/lib/contract-search';
+import { type DaoConfig, getAllDaosFromDatabase, getDaoContracts, withLiveAvailability } from '@/lib/dao-db';
 
 // Communities change as they launch; never serve a build-time snapshot.
 export const dynamic = 'force-dynamic';
@@ -14,11 +15,18 @@ export const metadata: Metadata = {
   description: 'Find a tribe on Stellar to join, bid in, or vote with.'
 };
 
-export default async function DiscoverPage() {
+export default async function DiscoverPage({
+  searchParams
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { q } = await searchParams;
   let daos: DaoConfig[] = [];
+  let contracts: Record<string, DaoContract[]> = {};
   let loadError = false;
   try {
-    daos = await withLiveAvailability(await getAllDaosFromDatabase('operational'));
+    const launched = await getAllDaosFromDatabase('operational');
+    [daos, contracts] = await Promise.all([withLiveAvailability(launched), getDaoContracts(launched)]);
   } catch {
     loadError = true;
   }
@@ -40,7 +48,7 @@ export default async function DiscoverPage() {
           description="Try again in a moment, or open a tribe directly if you have its link."
         />
       ) : null}
-      <CommunityGrid daos={daos} />
+      <CommunityGrid daos={daos} contracts={contracts} initialQuery={typeof q === 'string' ? q : ''} />
     </PageSection>
   );
 }
