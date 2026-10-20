@@ -2883,9 +2883,8 @@ fn real_auth_marketplace_pool_and_secondary_flows() {
 // Full factory flow with the real compiled WASM modules
 // ---------------------------------------------------------------------------
 
-/// Upload a compiled module WASM. Build first: `cargo build --release --target
-/// wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace`
-/// (or `stellar contract build`).
+/// Upload a compiled module WASM. Build first with `stellar contract build` (`pnpm contracts:build`):
+/// it shakes the contract spec, and a plain `cargo build` leaves Token over the 128 KiB code limit.
 fn upload_module_wasm(e: &Env, name: &str) -> BytesN<32> {
     let path = std::format!(
         "{}/../../target/wasm32v1-none/release/{name}.wasm",
