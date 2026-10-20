@@ -32,7 +32,7 @@ vi.mock('@/stores/proposal-composer-store', () => ({
     })
 }));
 vi.mock('@/contexts/dao-context', () => ({ useDaoContext: () => ({ routeId: 'dao' }) }));
-vi.mock('@/lib/proposal-changes/use-propose-change', () => ({ useProposeChange: () => ({ propose: form.propose }) }));
+vi.mock('@/lib/proposal-actions/use-propose-action', () => ({ useProposeAction: () => ({ propose: form.propose }) }));
 vi.mock('../context', () => ({
   useActionFormContext: () => ({ config: { treasuryContractId: 'treasury', adminAddress: 'treasury' } })
 }));

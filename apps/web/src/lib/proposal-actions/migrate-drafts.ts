@@ -1,7 +1,7 @@
 import { expiryToUnixSeconds } from '@/lib/expiry-time';
 import type { ProposalActionType, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
-import { CHANGE_SOURCES, defaultSourceKey, legacySourceKey } from './change-request';
+import { ACTION_SOURCES, defaultSourceKey, legacySourceKey } from './action-request';
 
 /** A datetime-local string ("2026-11-01T12:00", local time) as unix seconds, or the value unchanged. */
 function expiryAsUnixSeconds(value: unknown) {
@@ -21,7 +21,7 @@ export function migrateActionV3(action: ProposalQueuedAction, prepopulatedFrom?:
   const sourceKey = fallback === 'membership' && legacy ? legacy : fallback;
   const migrated: ProposalQueuedAction = {
     ...action,
-    source: action.source ?? CHANGE_SOURCES[sourceKey],
+    source: action.source ?? ACTION_SOURCES[sourceKey],
     note: typeof action.note === 'string' ? action.note : ''
   };
   if (action.type === 'open-pool') migrated.expiresAt = expiryAsUnixSeconds(action.expiresAt);
@@ -30,7 +30,7 @@ export function migrateActionV3(action: ProposalQueuedAction, prepopulatedFrom?:
 
 type DraftV3 = { queuedActions?: ProposalQueuedAction[]; prepopulatedFrom?: string; [key: string]: unknown };
 
-/** The composer's steps: 1 writes the why and the changes, in either order; 2 reviews and signs. */
+/** The composer's steps: 1 writes the why and the actions, in either order; 2 reviews and signs. */
 export type ComposerStep = 1 | 2;
 
 /** Any saved step as one of today's two. Anything past writing is Review. */

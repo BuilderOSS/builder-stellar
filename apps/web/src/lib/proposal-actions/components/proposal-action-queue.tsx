@@ -12,12 +12,12 @@ import { Button, Chip, IconButton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { isHighRiskProposalAction } from '@/lib/proposal-action-identity';
+import { actionEditHref, type ActionSource } from '@/lib/proposal-actions/action-request';
+import { showRemovedToast } from '@/lib/proposal-actions/action-toast';
+import { isPickable } from '@/lib/proposal-actions/catalog';
+import { type QueueItem, queueItems, removeFromQueue } from '@/lib/proposal-actions/queue';
+import { analyzeQueue } from '@/lib/proposal-actions/review';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { isPickable } from '@/lib/proposal-changes/catalog';
-import { changeEditHref, type ChangeSource } from '@/lib/proposal-changes/change-request';
-import { showRemovedToast } from '@/lib/proposal-changes/change-toast';
-import { type QueueItem, queueItems, removeFromQueue } from '@/lib/proposal-changes/queue';
-import { analyzeQueue } from '@/lib/proposal-changes/review';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -178,7 +178,7 @@ export function ProposalActionQueue({
     // A bundle or a high-risk change asks first; anything else comes out at once, with undo.
     if (entry.bundleId || entry.actions.some(isHighRiskProposalAction)) {
       setConfirm({
-        title: entry.bundleId ? 'Remove all of its steps?' : 'Remove this change?',
+        title: entry.bundleId ? 'Remove all of its steps?' : 'Remove this action?',
         message: `“${itemSentence(entry)}” comes out of the proposal${
           entry.actions.length > 1 ? `, all ${entry.actions.length} steps together` : ''
         }. You can undo it from the notice.`,
@@ -196,7 +196,7 @@ export function ProposalActionQueue({
     const first = entry.actions[0];
     const inline = variant === 'composer' && !entry.bundleId && isPickable(getActionHandler(first.type));
     if (inline) return beginEdit(address, daoId, entry.start);
-    const href = changeEditHref(first);
+    const href = actionEditHref(first);
     if (href) router.push(daoRoute(routeId, href));
   }
 
@@ -260,7 +260,7 @@ export function ProposalActionQueue({
     return (
       <p className={empty}>
         {variant === 'composer'
-          ? 'Nothing yet. Add a change below, or from any Manage page.'
+          ? 'Nothing yet. Add an action below, or from any Manage page.'
           : 'Nothing in your proposal yet.'}
       </p>
     );
@@ -268,10 +268,10 @@ export function ProposalActionQueue({
 
   return (
     <div>
-      <ol className={list} aria-label="Changes in this proposal">
+      <ol className={list} aria-label="Actions in this proposal">
         {items.map((entry, index) => {
           const first = entry.actions[0];
-          const source = first.source as ChangeSource | undefined;
+          const source = first.source as ActionSource | undefined;
           const isEditing =
             editingIndex !== undefined &&
             editingIndex >= entry.start &&
@@ -279,7 +279,7 @@ export function ProposalActionQueue({
           const open = expanded[entry.key] ?? false;
           const shown = rowFindings(entry, findings);
           const pickable = !entry.bundleId && isPickable(getActionHandler(first.type));
-          const href = changeEditHref(first);
+          const href = actionEditHref(first);
           const canEdit = variant === 'composer' ? pickable || Boolean(href) : Boolean(href);
           const dropping =
             drag && drag.to === index && drag.from !== index ? (drag.to < drag.from ? 'before' : 'after') : undefined;
@@ -353,7 +353,7 @@ export function ProposalActionQueue({
                       <GripVertical aria-hidden="true" />
                     </span>
                     <IconButton
-                      label={`Move change ${index + 1} up`}
+                      label={`Move action ${index + 1} up`}
                       size="sm"
                       disabled={index === 0}
                       onClick={() => move(index, index - 1)}
@@ -361,7 +361,7 @@ export function ProposalActionQueue({
                       <ChevronUp aria-hidden="true" />
                     </IconButton>
                     <IconButton
-                      label={`Move change ${index + 1} down`}
+                      label={`Move action ${index + 1} down`}
                       size="sm"
                       disabled={index === items.length - 1}
                       onClick={() => move(index, index + 1)}

@@ -2,19 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import { migrateStoredV3 } from '@/stores/proposal-composer-store';
 
-import { CHANGE_SOURCES } from './change-request';
+import { ACTION_SOURCES } from './action-request';
 import { clampComposerStep, migrateActionV3, migrateDraftV3 } from './migrate-drafts';
 import { action } from './test-fixtures';
 
 describe('v3 → v4 draft migration', () => {
   it('names each action’s page from its type, falling back to the draft’s old source', () => {
-    expect(migrateActionV3(action('set-quorum-bps')).source).toEqual(CHANGE_SOURCES.governance);
-    expect(migrateActionV3(action('transfer-sac-token'), 'admin/token').source).toEqual(CHANGE_SOURCES.treasury);
-    expect(migrateActionV3(action('change-mint-allowance'), 'claims/lists').source).toEqual(CHANGE_SOURCES.claims);
+    expect(migrateActionV3(action('set-quorum-bps')).source).toEqual(ACTION_SOURCES.governance);
+    expect(migrateActionV3(action('transfer-sac-token'), 'admin/token').source).toEqual(ACTION_SOURCES.treasury);
+    expect(migrateActionV3(action('change-mint-allowance'), 'claims/lists').source).toEqual(ACTION_SOURCES.claims);
     expect(migrateActionV3(action('change-mint-allowance'), 'Marketplace administration').source).toEqual(
-      CHANGE_SOURCES.marketplace
+      ACTION_SOURCES.marketplace
     );
-    expect(migrateActionV3(action('change-mint-allowance')).source).toEqual(CHANGE_SOURCES.membership);
+    expect(migrateActionV3(action('change-mint-allowance')).source).toEqual(ACTION_SOURCES.membership);
   });
 
   it('stores an open pool’s closing time as unix seconds', () => {
@@ -45,7 +45,7 @@ describe('v3 → v4 draft migration', () => {
       version: 0
     });
     const migrated = JSON.parse(migrateStoredV3(raw)!);
-    expect(migrated.state.draftsByWallet.W.dao.queuedActions[0].source).toEqual(CHANGE_SOURCES.governance);
+    expect(migrated.state.draftsByWallet.W.dao.queuedActions[0].source).toEqual(ACTION_SOURCES.governance);
     expect(migrateStoredV3(null)).toBeNull();
     expect(migrateStoredV3('not json')).toBeNull();
   });

@@ -3,24 +3,24 @@
 import { css } from 'styled-system/css';
 
 import { Button, Callout, Chip, Dialog } from '@/components/ui';
+import type { ActionFinding } from '@/lib/proposal-actions/review';
+import { useResolvePendingAction } from '@/lib/proposal-actions/use-propose-action';
 import { getProposalActionLabel } from '@/lib/proposal-call';
-import type { ChangeFinding } from '@/lib/proposal-changes/review';
-import { useResolvePendingChange } from '@/lib/proposal-changes/use-propose-change';
-import { usePendingChangeStore } from '@/stores/pending-change-store';
+import { usePendingActionStore } from '@/stores/pending-action-store';
 
 const summaryBox = css({ display: 'grid', gap: '1.5', p: '3.5', borderRadius: 'control', bg: 'raised' });
 const summaryText = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const FINDING_TITLE = {
-  'high-risk': 'High-risk change',
+  'high-risk': 'High-risk action',
   duplicate: 'Already in your proposal',
-  conflict: 'Changes the same thing as another change',
+  conflict: 'Changes the same thing as another action',
   order: 'Check the order'
 } as const;
 
 /** The same warning for several steps (e.g. three upgrades) reads once, with a count. */
-function groupFindings(findings: ChangeFinding[]) {
-  const groups = new Map<string, { finding: ChangeFinding; count: number }>();
+function groupFindings(findings: ActionFinding[]) {
+  const groups = new Map<string, { finding: ActionFinding; count: number }>();
   for (const finding of findings) {
     const key = `${finding.kind}:${finding.severity}:${finding.message}`;
     const group = groups.get(key);
@@ -31,18 +31,18 @@ function groupFindings(findings: ChangeFinding[]) {
 }
 
 /**
- * The one review for a change that repeats, clashes or is high-risk, wherever it was made. Mounted once in
- * the tribe layout and driven by the pending-change store. Nothing is signed here.
+ * The one review for an action that repeats, clashes or is high-risk, wherever it was made. Mounted once in
+ * the tribe layout and driven by the pending-action store. Nothing is signed here.
  */
-export function ProposeChangeDialog() {
-  const pending = usePendingChangeStore((state) => state.pending);
-  const openCount = usePendingChangeStore((state) => state.openCount);
-  const resolve = useResolvePendingChange();
+export function ProposeActionDialog() {
+  const pending = usePendingActionStore((state) => state.pending);
+  const openCount = usePendingActionStore((state) => state.openCount);
+  const resolve = useResolvePendingAction();
   const findings = pending?.findings ?? [];
   const actions = pending?.request.actions ?? [];
   const incoming = new Set(actions.map((action) => action.id));
   // Only what clashes with the proposal so far asks a question; a plan's own steps were ordered by its page.
-  const queued = (finding: ChangeFinding) => finding.existingIds.some((id) => !incoming.has(id));
+  const queued = (finding: ActionFinding) => finding.existingIds.some((id) => !incoming.has(id));
   const duplicate = findings.some((finding) => finding.kind === 'duplicate' && queued(finding));
   const conflict = findings.some((finding) => finding.kind === 'conflict' && queued(finding));
   const bundle = pending?.request.bundle;
@@ -62,7 +62,7 @@ export function ProposeChangeDialog() {
       onOpenChange={(open) => {
         if (!open) resolve('cancel');
       }}
-      title={conflict ? 'Replace the change already in your proposal?' : 'Add this to your proposal?'}
+      title={conflict ? 'Replace the action already in your proposal?' : 'Add this to your proposal?'}
       description="It joins your proposal on this browser. Your wallet isn't asked to sign anything yet."
       footer={
         pending ? (
@@ -95,7 +95,7 @@ export function ProposeChangeDialog() {
               {bundle
                 ? bundle.label
                 : actions.length > 1
-                  ? `${actions.length} changes`
+                  ? `${actions.length} actions`
                   : getProposalActionLabel(actions[0].type)}
             </Chip>
           </div>

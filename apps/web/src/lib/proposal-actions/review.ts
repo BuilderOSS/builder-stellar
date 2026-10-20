@@ -6,29 +6,29 @@ import {
 } from '@/lib/proposal-action-identity';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
-import { type ChangeRequest, stampChange, withoutChangeMeta } from './change-request';
+import { type ActionRequest, stampAction, withoutActionMeta } from './action-request';
 import { expandToBundles, replaceInQueue } from './queue';
 
 /** A finding about one new action, naming the queued actions it is about by id (indices move). */
-export type ChangeFinding = ProposalDraftFinding & { actionId: string; existingIds: string[] };
+export type ActionFinding = ProposalDraftFinding & { actionId: string; existingIds: string[] };
 
-/** What the member chooses when a change repeats or clashes with one already in the proposal. */
-export type ChangeResolution = 'add' | 'replace' | 'keep' | 'skip';
+/** What the member chooses when an action repeats or clashes with one already in the proposal. */
+export type ActionResolution = 'add' | 'replace' | 'keep' | 'skip';
 
 const REVIEW_KINDS = new Set<ProposalDraftFinding['kind']>(['duplicate', 'conflict', 'high-risk']);
 
-/** Findings for one action against the ones before it. Where a change came from never makes it different. */
+/** Findings for one action against the ones before it. Where an action came from never makes it different. */
 export function analyzeAgainst(
   action: ProposalQueuedAction,
   before: ProposalQueuedAction[],
   state?: ProposalDraftState
 ) {
-  return analyzeProposalAction(withoutChangeMeta(action), before.map(withoutChangeMeta), state);
+  return analyzeProposalAction(withoutActionMeta(action), before.map(withoutActionMeta), state);
 }
 
 /** Every finding for the whole draft, as the contracts will see it when the proposal runs. */
 export function analyzeDraft(actions: ProposalQueuedAction[], state?: ProposalDraftState) {
-  return analyzeProposalDraft(actions.map(withoutChangeMeta), state);
+  return analyzeProposalDraft(actions.map(withoutActionMeta), state);
 }
 
 /**
@@ -62,13 +62,13 @@ function replaceStep(queue: ProposalQueuedAction[], ids: string[], action: Propo
   return queue.flatMap((candidate, index) => (index === at ? [placed] : wanted.has(candidate.id) ? [] : [candidate]));
 }
 
-/** What adding this change finds: duplicates, clashes, high-risk steps and order problems. */
-export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAction[], state?: ProposalDraftState) {
+/** What adding this request finds: duplicates, clashes, high-risk steps and order problems. */
+export function reviewAction(request: ActionRequest, existing: ProposalQueuedAction[], state?: ProposalDraftState) {
   const base = request.replaces?.length ? replaceInQueue(existing, request.replaces, []) : existing;
   // The draft as it would be with every new step in its real place, analyzed the way it will run.
-  const projected = resolveChange(request, existing, [], 'keep');
+  const projected = resolveAction(request, existing, [], 'keep');
   const incoming = new Set(request.actions.map((action) => action.id));
-  const findings: ChangeFinding[] = [];
+  const findings: ActionFinding[] = [];
   for (const [actionId, found] of analyzeQueue(projected, state))
     if (incoming.has(actionId))
       for (const finding of found)
@@ -81,7 +81,7 @@ export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAct
   // A step the proposal already had (an edited bundle keeps its other steps) was reviewed when it was added.
   const existingIds = new Set(base.map((action) => action.id));
   const alreadyQueued = new Set(existing.map((action) => action.id));
-  // An edit rebuilt on its page has new ids; its high-risk steps were reviewed when the change was first added.
+  // An edit rebuilt on its page has new ids; its high-risk steps were reviewed when the action was first added.
   const replaced = request.replaces?.length ? expandToBundles(existing, request.replaces) : new Set<string>();
   const reviewedKinds = new Set<string>(
     existing.filter((action) => replaced.has(action.id)).map((action) => action.type)
@@ -98,17 +98,17 @@ export function reviewChange(request: ChangeRequest, existing: ProposalQueuedAct
 }
 
 /**
- * The queue after adding a change. `replace` puts each clashing action in place of what it clashes with;
+ * The queue after adding a request. `replace` puts each clashing action in place of what it clashes with;
  * `keep` adds everything but exact repeats; `skip` adds only what neither repeats nor clashes. A bundle
  * goes in whole or not at all, since its steps only work together.
  */
-export function resolveChange(
-  request: ChangeRequest,
+export function resolveAction(
+  request: ActionRequest,
   existing: ProposalQueuedAction[],
-  findings: ChangeFinding[],
-  resolution: ChangeResolution
+  findings: ActionFinding[],
+  resolution: ActionResolution
 ): ProposalQueuedAction[] {
-  const stamped = stampChange(request);
+  const stamped = stampAction(request);
   const byAction = (id: string, kind: ProposalDraftFinding['kind']) =>
     findings.filter((finding) => finding.actionId === id && finding.kind === kind);
   const known = new Set(existing.map((action) => action.id));
@@ -124,7 +124,7 @@ export function resolveChange(
     );
     if (resolution === 'skip' && repeats) return existing;
     if (resolution !== 'replace') return place(existing, stamped);
-    // Take out what the bundle clashes with, then add the bundle where the change was or at the end.
+    // Take out what the bundle clashes with, then add the bundle where the old action was or at the end.
     const clashing = stamped.flatMap((action) =>
       [...byAction(action.id, 'conflict'), ...byAction(action.id, 'duplicate')].flatMap((f) => f.existingIds)
     );

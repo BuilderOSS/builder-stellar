@@ -17,7 +17,7 @@ function bundleName(label: string | undefined) {
 }
 
 /** One line per queue row: the producer's note, or the action's own summary when it left none. */
-export function changeLines(actions: ProposalQueuedAction[]) {
+export function actionLines(actions: ProposalQueuedAction[]) {
   return queueItems(actions).map((item) => {
     const first = item.actions[0];
     const note = item.actions.map((action) => String(action.note ?? '').trim()).find(Boolean);
@@ -29,15 +29,16 @@ export function changeLines(actions: ProposalQueuedAction[]) {
   });
 }
 
-/** A title made from the changes, for the member to edit: "Change the quorum to 10% and 2 more changes". */
+/** A title made from the actions, for the member to edit: "Change the quorum to 10% and 2 more actions". */
 export function suggestTitle(actions: ProposalQueuedAction[]) {
   const items = queueItems(actions);
   if (!items.length) return '';
   const first = items[0];
   const summary = first.bundleId ? bundleName(first.bundleLabel) : getProposalActionSummary(first.actions[0]);
   const lead = summary.length <= SHORT_TITLE ? summary : getProposalActionLabel(first.actions[0].type);
-  const rest = items.length - 1;
-  return rest ? `${lead} and ${rest} more ${rest === 1 ? 'change' : 'changes'}` : lead;
+  // Every step counts, a bundle's too, as the composer's "N actions" does.
+  const rest = actions.length - first.actions.length;
+  return rest ? `${lead} and ${rest} more ${rest === 1 ? 'action' : 'actions'}` : lead;
 }
 
 /**
@@ -45,18 +46,21 @@ export function suggestTitle(actions: ProposalQueuedAction[]) {
  * the member already wrote. Lines that don't fit are counted instead of cut mid-sentence.
  */
 export function whatThisDoes(actions: ProposalQueuedAction[], metadata: ProposalMetadataDraft) {
-  const lines = changeLines(actions);
+  const lines = actionLines(actions);
   if (!lines.length) return '';
+  // Steps per line, so lines left out are counted the way the composer counts actions.
+  const steps = queueItems(actions).map((item) => item.actions.length);
   const base = stripWhatThisDoes(metadata.description);
   const build = (shown: string[], hidden: number) =>
     [
       WHAT_THIS_DOES_HEADING,
       '',
       ...shown.map((line) => `- ${line}`),
-      ...(hidden ? [`- And ${hidden} more ${hidden === 1 ? 'change' : 'changes'}, listed with the proposal.`] : [])
+      ...(hidden ? [`- And ${hidden} more ${hidden === 1 ? 'action' : 'actions'}, listed with the proposal.`] : [])
     ].join('\n');
   for (let shown = lines.length; shown >= 0; shown -= 1) {
-    const section = build(lines.slice(0, shown), lines.length - shown);
+    const hidden = steps.slice(shown).reduce((sum, count) => sum + count, 0);
+    const section = build(lines.slice(0, shown), hidden);
     const description = withSection(base, section);
     if (proposalDescriptionBytes({ ...metadata, description }) <= PROPOSAL_DESCRIPTION_MAX_BYTES) return section;
   }

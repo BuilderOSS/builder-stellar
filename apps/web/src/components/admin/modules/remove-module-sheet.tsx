@@ -10,10 +10,10 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { MODULE_COPY, type ModuleKind } from '@/lib/modules/kinds';
 import { actionCount, buildDetachPlan, type PlanStep } from '@/lib/modules/plans';
 import { moduleReadiness, type ReadinessRow } from '@/lib/modules/readiness';
-import { planChange } from '@/lib/modules/requests';
+import { planActions } from '@/lib/modules/requests';
 import { checkDetach, useModuleFacts } from '@/lib/modules/use-module-reads';
-import type { ChangeRequest } from '@/lib/proposal-changes/change-request';
-import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
+import type { ActionRequest } from '@/lib/proposal-actions/action-request';
+import type { ProposeResult } from '@/lib/proposal-actions/propose-action';
 
 import { afterTheVote, type CheckState, ModuleCheck, PlanList, useSafetyDelay } from './module-parts';
 
@@ -60,7 +60,7 @@ export function RemoveModuleSheet({
   daoId: string;
   address: string | null;
   module: RemovableModule | null;
-  propose: (request: ChangeRequest) => ProposeResult;
+  propose: (request: ActionRequest) => ProposeResult;
   /** A problem to show beside the card, when the change could not be added. */
   onMessage: (text: string) => void;
 }) {
@@ -141,7 +141,7 @@ export function RemoveModuleSheet({
     setSubmitError('');
     const title = `Remove ${noun} from the tribe`;
     try {
-      const request = planChange({
+      const request = planActions({
         steps,
         config,
         address,

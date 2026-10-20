@@ -5,7 +5,7 @@ import { Toast, Toaster } from '@ark-ui/react/toast';
 import { ArrowUpRight, CircleAlert, CircleCheck, Info, LoaderCircle, Undo2, X } from 'lucide-react';
 import { css, sva } from 'styled-system/css';
 
-import type { ToastUndo } from '@/lib/proposal-changes/change-toast';
+import type { ToastUndo } from '@/lib/proposal-actions/action-toast';
 import { toaster } from '@/lib/toaster';
 
 const toast = sva({

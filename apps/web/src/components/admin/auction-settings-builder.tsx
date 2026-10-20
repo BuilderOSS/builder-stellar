@@ -6,29 +6,29 @@ import { Pause, Play } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
-import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { actionAuthorityText, ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
+import { SettingValuesContext } from '@/components/proposal-actions/setting-forms';
 import { ActionBar, Button, Callout, Checkbox, Chip, ChoiceGroup, FieldHelperText } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import {
-  auctionChangeRequest,
+  auctionActionRequest,
   type AuctionEdits,
   type AuctionSettings,
   type AuctionStep,
-  buildAuctionChangePlan,
+  buildAuctionActionPlan,
   changedSettings
-} from '@/lib/auction-change-plan';
+} from '@/lib/auction-action-plan';
 import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/duration';
+import { settingForm } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
-import { settingForm } from '@/lib/proposal-changes/catalog';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -201,9 +201,9 @@ export function AuctionSettingsBuilder({
   refresh: () => Promise<unknown>;
 }) {
   const session = useAuthSessionStore();
-  const { propose } = useProposeChange();
-  const pending = usePendingChanges((action) => AUCTION_STEP_TYPES.has(action.type));
-  const editing = useEditingChange({
+  const { propose } = useProposeAction();
+  const pending = usePendingActions((action) => AUCTION_STEP_TYPES.has(action.type));
+  const editing = useEditingAction({
     accepts: (action) => AUCTION_STEP_TYPES.has(action.type),
     onLoad: (_action, bundle) => {
       const loaded = editsFromSteps(bundle);
@@ -227,7 +227,7 @@ export function AuctionSettingsBuilder({
     !session.walletNetworkIssue &&
     (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
   const changed = changedSettings(current, edits);
-  const steps = buildAuctionChangePlan({
+  const steps = buildAuctionActionPlan({
     live,
     paused,
     mode,
@@ -265,7 +265,7 @@ export function AuctionSettingsBuilder({
 
   function addToProposal() {
     if (!steps.length || !validate()) return;
-    const result = propose(auctionChangeRequest(steps, config, session.address, editing.replaces), {
+    const result = propose(auctionActionRequest(steps, config, session.address, editing.replaces), {
       onAdded: () => {
         setEdits({});
         setCancel(false);
@@ -327,7 +327,7 @@ export function AuctionSettingsBuilder({
     ? `${steps.length} ${steps.length === 1 ? (direct ? 'change' : 'step') : direct ? 'changes' : 'steps'}`
     : undefined;
   const submit = (
-    <ChangeSubmit
+    <ActionSubmit
       direct={direct}
       what={count}
       editing={Boolean(editing.editing)}
@@ -354,7 +354,7 @@ export function AuctionSettingsBuilder({
           </p>
         </div>
 
-        <EditingChangeNotice
+        <EditingActionNotice
           editing={editing.editing}
           bundle={editing.bundle}
           onCancel={() => {
@@ -469,7 +469,7 @@ export function AuctionSettingsBuilder({
         ) : null}
 
         <div className={footer}>
-          <FieldHelperText>{changeAuthorityText(direct)}</FieldHelperText>
+          <FieldHelperText>{actionAuthorityText(direct)}</FieldHelperText>
           {submit}
         </div>
       </section>

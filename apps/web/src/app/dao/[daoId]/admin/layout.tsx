@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { css } from 'styled-system/css';
 
 import { ManageNav } from '@/components/admin/manage-nav';
-import { DraftDock } from '@/components/proposal-changes/draft-dock';
+import { DraftDock } from '@/components/proposal-actions/draft-dock';
 import { ButtonLink, Callout } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';

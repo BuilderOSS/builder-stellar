@@ -1,7 +1,7 @@
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { ACTION_SOURCES, type ActionRequest, planBundle } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
-import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
 import { assertClaimListScope, claimListCall, type ClaimListDraft } from './proposal-actions';
@@ -36,18 +36,18 @@ export function claimListQueueActions(
 }
 
 /** The claim list as one change: the allowance and the list go in, and come out, together. */
-export function claimListChange(
+export function claimListAction(
   draft: ClaimListDraft,
   state: ClaimState,
   config: DaoNetworkConfig,
   deploymentId: string,
   wallets: number
-): ChangeRequest {
+): ActionRequest {
   const actions = claimListQueueActions(draft, state, config, deploymentId);
   return {
     actions,
     bundle: planBundle(`Open a claim list for ${draft.total.toLocaleString()} tokens`, actions.length),
-    source: CHANGE_SOURCES.claims,
+    source: ACTION_SOURCES.claims,
     note: `Let the claims module mint the list total, then open the list for ${wallets.toLocaleString()} ${wallets === 1 ? 'wallet' : 'wallets'}. The full list is published at ${draft.treeUri} so anyone can check who can claim and how much.`
   };
 }

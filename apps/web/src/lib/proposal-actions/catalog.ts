@@ -6,7 +6,7 @@ import {
   QuorumSettingForm,
   StartingPriceSettingForm,
   wholeNumberSettingForm
-} from '@/components/proposal-changes/setting-forms';
+} from '@/components/proposal-actions/setting-forms';
 import type { GovernorSettings } from '@/lib/admin-queries';
 import type { AuctionStatus } from '@/lib/auction-status';
 import { formatStroops } from '@/lib/auction-values';
@@ -18,7 +18,7 @@ import type { MembershipState } from '@/lib/membership-state';
 import { getActionHandler, getAllActionHandlers } from '@/lib/proposal-actions/registry';
 import type { ActionFormProps, ActionHandler, ProposalActionType } from '@/lib/proposal-actions/types';
 
-import { CHANGE_SOURCES, type ChangeSourceKey, defaultSourceKey } from './change-request';
+import { ACTION_SOURCES, type ActionSourceKey, defaultSourceKey } from './action-request';
 
 /** The tribe's live settings the composer and Manage pages read, whichever have loaded. */
 export type SettingValues = {
@@ -346,7 +346,7 @@ export function settingForm(type: ProposalActionType): ComponentType<ActionFormP
 
 /** The page an action is made on, for its "Open in Manage" link and its source chip. */
 export function actionHome(type: ProposalActionType) {
-  return CHANGE_SOURCES[defaultSourceKey(type)];
+  return ACTION_SOURCES[defaultSourceKey(type)];
 }
 
 /** Can this action be picked in the composer at all, as opposed to made on its own page? */
@@ -376,8 +376,8 @@ const MARKET_TYPES = new Set<ProposalActionType>([
 ]);
 
 const MODULE_FIX: Pick<Availability & { available: false }, 'fixHref' | 'fixLabel'> = {
-  fixHref: CHANGE_SOURCES.membership.href,
-  fixLabel: CHANGE_SOURCES.membership.label
+  fixHref: ACTION_SOURCES.membership.href,
+  fixLabel: ACTION_SOURCES.membership.label
 };
 
 /** Whether this tribe can run the action, and if not, why and where to fix it. Unknown state never blocks. */
@@ -396,8 +396,8 @@ export function actionAvailability(
     return {
       available: false,
       reason: 'DAO recovery is off. Turn it on first, in this proposal or an earlier one.',
-      fixHref: CHANGE_SOURCES.membership.href,
-      fixLabel: CHANGE_SOURCES.membership.label
+      fixHref: ACTION_SOURCES.membership.href,
+      fixLabel: ACTION_SOURCES.membership.label
     };
   if (type === 'pause-auction' && values.auction?.paused)
     return { available: false, reason: 'Auctions are already paused.' };
@@ -417,4 +417,4 @@ export function pickerEntries() {
     .map((handler) => ({ handler, meta: ACTION_CATALOG[handler.type] }));
 }
 
-export type { ChangeSourceKey };
+export type { ActionSourceKey };

@@ -5,7 +5,7 @@ import { css } from 'styled-system/css';
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
 import { PlatformUpgrades } from '@/components/admin/platform-upgrades';
 import { PageSection } from '@/components/page-section';
-import { DraftDock } from '@/components/proposal-changes/draft-dock';
+import { DraftDock } from '@/components/proposal-actions/draft-dock';
 import { Avatar, Chip, HelpTip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';

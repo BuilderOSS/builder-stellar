@@ -7,9 +7,9 @@ import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
-import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { actionAuthorityText, ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import { Badge, ButtonLink, Callout, Card, Checkbox, FieldHelperText, Heading, HelpTip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
@@ -17,15 +17,15 @@ import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { batchMintFits, MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 import { daoRoute } from '@/lib/dao-routes';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
 import {
   batchMintEntries,
   type BatchMintGovernanceTokenData
 } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -43,9 +43,9 @@ export default function TokenAdminPage() {
     : '';
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const { propose } = useProposeChange();
-  const pendingMints = usePendingChanges(['batch-mint-governance-token', 'mint-governance-token']);
-  const editing = useEditingChange({
+  const { propose } = useProposeAction();
+  const pendingMints = usePendingActions(['batch-mint-governance-token', 'mint-governance-token']);
+  const editing = useEditingAction({
     accepts: (action) => action.type === 'batch-mint-governance-token' || action.type === 'mint-governance-token',
     // A single mint from before minting had one form loads into the same form.
     onLoad: (action) => setMintData(getActionHandler('batch-mint-governance-token').deserialize(action))
@@ -119,7 +119,7 @@ export default function TokenAdminPage() {
         const result = propose(
           {
             actions: [action],
-            source: CHANGE_SOURCES.token,
+            source: ACTION_SOURCES.token,
             note: `Mint ${amount} membership token${amount === '1' ? '' : 's'} to ${recipient}.`,
             replaces: editing.replaces
           },
@@ -207,7 +207,7 @@ export default function TokenAdminPage() {
                           : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
                 </HelpTip>
               </Heading>
-              <EditingChangeNotice
+              <EditingActionNotice
                 editing={editing.editing}
                 onCancel={() => {
                   editing.done();
@@ -238,7 +238,7 @@ export default function TokenAdminPage() {
                 </>
               ) : null}
               <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
-                <ChangeSubmit
+                <ActionSubmit
                   direct={hasMintAccess}
                   editing={Boolean(editing.editing)}
                   directLabel={`Mint ${tokensLabel}`}
@@ -251,7 +251,7 @@ export default function TokenAdminPage() {
                 </ButtonLink>
               </div>
               {hasMintAccess || canProposeMint ? (
-                <FieldHelperText>{changeAuthorityText(hasMintAccess)}</FieldHelperText>
+                <FieldHelperText>{actionAuthorityText(hasMintAccess)}</FieldHelperText>
               ) : null}
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
               {token.error ? (

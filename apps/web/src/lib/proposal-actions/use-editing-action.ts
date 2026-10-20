@@ -7,12 +7,12 @@ import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-export const CHANGE_PARAM = 'change';
+import { ACTION_PARAM } from './action-request';
 
-/** The `?change=` id on this page's URL, read on the client only. */
-function readChangeParam() {
+/** The `?action=` id on this page's URL, read on the client only. */
+function readActionParam() {
   if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get(CHANGE_PARAM);
+  return new URLSearchParams(window.location.search).get(ACTION_PARAM);
 }
 
 // replaceState fires no event, so clearing the param tells its readers directly.
@@ -26,24 +26,24 @@ function subscribe(listener: () => void) {
   };
 }
 
-function clearChangeParam() {
+function clearActionParam() {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has(CHANGE_PARAM)) return;
-  url.searchParams.delete(CHANGE_PARAM);
+  if (!url.searchParams.has(ACTION_PARAM)) return;
+  url.searchParams.delete(ACTION_PARAM);
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   listeners.forEach((listener) => listener());
 }
 
 /**
- * The edit round trip: a queued change's Edit opens its page with `?change=<id>`, the page loads that
- * change (and the rest of its bundle) into its form, and saving replaces it by id, in the same place.
+ * The edit round trip: a queued action's Edit opens its page with `?action=<id>`, the page loads that
+ * action (and the rest of its bundle) into its form, and saving replaces it by id, in the same place.
  */
-export function useEditingChange({
+export function useEditingAction({
   accepts,
   onLoad
 }: {
-  /** Whether this page (or this form on it) makes the change. */
+  /** Whether this page (or this form on it) makes the action. */
   accepts: (action: ProposalQueuedAction) => boolean;
   onLoad: (action: ProposalQueuedAction, bundle: ProposalQueuedAction[]) => void;
 }) {
@@ -51,7 +51,7 @@ export function useEditingChange({
   const address = useAuthSessionStore((state) => state.address);
   const queued = useProposalComposerStore(selectDraft(address || null, daoId)).queuedActions;
   // The server render has no URL query; the client reads it after hydrating.
-  const id = useSyncExternalStore(subscribe, readChangeParam, () => null);
+  const id = useSyncExternalStore(subscribe, readActionParam, () => null);
   const loaded = useRef<string | null>(null);
   // The latest callbacks, for the load effect; Next's bundled React has no useEffectEvent yet.
   const latest = useRef({ accepts, onLoad });
@@ -76,8 +76,8 @@ export function useEditingChange({
     );
   }, [found, queued]);
 
-  /** Stop editing: after the change is saved, or when the member cancels. */
-  const done = useCallback(() => clearChangeParam(), []);
+  /** Stop editing: after the action is saved, or when the member cancels. */
+  const done = useCallback(() => clearActionParam(), []);
 
   return { editing, bundle, replaces: editing ? [editing.id] : undefined, done };
 }

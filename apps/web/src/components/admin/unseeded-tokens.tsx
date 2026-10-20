@@ -5,14 +5,14 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
 import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
+import { ACTION_SOURCES, type ActionRequest, planBundle } from '@/lib/proposal-actions/action-request';
+import type { ProposeResult } from '@/lib/proposal-actions/propose-action';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
-import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -40,7 +40,7 @@ export function UnseededTokens({
   direct: boolean;
   canPropose: boolean;
   hasArtwork: boolean;
-  propose: (request: ChangeRequest) => ProposeResult;
+  propose: (request: ActionRequest) => ProposeResult;
 }) {
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
@@ -86,7 +86,7 @@ export function UnseededTokens({
     const result = propose({
       actions: batch.map((tokenId) => handler.serialize({ tokenId }, context)),
       bundle: planBundle('Seed traits for unseeded tokens', batch.length),
-      source: CHANGE_SOURCES.artwork,
+      source: ACTION_SOURCES.artwork,
       note: `Assign traits to tokens minted before the artwork existed: ${batch.map((id) => `#${id}`).join(', ')}.`
     });
     if (result.outcome === 'invalid') setMessage(result.message);
@@ -110,7 +110,7 @@ export function UnseededTokens({
           </Button>
         ) : canPropose ? (
           <>
-            <ChangeSubmit
+            <ActionSubmit
               direct={false}
               what={`seeding ${Math.min(ids.length, MAX_PROPOSAL_ACTIONS)} ${Math.min(ids.length, MAX_PROPOSAL_ACTIONS) === 1 ? 'token' : 'tokens'}`}
               disabled={busy || !hasArtwork}

@@ -8,17 +8,17 @@ import { Stack } from 'styled-system/jsx';
 
 import { ModulesCard } from '@/components/admin/modules/modules-card';
 import { PageSection } from '@/components/page-section';
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import { Badge, Callout, Card, Chip, Heading, HelpTip, Skeleton, Switch } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { type MembershipState, useMembershipState } from '@/lib/membership-state';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ProposalActionType } from '@/lib/proposal-actions/types';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -109,10 +109,10 @@ export function MembershipSettings() {
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const state = useMembershipState(config, address);
-  const { propose: proposeChange } = useProposeChange();
-  const pendingSwitches = usePendingChanges(SWITCHES.map((entry) => entry.type));
+  const { propose: proposeAction } = useProposeAction();
+  const pendingSwitches = usePendingActions(SWITCHES.map((entry) => entry.type));
   // Edit from a queued switch: the page shows which one, and adding the other value replaces it.
-  const editing = useEditingChange({
+  const editing = useEditingAction({
     accepts: (action) => SWITCHES.some((entry) => entry.type === action.type),
     onLoad: () => undefined
   });
@@ -193,8 +193,8 @@ export function MembershipSettings() {
       return;
     }
     setMessage(null);
-    const result = proposeChange(
-      { actions: [handler.serialize(values, context)], source: CHANGE_SOURCES.membership, note, replaces },
+    const result = proposeAction(
+      { actions: [handler.serialize(values, context)], source: ACTION_SOURCES.membership, note, replaces },
       { onAdded: () => editing.done() }
     );
     if (result.outcome === 'invalid') setMessage({ where, text: result.message });
@@ -286,7 +286,7 @@ export function MembershipSettings() {
               {data.live ? (
                 // Once Live a change is a proposal, so show the state and a propose button, not a toggle.
                 <div>
-                  <EditingChangeNotice editing={editing.editing} onCancel={editing.done} />
+                  <EditingActionNotice editing={editing.editing} onCancel={editing.done} />
                   {SWITCHES.map((entry) => {
                     const enabled = data.settings[entry.key];
                     const queued = pendingSwitches.find((action) => action.type === entry.type);
@@ -306,7 +306,7 @@ export function MembershipSettings() {
                           />
                         </div>
                         {queued && queued.enabled !== enabled ? null : (
-                          <ChangeSubmit
+                          <ActionSubmit
                             direct={false}
                             variant="secondary"
                             size="sm"
@@ -358,7 +358,7 @@ export function MembershipSettings() {
             frozen={frozen}
             busy={busy}
             message={message?.where === 'modules' ? message.text : null}
-            propose={proposeChange}
+            propose={proposeAction}
             onMessage={(text) => setMessage({ where: 'modules', text })}
             onChanged={() => void state.mutate()}
             onChangeAllowance={changeAllowance}

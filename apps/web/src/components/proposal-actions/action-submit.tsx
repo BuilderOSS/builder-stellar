@@ -4,12 +4,12 @@ import { type ComponentProps, forwardRef } from 'react';
 
 import { Button } from '@/components/ui';
 
-type ChangeSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & {
-  /** Before launch, the launch admin applies a change directly; after launch it goes to a vote. */
+type ActionSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & {
+  /** Before launch, the launch admin applies an action directly; after launch it goes to a vote. */
   direct: boolean;
-  /** A count or what the change is, when it helps: "3 steps", "the new pool". */
+  /** A count or what the action is, when it helps: "3 steps", "the new pool". */
   what?: string;
-  /** An edit of a change already in the proposal. */
+  /** An edit of an action already in the proposal. */
   editing?: boolean;
   /** The outcome, when applying directly has a better name: "Mint 5 tokens". */
   directLabel?: string;
@@ -18,10 +18,10 @@ type ChangeSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & {
 };
 
 /**
- * The one button for making a change, so every page says the same thing: "Apply now" for the launch admin
- * before launch, "Add to proposal" once the change requires DAO governance.
+ * The one button for making an action, so every page says the same thing: "Apply now" for the launch admin
+ * before launch, "Add to proposal" once the action requires DAO governance.
  */
-export const ChangeSubmit = forwardRef<HTMLButtonElement, ChangeSubmitProps>(function ChangeSubmit(
+export const ActionSubmit = forwardRef<HTMLButtonElement, ActionSubmitProps>(function ActionSubmit(
   { direct, what, editing = false, directLabel, proposeLabel, type = 'button', ...props },
   ref
 ) {
@@ -37,8 +37,8 @@ export const ChangeSubmit = forwardRef<HTMLButtonElement, ChangeSubmitProps>(fun
   );
 });
 
-/** The helper line under a change's button: who has to agree before it happens. */
-export function changeAuthorityText(direct: boolean) {
+/** The helper line under an action's button: who has to agree before it happens. */
+export function actionAuthorityText(direct: boolean) {
   return direct
     ? 'Setup: you apply this directly as the launch admin.'
     : 'Requires DAO governance: it runs only if members vote for it.';

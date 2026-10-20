@@ -40,10 +40,10 @@ import {
   validateModuleConfig
 } from '@/lib/modules/kinds';
 import { actionCount, buildAttachPlan, type PlanStep } from '@/lib/modules/plans';
-import { planChange } from '@/lib/modules/requests';
+import { planActions } from '@/lib/modules/requests';
 import { checkAttach, useAttachReads } from '@/lib/modules/use-module-reads';
-import type { ChangeRequest } from '@/lib/proposal-changes/change-request';
-import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
+import type { ActionRequest } from '@/lib/proposal-actions/action-request';
+import type { ProposeResult } from '@/lib/proposal-actions/propose-action';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 
 import { afterTheVote, type CheckState, ModuleCheck, PlanList, useSafetyDelay } from './module-parts';
@@ -85,7 +85,7 @@ export function AddModuleSheet({
   live: boolean;
   present: ReadonlySet<ModuleKind>;
   registered: number;
-  propose: (request: ChangeRequest) => ProposeResult;
+  propose: (request: ActionRequest) => ProposeResult;
   /** A problem to show beside the card, when the change could not be added. */
   onMessage: (text: string) => void;
   onChanged: () => void;
@@ -244,7 +244,7 @@ export function AddModuleSheet({
       return;
     }
     try {
-      const request = planChange({
+      const request = planActions({
         steps,
         config,
         address,

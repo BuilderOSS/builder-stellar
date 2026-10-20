@@ -21,8 +21,8 @@ import {
 } from '@/components/ui';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { isModuleKind, MODULE_COPY, type ModuleKind, UNLIMITED_ALLOWANCE } from '@/lib/modules/kinds';
-import type { ChangeRequest } from '@/lib/proposal-changes/change-request';
-import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
+import type { ActionRequest } from '@/lib/proposal-actions/action-request';
+import type { ProposeResult } from '@/lib/proposal-actions/propose-action';
 
 import { AddModuleSheet } from './add-module-sheet';
 import { AllowanceSheet } from './allowance-sheet';
@@ -100,7 +100,7 @@ export function ModulesCard({
   frozen: boolean;
   busy: boolean;
   message: string | null;
-  propose: (request: ChangeRequest) => ProposeResult;
+  propose: (request: ActionRequest) => ProposeResult;
   onMessage: (text: string) => void;
   onChanged: () => void;
   /** Returns a problem to show, or null once the change was signed or added to the draft. */

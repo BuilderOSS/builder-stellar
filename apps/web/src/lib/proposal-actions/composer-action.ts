@@ -1,7 +1,7 @@
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { getProposalActionSummary } from '@/lib/proposal-call';
 
-import { bundleLabel, CHANGE_SOURCES, type ChangeRequest } from './change-request';
+import { ACTION_SOURCES, type ActionRequest, bundleLabel } from './action-request';
 import { queueItems } from './queue';
 
 /** Auction calls the contract only accepts while auctions are paused. */
@@ -21,17 +21,17 @@ function newAction(type: 'pause-auction' | 'unpause-auction'): ProposalQueuedAct
 }
 
 /**
- * An action made in the composer, as a change. An auction setting picked on its own is wrapped in pause and
+ * An action made in the composer, as a request. An auction setting picked on its own is wrapped in pause and
  * resume, the same way Manage → Auction plans it; with a "Change the auction" bundle already queued, it
  * joins that bundle before its resume step instead.
  */
-export function composerChange(
+export function composerAction(
   action: ProposalQueuedAction,
   queue: ProposalQueuedAction[],
   { editingId, auctionPaused }: { editingId?: string; auctionPaused?: boolean } = {}
-): ChangeRequest {
+): ActionRequest {
   const note = `${getProposalActionSummary(action).replace(/\.$/, '')}.`;
-  const base = { source: CHANGE_SOURCES.composer, note };
+  const base = { source: ACTION_SOURCES.composer, note };
   const edited = editingId ? queue.find((candidate) => candidate.id === editingId) : undefined;
 
   // An edit keeps its place, and its bundle when it is one of a bundle's steps.
@@ -44,7 +44,7 @@ export function composerChange(
         ...base,
         actions,
         bundle: { id: String(edited.bundleId), label: String(edited.bundleLabel ?? '') },
-        source: (edited.source as ChangeRequest['source']) ?? base.source,
+        source: (edited.source as ActionRequest['source']) ?? base.source,
         note: String(edited.note ?? note),
         replaces: [edited.id]
       };
@@ -68,7 +68,7 @@ export function composerChange(
       ...base,
       actions: steps,
       bundle: { id: open.bundleId!, label: bundleLabel(AUCTION_BUNDLE, steps.length) },
-      source: (open.actions[0].source as ChangeRequest['source']) ?? base.source,
+      source: (open.actions[0].source as ActionRequest['source']) ?? base.source,
       // The note lists the steps in the order they run, the new one before the resume.
       note: `${steps.map((step) => getProposalActionSummary(step).replace(/\.$/, '')).join('. ')}.`,
       replaces: [open.actions[0].id]

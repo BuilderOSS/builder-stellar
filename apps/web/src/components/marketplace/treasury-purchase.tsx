@@ -4,14 +4,14 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import { type AuthNode, Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
 import { useState } from 'react';
 
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
 import { Callout, Field, FieldLabel, Input } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { readSource } from '@/lib/dao-config';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
+import { ACTION_SOURCES, type ActionRequest, planBundle } from '@/lib/proposal-actions/action-request';
+import type { ProposeResult } from '@/lib/proposal-actions/propose-action';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES, type ChangeRequest, planBundle } from '@/lib/proposal-changes/change-request';
-import type { ProposeResult } from '@/lib/proposal-changes/propose-change';
 import { authNodeSpecValue, describeAuthNodes, treasuryPurchaseAuthNodes } from '@/lib/treasury-authorize';
 
 import styles from './marketplace-styles';
@@ -28,7 +28,7 @@ export function TreasuryPurchase({
 }: {
   daoId: string;
   enabled: boolean;
-  propose: (request: ChangeRequest) => ProposeResult;
+  propose: (request: ActionRequest) => ProposeResult;
 }) {
   const { daoConfig: config } = useDaoContext();
   const [tokenId, setTokenId] = useState('');
@@ -78,7 +78,7 @@ export function TreasuryPurchase({
           buy.serialize({ tokenId, maxPrice: price.toString() }, context)
         ],
         bundle: planBundle(`Treasury buys listed token #${tokenId}`, 2),
-        source: CHANGE_SOURCES.marketplace,
+        source: ACTION_SOURCES.marketplace,
         note: `The treasury pays for and buys token #${tokenId} for at most ${amount}, the listing price. Authorized calls: ${describeAuthNodes(nodes).join('; ')}. The purchase fails if the price rises or the listing closes before it runs.`
       });
       if (result.outcome === 'invalid') setMessage(result.message);
@@ -109,7 +109,7 @@ export function TreasuryPurchase({
           />
         </Field>
         <div>
-          <ChangeSubmit
+          <ActionSubmit
             direct={false}
             what="the purchase"
             variant="secondary"

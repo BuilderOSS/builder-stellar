@@ -5,10 +5,10 @@ import { css } from 'styled-system/css';
 
 import { Button, Chip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { showRemovedToast } from '@/lib/proposal-actions/action-toast';
+import { removeFromQueue } from '@/lib/proposal-actions/queue';
 import type { ProposalActionType, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { showRemovedToast } from '@/lib/proposal-changes/change-toast';
-import { removeFromQueue } from '@/lib/proposal-changes/queue';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -24,8 +24,8 @@ const row = css({
 const pendingText = css({ color: 'ink', fontWeight: '600', overflowWrap: 'anywhere' });
 const buttons = css({ display: 'flex', gap: '1', flexWrap: 'wrap' });
 
-/** The queued changes of these types in this tribe's proposal draft, in queue order. */
-export function usePendingChanges(
+/** The queued actions of these types in this tribe's proposal draft, in queue order. */
+export function usePendingActions(
   types: ProposalActionType | ProposalActionType[] | ((a: ProposalQueuedAction) => boolean)
 ) {
   const { daoId } = useDaoContext();
@@ -52,7 +52,7 @@ export function PendingValue({
   now?: ReactNode;
   pending: ProposalQueuedAction | undefined;
   describe?: (action: ProposalQueuedAction) => string;
-  /** Load the queued change into this page's form; saving replaces it in place. */
+  /** Load the queued action into this page's form; saving replaces it in place. */
   onEdit?: () => void;
 }) {
   const { daoId } = useDaoContext();

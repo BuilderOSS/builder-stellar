@@ -9,8 +9,8 @@ import { Button, Chip, Disclosure, HelpTip } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions/components/proposal-action-queue';
+import { queueItems } from '@/lib/proposal-actions/queue';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { changeCount, queueItems } from '@/lib/proposal-changes/queue';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -20,7 +20,7 @@ const dock = css({
   p: '4',
   borderRadius: 'card',
   bg: 'signal.wash',
-  // The dock appears when the first change lands; it rises in once and never moves after.
+  // The dock appears when the first action lands; it rises in once and never moves after.
   transitionProperty: 'opacity, transform',
   transitionDuration: '200ms',
   transitionTimingFunction: 'out',
@@ -48,7 +48,7 @@ const buttons = css({ display: 'flex', gap: '2', flexWrap: 'wrap' });
 const empty = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 /**
- * The one visible proposal draft, on every page that can add a change: how many changes are waiting, the
+ * The one visible proposal draft, on every page that can add an action: how many actions are waiting, the
  * latest one, the queue, and the way to the composer. Explanations sit behind a help tip rather than in the
  * page; on the overview, the section heading carries it.
  */
@@ -60,7 +60,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
   const hasDraft = useProposalComposerStore(selectHasDraft(address || null, daoId));
   const reset = useProposalComposerStore((state) => state.reset);
   const [confirmClear, setConfirmClear] = useState(false);
-  const count = changeCount(draft.queuedActions);
+  const count = draft.queuedActions.length;
   const last = queueItems(draft.queuedActions).at(-1);
 
   if (!count) {
@@ -80,10 +80,10 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
         <div className={lead}>
           <Chip tone="live">{count}</Chip>
           <p className={titleText}>
-            {count === 1 ? 'change' : 'changes'} waiting for a vote
+            {count === 1 ? 'action' : 'actions'} waiting for a vote
             {overview ? null : (
               <HelpTip label="Proposal draft">
-                These changes go up for a vote together. Add a title and why, then submit.
+                These actions go up for a vote together. Add a title and why, then submit.
               </HelpTip>
             )}
           </p>
@@ -100,7 +100,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
         </div>
       </div>
       {lastText ? <p className={latest}>Latest: {lastText}</p> : null}
-      <Disclosure title="See changes" defaultOpen={overview}>
+      <Disclosure title="See actions" defaultOpen={overview}>
         <ProposalActionQueue daoId={daoId} variant="compact" />
       </Disclosure>
       <DiscardDraftDialog

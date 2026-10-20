@@ -3,10 +3,10 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { clampComposerStep, type ComposerStep, migrateDraftsV3 } from '@/lib/proposal-actions/migrate-drafts';
+import { moveQueueItem, removeFromQueue, replaceInQueue } from '@/lib/proposal-actions/queue';
+import { reviewReadiness } from '@/lib/proposal-actions/review-readiness';
 import type { ProposalActionType, ProposalQueuedAction, ValidationResult } from '@/lib/proposal-actions/types';
-import { clampComposerStep, type ComposerStep, migrateDraftsV3 } from '@/lib/proposal-changes/migrate-drafts';
-import { moveQueueItem, removeFromQueue, replaceInQueue } from '@/lib/proposal-changes/queue';
-import { reviewReadiness } from '@/lib/proposal-changes/review-readiness';
 
 export type ProposalMetadata = {
   title: string;
@@ -52,7 +52,7 @@ type ProposalComposerActions = {
    * Add changes to the proposal. Never moves the composer to another step and never touches the
    * proposal's title or description. With `replaces`, the new actions take the replaced ones' place.
    */
-  addChanges: (address: string, daoId: string, actions: ProposalQueuedAction[], replaces?: string[]) => void;
+  addActions: (address: string, daoId: string, actions: ProposalQueuedAction[], replaces?: string[]) => void;
   /** Swap queued actions (a bundle as a whole) for new ones, keeping their position. */
   replaceById: (address: string, daoId: string, ids: string[], actions: ProposalQueuedAction[]) => void;
   /** Take an action out; an action inside a bundle takes its whole bundle with it. */
@@ -329,7 +329,7 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
           return withUpdatedAt(draft, { queuedActions });
         }),
 
-      addChanges: (address, daoId, actions, replaces) =>
+      addActions: (address, daoId, actions, replaces) =>
         updateDaoDraft(set, address, daoId, (draft) =>
           withUpdatedAt(draft, {
             queuedActions: replaces?.length

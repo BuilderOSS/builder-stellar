@@ -12,7 +12,7 @@ import { css } from 'styled-system/css';
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
-import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { SettingValuesContext } from '@/components/proposal-actions/setting-forms';
 import {
   ActionBar,
   Button,
@@ -34,12 +34,12 @@ import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
 import { createCallsIn, resolvePendingModules } from '@/lib/modules/pending';
 import { ActionFormProvider, ActionPickerSheet, ProposalActionQueue } from '@/lib/proposal-actions';
+import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-actions/compose-metadata';
+import { actionCountText } from '@/lib/proposal-actions/queue';
+import { analyzeDraft } from '@/lib/proposal-actions/review';
+import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-readiness';
+import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
-import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-changes/compose-metadata';
-import { changeCountText } from '@/lib/proposal-changes/queue';
-import { analyzeDraft } from '@/lib/proposal-changes/review';
-import { reviewGapText, reviewReadiness } from '@/lib/proposal-changes/review-readiness';
-import { useSettingValues } from '@/lib/proposal-changes/use-setting-values';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
 import {
@@ -288,7 +288,7 @@ export default function ProposalCreatePage() {
           />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Say why, add what changes, then sign. Changes you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
+            meta="Say why, add the actions, then sign. Actions you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -341,7 +341,7 @@ export default function ProposalCreatePage() {
                       />
                       {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
                         <div className={suggestion}>
-                          <FieldHelperText>Suggested from the changes: {suggestedTitle}</FieldHelperText>
+                          <FieldHelperText>Suggested from the actions: {suggestedTitle}</FieldHelperText>
                           <Button
                             variant="link"
                             size="sm"
@@ -379,7 +379,7 @@ export default function ProposalCreatePage() {
                             onClick={() => updateMetadata(session.address, daoId, { description: whatItDoes })}
                           >
                             <Sparkles aria-hidden="true" />
-                            {hasWhatItDoes ? 'Update “What this does”' : 'Add “What this does” from the changes'}
+                            {hasWhatItDoes ? 'Update “What this does”' : 'Add “What this does” from the actions'}
                           </Button>
                         </div>
                       ) : null}
@@ -399,7 +399,7 @@ export default function ProposalCreatePage() {
                         <Section
                           title={
                             queuedActions.length
-                              ? `In this proposal (${changeCountText(queuedActions)})`
+                              ? `In this proposal (${actionCountText(queuedActions)})`
                               : 'In this proposal'
                           }
                           description={`Up to ${MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote passes.`}
@@ -415,7 +415,7 @@ export default function ProposalCreatePage() {
                                 disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS || Boolean(editingState)}
                               >
                                 <Plus aria-hidden="true" />
-                                Add a change
+                                Add an action
                               </Button>
                             </div>
                           </div>
@@ -467,15 +467,15 @@ export default function ProposalCreatePage() {
                       <Callout
                         variant="error"
                         badge="Fix before submitting"
-                        title="Some changes repeat or clash"
-                        description="Go back and remove or replace the flagged change."
+                        title="Some actions repeat or clash"
+                        description="Go back and remove or replace the flagged action."
                       />
                     ) : null}
                     {orderWarnings.map((message) => (
                       <Callout
                         key={message}
                         variant="warning"
-                        title="Check the order of changes"
+                        title="Check the order of actions"
                         description={message}
                       />
                     ))}

@@ -13,7 +13,7 @@ import type { ArtworkPlan } from '@/components/create-dao/artwork-configuration'
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { PageSection } from '@/components/page-section';
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
 import {
   Button,
   Callout,
@@ -34,10 +34,10 @@ import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { ARTWORK_GUIDE_URL } from '@/lib/help-links';
+import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -54,7 +54,7 @@ export default function ArtworkAdminPage() {
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
-  const { propose } = useProposeChange();
+  const { propose } = useProposeAction();
   const tx = useTransactionFeedback(config.name);
   const [renderer, setRenderer] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -97,7 +97,7 @@ export default function ArtworkAdminPage() {
     const result = propose(
       {
         actions: [handler.serialize({ value: nextRenderer }, context)],
-        source: CHANGE_SOURCES.artwork,
+        source: ACTION_SOURCES.artwork,
         note: `Every token's image will be drawn from ${nextRenderer} instead of ${currentRenderer || 'the current renderer'}. Why: ${reason.trim()}`
       },
       { onAdded: () => setRenderer(null) }
@@ -152,7 +152,7 @@ export default function ArtworkAdminPage() {
       const result = propose({
         actions: batches.map((batch) => appendHandler.serialize(batch, context)),
         bundle: planBundle('Add new artwork layers', batches.length),
-        source: CHANGE_SOURCES.artwork,
+        source: ACTION_SOURCES.artwork,
         note: `Add a new artwork upload (${upload.baseUri}) to the ${fresh.properties.length} existing layers, changing none of them${batches.length > 1 ? `, in ${batches.length} parts` : ''}. If another artwork proposal runs first, this one fails rather than numbering layers wrongly.`
       });
       if (result.outcome === 'invalid') setMessage(result.message);
@@ -268,7 +268,7 @@ export default function ArtworkAdminPage() {
                   </Text>
                 ) : null}
                 <div>
-                  <ChangeSubmit
+                  <ActionSubmit
                     direct={false}
                     what="the new layers"
                     disabled={busy || !upload || !networkReady}
@@ -355,7 +355,7 @@ export default function ArtworkAdminPage() {
                           }
                         />
                       ) : (
-                        <ChangeSubmit
+                        <ActionSubmit
                           direct={false}
                           variant="secondary"
                           disabled={busy || !networkReady || !rendererChanged || !reasonReady}

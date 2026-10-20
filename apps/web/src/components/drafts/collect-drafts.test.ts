@@ -50,7 +50,7 @@ describe('collectDrafts', () => {
       ['proposal', 'Raise the reserve'],
       ['dao', 'Lantern Club']
     ]);
-    expect(items[0].meta).toMatch(/^Builder DAO · 1 change · saved /);
+    expect(items[0].meta).toMatch(/^Builder DAO · 1 action · saved /);
     expect(items[0].href).toBe('/dao/builder/proposals/create');
     expect(items[1].href).toBe('/create?draft=d1');
   });

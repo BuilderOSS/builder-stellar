@@ -2,21 +2,21 @@
 
 import { useState } from 'react';
 
-import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { actionAuthorityText, ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import { Callout, FieldHelperText } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import type { TransferSacTokenData } from '@/lib/proposal-actions/actions/transfer-sac-token/types';
 import { ActionFormProvider, useActionFormContext } from '@/lib/proposal-actions/context';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ValidationResult } from '@/lib/proposal-actions/types';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -36,12 +36,12 @@ function TransferProposalForm() {
   const { daoId, daoConfig } = useDaoContext();
   const context = useActionFormContext();
   const session = useAuthSessionStore();
-  const { propose } = useProposeChange();
-  const pending = usePendingChanges('transfer-sac-token');
+  const { propose } = useProposeAction();
+  const pending = usePendingActions('transfer-sac-token');
   const [draft, setDraft] = useState<TransferSacTokenData>(() => handler.getDefaultValues());
   const [validation, setValidation] = useState<ValidationResult>();
   const [message, setMessage] = useState('');
-  const editing = useEditingChange({
+  const editing = useEditingAction({
     accepts: (action) => action.type === 'transfer-sac-token',
     onLoad: (action) => setDraft(handler.deserialize(action))
   });
@@ -78,7 +78,7 @@ function TransferProposalForm() {
       const result = propose(
         {
           actions: [handler.serialize(draft, context)],
-          source: CHANGE_SOURCES.treasury,
+          source: ACTION_SOURCES.treasury,
           note: `Send ${draft.amount} ${draft.assetCode} from the treasury to ${draft.recipient.trim()}.`,
           replaces: editing.replaces
         },
@@ -113,7 +113,7 @@ function TransferProposalForm() {
               : 'Connect your wallet to propose a payout.')}
         </p>
       ) : null}
-      <EditingChangeNotice
+      <EditingActionNotice
         editing={editing.editing}
         onCancel={() => {
           editing.done();
@@ -137,7 +137,7 @@ function TransferProposalForm() {
         network={daoConfig.name}
       />
       {message ? <Callout variant="error" title={message} role="alert" /> : null}
-      <ChangeSubmit
+      <ActionSubmit
         direct={false}
         what="the payout"
         editing={Boolean(editing.editing)}
@@ -147,7 +147,7 @@ function TransferProposalForm() {
         onClick={add}
       />
       <FieldHelperText>
-        {changeAuthorityText(false)} The recipient&apos;s trustline and the treasury balance are checked when it runs.
+        {actionAuthorityText(false)} The recipient&apos;s trustline and the treasury balance are checked when it runs.
       </FieldHelperText>
     </section>
   );

@@ -8,13 +8,13 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import type { AdminValueDraft } from '@/components/admin/admin-action-forms';
 import { PageSection } from '@/components/page-section';
-import { SettingChangeCard } from '@/components/proposal-changes/setting-change-card';
+import { SettingActionCard } from '@/components/proposal-actions/setting-action-card';
 import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin, useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/duration';
-import { getActionMeta } from '@/lib/proposal-changes/catalog';
+import { getActionMeta } from '@/lib/proposal-actions/catalog';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -190,7 +190,7 @@ export default function GovernanceAdminPage() {
 
         <Grid columns={{ base: 1, xl: 2 }} gap="4">
           {RULES.map((rule) => (
-            <SettingChangeCard<AdminValueDraft>
+            <SettingActionCard<AdminValueDraft>
               key={rule.type}
               type={rule.type}
               title={rule.title}

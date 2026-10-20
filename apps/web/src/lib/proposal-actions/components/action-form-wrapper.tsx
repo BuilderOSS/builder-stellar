@@ -5,13 +5,13 @@
 import { Suspense, useCallback, useContext } from 'react';
 import { css } from 'styled-system/css';
 
-import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { SettingValuesContext } from '@/components/proposal-actions/setting-forms';
 import { Callout, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
-import { ACTION_CATALOG, actionHome, getActionMeta } from '@/lib/proposal-changes/catalog';
-import { composerChange } from '@/lib/proposal-changes/composer-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { ACTION_CATALOG, actionHome, getActionMeta } from '@/lib/proposal-actions/catalog';
+import { composerAction } from '@/lib/proposal-actions/composer-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import {
   normalizeWalletAddress,
@@ -34,7 +34,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
   const { routeId } = useDaoContext();
   const context = useActionFormContext();
   const values = useContext(SettingValuesContext);
-  const { propose } = useProposeChange();
+  const { propose } = useProposeAction();
   const address = useAuthSessionStore((state) => state.address);
   const walletKey = normalizeWalletAddress(address);
 
@@ -69,7 +69,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
         ? queuedActions[editingState.index]?.id
         : undefined;
     const result = propose(
-      composerChange(action, queuedActions, { editingId, auctionPaused: values.auction?.paused }),
+      composerAction(action, queuedActions, { editingId, auctionPaused: values.auction?.paused }),
       {
         onAdded: () => {
           cancelEdit(address, daoId);
@@ -78,7 +78,7 @@ export function ActionFormWrapper({ daoId, onDone }: { daoId: string; onDone?: (
       }
     );
     if (result.outcome === 'invalid') setFormMessage(address, daoId, result.message);
-    if (result.outcome === 'no-wallet') setFormMessage(address, daoId, 'Connect a wallet to add changes.');
+    if (result.outcome === 'no-wallet') setFormMessage(address, daoId, 'Connect a wallet to add actions.');
   }, [
     address,
     daoId,

@@ -7,8 +7,8 @@ import type { AdminReservePriceDraft, AdminValueDraft } from '@/components/admin
 import { PercentageInput } from '@/components/admin/percentage-input';
 import { AmountInput, DurationInput, FieldHelperText, FieldLabel, HelpTip, Input } from '@/components/ui';
 import { MIN_RESERVE_PRICE_TOKENS } from '@/lib/auction-values';
+import type { SettingValues } from '@/lib/proposal-actions/catalog';
 import type { ActionFormProps } from '@/lib/proposal-actions/types';
-import type { SettingValues } from '@/lib/proposal-changes/catalog';
 
 /** The tribe's live settings, for forms that need a unit or a current value beyond their own draft. */
 export const SettingValuesContext = createContext<SettingValues>({});
