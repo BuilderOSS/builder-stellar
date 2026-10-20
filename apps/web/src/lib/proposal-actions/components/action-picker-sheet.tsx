@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useContext, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { SettingValuesContext } from '@/components/proposal-actions/setting-forms';
 import { Disclosure, SearchInput, Sheet } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -17,7 +17,7 @@ import {
   actionHome,
   pickerEntries,
   TRIBE_PARTS
-} from '@/lib/proposal-changes/catalog';
+} from '@/lib/proposal-actions/catalog';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 

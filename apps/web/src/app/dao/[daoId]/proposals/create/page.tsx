@@ -12,7 +12,7 @@ import { css } from 'styled-system/css';
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
-import { SettingValuesContext } from '@/components/proposal-changes/setting-forms';
+import { SettingValuesContext } from '@/components/proposal-actions/setting-forms';
 import {
   ActionBar,
   Button,
@@ -34,12 +34,12 @@ import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
 import { createCallsIn, resolvePendingModules } from '@/lib/modules/pending';
 import { ActionFormProvider, ActionPickerSheet, ProposalActionQueue } from '@/lib/proposal-actions';
+import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-actions/compose-metadata';
+import { actionCountText } from '@/lib/proposal-actions/queue';
+import { analyzeDraft } from '@/lib/proposal-actions/review';
+import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-readiness';
+import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
-import { applyWhatThisDoes, suggestTitle, WHAT_THIS_DOES_HEADING } from '@/lib/proposal-changes/compose-metadata';
-import { changeCountText } from '@/lib/proposal-changes/queue';
-import { analyzeDraft } from '@/lib/proposal-changes/review';
-import { reviewGapText, reviewReadiness } from '@/lib/proposal-changes/review-readiness';
-import { useSettingValues } from '@/lib/proposal-changes/use-setting-values';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
 import {
@@ -399,7 +399,7 @@ export default function ProposalCreatePage() {
                         <Section
                           title={
                             queuedActions.length
-                              ? `In this proposal (${changeCountText(queuedActions)})`
+                              ? `In this proposal (${actionCountText(queuedActions)})`
                               : 'In this proposal'
                           }
                           description={`Up to ${MAX_PROPOSAL_ACTIONS} actions. They run in order, all together, only if the vote passes.`}

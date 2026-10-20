@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { actionAuthorityText, ActionSubmit } from '@/components/proposal-actions/action-submit';
 import { ChoiceGroup, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
 import { Sheet } from '@/components/ui/sheet';
 import { UNLIMITED_ALLOWANCE } from '@/lib/modules/kinds';
@@ -86,12 +86,12 @@ export function AllowanceSheet({
           ]}
         />
         <div className={buttons}>
-          <ChangeSubmit
+          <ActionSubmit
             direct={!live}
             directLabel={direction === 'increase' ? 'Raise allowance' : 'Lower allowance'}
             onClick={submit}
           />
-          <FieldHelperText>{changeAuthorityText(!live)}</FieldHelperText>
+          <FieldHelperText>{actionAuthorityText(!live)}</FieldHelperText>
         </div>
       </div>
     </Sheet>

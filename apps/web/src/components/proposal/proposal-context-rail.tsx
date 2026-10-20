@@ -24,9 +24,9 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
+import { getActionMeta } from '@/lib/proposal-actions/catalog';
 import { isRegisteredActionType } from '@/lib/proposal-actions/registry';
 import type { ProposalActionType } from '@/lib/proposal-actions/types';
-import { getActionMeta } from '@/lib/proposal-changes/catalog';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
 import { ProposalStateBadge } from './proposal-state-badge';

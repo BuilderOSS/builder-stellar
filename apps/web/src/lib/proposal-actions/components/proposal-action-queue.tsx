@@ -12,12 +12,12 @@ import { Button, Chip, IconButton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { isHighRiskProposalAction } from '@/lib/proposal-action-identity';
+import { actionEditHref, type ActionSource } from '@/lib/proposal-actions/action-request';
+import { showRemovedToast } from '@/lib/proposal-actions/action-toast';
+import { isPickable } from '@/lib/proposal-actions/catalog';
+import { type QueueItem, queueItems, removeFromQueue } from '@/lib/proposal-actions/queue';
+import { analyzeQueue } from '@/lib/proposal-actions/review';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { isPickable } from '@/lib/proposal-changes/catalog';
-import { changeEditHref, type ChangeSource } from '@/lib/proposal-changes/change-request';
-import { showRemovedToast } from '@/lib/proposal-changes/change-toast';
-import { type QueueItem, queueItems, removeFromQueue } from '@/lib/proposal-changes/queue';
-import { analyzeQueue } from '@/lib/proposal-changes/review';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -196,7 +196,7 @@ export function ProposalActionQueue({
     const first = entry.actions[0];
     const inline = variant === 'composer' && !entry.bundleId && isPickable(getActionHandler(first.type));
     if (inline) return beginEdit(address, daoId, entry.start);
-    const href = changeEditHref(first);
+    const href = actionEditHref(first);
     if (href) router.push(daoRoute(routeId, href));
   }
 
@@ -271,7 +271,7 @@ export function ProposalActionQueue({
       <ol className={list} aria-label="Changes in this proposal">
         {items.map((entry, index) => {
           const first = entry.actions[0];
-          const source = first.source as ChangeSource | undefined;
+          const source = first.source as ActionSource | undefined;
           const isEditing =
             editingIndex !== undefined &&
             editingIndex >= entry.start &&
@@ -279,7 +279,7 @@ export function ProposalActionQueue({
           const open = expanded[entry.key] ?? false;
           const shown = rowFindings(entry, findings);
           const pickable = !entry.bundleId && isPickable(getActionHandler(first.type));
-          const href = changeEditHref(first);
+          const href = actionEditHref(first);
           const canEdit = variant === 'composer' ? pickable || Boolean(href) : Boolean(href);
           const dropping =
             drag && drag.to === index && drag.from !== index ? (drag.to < drag.from ? 'before' : 'after') : undefined;

@@ -5,14 +5,14 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import { Button, Callout, FieldHelperText, FieldLabel, Input, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type TreasuryTokensResponse = { items: Array<{ tokenId: string; owner: string }>; total: number };
@@ -34,12 +34,12 @@ const fetchTokens = async (url: string): Promise<TreasuryTokensResponse> => {
 export function TreasuryTokens() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
-  const { propose } = useProposeChange();
-  const pending = usePendingChanges('transfer-dao-token');
+  const { propose } = useProposeAction();
+  const pending = usePendingActions('transfer-dao-token');
   const [giving, setGiving] = useState<string | null>(null);
   const [recipient, setRecipient] = useState('');
   const [error, setError] = useState('');
-  const editing = useEditingChange({
+  const editing = useEditingAction({
     accepts: (action) => action.type === 'transfer-dao-token',
     onLoad: (action) => {
       setGiving(String(action.tokenId ?? ''));
@@ -63,7 +63,7 @@ export function TreasuryTokens() {
     const outcome = propose(
       {
         actions: [handler.serialize(values, context)],
-        source: CHANGE_SOURCES.treasury,
+        source: ACTION_SOURCES.treasury,
         note: `Give token #${tokenId} from the treasury to ${recipient}.`,
         replaces: editing.editing?.tokenId === tokenId ? editing.replaces : undefined
       },
@@ -122,7 +122,7 @@ export function TreasuryTokens() {
                       setError('');
                     }}
                   />
-                  <ChangeSubmit
+                  <ActionSubmit
                     direct={false}
                     size="sm"
                     editing={editing.editing?.tokenId === item.tokenId}

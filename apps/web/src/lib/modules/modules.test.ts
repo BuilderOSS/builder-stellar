@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { getProposalActionResourceKey, isHighRiskProposalAction } from '@/lib/proposal-action-identity';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
 import {
@@ -22,7 +22,7 @@ import {
 } from './kinds';
 import { actionCount, buildAttachPlan, buildDetachPlan, type PlanStep } from './plans';
 import { type ModuleFacts, moduleReadiness } from './readiness';
-import { planChange } from './requests';
+import { planActions } from './requests';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));
 const ASSET = contract(9);
@@ -368,17 +368,17 @@ describe('module plans as one change', () => {
       predicted: PREDICTED,
       open: true
     });
-    const change = planChange({ steps, config, address: null, title: 'Add a market', note: 'Adds a market.' });
-    expect(change.actions.map((action) => action.type)).toEqual(steps.map((step) => step.type));
-    expect(change.bundle?.label).toBe(`Add a market: ${steps.length} steps`);
-    expect(change.source).toEqual(CHANGE_SOURCES.membership);
-    expect(change.note).toBe('Adds a market.');
+    const request = planActions({ steps, config, address: null, title: 'Add a market', note: 'Adds a market.' });
+    expect(request.actions.map((action) => action.type)).toEqual(steps.map((step) => step.type));
+    expect(request.bundle?.label).toBe(`Add a market: ${steps.length} steps`);
+    expect(request.source).toEqual(ACTION_SOURCES.membership);
+    expect(request.note).toBe('Adds a market.');
   });
 
   it('adds a one-step detach on its own, without a bundle', () => {
     const steps = buildDetachPlan({ kind: 'claims', address: config.claimsContractId });
-    const change = planChange({ steps, config, address: null, title: 'Remove claims', note: 'Removes it.' });
-    expect(change.actions.map((action) => action.type)).toEqual(['unregister-module']);
-    expect(change.bundle).toBeUndefined();
+    const request = planActions({ steps, config, address: null, title: 'Remove claims', note: 'Removes it.' });
+    expect(request.actions.map((action) => action.type)).toEqual(['unregister-module']);
+    expect(request.bundle).toBeUndefined();
   });
 });

@@ -45,7 +45,7 @@ describe('proposal composer v4 actions', () => {
     clearDraft(wallet);
     const store = useProposalComposerStore.getState();
     store.setStep(wallet, daoId, 2);
-    store.addChanges(wallet, daoId, [queued('a'), queued('b'), queued('c')]);
+    store.addActions(wallet, daoId, [queued('a'), queued('b'), queued('c')]);
     store.replaceById(wallet, daoId, ['b'], [queued('b2')]);
     let draft = selectDraft(wallet, daoId)(useProposalComposerStore.getState());
     expect(draft.step).toBe(2);
@@ -61,7 +61,7 @@ describe('proposal composer v4 actions', () => {
   it('removes and moves a bundle as one row', () => {
     clearDraft(wallet);
     const store = useProposalComposerStore.getState();
-    store.addChanges(wallet, daoId, [queued('x'), queued('p', { bundleId: 'B' }), queued('q', { bundleId: 'B' })]);
+    store.addActions(wallet, daoId, [queued('x'), queued('p', { bundleId: 'B' }), queued('q', { bundleId: 'B' })]);
     store.moveItem(wallet, daoId, 1, 0);
     expect(selectDraft(wallet, daoId)(useProposalComposerStore.getState()).queuedActions.map((a) => a.id)).toEqual([
       'p',
@@ -82,11 +82,11 @@ describe('proposal composer v4 actions', () => {
     clearDraft(wallet);
     store.updateMetadata(wallet, daoId, { title: 'Fund the tool library', description: 'Winter is coming.' });
     expect(canReview()).toBe(false);
-    store.addChanges(wallet, daoId, [queued('after')]);
+    store.addActions(wallet, daoId, [queued('after')]);
     expect(canReview()).toBe(true);
 
     clearDraft(wallet);
-    store.addChanges(wallet, daoId, [queued('before')]);
+    store.addActions(wallet, daoId, [queued('before')]);
     expect(canReview()).toBe(false);
     store.updateMetadata(wallet, daoId, { title: 'Pause first', description: 'Then change.' });
     expect(canReview()).toBe(true);

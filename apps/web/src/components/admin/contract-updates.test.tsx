@@ -25,15 +25,15 @@ vi.mock('@/contexts/dao-context', () => ({
   })
 }));
 vi.mock('@/stores/auth-session-store', () => ({ useAuthSessionStore: () => ({ address: state.address }) }));
-vi.mock('@/lib/proposal-changes/use-propose-change', () => ({
-  useProposeChange: () => ({ propose: vi.fn(() => ({ outcome: 'added' })), canPropose: true })
+vi.mock('@/lib/proposal-actions/use-propose-action', () => ({
+  useProposeAction: () => ({ propose: vi.fn(() => ({ outcome: 'added' })), canPropose: true })
 }));
-vi.mock('@/lib/proposal-changes/use-editing-change', () => ({
-  useEditingChange: () => ({ editing: null, bundle: [], replaces: undefined, done: vi.fn() })
+vi.mock('@/lib/proposal-actions/use-editing-action', () => ({
+  useEditingAction: () => ({ editing: null, bundle: [], replaces: undefined, done: vi.fn() })
 }));
-vi.mock('@/components/proposal-changes/pending-value', () => ({
+vi.mock('@/components/proposal-actions/pending-value', () => ({
   PendingValue: () => null,
-  usePendingChanges: () => []
+  usePendingActions: () => []
 }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })

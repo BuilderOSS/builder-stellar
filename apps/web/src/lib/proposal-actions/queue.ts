@@ -77,12 +77,12 @@ export function removeFromQueue(actions: ProposalQueuedAction[], ids: string[]) 
   return actions.filter((action) => !removed.has(action.id));
 }
 
-/** How many separate things the proposal changes: a bundle counts once. */
-export function changeCount(actions: ProposalQueuedAction[]) {
+/** How many separate things the proposal does: a bundle counts once. */
+export function queuedActionCount(actions: ProposalQueuedAction[]) {
   return queueItems(actions).length;
 }
 
-export function changeCountText(actions: ProposalQueuedAction[]) {
-  const count = changeCount(actions);
+export function actionCountText(actions: ProposalQueuedAction[]) {
+  const count = queuedActionCount(actions);
   return `${count} ${count === 1 ? 'change' : 'changes'}`;
 }

@@ -6,9 +6,9 @@ import { useState } from 'react';
 import useSWR from 'swr';
 
 import type { OpenPoolDraft } from '@/components/admin/admin-action-forms';
-import { changeAuthorityText, ChangeSubmit } from '@/components/proposal-changes/change-submit';
-import { EditingChangeNotice } from '@/components/proposal-changes/editing-change-notice';
-import { PendingValue, usePendingChanges } from '@/components/proposal-changes/pending-value';
+import { actionAuthorityText, ActionSubmit } from '@/components/proposal-actions/action-submit';
+import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
+import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import {
   Address,
   AmountInput,
@@ -29,12 +29,12 @@ import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/marketplace/governance';
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { largestBuyerShare } from '@/lib/marketplace/pool-share';
+import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
+import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
-import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-changes/catalog';
-import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace-styles';
@@ -44,8 +44,8 @@ const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const { daoConfig, routeId } = useDaoContext();
-  const { propose } = useProposeChange();
-  const pendingPools = usePendingChanges((action) => POOL_TYPES.has(action.type));
+  const { propose } = useProposeAction();
+  const pendingPools = usePendingActions((action) => POOL_TYPES.has(action.type));
   const { data, error, isLoading } = useDaoMarketplace(daoId, 'kind=pool&status=open');
   // Closing needs a pool that is still open; sweeping one that has closed. List both to pick from.
   const allPools = useDaoMarketplace(daoId, 'kind=pool&status=all');
@@ -62,7 +62,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   });
   const [poolId, setPoolId] = useState('');
   const [message, setMessage] = useState('');
-  const editing = useEditingChange({
+  const editing = useEditingAction({
     accepts: (action) =>
       action.type === 'open-pool' || (action.type === 'change-mint-allowance' && Boolean(action.bundleId)),
     onLoad: (_action, bundle) => {
@@ -125,7 +125,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               { ...open.action, targetRole: 'marketplace' }
             ],
             bundle: planBundle('Open a quick-buy pool', 2),
-            source: CHANGE_SOURCES.marketplace,
+            source: ACTION_SOURCES.marketplace,
             note: `Sell ${pool.size} new tokens at ${formatMarketplaceAmount(amount)} ${unit} each, at most ${pool.maxPerBuyer} per wallet and ${pool.maxSoldPerPeriod} every ${pool.periodHours}h, until ${new Date(expiry).toISOString()}. The market may mint them first. Proceeds go to the treasury. Each token sold adds a vote: a pool larger than the voting supply could let buyers outvote today's members.${shareText ? ` ${shareText}` : ''}`,
             replaces: editing.replaces
           },
@@ -139,7 +139,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
       const { action } = marketplaceGovernanceAction(daoConfig, address, handler, { poolId });
       const result = propose({
         actions: [{ ...action, targetRole: 'marketplace' }],
-        source: CHANGE_SOURCES.marketplace,
+        source: ACTION_SOURCES.marketplace,
         note:
           kind === 'close'
             ? `Stop pool #${poolId}'s sales now. Tokens it never minted go back to the market's mint allowance.`
@@ -195,7 +195,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <section className={styles.panel}>
           <div className={styles.stack}>
             <h2>Propose a quick-buy pool</h2>
-            <EditingChangeNotice editing={editing.editing} bundle={editing.bundle} onCancel={editing.done} />
+            <EditingActionNotice editing={editing.editing} bundle={editing.bundle} onCancel={editing.done} />
             <p>
               A pool sells new tokens at a fixed price. Anyone can stock it once it opens; buyers take one token at a
               time, within the per-wallet and per-period limits. Choose a closing time that leaves room for the vote.
@@ -271,7 +271,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             />
             <div className={styles.stack}>
               <div>
-                <ChangeSubmit
+                <ActionSubmit
                   direct={false}
                   what="the pool"
                   editing={Boolean(editing.editing)}
@@ -279,7 +279,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                   onClick={() => queue('open')}
                 />
               </div>
-              <FieldHelperText>{changeAuthorityText(false)}</FieldHelperText>
+              <FieldHelperText>{actionAuthorityText(false)}</FieldHelperText>
             </div>
             {!enabled ? (
               <FieldHelperText>
@@ -333,14 +333,14 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               <PendingValue key={action.id} pending={action} />
             ))}
             <div className={styles.row}>
-              <ChangeSubmit
+              <ActionSubmit
                 direct={false}
                 what="closing"
                 variant="secondary"
                 disabled={!enabled || pickedClosed}
                 onClick={() => queue('close')}
               />
-              <ChangeSubmit
+              <ActionSubmit
                 direct={false}
                 what="sweeping"
                 variant="secondary"
@@ -368,7 +368,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 throw new Error('This governance action does not target this marketplace.');
               const result = propose({
                 actions: [action],
-                source: CHANGE_SOURCES.marketplace,
+                source: ACTION_SOURCES.marketplace,
                 note: `${handler.label}. The treasury makes the change on the market when the proposal runs.`,
                 replaces
               });
@@ -445,8 +445,8 @@ function MarketplaceSetting({
 }) {
   const current = getActionMeta(handler.type).currentValue?.(values) ?? null;
   const [draft, setDraft] = useState<unknown>(null);
-  const pending = usePendingChanges(handler.type).at(-1);
-  const editing = useEditingChange({
+  const pending = usePendingActions(handler.type).at(-1);
+  const editing = useEditingAction({
     accepts: (action) => action.type === handler.type,
     onLoad: (action) => setDraft(handler.deserialize(action))
   });
@@ -456,7 +456,7 @@ function MarketplaceSetting({
     <div className={styles.notice}>
       <div className={styles.stack}>
         <h3>{handler.label}</h3>
-        <EditingChangeNotice editing={editing.editing} onCancel={editing.done} />
+        <EditingActionNotice editing={editing.editing} onCancel={editing.done} />
         <PendingValue now={current?.text} pending={editing.editing ? undefined : pending} />
         <Form
           value={draft ?? current?.draft ?? handler.getDefaultValues()}
@@ -465,7 +465,7 @@ function MarketplaceSetting({
           network={network}
         />
         <div>
-          <ChangeSubmit
+          <ActionSubmit
             direct={false}
             variant="secondary"
             editing={Boolean(editing.editing)}

@@ -4,8 +4,8 @@ import { Button, Callout } from '@/components/ui';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { getProposalActionSummary } from '@/lib/proposal-call';
 
-/** Shown on a page opened from a queued change's Edit: what is being edited, and how to stop. */
-export function EditingChangeNotice({
+/** Shown on a page opened from a queued action's Edit: what is being edited, and how to stop. */
+export function EditingActionNotice({
   editing,
   bundle,
   onCancel

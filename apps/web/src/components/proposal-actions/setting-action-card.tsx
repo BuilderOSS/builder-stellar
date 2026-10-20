@@ -5,18 +5,18 @@ import { css } from 'styled-system/css';
 
 import { Badge, Callout, FieldHelperText } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { ACTION_SOURCES, defaultSourceKey } from '@/lib/proposal-actions/action-request';
+import { ACTION_CATALOG, type CurrentValue } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ProposalActionType, ValidationResult } from '@/lib/proposal-actions/types';
+import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { ACTION_CATALOG, type CurrentValue } from '@/lib/proposal-changes/catalog';
-import { CHANGE_SOURCES, defaultSourceKey } from '@/lib/proposal-changes/change-request';
-import { useEditingChange } from '@/lib/proposal-changes/use-editing-change';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import { changeAuthorityText, ChangeSubmit } from './change-submit';
-import { EditingChangeNotice } from './editing-change-notice';
-import { PendingValue, usePendingChanges } from './pending-value';
+import { actionAuthorityText, ActionSubmit } from './action-submit';
+import { EditingActionNotice } from './editing-action-notice';
+import { PendingValue, usePendingActions } from './pending-value';
 
 const card = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 const footer = css({
@@ -31,7 +31,7 @@ const footer = css({
  * One setting on a Manage page: its live value, any value waiting in the proposal, the same form the composer
  * uses, and one button that applies it in Setup or adds it to the proposal after launch.
  */
-export function SettingChangeCard<TData extends object>({
+export function SettingActionCard<TData extends object>({
   type,
   title,
   current,
@@ -47,9 +47,9 @@ export function SettingChangeCard<TData extends object>({
   direct: boolean;
   canAct: boolean;
   busy: boolean;
-  /** This card's own change is being signed. */
+  /** This card's own action is being signed. */
   loading?: boolean;
-  /** Setup only: sign the change now. */
+  /** Setup only: sign the action now. */
   onApply: (draft: TData) => Promise<void> | void;
 }) {
   const { daoConfig: config } = useDaoContext();
@@ -57,14 +57,14 @@ export function SettingChangeCard<TData extends object>({
   const handler = getActionHandler(type);
   // The setting's own form, the one the composer shows for it.
   const Form = ACTION_CATALOG[type].Form ?? handler.FormComponent;
-  const { propose } = useProposeChange();
+  const { propose } = useProposeAction();
   const [draft, setDraft] = useState<TData | null>(null);
   const [errors, setErrors] = useState<ValidationResult | null>(null);
   const [message, setMessage] = useState('');
-  // Edit from the pending row: saving replaces that change in place, like the `?change=` round trip.
+  // Edit from the pending row: saving replaces that action in place, like the `?action=` round trip.
   const [localEdit, setLocalEdit] = useState<string | null>(null);
-  const pending = usePendingChanges(type).at(-1);
-  const editing = useEditingChange({
+  const pending = usePendingActions(type).at(-1);
+  const editing = useEditingAction({
     accepts: (action) => action.type === type,
     onLoad: (action) => setDraft(handler.deserialize(action) as TData)
   });
@@ -89,7 +89,7 @@ export function SettingChangeCard<TData extends object>({
     const outcome = propose(
       {
         actions: [action],
-        source: CHANGE_SOURCES[defaultSourceKey(type)],
+        source: ACTION_SOURCES[defaultSourceKey(type)],
         note: `${getProposalActionSummary(action)}${current ? ` (now ${current.text})` : ''}.`,
         replaces: editing.replaces ?? (localEdit ? [localEdit] : undefined)
       },
@@ -110,14 +110,14 @@ export function SettingChangeCard<TData extends object>({
       <div>
         <Badge>{title}</Badge>
       </div>
-      <EditingChangeNotice
+      <EditingActionNotice
         editing={editing.editing}
         onCancel={() => {
           editing.done();
           setDraft(null);
         }}
       />
-      <EditingChangeNotice
+      <EditingActionNotice
         editing={localEdit && pending?.id === localEdit ? pending : null}
         onCancel={() => {
           setLocalEdit(null);
@@ -148,8 +148,8 @@ export function SettingChangeCard<TData extends object>({
       />
       {message ? <Callout variant="warning" title={message} /> : null}
       <div className={footer}>
-        <FieldHelperText>{changeAuthorityText(direct)}</FieldHelperText>
-        <ChangeSubmit
+        <FieldHelperText>{actionAuthorityText(direct)}</FieldHelperText>
+        <ActionSubmit
           direct={direct}
           editing={Boolean(editing.editing || localEdit)}
           disabled={busy || !canAct || (unchanged && !editing.editing && !localEdit)}

@@ -22,9 +22,9 @@ import { readAdminModuleVersion, type UpgradeModule, useAdminModuleVersion } fro
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig; module: UpgradeModule }) {
@@ -34,7 +34,7 @@ export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const state = useAdminModuleVersion(config, module, session.address, targetHash);
-  const { propose: proposeChange } = useProposeChange();
+  const { propose: proposeAction } = useProposeAction();
   const handler = getAllActionHandlers().find((item) => String(item.type) === 'upgrade-dao-module');
   const canPropose = Boolean(state.data && session.address && treasuryIsAdmin(config, state.data.admin));
   async function propose() {
@@ -56,9 +56,9 @@ export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig
       const valid = handler.validate(values, context);
       if (!valid.valid) throw new Error(valid.message);
       assertAdminCallSupported(handler, values, context);
-      const result = proposeChange({
+      const result = proposeAction({
         actions: [handler.serialize(values, context)],
-        source: CHANGE_SOURCES.upgrades,
+        source: ACTION_SOURCES.upgrades,
         note: `Upgrade ${module} to ${current.target!.version}: the Manager-approved transition ${current.fromHash} → ${current.target!.hash}.`
       });
       if (result.outcome === 'invalid') setMessage(result.message);
@@ -73,9 +73,9 @@ export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig
     const migrate = getAllActionHandlers().find((item) => String(item.type) === 'migrate-dao-module');
     if (!migrate) return setMessage('Storage migration is not registered in this build.');
     const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
-    const result = proposeChange({
+    const result = proposeAction({
       actions: [migrate.serialize({ module }, context)],
-      source: CHANGE_SOURCES.upgrades,
+      source: ACTION_SOURCES.upgrades,
       note: `Run the ${module} storage migration (storage version ${state.data.storageVersion} now). It belongs right after an upgrade whose release changes storage, and fails otherwise.`
     });
     if (result.outcome === 'invalid') setMessage(result.message);

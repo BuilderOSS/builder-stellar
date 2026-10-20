@@ -5,7 +5,7 @@ import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { ChangeSubmit } from '@/components/proposal-changes/change-submit';
+import { ActionSubmit } from '@/components/proposal-actions/action-submit';
 import { Address, Callout, Chip, Disclosure, Skeleton } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -18,9 +18,9 @@ import {
   type ModuleUpdateStatus,
   upgradeProposalMetadata
 } from '@/lib/module-updates';
+import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { releaseNote } from '@/lib/release-notes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -90,7 +90,7 @@ export function ContractUpdates() {
   const { daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { rows, plan, isLoading, error, mutate } = useModuleUpdates(config, session.address);
-  const { propose: proposeChange } = useProposeChange();
+  const { propose: proposeAction } = useProposeAction();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -116,10 +116,10 @@ export function ContractUpdates() {
         assertAdminCallSupported(handler, values, context);
         return handler.serialize(values, context);
       });
-      const result = proposeChange({
+      const result = proposeAction({
         actions,
         bundle: planBundle(metadata.title, actions.length),
-        source: CHANGE_SOURCES.upgrades,
+        source: ACTION_SOURCES.upgrades,
         note: metadata.description
       });
       if (result.outcome === 'invalid') setMessage(result.message);
@@ -218,12 +218,12 @@ export function ContractUpdates() {
             {count ? (
               direct ? (
                 <div className={actions}>
-                  <ChangeSubmit direct what={plural(count)} loading={busy} onClick={() => void applyAll()} />
+                  <ActionSubmit direct what={plural(count)} loading={busy} onClick={() => void applyAll()} />
                 </div>
               ) : canPropose ? (
                 <div className={actions}>
                   {plan.batch.length ? (
-                    <ChangeSubmit
+                    <ActionSubmit
                       direct={false}
                       what={plural(plan.batch.length)}
                       disabled={busy}
@@ -231,7 +231,7 @@ export function ContractUpdates() {
                     />
                   ) : null}
                   {plan.separate.map((update) => (
-                    <ChangeSubmit
+                    <ActionSubmit
                       key={update.module}
                       direct={false}
                       what={`${moduleLabelInSentence(update.module)} upgrade`}

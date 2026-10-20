@@ -21,7 +21,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { parseMarketplaceAmount } from '@/lib/marketplace/amount';
-import { claimListChange } from '@/lib/minter/allocation-proposal';
+import { claimListAction } from '@/lib/minter/allocation-proposal';
 import { claimEntries, parseClaimCsv } from '@/lib/minter/claim-csv';
 import { claimMinterClient } from '@/lib/minter/client';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
@@ -30,7 +30,7 @@ import { claimFetch } from '@/lib/minter/hooks';
 import { type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 import { buildClaimTree, type ClaimEntry, claimTreeJson, MAX_TREE_CLAIMS } from '@/lib/minter/tree';
 import type { ClaimState } from '@/lib/minter/types';
-import { useProposeChange } from '@/lib/proposal-changes/use-propose-change';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { uploadFile } from '@/lib/upload-image';
 import { combineDuplicates, walletRowsCsv } from '@/lib/wallet-csv';
@@ -79,7 +79,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
   const { daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
-  const { propose } = useProposeChange();
+  const { propose } = useProposeAction();
   const tx = useTransactionFeedback(config.name);
   const launchAdmin = Boolean(state && address && !state.live && state.admin === address);
   const governed = Boolean(state?.live && state.admin === config.treasuryContractId);
@@ -249,7 +249,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       at = 'open';
       stage('open', 'active');
       if (mode === 'proposal') {
-        const result = propose(claimListChange(draft, fresh, config, DEPLOYMENT_ID, entries.length), {
+        const result = propose(claimListAction(draft, fresh, config, DEPLOYMENT_ID, entries.length), {
           onAdded: () => stage('open', 'done')
         });
         if (result.outcome === 'invalid') throw new Error(result.message);

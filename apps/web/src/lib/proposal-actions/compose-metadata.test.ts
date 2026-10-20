@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { PROPOSAL_DESCRIPTION_MAX_BYTES, proposalDescriptionBytes } from '@/lib/proposal-metadata';
 
 import {
+  actionLines,
   applyWhatThisDoes,
-  changeLines,
   stripWhatThisDoes,
   suggestTitle,
   WHAT_THIS_DOES_HEADING
@@ -29,7 +29,7 @@ describe('proposal text from its changes', () => {
 
   it('writes one line per change, from its note when it has one', () => {
     const quorum = { ...setting('set-quorum-bps', '1000'), note: 'Lower the bar to 10%.' };
-    expect(changeLines([...auction, quorum, setting('set-voting-period', '86400')])).toEqual([
+    expect(actionLines([...auction, quorum, setting('set-voting-period', '86400')])).toEqual([
       'Change the auction. Each auction runs 10 minutes.',
       'Lower the bar to 10%.',
       'Change how long voting stays open to 1 day.'

@@ -17,7 +17,7 @@ function bundleName(label: string | undefined) {
 }
 
 /** One line per queue row: the producer's note, or the action's own summary when it left none. */
-export function changeLines(actions: ProposalQueuedAction[]) {
+export function actionLines(actions: ProposalQueuedAction[]) {
   return queueItems(actions).map((item) => {
     const first = item.actions[0];
     const note = item.actions.map((action) => String(action.note ?? '').trim()).find(Boolean);
@@ -29,7 +29,7 @@ export function changeLines(actions: ProposalQueuedAction[]) {
   });
 }
 
-/** A title made from the changes, for the member to edit: "Change the quorum to 10% and 2 more changes". */
+/** A title made from the actions, for the member to edit: "Change the quorum to 10% and 2 more actions". */
 export function suggestTitle(actions: ProposalQueuedAction[]) {
   const items = queueItems(actions);
   if (!items.length) return '';
@@ -45,7 +45,7 @@ export function suggestTitle(actions: ProposalQueuedAction[]) {
  * the member already wrote. Lines that don't fit are counted instead of cut mid-sentence.
  */
 export function whatThisDoes(actions: ProposalQueuedAction[], metadata: ProposalMetadataDraft) {
-  const lines = changeLines(actions);
+  const lines = actionLines(actions);
   if (!lines.length) return '';
   const base = stripWhatThisDoes(metadata.description);
   const build = (shown: string[], hidden: number) =>

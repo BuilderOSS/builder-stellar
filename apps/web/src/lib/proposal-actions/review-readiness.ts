@@ -8,13 +8,13 @@ export type ReviewReadiness = {
   ready: boolean;
   /** What is still empty, in the order the page asks for it. */
   missing: ReviewGap[];
-  /** A problem with what is filled in (too long, a bad link, too many changes), when nothing is missing. */
+  /** A problem with what is filled in (too long, a bad link, too many actions), when nothing is missing. */
   problem: string | null;
 };
 
 /**
- * Whether a draft can go to Review. The why and the changes can be written in either order; Review
- * needs a title, a why and at least one change.
+ * Whether a draft can go to Review. The why and the actions can be written in either order; Review
+ * needs a title, a why and at least one action.
  */
 export function reviewReadiness(metadata: ProposalMetadataDraft, actions: ProposalQueuedAction[]): ReviewReadiness {
   const missing: ReviewGap[] = [];

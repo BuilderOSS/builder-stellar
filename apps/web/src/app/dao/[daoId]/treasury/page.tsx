@@ -2,7 +2,7 @@
 
 import { GlossaryTerm } from '@/components/help/glossary';
 import { PageSection } from '@/components/page-section';
-import { DraftDock } from '@/components/proposal-changes/draft-dock';
+import { DraftDock } from '@/components/proposal-actions/draft-dock';
 import { TreasuryWorkspace } from '@/components/treasury/treasury-workspace';
 import { useDaoContext } from '@/contexts/dao-context';
 
