@@ -30,8 +30,16 @@ export function migrateActionV3(action: ProposalQueuedAction, prepopulatedFrom?:
 
 type DraftV3 = { queuedActions?: ProposalQueuedAction[]; prepopulatedFrom?: string; [key: string]: unknown };
 
-/** v3 asked for the why first (step 1) and the actions second; v4 asks for the changes first. */
-const STEP_V3_TO_V4: Record<number, number> = { 1: 2, 2: 1, 3: 3 };
+/** The composer's steps: 1 writes the why and the changes, in either order; 2 reviews and signs. */
+export type ComposerStep = 1 | 2;
+
+/** Any saved step as one of today's two. Anything past writing is Review. */
+export function clampComposerStep(step: unknown): ComposerStep {
+  return typeof step === 'number' && step >= 2 ? 2 : 1;
+}
+
+/** v3 had three steps (why, actions, review); the first two are now one page. */
+const STEP_V3_TO_V4: Record<number, ComposerStep> = { 1: 1, 2: 1, 3: 2 };
 
 export function migrateDraftV3<T extends DraftV3>(draft: T): Omit<T, 'prepopulatedFrom'> {
   const { prepopulatedFrom, ...rest } = draft;
