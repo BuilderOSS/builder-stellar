@@ -227,8 +227,9 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     currentValue: (values) => {
       if (!values.auction) return null;
       const price = formatStroops(values.auction.config.reserve_price);
-      const unit = values.auction.assetCode ? ` ${values.auction.assetCode}` : '';
-      return { draft: { reservePrice: price }, text: `${price}${unit}` };
+      const assetCode = values.auction.assetCode;
+      const unit = assetCode ? ` ${assetCode}` : '';
+      return { draft: { reservePrice: price, ...(assetCode ? { assetCode } : {}) }, text: `${price}${unit}` };
     },
     Form: StartingPriceSettingForm,
     keywords: 'starting price reserve'
