@@ -83,7 +83,7 @@ export function buildAuctionChangePlan({
   if (changed.reservePrice)
     settings.push({
       type: 'set-auction-reserve-price',
-      values: { reservePrice: edits.reservePrice!.trim() },
+      values: { reservePrice: edits.reservePrice!.trim(), ...(assetCode ? { assetCode } : {}) },
       title: 'Change the starting price',
       detail: `${formatStroops(current.reservePrice)}${unit} → ${edits.reservePrice!.trim()}${unit}`
     });

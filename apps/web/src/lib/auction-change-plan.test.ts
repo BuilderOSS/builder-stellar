@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { getProposalActionSummary } from '@/lib/proposal-call';
 import { CHANGE_SOURCES } from '@/lib/proposal-changes/change-request';
 import { config } from '@/lib/proposal-changes/test-fixtures';
 
@@ -23,7 +24,7 @@ describe('buildAuctionChangePlan', () => {
       'unpause-auction'
     ]);
     expect(steps[1].detail).toBe('1 XLM → 5 XLM');
-    expect(steps[1].values).toEqual({ reservePrice: '5' });
+    expect(steps[1].values).toEqual({ reservePrice: '5', assetCode: 'XLM' });
   });
 
   it('leaves auctions paused when asked', () => {
@@ -97,5 +98,7 @@ describe('auctionChangeRequest', () => {
     expect(change.source).toEqual(CHANGE_SOURCES.auction);
     expect(change.note).toBe('Pause auctions. Change the starting price: 1 XLM → 5 XLM. Resume auctions.');
     expect(change.replaces).toEqual(['old']);
+    expect(change.actions[1]).toMatchObject({ reservePrice: '5', assetCode: 'XLM' });
+    expect(getProposalActionSummary(change.actions[1])).toBe('Change the starting price to 5 XLM');
   });
 });

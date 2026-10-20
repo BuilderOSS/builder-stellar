@@ -14,7 +14,8 @@ import type { ActionFormProps } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };
-export type AdminReservePriceDraft = { reservePrice: string };
+/** `assetCode` is the asset bids are paid in, kept so the change reads "… to 150 XLM". */
+export type AdminReservePriceDraft = { reservePrice: string; assetCode?: string };
 export type AdminPaymentTokenDraft = { paymentToken: string };
 export type OpenPoolDraft = {
   price: string;

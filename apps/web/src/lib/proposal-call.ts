@@ -251,7 +251,8 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return getProposalActionLabel(action.type);
   }
   if (action.type === 'set-auction-reserve-price') {
-    return `${getProposalActionLabel(action.type)} to ${action.reservePrice || action.amount}`;
+    const unit = action.assetCode ? ` ${action.assetCode}` : '';
+    return `${getProposalActionLabel(action.type)} to ${action.reservePrice || action.amount}${unit}`;
   }
   if (action.type === 'set-auction-duration')
     return `${getProposalActionLabel(action.type)} to ${seconds(action.value || action.amount)}`;
