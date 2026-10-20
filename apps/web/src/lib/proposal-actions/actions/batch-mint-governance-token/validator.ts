@@ -1,47 +1,36 @@
-// src/lib/proposal-actions/actions/batch-mint-governance-token/validator.ts
-
-import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
+import { batchMintFits, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { validateStellarAddress } from '@/lib/validate-address';
 
 import type { FormContext, ValidationResult } from '../../types';
-import type { BatchMintGovernanceTokenData } from './types';
+import { batchMintEntries, type BatchMintGovernanceTokenData } from './types';
 
 export function validateBatchMintGovernanceToken(
   data: BatchMintGovernanceTokenData,
   _context: FormContext
 ): ValidationResult {
   const fields: Record<string, string> = {};
-
-  // Validate recipient
-  const recipientValidation = validateStellarAddress(data.recipient);
-  if (!recipientValidation.isValid) {
-    fields.recipient = recipientValidation.error || 'Invalid address';
-  }
-
-  // One batch_mint to a single recipient fits the event budget up to MAX_BATCH_MINT.
-  const amount = data.amount.trim();
-  if (amount.length === 0) {
-    fields.amount = 'Amount is required';
-  } else if (!/^\d+$/.test(amount)) {
-    fields.amount = 'Amount must be a positive whole number';
-  } else {
-    const numAmount = parseInt(amount, 10);
-    if (numAmount < 1) {
-      fields.amount = 'Amount must be at least 1';
-    } else if (numAmount > MAX_BATCH_MINT) {
-      fields.amount = `Amount cannot exceed ${MAX_BATCH_MINT} tokens per action; add another action for more`;
-    }
-  }
-
-  const hasErrors = Object.keys(fields).length > 0;
-
-  if (hasErrors) {
+  const entries = batchMintEntries(data);
+  let total = 0n;
+  if (entries.length > MAX_BATCH_RECIPIENTS)
+    return { valid: false, message: `Use at most ${MAX_BATCH_RECIPIENTS} recipients per action.` };
+  entries.forEach((entry, index) => {
+    const key = data.allocations?.length ? `allocations.${index}.` : '';
+    const valid = validateStellarAddress(entry.recipient);
+    if (!valid.isValid) fields[`${key}recipient`] = valid.error || 'Invalid address';
+    if (
+      !/^\d+$/.test(entry.amount.trim()) ||
+      BigInt(entry.amount.trim()) < 1n ||
+      BigInt(entry.amount.trim()) > BigInt(MAX_BATCH_MINT)
+    )
+      fields[`${key}amount`] = `Use a whole number from 1 to ${MAX_BATCH_MINT}.`;
+    else total += BigInt(entry.amount.trim());
+  });
+  if (Object.keys(fields).length)
+    return { valid: false, message: 'Check the recipient addresses and token amounts.', fields };
+  if (!batchMintFits(total, entries.length))
     return {
       valid: false,
-      message: 'Please fix the errors below',
-      fields
+      message: 'These allocations exceed the transaction event limit. Reduce the token amounts or recipients.'
     };
-  }
-
   return { valid: true };
 }

@@ -33,7 +33,6 @@ export default async function DiscoverPage({
   return (
     <PageSection
       title="Discover"
-      description="Tribes on Stellar. Bid in an auction or buy a token to become a member and vote."
       actions={
         <ButtonLink href="/create">
           <Plus aria-hidden="true" />

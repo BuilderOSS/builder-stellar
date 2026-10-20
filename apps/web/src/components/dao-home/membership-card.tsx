@@ -105,12 +105,16 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
           <span className={classes.label}>Votes</span>
         </div>
       </div>
-      <div className={css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' })}>
-        <span className={classes.label}>{delegated ? 'Your votes go to a delegate' : 'You vote for yourself'}</span>
-        {delegated ? <Chip>Delegated</Chip> : null}
-      </div>
+      {delegated ? (
+        <div>
+          <Chip>Delegated</Chip>
+        </div>
+      ) : null}
       <ButtonLink href={daoRoute(routeId, `members/${membership.address}`)} variant="secondary">
-        Tokens and delegation
+        Your profile
+      </ButtonLink>
+      <ButtonLink href={daoRoute(routeId, 'members')} variant="ghost">
+        All members
       </ButtonLink>
     </section>
   );

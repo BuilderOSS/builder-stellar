@@ -31,7 +31,7 @@ export function actionListCopy(count: number, state: ProposalState | undefined) 
   const noun = one ? 'This action' : `These ${count} actions`;
   switch (state) {
     case ProposalState.Executed:
-      return { title: 'What it did', description: one ? undefined : `${noun} ran, in this order.` };
+      return { title: 'Executed actions', description: undefined };
     case ProposalState.Succeeded:
     case ProposalState.Queued:
       return { title: 'When it runs', description: one ? undefined : `${noun} run together, in this order.` };

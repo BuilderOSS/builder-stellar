@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
@@ -52,7 +52,16 @@ export function HolderControls({
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
   const membersOnly = config.tokenSettings.membersOnlyDelegation;
-  const [kind, setKind] = useState<HolderAction['action']>('transfer');
+  const queryAction = useSyncExternalStore(
+    (listener) => {
+      window.addEventListener('popstate', listener);
+      return () => window.removeEventListener('popstate', listener);
+    },
+    () => new URLSearchParams(window.location.search).get('action'),
+    () => null
+  );
+  const [selectedKind, setKind] = useState<HolderAction['action'] | null>(null);
+  const kind: HolderAction['action'] = selectedKind ?? (queryAction === 'delegate' ? 'delegate' : 'transfer');
   const [typed, setDestination] = useState('');
   // A locked community: a token moves only back to the Treasury, or by a vote the Treasury runs.
   const fixedToTreasury = locked && (kind === 'transfer' || kind === 'approve');
@@ -249,13 +258,14 @@ export function HolderControls({
     endsAt && position && endsAt > position.sequence
       ? estimateDate(endsAt, position.sequence, position.at).toLocaleDateString(undefined, { dateStyle: 'medium' })
       : null;
+  if (!owner || owner !== session.address) return null;
+
   return (
     <section className={card} aria-labelledby="holder-controls-title">
       <div>
         <h2 id="holder-controls-title" className={title}>
           Your token
         </h2>
-        <p className={muted}>Only the holder can do these. Each one asks your wallet to sign.</p>
       </div>
       {!allowed ? (
         <p className={muted} role="status">
@@ -273,7 +283,7 @@ export function HolderControls({
         label="What do you want to do?"
         name="holder-action"
         value={kind}
-        disabled={busy || Boolean(hash)}
+        disabled={!allowed || busy || Boolean(hash)}
         onValueChange={(value) => {
           setKind(value as typeof kind);
           clearReview();
@@ -286,24 +296,27 @@ export function HolderControls({
                 { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
                 { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
                 { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
-                { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
+                {
+                  value: 'revoke',
+                  label: 'Cancel token approval',
+                  description: 'Remove permission to transfer this token'
+                }
               ]
             : [
                 { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
                 { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
                 { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
-                { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
+                {
+                  value: 'revoke',
+                  label: 'Cancel token approval',
+                  description: 'Remove permission to transfer this token'
+                }
               ]
         }
       />
       <div className={form}>
         {fixedToTreasury ? (
           <div>
-            <p className={muted}>
-              {kind === 'transfer'
-                ? 'Memberships here are locked, so a token can only go back to the tribe. You stop being a member if it was your last one.'
-                : 'Memberships here are locked. Approving the tribe lets a proposal members pass move this token, for example to a new wallet of yours.'}
-            </p>
             <Address value={config.treasuryContractId} label="Tribe Treasury" compact />
           </div>
         ) : kind !== 'revoke' ? (
@@ -318,7 +331,7 @@ export function HolderControls({
                 setDestination(e.target.value);
                 clearReview();
               }}
-              disabled={busy || Boolean(hash)}
+              disabled={!allowed || busy || Boolean(hash)}
               autoCapitalize="none"
               spellCheck={false}
               placeholder="G… or C…"
@@ -349,7 +362,7 @@ export function HolderControls({
                 setExpiry(e.target.value);
                 clearReview();
               }}
-              disabled={busy || Boolean(hash)}
+              disabled={!allowed || busy || Boolean(hash)}
             />
             <FieldHelperText>
               {endsAround

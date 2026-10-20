@@ -52,6 +52,7 @@ const toolbar = css({
   gridTemplateColumns: { base: '1fr', md: 'minmax(0, 1fr) 200px 180px' },
   alignItems: 'center'
 });
+
 const count = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 type Filter = 'all' | 'auction' | 'market';
@@ -208,10 +209,11 @@ export function CommunityGrid({
           <option value="name-desc">Z to A</option>
         </Select>
       </div>
-      <p className={count} role="status" aria-live="polite">
-        {visible.length} {visible.length === 1 ? 'tribe' : 'tribes'}
-        {byContract ? (visible.length === 1 ? ' uses this contract' : ' use this contract') : ''}
-      </p>
+      {byContract ? (
+        <p className={count} role="status" aria-live="polite">
+          {visible.length} {visible.length === 1 ? 'tribe uses this contract' : 'tribes use this contract'}
+        </p>
+      ) : null}
       {visible.length ? (
         <div className={communityGrid}>
           {visible.map(({ summary }) => (

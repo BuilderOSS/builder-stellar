@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
-import { getGoldskyProposalDetail } from '@/lib/goldsky';
+import { getGoldskyProposalDetail, GoldskyProposalNotFoundError } from '@/lib/goldsky';
 import { PROPOSAL_EXPIRATION_SECONDS, readProposalChainState } from '@/lib/proposal-chain-state';
 import { getIndexedExecutionReceipt } from '@/lib/proposal-execution-receipt-service';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
@@ -90,7 +90,10 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Proposal unavailable' },
-      { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      {
+        status: error instanceof GoldskyProposalNotFoundError ? 404 : 503,
+        headers: { 'Cache-Control': 'no-store' }
+      }
     );
   }
 }

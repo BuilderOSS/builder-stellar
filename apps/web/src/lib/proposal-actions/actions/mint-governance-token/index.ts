@@ -11,6 +11,9 @@ export const mintGovernanceTokenHandler: ActionHandler<MintGovernanceTokenData> 
   description: 'Mint one membership token to a wallet',
   order: 1,
   group: 'Membership',
+  // Minting has one form now ("Mint membership tokens", one or more wallets). This handler stays so
+  // proposals and drafts made with it still read, encode and open.
+  pickable: false,
 
   FormComponent: MintGovernanceTokenForm,
 

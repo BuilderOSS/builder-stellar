@@ -89,6 +89,25 @@ Event, schema, and API work must retain both deployment and DAO identity filters
 event is not complete until it is indexed and exposed, explicitly indexed but internal,
 or explicitly excluded with a reason.
 
+## Documentation placeholders before production
+
+Treat requests mentioning production, prod, rollout, release, go-live, launch
+readiness, finalisation, finalization, or equivalent preparation as a trigger to
+check for unresolved documentation placeholders. Read repository instructions and
+search maintained source and documentation for placeholder links, `example.com`
+documentation URLs, and comments marking documentation as pending. Inspect each
+match so sample data and intentional examples are not reported as unfinished work.
+
+Report each unresolved item with its source path, current value, user-facing
+surface, and the final URL or owner decision needed. Flag these items before
+claiming readiness, and ask for missing authoritative destinations rather than
+inventing links. Recheck after replacements. Local ignored feedback records are
+useful context when available, but the check must work from tracked source alone.
+
+The current artwork documentation placeholder is `ARTWORK_GUIDE_URL` in
+`apps/web/src/lib/help-links.ts`. Replace it with the team's final artwork guide
+URL before release, or explicitly report that it remains unresolved.
+
 ## Optional Vendor Skills
 
 The agent definitions use the following vendor skills when they are installed locally:

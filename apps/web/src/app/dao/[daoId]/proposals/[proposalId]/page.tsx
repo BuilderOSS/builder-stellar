@@ -5,7 +5,7 @@ import { Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
 import { Buffer } from 'buffer';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
@@ -36,6 +36,7 @@ import {
 } from '@/lib/proposal-execution-receipt';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { proposalActionMode, ProposalState } from '@/lib/proposal-state';
+import { isRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -92,7 +93,9 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
   ]);
 
   if (!detailResponse.ok) {
-    throw new Error((await detailResponse.json()).message || 'Proposal lookup failed');
+    const error = new Error((await detailResponse.json()).message || 'Proposal lookup failed');
+    Object.assign(error, { status: detailResponse.status });
+    throw error;
   }
 
   const detail = (await detailResponse.json()) as ProposalDetail;
@@ -168,13 +171,19 @@ export default function ProposalDetailPage() {
     config.passphrase
   ].join(':');
 
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR<ProposalPageData, Error & { status?: number }>(
     proposalId ? (['proposal-detail', DEPLOYMENT_ID, daoId, proposalId] as const) : null,
     fetchProposalPageData,
     { shouldRetryOnError: false, revalidateOnFocus: true, refreshInterval: 5000 }
   );
 
   const detail = data?.detail ?? null;
+  const recentlySubmitted = useSyncExternalStore(
+    () => () => {},
+    () => isRecentProposal(daoId, proposalId),
+    () => false
+  );
+  const waitingForIndex = !detail && recentlySubmitted && (!error || error.status === 404);
   const receipt =
     (executionResult?.key === receiptKey ? executionResult.receipt : null) ?? detail?.executionReceipt ?? null;
   const receiptError = executionResult?.key === receiptKey ? executionResult.error : '';
@@ -582,9 +591,18 @@ export default function ProposalDetailPage() {
         All proposals
       </ButtonLink>
 
-      {errorMessage ? <Callout variant="error" title="This proposal didn't load" description={errorMessage} /> : null}
+      {errorMessage && !waitingForIndex ? (
+        <Callout variant="error" title="This proposal didn't load" description={errorMessage} />
+      ) : null}
+      {waitingForIndex ? (
+        <div role="status" aria-busy="true" className={loading}>
+          <h1 className={title}>Loading your proposal</h1>
+          <p>The transaction is confirmed. Waiting for the proposal details…</p>
+          <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
+        </div>
+      ) : null}
 
-      {isLoading && !detail ? (
+      {isLoading && !detail && !waitingForIndex ? (
         <div className={loading} role="status" aria-busy="true">
           <span className="sr-only">Loading proposal</span>
           <Skeleton className={css({ width: '28', height: '6' })} />
@@ -601,7 +619,9 @@ export default function ProposalDetailPage() {
               <ProposalStateBadge label={detail.label} />
               <span className={css({ textStyle: 'mono', color: 'ink.muted' })}>Proposal {detail.proposalNumber}</span>
             </div>
-            <h1 className={title}>{detail.metadata.title || `Proposal ${shortenProposalId(proposalId)}`}</h1>
+            <h1
+              className={title}
+            >{`Proposal ${detail.proposalNumber}: ${detail.metadata.title || shortenProposalId(proposalId)}`}</h1>
             <p className={byline}>
               <Avatar address={detail.proposer} size="xs" />
               {detail.proposer === session.address

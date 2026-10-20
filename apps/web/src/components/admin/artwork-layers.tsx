@@ -15,6 +15,7 @@ import {
   Field,
   FieldLabel,
   Heading,
+  HelpTip,
   IconButton,
   Pagination,
   Select,
@@ -110,11 +111,13 @@ export function ArtworkLayers({
         <div className={head}>
           <div>
             <Heading size="heading">Layers</Heading>
-            <Text color="ink.muted">
-              {layers.length
-                ? `${layers.length} ${layers.length === 1 ? 'layer' : 'layers'}. Each token takes one item from every layer.`
-                : 'No artwork yet.'}
-            </Text>
+            {layers.length ? (
+              <HelpTip label="Artwork layers">
+                Each token combines one image from each of the {layers.length} layers.
+              </HelpTip>
+            ) : (
+              <Text color="ink.muted">No artwork yet.</Text>
+            )}
           </div>
           <div className={controls}>
             {layers.length ? (
@@ -207,10 +210,10 @@ function TechnicalDetails({
   return (
     <div className={technical}>
       <Address value={config.metadataContractId} label="Artwork contract" />
-      <Text color="ink.muted">
-        {groupCount} IPFS {groupCount === 1 ? 'upload' : 'uploads'}. A layer image is the upload address, then the layer
-        and item names, then the file extension.
-      </Text>
+      <HelpTip label="Artwork contract">
+        The artwork contract stores the layer names and links to uploaded images. Each image URL combines its upload
+        address, layer folder, image name, and file extension.
+      </HelpTip>
       {groups.data?.map((group, index) =>
         group ? (
           <Text key={index} textStyle="mono" fontSize="0.75rem">

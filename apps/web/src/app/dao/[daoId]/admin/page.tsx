@@ -6,7 +6,7 @@ import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notic
 import { PlatformUpgrades } from '@/components/admin/platform-upgrades';
 import { PageSection } from '@/components/page-section';
 import { DraftDock } from '@/components/proposal-changes/draft-dock';
-import { Avatar, Chip, ListRow, Section } from '@/components/ui';
+import { Avatar, Chip, HelpTip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
@@ -27,7 +27,6 @@ const accessCard = css({
   boxShadow: 'raised'
 });
 const accessTitle = css({ textStyle: 'heading', m: '0' });
-const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '0.5' });
 const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 
 type Access = 'direct' | 'vote' | 'read' | 'open';
@@ -85,14 +84,7 @@ export default function AdminPage() {
     .filter((section) => section.key !== 'overview');
 
   return (
-    <PageSection
-      title="Manage"
-      description={`Change how ${config.tokenName || 'this tribe'} works. ${
-        config.status === 'pending'
-          ? 'In Setup, the launch admin makes changes directly.'
-          : 'After launch, most changes go up for a vote.'
-      }`}
-    >
+    <PageSection title="Manage">
       <ContractUpdatesNotice enabled={hasAnyAccess} />
       <PlatformUpgrades enabled={hasAnyAccess} />
       <section className={accessCard} aria-labelledby="access-title">
@@ -100,13 +92,13 @@ export default function AdminPage() {
           {session.address ? <Avatar address={session.address} size="lg" yours={hasAnyAccess} /> : null}
           <div className={css({ minW: '0' })}>
             <h2 id="access-title" className={accessTitle}>
-              {session.address ? 'Your access' : 'Connect to see your access'}
+              {session.address ? 'Your permissions' : 'Connect to see your permissions'}
             </h2>
-            <p className={muted}>
+            <HelpTip label="Your permissions">
               {session.address
                 ? 'Each section checks your live permissions before offering a change.'
                 : 'Sections stay readable without a wallet.'}
-            </p>
+            </HelpTip>
           </div>
         </div>
         <div className={chips}>
@@ -119,7 +111,17 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <Section title="Your proposal draft">
+      <Section
+        title={
+          <>
+            Proposal draft
+            <HelpTip label="Proposal draft">
+              Changes that require a vote collect in your proposal draft on this browser. Review them together before
+              submitting.
+            </HelpTip>
+          </>
+        }
+      >
         <DraftDock daoId={daoId} overview />
       </Section>
 

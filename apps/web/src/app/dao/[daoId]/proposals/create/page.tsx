@@ -48,6 +48,7 @@ import {
   proposalDescriptionBytes,
   validateProposalMetadataDraft
 } from '@/lib/proposal-metadata';
+import { markRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -85,6 +86,8 @@ const referenceTrigger = css({
 export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
   const router = useRouter();
+  const [openingProposal, setOpeningProposal] = useState(false);
+  const [confirmedProposalHref, setConfirmedProposalHref] = useState<ReturnType<typeof daoRoute> | null>(null);
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
@@ -149,6 +152,7 @@ export default function ProposalCreatePage() {
 
   const handleConfirmSubmit = async () => {
     if (!session.address) return;
+    let confirmedHref: ReturnType<typeof daoRoute> | null = null;
 
     try {
       setTransactionBusy(true);
@@ -210,14 +214,19 @@ export default function ProposalCreatePage() {
       txFeedback.submitted('Proposal sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
 
+      confirmedHref = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
+      setConfirmedProposalHref(confirmedHref);
       txFeedback.success('Proposal created', hash);
 
-      // Reset store and navigate
+      // Keep a loading surface mounted while clearing the draft and navigating.
+      setOpeningProposal(true);
+      if (proposalId) markRecentProposal(daoId, proposalId);
       reset(session.address, daoId);
-      router.push(proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals'));
+      router.push(confirmedHref);
     } catch (err: any) {
+      setOpeningProposal(false);
       console.error('Proposal creation error:', err);
-      txFeedback.fail(err, 'Proposal failed', 'governor');
+      if (!confirmedHref) txFeedback.fail(err, 'Proposal failed', 'governor');
     } finally {
       setTransactionBusy(false);
     }
@@ -227,6 +236,29 @@ export default function ProposalCreatePage() {
     { id: 'write', label: 'Write' },
     { id: 'review', label: 'Review' }
   ];
+
+  if (openingProposal)
+    return (
+      <div role="status" aria-busy="true" className={stack}>
+        <PageHeader title="Opening your proposal" />
+        <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
+        <p>Your proposal is confirmed. Loading its details…</p>
+        {confirmedProposalHref ? <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink> : null}
+      </div>
+    );
+
+  if (confirmedProposalHref)
+    return (
+      <div className={stack}>
+        <PageHeader title="Your proposal was created" />
+        <Callout
+          variant="warning"
+          title="We couldn't open it automatically"
+          description="Your transaction is confirmed. Open the proposal below; its details may take a moment to appear."
+        />
+        <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink>
+      </div>
+    );
 
   return (
     <>
@@ -299,9 +331,10 @@ export default function ProposalCreatePage() {
                 {step === 1 && (
                   <div className={stack}>
                     <Field>
-                      <FieldLabel htmlFor="title">Title</FieldLabel>
+                      <FieldLabel htmlFor="title">Title (required)</FieldLabel>
                       <Input
                         id="title"
+                        required
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
                         placeholder={suggestedTitle || 'Fund the winter tool library'}
@@ -335,8 +368,8 @@ export default function ProposalCreatePage() {
                         id="description-budget"
                         tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
                       >
-                        {descriptionBytes.toLocaleString()} of {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
-                        used. Images take only their link, about 70 bytes each.
+                        Required. Up to {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes (
+                        {descriptionBytes.toLocaleString()} used).
                       </FieldHelperText>
                       {queuedActions.length && whatItDoes !== metadata.description ? (
                         <div>

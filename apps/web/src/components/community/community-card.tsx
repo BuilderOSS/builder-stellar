@@ -88,12 +88,12 @@ const card = sva({
     },
     // Washes are translucent; a solid backing keeps the chip readable over any art.
     liveTag: { position: 'absolute', left: '3', top: '3', bg: 'surface', borderRadius: 'full', boxShadow: 'raised' },
-    body: { display: 'grid', alignContent: 'start', gap: '1.5', p: '4' },
+    body: { display: 'flex', flexDirection: 'column', gap: '1.5', p: '4' },
     name: { textStyle: 'heading', fontSize: '1.0625rem', m: '0', overflowWrap: 'anywhere' },
     meta: { textStyle: 'caption', color: 'ink.muted', m: '0', fontVariantNumeric: 'tabular-nums' },
     description: { textStyle: 'caption', fontSize: '0.875rem', color: 'ink.muted', m: '0', lineClamp: '2' },
     match: { textStyle: 'caption', color: 'ink.muted', m: '0', overflowWrap: 'anywhere' },
-    footer: { display: 'flex', flexWrap: 'wrap', gap: '1.5', mt: '1' }
+    footer: { display: 'flex', flexWrap: 'wrap', gap: '1.5', mt: 'auto', pt: '2' }
   }
 });
 

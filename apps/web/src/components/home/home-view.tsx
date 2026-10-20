@@ -1,7 +1,6 @@
 'use client';
 
 import { ArrowRight, ExternalLink, Plus } from 'lucide-react';
-import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { ActivityList } from '@/components/activity/activity-list';
@@ -10,7 +9,7 @@ import { communityGrid, toCommunitySummary } from '@/components/community/commun
 import { WhatsATribe } from '@/components/help/whats-a-tribe';
 import { BuilderDaoCredit } from '@/components/shell/brand-mark';
 import { useWalletSession } from '@/components/shell/wallet-session';
-import { Button, ButtonLink, Callout, EmptyState, Section, Skeleton } from '@/components/ui';
+import { Button, ButtonLink, Callout, EmptyState, ExpandableList, Section, Skeleton } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { useDashboardData } from '@/lib/goldsky-queries';
@@ -21,7 +20,6 @@ import { HomeDrafts } from './home-drafts';
 const ACTIVITY_SHOWN = 5;
 const SUGGESTIONS_SHOWN = 4;
 
-const more = css({ display: 'flex', justifyContent: 'center', pt: '2' });
 const hero = css({ display: 'grid', gap: '5', py: { base: '6', md: '12' }, maxW: '760px' });
 const heroTitle = css({
   fontFamily: 'display',
@@ -133,7 +131,7 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
         <Section
           title="Happening now"
           action={
-            <ButtonLink href="/discover" variant="ghost" size="sm">
+            <ButtonLink href="/discover" variant="secondary" size="sm">
               See all
               <ArrowRight aria-hidden="true" />
             </ButtonLink>
@@ -240,7 +238,6 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
     return { ...summary, yours: 'Member' };
   });
   const setup = pendingDaos.map((dao) => toCommunitySummary(dao, 'Launch admin'));
-  const [showAllActivity, setShowAllActivity] = useState(false);
   // Buy again first: open auctions and listings where you're already a member,
   // then live ones elsewhere, then the rest.
   const available = (community: CommunitySummary) => Boolean(community.auctionLive || community.forSale);
@@ -277,7 +274,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
         id="your-tribes"
         title="Your tribes"
         action={
-          <ButtonLink href="/create" variant="secondary" size="sm">
+          <ButtonLink href="/create" variant="primary" size="sm">
             <Plus aria-hidden="true" />
             Build a tribe
           </ButtonLink>
@@ -316,7 +313,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
                 : undefined
           }
           action={
-            <ButtonLink href="/discover" variant="ghost" size="sm">
+            <ButtonLink href="/discover" variant="secondary" size="sm">
               See all
               <ArrowRight aria-hidden="true" />
             </ButtonLink>
@@ -334,23 +331,19 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
 
       {activity.length ? (
         <Section title="Recent activity">
-          <ActivityList
-            items={showAllActivity ? activity : activity.slice(0, ACTIVITY_SHOWN)}
-            daoIdFor={(item) => ('dao_id' in item ? item.dao_id : '')}
-            showCommunity
-          />
-          {activity.length > ACTIVITY_SHOWN ? (
-            <div className={more}>
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-expanded={showAllActivity}
-                onClick={() => setShowAllActivity((open) => !open)}
-              >
-                {showAllActivity ? 'Show less' : 'Show more'}
-              </Button>
-            </div>
-          ) : null}
+          <ExpandableList
+            label="Recent activity"
+            expandable={activity.length > ACTIVITY_SHOWN}
+            preview={
+              <ActivityList
+                items={activity.slice(0, ACTIVITY_SHOWN)}
+                daoIdFor={(item) => ('dao_id' in item ? item.dao_id : '')}
+                showCommunity
+              />
+            }
+          >
+            <ActivityList items={activity} daoIdFor={(item) => ('dao_id' in item ? item.dao_id : '')} showCommunity />
+          </ExpandableList>
         </Section>
       ) : null}
     </div>

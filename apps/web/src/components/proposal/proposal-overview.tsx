@@ -115,7 +115,7 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
       return {
         label: 'Done',
         headline: 'Executed',
-        subline: detail.functions.length === 1 ? 'Its action has run.' : 'Every action in this proposal has run.'
+        subline: ''
       };
     default:
       return { label: 'Status', headline: 'Status unavailable', subline: 'Try refreshing in a moment.' };
@@ -196,7 +196,7 @@ export function ProposalLifecyclePanel({
         <h2 id="proposal-lifecycle" className={headline}>
           {lifecycle.headline}
         </h2>
-        <p className={subline}>{lifecycle.subline}</p>
+        {lifecycle.subline ? <p className={subline}>{lifecycle.subline}</p> : null}
         {detail.stateSource === 'indexed' ? (
           <p className={subline}>Live chain state is unavailable, so actions are paused until it refreshes.</p>
         ) : null}

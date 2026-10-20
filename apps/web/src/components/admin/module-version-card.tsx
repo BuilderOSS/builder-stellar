@@ -2,9 +2,22 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Callout, Card, Field, FieldLabel, Heading, Input, ShortId, Text } from '@/components/ui';
+import {
+  Address,
+  Badge,
+  Button,
+  Callout,
+  Card,
+  Field,
+  FieldLabel,
+  Heading,
+  Input,
+  ShortId,
+  Text
+} from '@/components/ui';
 import { readAdminModuleVersion, type UpgradeModule, useAdminModuleVersion } from '@/lib/admin-module-versions';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
@@ -71,9 +84,39 @@ export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig
     <>
       <Card p="5">
         <Stack gap="3">
-          <Heading size="heading" textTransform="capitalize">
-            {module}
-          </Heading>
+          <div
+            className={css({
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: '3',
+              flexWrap: 'wrap'
+            })}
+          >
+            <Heading size="heading" textTransform="capitalize">
+              {module}
+            </Heading>
+            {state.data ? (
+              <div className={css({ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '1.5' })}>
+                <Badge>
+                  {state.data.source
+                    ? state.data.source.revoked
+                      ? 'Current implementation revoked'
+                      : 'Current implementation registered'
+                    : 'Current implementation not registered'}
+                </Badge>
+                {state.data.target ? (
+                  <Badge>
+                    {state.data.fromHash === state.data.target.hash
+                      ? 'Already current'
+                      : state.data.approved
+                        ? 'Transition approved'
+                        : 'Transition not approved'}
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           {state.isLoading ? <Text role="status">Reading version and Manager approval…</Text> : null}
           {state.error ? (
             <Callout variant="error" title="Module read failed" description={state.error.message} />
@@ -85,25 +128,23 @@ export function ModuleVersionCard({ config, module }: { config: DaoNetworkConfig
               <Text>
                 Current version: {state.data.version} · Storage version: {state.data.storageVersion}
               </Text>
-              <Text overflowWrap="anywhere">Current WASM hash: {state.data.fromHash}</Text>
-              <Badge>
-                {state.data.source
-                  ? state.data.source.revoked
-                    ? 'Current implementation revoked'
-                    : 'Current implementation registered'
-                  : 'Current implementation not registered'}
-              </Badge>
+              <Address
+                value={state.data.fromHash}
+                label="Current WASM hash"
+                explorerUrl=""
+                compact
+                copyLabel="Copy current WASM hash"
+              />
               {state.data.target ? (
                 <>
                   <Text>Candidate version: {state.data.target.version}</Text>
-                  <Text overflowWrap="anywhere">Candidate hash: {state.data.target.hash}</Text>
-                  <Badge>
-                    {state.data.fromHash === state.data.target.hash
-                      ? 'Already current'
-                      : state.data.approved
-                        ? 'Transition approved'
-                        : 'Transition not approved'}
-                  </Badge>
+                  <Address
+                    value={state.data.target.hash}
+                    label="Candidate hash"
+                    explorerUrl=""
+                    compact
+                    copyLabel="Copy candidate hash"
+                  />
                   {state.data.target.revoked ? (
                     <Callout variant="warning" title="Target implementation revoked" />
                   ) : null}

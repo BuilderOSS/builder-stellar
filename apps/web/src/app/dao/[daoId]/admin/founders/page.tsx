@@ -8,6 +8,7 @@ import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { type FounderMintRow, founderMintValues } from '@/components/admin/founder-mint-values';
+import { InitialAllocations } from '@/components/admin/initial-allocations';
 import { PageSection } from '@/components/page-section';
 import {
   Address,
@@ -16,6 +17,7 @@ import {
   Callout,
   Card,
   Checkbox,
+  Chip,
   Heading,
   IconButton,
   Input,
@@ -268,10 +270,7 @@ export default function FoundersAdminPage() {
   }
 
   return (
-    <PageSection
-      title="Founder tokens"
-      description="Mint the founding team's tokens before launch, in one transaction."
-    >
+    <PageSection title="Founder tokens">
       <Stack gap="4">
         {token.error ? (
           <Callout variant="error" title="The token didn't load" description={token.error.message} />
@@ -284,17 +283,17 @@ export default function FoundersAdminPage() {
             </Text>
           ) : null
         ) : token.data.live ? (
-          <Callout
-            variant="info"
-            title="Your tribe has launched"
-            description="Founder tokens are minted before launch. To mint more now, use Mint tokens."
-          >
-            <div className={css({ mt: '3' })}>
+          <>
+            <div>
+              <Chip tone="live">Launched</Chip>
+            </div>
+            <InitialAllocations />
+            <div>
               <ButtonLink href={daoAdminRoute(routeId, '/token')} variant="secondary" size="sm">
-                Go to Mint tokens
+                Mint tokens
               </ButtonLink>
             </div>
-          </Callout>
+          </>
         ) : (
           <>
             {token.data && !allowed ? (

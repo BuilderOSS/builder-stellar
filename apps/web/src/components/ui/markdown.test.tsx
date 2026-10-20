@@ -45,13 +45,24 @@ describe('Markdown', () => {
     expect(html).not.toContain('<h1');
   });
 
-  it('keeps comments to inline formatting, links, lists and images', () => {
+  it('renders comment headings and tables while keeping a single page heading', () => {
     const html = render('# Big\n\n**ok** ![img](https://x.y/a.png)\n\n| A |\n|---|\n| 1 |', 'comment');
-    expect(html).not.toContain('<h');
+    expect(html).not.toContain('<h1');
+    expect(html).toContain('<h2>Big</h2>');
     expect(html).toContain('<img');
-    expect(html).not.toContain('<table');
+    expect(html).toContain('<table');
     expect(html).toContain('Big');
     expect(html).toContain('<strong>ok</strong>');
+  });
+  it('keeps comment task-list checkboxes disabled and rejects raw form controls', () => {
+    const html = render('- [ ] Pending\n- [x] Done\n\n<input type="text" value="editable">', 'comment');
+    const inputs = html.match(/<input\b[^>]*>/g) ?? [];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input).toContain('type="checkbox"');
+      expect(input).toContain('disabled=""');
+    }
+    expect(html).not.toContain('editable');
   });
 });
 

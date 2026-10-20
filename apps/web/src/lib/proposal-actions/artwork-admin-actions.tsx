@@ -105,7 +105,7 @@ export type ArtworkSettingType = keyof typeof artworkSettingMethods;
 export function validateArtworkSetting(value: string, type: ArtworkSettingType): ValidationResult {
   if (!value.trim()) return { valid: false, message: 'Enter a non-empty value.' };
   // Metadata rejects settings strings over 256 characters (StringTooLong, 7312).
-  if (new TextEncoder().encode(value).length > 256) return { valid: false, message: 'Use at most 256 UTF-8 bytes.' };
+  if (new TextEncoder().encode(value).length > 256) return { valid: false, message: 'Use at most 256 bytes.' };
   void type;
   try {
     const url = new URL(value.trim());

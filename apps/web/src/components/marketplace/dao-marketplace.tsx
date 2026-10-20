@@ -96,11 +96,6 @@ export function DaoMarketplaceView({
     <div className={styles.scoped}>
       <PageSection
         title="Market"
-        description={
-          locked
-            ? 'Buy a new token straight from the tribe. Memberships here are locked, so members can’t resell them. Sales fund the treasury.'
-            : 'Buy a new token straight from the tribe, or a resale from a member. New sales fund the treasury.'
-        }
         actions={
           <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
             Market settings
@@ -131,10 +126,7 @@ export function DaoMarketplaceView({
                   </span>
                 ) : null}
               </div>
-              <p className={note}>
-                Listings keep the price asset and fee they were created with. Canceling and clearing expired listings
-                work even while buying is paused.
-              </p>
+
               {data.configError ? <Callout variant="warning" title={data.configError} /> : null}
             </div>
 
@@ -226,7 +218,7 @@ export function DaoMarketplaceView({
               onNext={() => setPage(page + 1)}
             />
 
-            <Section title="Recent sales" description="Pool numbers are separate from token numbers.">
+            <Section title="Recent sales">
               {!data.sales.length ? (
                 <p className={note}>No sales on this page yet.</p>
               ) : (

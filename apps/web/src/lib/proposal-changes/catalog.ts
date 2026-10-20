@@ -190,7 +190,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     Form: wholeNumberSettingForm({
       id: 'setting-proposal-threshold',
       label: 'Votes needed to propose',
-      helper: 'At least 1. Higher numbers cut down on spam.'
+      helper: 'How many votes someone needs to make a proposal. At least 1; higher numbers cut down on spam.'
     }),
     keywords: 'threshold propose'
   },

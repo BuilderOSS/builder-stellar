@@ -192,15 +192,58 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 | `GET /api/render/[daoId]/[tokenId]`, `GET /api/render?contract=&token=` | Token artwork renderer; the query form is the `renderer_base` on-chain `token_uri` points at |
 | `GET /api/dao/[daoId]/token/[tokenId]` | The decoded on-chain `token_uri` JSON |
 
+The member directory accepts `order=asc|desc` (descending votes by default); ordering is applied before pagination and includes an address tie-breaker. `GET /api/dao/[daoId]/initial-allocations` returns paginated original mint recipients before launch from `token.transfers` and `manager.dao_launches`, scoped to the deployment and Token contract. These records include any launch-drive claims and are not a list of current holders.
+
 Marketplace query filters are `search` (≤120 characters), `page` (0–500), `kind=all|pool|secondary`, `status=all|open|purchased|cancelled|expired|closed`, and `capability=all|marketplace|auction|metadata`. Community pages use 24 rows; combined offers page each kind independently (12 per kind, or 24 for one kind). Expired open rows can display `awaiting-expiry` until recovery is indexed. Successful responses are private/no-store. Route handlers and `src/lib/marketplace` are the full request/response authority.
 
 ## Agentation (optional, dev only)
 
 A visual feedback toolbar for annotating the running app. It renders only when `NODE_ENV=development` and `NEXT_PUBLIC_AGENTATION_ENABLED=true` (set in `.env.local`). Global keyboard shortcuts are disabled so it can't intercept app keys.
 
-1. `npx -y agentation-mcp server` (port 4747) and register it with your agent, e.g. `claude mcp add agentation -- npx -y agentation-mcp server`.
-2. Set the flag, run `pnpm dev`, click the toolbar, annotate, and send.
-3. The agent reads notes with `agentation_get_all_pending`.
+For Codex, register the server once in Terminal:
+
+```sh
+codex mcp add agentation -- npx -y agentation-mcp server
+codex mcp list
+```
+
+Restart the Codex client after configuration. It starts the configured server when
+it connects; a separate Agentation server terminal is not normally needed. For
+Claude Code, the equivalent registration is
+`claude mcp add agentation -- npx -y agentation-mcp server`.
+
+For each review session:
+
+1. Keep `NEXT_PUBLIC_AGENTATION_ENABLED=true` in `apps/web/.env.local`, and run
+   `pnpm dev` from the repository root.
+2. Open the app at the same local address and port, click the feedback toolbar,
+   select an element, enter a note, and choose Add.
+3. Ask the connected agent to read pending Agentation feedback for this app and
+   summarise it before changing code. It can use `agentation_get_all_pending`.
+4. If the connection fails, run `npx -y agentation-mcp doctor`, confirm the server
+   is reachable on port 4747, and restart the client after correcting its setup.
+   The toolbar's Copy control also exports structured Markdown to paste into chat.
+
+The component already uses `http://localhost:4747`. Agentation's default server
+store is SQLite at `~/.agentation/store.db`; this is local machine storage, not
+team synchronisation. Each teammate configures their own client, or receives an
+export through the team's chosen shared channel.
+
+If the service on port 4747 is unavailable, the toolbar can fall back to the
+browser's localStorage. Those notes belong to that browser profile and exact
+origin, including its port. They do not enter Git or automatically reach the
+team's agents. Clearing site data can remove them; another browser, profile, or
+port will not show the same notes.
+
+For a reliable handoff, export the feedback and keep a copy in the team's chosen
+shared location. Date-stamped feedback, bug, and feedback-record Markdown files
+are Git-ignored in this checkout, so they will not accompany a commit or PR. To
+let a connected agent consume annotations directly, use the MCP setup above. The
+production build does not render the toolbar.
+
+Setup references: [Agentation installation](https://www.agentation.com/install),
+[Agentation storage](https://www.agentation.com/api), and
+[Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
 ## Checks and limits
 

@@ -10,11 +10,7 @@ const fn = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
 
 export function ProposalExecutionReceipt({ receipt }: { receipt: Receipt }) {
   return (
-    <Section
-      title="Executed"
-      description={receipt.source === 'indexed' ? 'From the indexed receipt' : 'Confirmed on-chain just now'}
-      action={<Chip tone="success">Done</Chip>}
-    >
+    <Section title="Executed" action={<Chip tone="success">Done</Chip>}>
       <Address value={receipt.transactionHash} label="Transaction" />
       <ol className={list}>
         {receipt.calls.map((item) => (

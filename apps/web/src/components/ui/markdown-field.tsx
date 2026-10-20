@@ -256,7 +256,6 @@ export function MarkdownField({
         />
       ) : null}
       {uploadError ? <FieldHelperText tone="error">{uploadError}</FieldHelperText> : null}
-      {images ? <FieldHelperText>Drop or paste images to add them.</FieldHelperText> : null}
     </div>
   );
 }

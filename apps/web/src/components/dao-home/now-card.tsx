@@ -13,6 +13,8 @@ import { formatAuctionAmount } from '@/lib/auction-history/state';
 import { daoRoute } from '@/lib/dao-routes';
 import { useTokenMetadata } from '@/lib/token-queries';
 
+import { SettleAuction } from './settle-auction';
+
 export type HomeAuction = {
   status: 'active' | 'disabled' | 'not-launched' | 'paused';
   auction: {
@@ -145,7 +147,6 @@ export function NowCard({
   proposalsError,
   activeProposals,
   runsAuctions,
-  hasMarket,
   assetCode,
   now
 }: {
@@ -160,7 +161,6 @@ export function NowCard({
   activeProposals: number;
   /** The community runs auctions (or may at launch); otherwise auction state is ignored. */
   runsAuctions: boolean;
-  hasMarket: boolean;
   assetCode: string;
   now: number | null;
 }) {
@@ -217,9 +217,7 @@ export function NowCard({
             ) : null}
           </>
         }
-        action={
-          <ButtonLink href={daoRoute(routeId, 'auctions')}>{ended ? 'Settle auction' : 'Place a bid'}</ButtonLink>
-        }
+        action={ended ? <SettleAuction /> : <ButtonLink href={daoRoute(routeId, 'auctions')}>Place a bid</ButtonLink>}
       />
     );
   }
@@ -265,33 +263,5 @@ export function NowCard({
     );
   }
 
-  const quiet = !runsAuctions
-    ? { title: 'All quiet for now', text: 'No proposals are open for voting right now. New ones show up here.' }
-    : auction?.status === 'paused'
-      ? { title: 'Auctions are paused', text: 'Bidding and settlement are on hold for now.' }
-      : auction?.status === 'not-launched'
-        ? { title: 'The first auction is coming', text: 'Auctions are set up and start when the tribe launches.' }
-        : { title: 'All quiet for now', text: 'No proposals are open for voting and no auction is running.' };
-
-  return (
-    <Shell
-      title={quiet.title}
-      text={quiet.text}
-      action={
-        runsAuctions ? (
-          <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
-            View auction
-          </ButtonLink>
-        ) : hasMarket ? (
-          <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="secondary">
-            Visit the market
-          </ButtonLink>
-        ) : (
-          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="secondary">
-            See past proposals
-          </ButtonLink>
-        )
-      }
-    />
-  );
+  return <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>You're all caught up.</p>;
 }

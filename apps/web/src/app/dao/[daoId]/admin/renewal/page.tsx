@@ -7,10 +7,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 export default function RenewalPage() {
   const { daoConfig: config } = useDaoContext();
   return (
-    <PageSection
-      title="Storage renewal"
-      description="When your tribe's data expires, and one transaction that renews all of it."
-    >
+    <PageSection title="Storage renewal">
       <RenewalPanel config={config} />
     </PageSection>
   );

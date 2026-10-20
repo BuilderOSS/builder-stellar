@@ -5,12 +5,17 @@ vi.mock('@/lib/dao-config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/dao-config')>()),
   getDaoNetworkConfigById: mocks.config
 }));
-vi.mock('@/lib/goldsky', () => ({ getGoldskyProposalDetail: mocks.proposal }));
+vi.mock('@/lib/goldsky', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/goldsky')>()),
+  getGoldskyProposalDetail: mocks.proposal
+}));
 vi.mock('@/lib/proposal-execution-receipt-service', () => ({ getIndexedExecutionReceipt: mocks.receipt }));
 vi.mock('@/lib/proposal-chain-state', () => ({
   readProposalChainState: mocks.chain,
   PROPOSAL_EXPIRATION_SECONDS: 1209600
 }));
+import { GoldskyProposalNotFoundError } from '@/lib/goldsky';
+
 import { GET } from './route';
 
 const indexed = (dao: string) => ({
@@ -46,6 +51,17 @@ describe('proposal detail API sources and tenant identity', () => {
       core: null,
       quorumVotes: null
     });
+  });
+  it('returns 404 for a proposal awaiting indexing, retaining no-store headers', async () => {
+    mocks.proposal.mockRejectedValue(new GoldskyProposalNotFoundError('1'));
+    const response = await get('dao1');
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(mocks.chain).not.toHaveBeenCalled();
+  });
+  it('does not classify unrelated failures as missing proposals based on their message', async () => {
+    mocks.proposal.mockRejectedValue(new Error('Proposal not found: backend unavailable'));
+    expect((await get('dao1')).status).toBe(503);
   });
   it('recovers indexed ETA while retaining live state and indexed proposer, not a voting-period-derived start', async () => {
     const result = await (await get('dao1')).json();

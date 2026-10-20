@@ -16,10 +16,10 @@ export async function directoryFetch<T>(url: string, init?: RequestInit): Promis
   if (!response.ok) throw restoreFromBody(body) ?? new Error(body.message || 'This data is unavailable. Try again.');
   return body as T;
 }
-export function useDirectoryMembers(daoId: string, page: number) {
-  return useSWR(directoryKey(daoId, 'members', page), () =>
+export function useDirectoryMembers(daoId: string, page: number, order: 'asc' | 'desc' = 'desc') {
+  return useSWR(directoryKey(daoId, 'members', `${page}:${order}`), () =>
     directoryFetch<DirectoryPage<DirectoryMember>>(
-      `/api/dao/${encodeURIComponent(daoId)}/members?limit=25&offset=${page * 25}`
+      `/api/dao/${encodeURIComponent(daoId)}/members?limit=25&offset=${page * 25}&order=${order}`
     )
   );
 }

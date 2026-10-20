@@ -2,7 +2,6 @@
 
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import NextLink from 'next/link';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
@@ -25,6 +24,7 @@ import {
   FieldHelperText,
   FieldLabel,
   Heading,
+  HelpTip,
   Input,
   Text,
   Textarea
@@ -33,7 +33,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
-import { daoAdminRoute } from '@/lib/dao-routes';
+import { ARTWORK_GUIDE_URL } from '@/lib/help-links';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { CHANGE_SOURCES, planBundle } from '@/lib/proposal-changes/change-request';
@@ -50,7 +50,7 @@ const MIN_REASON = 20;
 const current = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink', m: '0', overflowWrap: 'anywhere' });
 
 export default function ArtworkAdminPage() {
-  const { daoId, daoConfig: config, routeId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
@@ -165,10 +165,7 @@ export default function ArtworkAdminPage() {
 
   return (
     <>
-      <PageSection
-        title="Artwork"
-        description="The layers every token is drawn from. Add them during setup; change them by vote after launch."
-      >
+      <PageSection title="Artwork">
         <Stack gap="4">
           {!config.metadataContractId ? (
             <Callout
@@ -252,10 +249,11 @@ export default function ArtworkAdminPage() {
             <Card p="5">
               <Stack gap="3">
                 <Heading size="heading">Add new layers by vote</Heading>
-                <Text color="ink.muted">
-                  Upload a folder of new layers. They&apos;re added after the existing ones, which stay exactly as they
-                  are.
-                </Text>
+                <HelpTip label="Artwork layers">
+                  <a href={ARTWORK_GUIDE_URL} target="_blank" rel="noreferrer">
+                    Read the artwork guide
+                  </a>
+                </HelpTip>
                 {session.authStatus !== 'authenticated' ? (
                   <Callout
                     variant="info"
@@ -297,17 +295,13 @@ export default function ArtworkAdminPage() {
           ) : null}
 
           {artwork.data ? (
-            <Disclosure title="Advanced: where token images are drawn">
+            <Disclosure title="Advanced">
               <Stack gap="4">
-                <Text color="ink.muted">
-                  Wallets and markets ask this address for every token&apos;s image. Change it only to move to a new
-                  renderer you trust; a wrong address breaks every token image at once. The tribe&apos;s own image,
-                  description and links are in{' '}
-                  <NextLink href={daoAdminRoute(routeId, '/profile')} className={css({ color: 'signal' })}>
-                    Tribe profile
-                  </NextLink>
-                  .
-                </Text>
+                <Callout
+                  variant="warning"
+                  title="Changing the renderer affects every token image"
+                  description="Wallets and marketplaces load token images from this URL. An invalid or unavailable URL prevents them from displaying the artwork."
+                />
                 <div>
                   <Text textStyle="caption" color="ink.muted">
                     Renderer now

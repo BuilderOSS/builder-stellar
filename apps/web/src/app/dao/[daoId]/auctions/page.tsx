@@ -20,8 +20,8 @@ import {
   Disclosure,
   ErrorState,
   Field,
-  FieldHelperText,
   FieldLabel,
+  HelpTip,
   ListRow,
   Section,
   Skeleton
@@ -371,7 +371,14 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
             {state === 'active' ? (
               <div className={css({ display: 'grid', gap: '3' })}>
                 <Field>
-                  <FieldLabel htmlFor="auction-bid">Your bid</FieldLabel>
+                  <FieldLabel htmlFor="auction-bid">
+                    Your bid{' '}
+                    <HelpTip label="Your bid">
+                      {minimum !== null ? `At least ${formatAuctionAmount(minimum)} ${paymentToken}. ` : ''}
+                      Your full bid is held until you&apos;re outbid, then it comes back to you. Bids near the end
+                      extend the auction.
+                    </HelpTip>
+                  </FieldLabel>
                   <AmountInput
                     id="auction-bid"
                     unit={paymentToken}
@@ -380,10 +387,6 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                     disabled={Boolean(busy)}
                     placeholder={minimum !== null ? formatAuctionAmount(minimum) : undefined}
                   />
-                  <FieldHelperText>
-                    {minimum !== null ? `At least ${formatAuctionAmount(minimum)} ${paymentToken}. ` : ''}
-                    Your full bid is held until you&apos;re outbid, then it comes back to you.
-                  </FieldHelperText>
                 </Field>
                 {minimum !== null && !amount ? (
                   <div>
@@ -416,15 +419,17 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                       ? `Place ${formatAuctionAmount(parsedAmount!)} ${paymentToken} bid`
                       : 'Place bid'}
                 </Button>
-                <p className={note}>Bids in the last minutes add a little time so everyone gets a fair chance.</p>
               </div>
             ) : null}
 
             {state === 'paused' || state === 'expired' ? (
-              <Callout
-                title={state === 'paused' ? 'Bidding is paused' : 'Bidding has ended'}
-                description={`${state === 'expired' ? 'Anyone can settle it. ' : ''}${auction.highest_bidder ? 'Settling sends the token to the winner and the bid to the treasury.' : 'No one bid, so settling sends the token to the treasury. It is not burned.'} ${data.paused ? 'Because auctions are paused, no new auction starts.' : 'It also starts the next auction.'}`}
-              />
+              <HelpTip label="Auction settlement">
+                {auction.highest_bidder
+                  ? 'Settlement sends the token to the winner and the bid to the treasury.'
+                  : 'There were no bids. Settlement sends the token to the treasury.'}{' '}
+                {data.paused ? 'Auctions are paused, so no new auction starts.' : 'Settlement starts the next auction.'}{' '}
+                Anyone can settle an ended auction. A token with no bids is not burned.
+              </HelpTip>
             ) : null}
             {canSettle ? (
               <Button

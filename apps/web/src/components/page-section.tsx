@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { css } from 'styled-system/css';
 
-import { PageHeader } from '@/components/ui';
+import { HelpTip, PageHeader } from '@/components/ui';
 
 const body = css({ display: 'grid', gap: '5', minW: '0' });
 const noteLine = css({ display: 'block' });
@@ -13,6 +13,7 @@ const noteLine = css({ display: 'block' });
 export function PageSection({
   title,
   description,
+  help,
   daoNote,
   actions,
   eyebrow,
@@ -20,6 +21,7 @@ export function PageSection({
 }: {
   title: ReactNode;
   description?: ReactNode;
+  help?: ReactNode;
   daoNote?: ReactNode;
   actions?: ReactNode;
   eyebrow?: ReactNode;
@@ -35,7 +37,26 @@ export function PageSection({
   );
   return (
     <div>
-      <PageHeader title={title} meta={meta} actions={actions} eyebrow={eyebrow} />
+      <PageHeader
+        title={
+          <>
+            {title}
+            {help ? (
+              <HelpTip
+                id={
+                  typeof title === 'string' ? `page-help-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined
+                }
+                label={typeof title === 'string' ? title : 'this page'}
+              >
+                {help}
+              </HelpTip>
+            ) : null}
+          </>
+        }
+        meta={meta}
+        actions={actions}
+        eyebrow={eyebrow}
+      />
       <div className={body}>{children}</div>
     </div>
   );
