@@ -134,6 +134,12 @@ export function CommunityGrid({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
+  // A navigation to another ?q= re-renders the page with a new initialQuery; follow it.
+  const [seenQuery, setSeenQuery] = useState(initialQuery);
+  if (initialQuery !== seenQuery) {
+    setSeenQuery(initialQuery);
+    setQuery(initialQuery);
+  }
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<CommunitySort>('newest');
   const contractQuery = useMemo(() => parseContractQuery(query), [query]);
@@ -185,8 +191,9 @@ export function CommunityGrid({
           autoComplete="off"
           onKeyDown={(event) => {
             // One result, usually from a pasted contract ID: Enter opens it.
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
             const only = visible.length === 1 ? visible[0].summary : null;
-            if (event.key === 'Enter' && only) router.push(daoRoute(only.routeId ?? only.id));
+            if (only) router.push(daoRoute(only.routeId ?? only.id));
           }}
         />
         <Select aria-label="Show" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
