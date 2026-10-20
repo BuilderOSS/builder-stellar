@@ -23,8 +23,14 @@ const rawScript = loadInvoke('raw-events.script.js');
 const decodeScript = loadInvoke('decoded-events.script.js');
 const activityScript = loadInvoke('activity-feed.script.js');
 
+// The SQL goes in on stdin, not as `-c <sql>`: the landing-table inserts carry whole event batches
+// as JSON, and Linux caps a single argument at 128 KiB (spawnSync fails with E2BIG on CI runners).
 function psql(sql) {
-  return execFileSync('psql', [DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-A', '-t', '-c', sql], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync('psql', [DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-A', '-t'], {
+    input: sql,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
 }
 function rows(sql) {
   const out = psql(`SELECT coalesce(jsonb_agg(to_jsonb(_r)), '[]'::jsonb) FROM (${sql}) _r`).trim();
