@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { migrateStoredV3 } from '@/stores/proposal-composer-store';
 
 import { CHANGE_SOURCES } from './change-request';
-import { migrateActionV3, migrateDraftV3 } from './migrate-drafts';
+import { clampComposerStep, migrateActionV3, migrateDraftV3 } from './migrate-drafts';
 import { action } from './test-fixtures';
 
 describe('v3 → v4 draft migration', () => {
@@ -32,9 +32,10 @@ describe('v3 → v4 draft migration', () => {
       queuedActions: [action('transfer-sac-token')]
     });
     expect(draft).not.toHaveProperty('prepopulatedFrom');
-    // v3's actions step (2) is v4's first step.
+    // v3's why (1) and actions (2) steps are now one Write step; its review (3) is step 2.
     expect(draft.step).toBe(1);
-    expect(migrateDraftV3({ step: 1, queuedActions: [] }).step).toBe(2);
+    expect(migrateDraftV3({ step: 1, queuedActions: [] }).step).toBe(1);
+    expect(migrateDraftV3({ step: 3, queuedActions: [] }).step).toBe(2);
     expect(draft.queuedActions?.[0].note).toBe('');
   });
 
@@ -47,5 +48,15 @@ describe('v3 → v4 draft migration', () => {
     expect(migrated.state.draftsByWallet.W.dao.queuedActions[0].source).toEqual(CHANGE_SOURCES.governance);
     expect(migrateStoredV3(null)).toBeNull();
     expect(migrateStoredV3('not json')).toBeNull();
+  });
+});
+
+describe('clampComposerStep', () => {
+  it('keeps Write and Review, and treats anything past writing as Review', () => {
+    expect(clampComposerStep(1)).toBe(1);
+    expect(clampComposerStep(2)).toBe(2);
+    expect(clampComposerStep(3)).toBe(2);
+    expect(clampComposerStep(undefined)).toBe(1);
+    expect(clampComposerStep(0)).toBe(1);
   });
 });

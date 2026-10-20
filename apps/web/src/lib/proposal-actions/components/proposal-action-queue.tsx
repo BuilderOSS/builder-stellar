@@ -260,7 +260,7 @@ export function ProposalActionQueue({
     return (
       <p className={empty}>
         {variant === 'composer'
-          ? 'Nothing yet. Add a change above, or from any Manage page.'
+          ? 'Nothing yet. Add a change below, or from any Manage page.'
           : 'Nothing in your proposal yet.'}
       </p>
     );

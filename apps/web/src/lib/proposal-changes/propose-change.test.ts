@@ -25,12 +25,12 @@ describe('proposeChange', () => {
   it('adds a clean change at once, stamped with its source and note, without touching the step or text', () => {
     const store = useProposalComposerStore.getState();
     store.updateMetadata(address, daoId, { title: 'Mine' });
-    store.setStep(address, daoId, 3);
+    store.setStep(address, daoId, 2);
     const notify = vi.fn();
     const result = proposeChange({ address, daoId, config, request: governance('set-voting-period', '86400'), notify });
     expect(result).toEqual({ outcome: 'added' });
     const draft = selectDraft(address, daoId)(useProposalComposerStore.getState());
-    expect(draft.step).toBe(3);
+    expect(draft.step).toBe(2);
     expect(draft.metadata.title).toBe('Mine');
     expect(draft.queuedActions[0]).toMatchObject({
       source: CHANGE_SOURCES.governance,

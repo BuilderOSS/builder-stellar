@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createEmptyDraft,
   sanitizeDrafts,
-  selectCanProceedToStep2,
+  selectCanReview,
   selectDraft,
   selectHasDraft,
   useProposalComposerStore
@@ -75,10 +75,33 @@ describe('proposal composer v4 actions', () => {
     clearDraft(wallet);
   });
 
-  it('can move on from the actions step before the why is written', () => {
+  it('needs a title, a why and a change for Review, written in either order', () => {
+    const canReview = () => selectCanReview(wallet, daoId)(useProposalComposerStore.getState());
+    const store = useProposalComposerStore.getState();
+
     clearDraft(wallet);
-    useProposalComposerStore.getState().addChanges(wallet, daoId, [queued('only')]);
-    expect(selectCanProceedToStep2(wallet, daoId)(useProposalComposerStore.getState())).toBe(true);
+    store.updateMetadata(wallet, daoId, { title: 'Fund the tool library', description: 'Winter is coming.' });
+    expect(canReview()).toBe(false);
+    store.addChanges(wallet, daoId, [queued('after')]);
+    expect(canReview()).toBe(true);
+
+    clearDraft(wallet);
+    store.addChanges(wallet, daoId, [queued('before')]);
+    expect(canReview()).toBe(false);
+    store.updateMetadata(wallet, daoId, { title: 'Pause first', description: 'Then change.' });
+    expect(canReview()).toBe(true);
+    clearDraft(wallet);
+  });
+
+  it('keeps the step within Write and Review', () => {
+    clearDraft(wallet);
+    const store = useProposalComposerStore.getState();
+    store.nextStep(wallet, daoId);
+    store.nextStep(wallet, daoId);
+    expect(selectDraft(wallet, daoId)(useProposalComposerStore.getState()).step).toBe(2);
+    store.prevStep(wallet, daoId);
+    store.prevStep(wallet, daoId);
+    expect(selectDraft(wallet, daoId)(useProposalComposerStore.getState()).step).toBe(1);
     clearDraft(wallet);
   });
 });
@@ -105,5 +128,13 @@ describe('sanitizeDrafts', () => {
     const { draftsByWallet, removed } = sanitizeDrafts({ W: { d: draft } }, () => true);
     expect(removed).toBe(0);
     expect(draftsByWallet.W.d).toBe(draft);
+  });
+
+  it('moves a draft saved on the old third step to Review', () => {
+    const draft = { ...createEmptyDraft(), step: 3 as unknown as 2 };
+    const { draftsByWallet, removed, changed } = sanitizeDrafts({ W: { d: draft } }, () => true);
+    expect(removed).toBe(0);
+    expect(changed).toBe(true);
+    expect(draftsByWallet.W.d.step).toBe(2);
   });
 });
