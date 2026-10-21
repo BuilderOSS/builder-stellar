@@ -324,8 +324,9 @@ returned as `data:application/json;base64,<…>`.
   small base64 routine in `common` (no host function). § 10 gates both CPU and the return-value size against the
   live network limits; the name cap exists so the maximum document is known at compile time.
 - The spec says `token_uri` "returns an url". A `data:` URL follows ERC-721 practice; which Stellar wallets and
-  marketplaces render it is open question 1 (§ 12). If one does not, `renderer_base` can serve HTTPS JSON
-  without a contract change.
+  marketplaces render it is open question 1 (§ 12). `renderer_base` is not a fallback for that: it fills only the
+  `image` field, and `token_uri` always returns the `data:` document. Serving the JSON over HTTPS needs a
+  Metadata change (§ 12, question 1); the Token is unchanged, since its `token_uri` forwards to Metadata.
 
 ## 6. Profile JSON
 
@@ -592,7 +593,14 @@ within budget and their measured per-call fees are published.
 ## 12. Open questions
 
 1. **`data:` URIs in Stellar wallets.** Which wallets and marketplaces render a `data:application/json;base64`
-   `token_uri`? Test with the ones that matter before relying on it; HTTPS fallback exists either way.
+   `token_uri`? Test with the ones that matter before relying on it, starting with whether each shows NFTs from a
+   custom contract at all (if not, no URI format helps). There is no HTTPS fallback today: `renderer_base` only
+   sets `image`. If one that matters needs HTTPS, the fix is an optional `uri_base` in the Metadata settings,
+   with an admin-only setter (so each DAO opts in by proposal): when set, `token_uri` returns
+   `<uri_base>/<token>/<id>`; when unset, the `data:` document as now. A web route serves that path by simulating
+   the on-chain `token_uri` and decoding it, so the HTTPS JSON cannot drift from the chain (short cache: names can
+   change after an artwork reset). Adding the field likely needs a `STORAGE_VERSION` bump and migration. Testnet
+   redeploys; live DAOs upgrade Metadata and set `uri_base` in one proposal.
 2. **Profile `v` policy.** Read `v: 1` forever (default) or a one-time rewrite proposal per DAO on schema change.
 3. **Renewal cadence.** Should the app nudge members when any DAO class drops under 45 days, as it does for
    artwork today? Default: yes, same thresholds, one button.
