@@ -153,7 +153,8 @@ export function ProposalOverview({ detail, network }: { detail: ProposalDetail; 
       <Disclosure title="Technical details">
         <div className={facts}>
           <Address value={detail.proposer} label="Proposed by" />
-          <Address value={detail.proposalId} label="Proposal id" />
+          {/* A proposal id hashes the proposal's calls; it is not a transaction, so no explorer link. */}
+          <Address value={detail.proposalId} label="Proposal id" explorerUrl="" copyLabel="Copy proposal id" />
           <div className={fact}>
             <span className={factLabel}>Voting power snapshot</span>
             <a
