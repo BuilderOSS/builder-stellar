@@ -17,6 +17,7 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 import { keccak256Bytes } from '@/lib/keccak';
 import { buildProposalCallVectors, encodeProposalCallArgs, proposalCallId } from '@/lib/proposal-call';
 import type { ProposalEncodingContext } from '@/lib/proposal-supported-calls';
+import { treasuryPurchaseAuthNodes } from '@/lib/treasury-authorize';
 
 import { getActionHandler, getAllActionHandlers } from './registry';
 import type { FormContext, ProposalActionType, ProposalQueuedAction } from './types';
@@ -650,31 +651,93 @@ describe('every registered proposal action encodes to its contract function’s 
     );
 
     // Re-encoding gives the same proposal id: from the queued action again, and from the indexer's
-    // tagged form of the arguments (how the proposal page recomputes it). Authorize is the known gap below.
+    // tagged form of the arguments (how the proposal page recomputes it).
     const description = keccak256Bytes(`contract-spec ${label(fixture)}`);
     const id = proposalCallId(vectors.targets, vectors.functions, encoded, description);
     expect(proposalCallId(vectors.targets, vectors.functions, encodeQueued(fixture).encoded, description)).toBe(id);
-    if (fixture.type !== 'treasury-authorize') {
-      const fromIndex = encodeProposalCallArgs(
-        vectors.targets,
-        vectors.functions,
-        [encoded[0]!.map(indexed)],
-        encodingContext(fixture)
-      );
-      expect(proposalCallId(vectors.targets, vectors.functions, fromIndex, description)).toBe(id);
-    }
+    const fromIndex = encodeProposalCallArgs(
+      vectors.targets,
+      vectors.functions,
+      [encoded[0]!.map(indexed)],
+      encodingContext(fixture)
+    );
+    expect(proposalCallId(vectors.targets, vectors.functions, fromIndex, description)).toBe(id);
   });
 });
 
-// Known gap: AuthNode.args is Vec<Val>, and normalizeProposalCallArgs drops the indexer's type tags,
-// so the proposal page cannot rebuild an authorize call ("Untyped Val argument") and disables voting
-// and execution for a treasury purchase. When this starts passing, fold authorize into the check above.
-it.fails('re-encodes a treasury authorize call from the indexer’s tagged arguments', () => {
-  const fixture = FIXTURES.find((candidate) => candidate.type === 'treasury-authorize')!;
-  const { vectors, encoded } = encodeQueued(fixture);
-  expect(
-    xdrs(encodeProposalCallArgs(vectors.targets, vectors.functions, [encoded[0]!.map(indexed)], config)[0]!)
-  ).toEqual(xdrs(encoded[0]!));
+/**
+ * The indexer's decoder (packages/goldsky decoded-events.script.js `native`) as the proposal API
+ * serves it: no type tags, integers above 32 bits as strings, maps as objects. An authorize node's
+ * `Vec<Val>` args lose their types here, which is what the encoder has to recover.
+ */
+function decoded(value: xdr.ScVal): unknown {
+  switch (value.type) {
+    case 'scvVoid':
+      return null;
+    case 'scvVec':
+      return (value.vec ?? []).map(decoded);
+    case 'scvMap':
+      return Object.fromEntries((value.map ?? []).map((entry) => [String(decoded(entry.key)), decoded(entry.val)]));
+    case 'scvBytes':
+      return Buffer.from(scValToNative(value) as Uint8Array).toString('hex');
+    case 'scvU64':
+    case 'scvI64':
+    case 'scvU128':
+    case 'scvI128':
+      return String(scValToNative(value));
+    default:
+      return scValToNative(value);
+  }
+}
+
+describe('a treasury purchase re-encodes from the indexed proposal (AuthNode.args are Vec<Val>)', () => {
+  const treasury = config.treasuryContractId;
+  const seller = wallet(31);
+  const authorizeFixture = FIXTURES.find((candidate) => candidate.type === 'treasury-authorize')!;
+  const reencode = (nodes: unknown[]) => {
+    const { encoded } = encodeQueued({ ...authorizeFixture, draft: { nodes } });
+    const fromApi = encodeProposalCallArgs([treasury], ['authorize'], [encoded[0]!.map(decoded)], config);
+    return { encoded: xdrs(encoded[0]!), fromApi: xdrs(fromApi[0]!) };
+  };
+
+  it('types each transfer from the asset contract’s transfer(from, to, i128)', () => {
+    const { encoded, fromApi } = reencode(authNodes);
+    expect(fromApi).toEqual(encoded);
+  });
+
+  it('rebuilds both transfers of a purchase with a fee, and the single transfer without one', () => {
+    for (const fee of [125_000n, 0n]) {
+      const nodes = treasuryPurchaseAuthNodes({ treasury, paymentAsset: XLM, seller, price: 5_000_000n, fee });
+      expect(nodes).toHaveLength(fee ? 2 : 1);
+      const { encoded, fromApi } = reencode(nodes);
+      expect(fromApi).toEqual(encoded);
+    }
+  });
+
+  it('types a node calling one of the DAO’s contracts from that contract’s spec (token.transfer takes a u32)', () => {
+    const nodes = [
+      {
+        contract: config.tokenContractId,
+        fnName: 'transfer',
+        args: [
+          { type: 'address', value: treasury },
+          { type: 'address', value: seller },
+          { type: 'u32', value: '7' }
+        ],
+        sub: []
+      }
+    ];
+    const { encoded, fromApi } = reencode(nodes);
+    expect(fromApi).toEqual(encoded);
+  });
+
+  it('refuses an untyped node whose callee has no known signature', () => {
+    const unknown = contract(42);
+    const indexedNode = { args: [treasury, '5'], contract: unknown, fn_name: 'pay', sub: [] };
+    expect(() => encodeProposalCallArgs([treasury], ['authorize'], [[[indexedNode]]], config)).toThrow(
+      /Untyped authorization arguments/
+    );
+  });
 });
 
 describe('validators refuse what each contract rejects', () => {
