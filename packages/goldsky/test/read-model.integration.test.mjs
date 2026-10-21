@@ -52,7 +52,25 @@ const u64 = (v) => ({ u64: String(v) });
 const u128 = (v) => ({ u128: String(v) });
 const i128 = (v) => ({ i128: String(v) });
 const bool = (v) => ({ bool: v });
-const str = (v) => ({ string: v });
+// The Goldsky dataset writes a contract String as stellar-xdr does (escape-bytes): printable ASCII
+// as is, `\\` for a backslash, `\0 \t \n \r`, and `\xNN` for every other byte. Fixtures use the
+// same form so the decoder is tested on what it really receives.
+function escapeBytes(value) {
+  let out = '';
+  for (const b of Buffer.from(value, 'utf8')) {
+    if (b === 0x5c) out += '\\\\';
+    else if (b === 0) out += '\\0';
+    else if (b === 9) out += '\\t';
+    else if (b === 10) out += '\\n';
+    else if (b === 13) out += '\\r';
+    else if (b >= 0x20 && b <= 0x7e) out += String.fromCharCode(b);
+    else out += `\\x${b.toString(16).padStart(2, '0')}`;
+  }
+  return out;
+}
+const str = (v) => ({ string: escapeBytes(v) });
+const proposalDescription = (id) =>
+  JSON.stringify({ title: `${id} for Ana’s café 🎉`, description: `Why ${id}\n\n## What this does\n\n- Send 5 \\ done`, url: '' });
 const bytes = (v) => ({ bytes: v });
 const vec = (...v) => ({ vec: v });
 const VOID = 'void';
@@ -280,6 +298,8 @@ function buildScenario() {
   emit('governor', d1.governor, 'voting_period_changed', { topics: [addr(d1.treasury)], data: { old_value: u32(10), new_value: u32(20) }, ledger: 136 });
   // proposal_created + proposal_scheduled (same transaction). States are computed
   // from the clock, so windows are placed far in the past/future or relative to now.
+  // Line breaks inside the JSON, a backslash and non-ASCII text: the description must come back
+  // exactly as signed, or the proposal ID (which hashes it) no longer reproduces.
   const created = (id, ledger, { voteStart = 1000000000, voteEnd = 1000000300, quorum = 1 } = {}) => {
     emit('governor', d1.governor, 'proposal_created', {
       topics: [bytes(id), addr('GALICE')],
@@ -287,7 +307,7 @@ function buildScenario() {
         targets: vec(addr(d1.treasury), addr(d1.token)),
         functions: vec(sym('transfer'), sym('mint')),
         args: vec(vec(addr('GBOB'), i128(5)), vec(addr('GBOB'))),
-        vote_snapshot: u32(ledger - 1), vote_end: u32(voteEnd), description: str(JSON.stringify({ title: id }))
+        vote_snapshot: u32(ledger - 1), vote_end: u32(voteEnd), description: str(proposalDescription(id))
       },
       ledger
     });
@@ -312,7 +332,7 @@ function buildScenario() {
   created('p3', 146);
   emit('governor', d1.governor, 'proposal_cancelled', { topics: [bytes('p3')], ledger: 147 });
   // Event-only comments (governor 0.2.0), in any proposal state.
-  emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p1'), addr('GBOB')], data: { body: str('Shipped, thanks all') }, ledger: 147, evt: 1 });
+  emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p1'), addr('GBOB')], data: { body: str('Shipped, thanks all ’ 🎉') }, ledger: 147, evt: 1 });
   emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p3'), addr('GALICE')], data: { body: str('Withdrawn for now') }, ledger: 147, evt: 2 });
   // Free text with a NUL: jsonb refuses U+0000, so the decoder replaces it with U+FFFD.
   emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p3'), addr('GCAROL')], data: { body: str('nul\u0000byte') }, ledger: 147, evt: 3 });
@@ -730,6 +750,12 @@ test('governance: proposals, votes, state, settings and comments', { skip }, () 
   assert.deepEqual([p1.for_votes, p1.against_votes, p1.abstain_votes].map(Number), [5, 1, 2]);
   assert.deepEqual([proposals[1].for_votes, proposals[1].against_votes, proposals[1].abstain_votes].map(Number), [0, 0, 0], 'no votes yet is a zero tally');
 
+  assert.equal(
+    one(`SELECT description FROM governance.proposals WHERE proposal_id = 'p1'`).description,
+    proposalDescription('p1'),
+    'the description reads back byte for byte as signed'
+  );
+
   const detail = one(`SELECT actions FROM app.proposal_detail WHERE proposal_id = 'p1'`);
   assert.deepEqual(detail.actions.map((a) => [a.action_index, a.target, a.function]), [[0, 'CTRE1', 'transfer'], [1, 'CTOK1', 'mint']]);
   assert.deepEqual(detail.actions[0].args, ['GBOB', '5']);
@@ -748,7 +774,7 @@ test('governance: proposals, votes, state, settings and comments', { skip }, () 
   );
   assert.deepEqual(
     rows(`SELECT proposal_id, author, body, dao_id FROM governance.proposal_comments ORDER BY event_ledger, event_index`).map((r) => [r.author, r.body, r.dao_id]),
-    [['GBOB', 'Shipped, thanks all', 'CTOK1'], ['GALICE', 'Withdrawn for now', 'CTOK1'], ['GCAROL', 'nul\uFFFDbyte', 'CTOK1']],
+    [['GBOB', 'Shipped, thanks all ’ 🎉', 'CTOK1'], ['GALICE', 'Withdrawn for now', 'CTOK1'], ['GCAROL', 'nul\uFFFDbyte', 'CTOK1']],
     'a NUL in free text becomes U+FFFD before the sink'
   );
   // The views cast through chain.jsonb_safe, so a NUL that reaches the table still reads.
