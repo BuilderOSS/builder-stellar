@@ -468,8 +468,9 @@ would still pass with its old role; and external modules emit event names the de
 ## Open Questions
 
 1. **Vote delay.** Should tokens bought from a pool vote only after T days? That is the strongest takeover defense,
-   but it changes the Token's checkpoints. It's deferred until per-buyer caps and the sales rate prove
-   insufficient.
+   but done in the Token it changes checkpoints and delegation. The Marketplace could instead hold a bought
+   token for T days before the buyer claims it, leaving the Token unchanged (both options in `TODOS.md`). It's
+   deferred until per-buyer caps and the sales rate prove insufficient.
 2. **Circle `join` for existing holders.** Mint for a member who already holds a token, or skip
    (savings-circle open question 2).
 
