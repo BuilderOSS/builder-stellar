@@ -298,6 +298,43 @@ test('decodes proposal_created event from real Goldsky data', () => {
   assert.equal(argsOf(decoded).vote_end, 1787300891);
 });
 
+// XDR-JSON escapes a contract String's bytes (stellar-xdr StringM, escape-bytes). This literal is
+// `stellar xdr decode --type ScVal --output json` of the ScVal String below, so it is the exact
+// shape the Goldsky dataset delivers.
+const ESCAPED_DESCRIPTION = JSON.parse(
+  String.raw`{"string":"{\"title\":\"Pay Ana\\xe2\\x80\\x99s caf\\xc3\\xa9 \\xf0\\x9f\\x8e\\x89\",\"description\":\"Lets go\\\\n\\\\n## What this does\\\\n\\\\n- Send 1 XLM \\\\\\\\ done\",\"url\":\"\"}\\0end"}`
+).string;
+const ORIGINAL_DESCRIPTION =
+  JSON.stringify({ title: 'Pay Ana’s café 🎉', description: 'Lets go\n\n## What this does\n\n- Send 1 XLM \\ done', url: '' }) + '\u0000end';
+
+test('contract strings decode from XDR-JSON escapes to the exact text the contract stored', () => {
+  const decoded = decodeEvent({
+    event_id: 'escaped-description', deployment_id: 'builder-testnet', contract_id: 'CGOV', contract_role: 'governor',
+    topics: JSON.stringify([{ symbol: 'proposal_created' }, { bytes: 'aa' }, { address: 'GPROPOSER' }]),
+    data: JSON.stringify({ map: [{ key: { symbol: 'description' }, val: { string: ESCAPED_DESCRIPTION } }] }),
+    transaction_hash: 'tx', ledger_sequence: 1
+  });
+  // Backslashes, newlines inside the JSON and multi-byte characters all come back as stored, so the
+  // proposal ID (which hashes the description) is reproducible. A NUL still becomes U+FFFD for jsonb.
+  assert.equal(argsOf(decoded).description, ORIGINAL_DESCRIPTION.replace('\u0000', '�'));
+  assert.equal(JSON.parse(argsOf(decoded).description.replace('�end', '')).title, 'Pay Ana’s café 🎉');
+});
+
+test('a string that is not valid escape-bytes text is kept as is', () => {
+  const decode = (string) =>
+    argsOf(decodeEvent({
+      event_id: `odd-${string}`, deployment_id: 'd', contract_id: 'C', contract_role: 'governor',
+      topics: JSON.stringify([{ symbol: 'proposal_commented' }]),
+      data: JSON.stringify({ map: [{ key: { symbol: 'body' }, val: { string } }] }),
+      transaction_hash: 'tx', ledger_sequence: 1
+    })).body;
+  assert.equal(decode('plain text'), 'plain text');
+  assert.equal(decode('already café'), 'already café', 'non-ASCII means it was never escaped');
+  assert.equal(decode('bad \\q escape'), 'bad \\q escape');
+  assert.equal(decode('short \\x4'), 'short \\x4');
+  assert.equal(decode('lone \\xff byte'), 'lone � byte', 'an invalid UTF-8 byte reads as U+FFFD');
+});
+
 test('decodes vote_cast event from real Goldsky data', () => {
   const decoded = decodeEvent({
     event_id: '4255636-dd1558d7d5669560d0a6f0020e3692208104f13e76bc62fe58904b7294129fb5-op-0-event-0',
