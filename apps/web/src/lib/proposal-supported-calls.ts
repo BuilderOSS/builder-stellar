@@ -15,9 +15,11 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import type { ModuleKind } from '@/lib/modules/kinds';
 import {
+  type AuthArgType,
   type AuthNodeDraft,
   authNodeSpecValue,
   isTypedAuthArg,
+  type TypedAuthArg,
   typedAuthArgToScVal,
   validateAuthNodes
 } from '@/lib/treasury-authorize';
@@ -104,6 +106,108 @@ const supported = {
   // The DAO's ClaimMinter: open a claim list (after granting it an allowance), upgrade it.
   claims: ['open_list', 'upgrade', 'migrate']
 } as const;
+
+type ContractRole = keyof typeof supported;
+
+const CLIENTS = {
+  token: TokenClient,
+  governor: GovernorClient,
+  auction: AuctionClient,
+  treasury: TreasuryClient,
+  marketplace: MarketplaceClient,
+  metadata: MetadataClient,
+  claims: ClaimMinterClient
+};
+
+/** Which of this DAO's contracts an address is, including modules the same proposal creates. */
+function contractRole(target: string, config: ProposalEncodingContext): ContractRole | null {
+  if (!target) return null;
+  const pending = config.pendingModules?.[target];
+  if (pending) return pending as ContractRole;
+  const byAddress: Array<[string | undefined, ContractRole]> = [
+    [config.tokenContractId, 'token'],
+    [config.governorContractId, 'governor'],
+    [config.auctionContractId, 'auction'],
+    [config.treasuryContractId, 'treasury'],
+    [config.marketplaceContractId, 'marketplace'],
+    [config.metadataContractId, 'metadata'],
+    [config.claimsContractId, 'claims']
+  ];
+  return byAddress.find(([address]) => address && address === target)?.[1] ?? null;
+}
+
+function roleSpec(role: ContractRole, target: string, config: ProposalEncodingContext): Spec {
+  return new CLIENTS[role]({ contractId: target, rpcUrl: config.rpcUrl, networkPassphrase: config.passphrase }).spec;
+}
+
+/** An asset the treasury holds (its Stellar Asset Contract), XLM included. */
+function isTreasuryAsset(target: string, config: ProposalEncodingContext) {
+  return getTreasuryAssets(config.name).some(
+    (asset) => (asset.isNative ? Asset.native().contractId(config.passphrase) : asset.contractId) === target
+  );
+}
+
+const AUTH_ARG_TYPES: Partial<Record<string, AuthArgType>> = {
+  scSpecTypeAddress: 'address',
+  scSpecTypeI128: 'i128',
+  scSpecTypeU128: 'u128',
+  scSpecTypeU32: 'u32',
+  scSpecTypeU64: 'u64',
+  scSpecTypeSymbol: 'symbol',
+  scSpecTypeString: 'string',
+  scSpecTypeBool: 'bool'
+};
+
+/**
+ * The argument types of the call an AuthNode authorizes, from that callee's own signature: a
+ * treasury asset's `transfer(from, to, amount)`, or a function of one of this DAO's contracts.
+ * Anything else has no known signature, so its arguments stay untyped and encoding refuses them.
+ */
+function authorizedCallTypes(contract: string, fnName: string, config: ProposalEncodingContext): AuthArgType[] | null {
+  if (isTreasuryAsset(contract, config)) return fnName === 'transfer' ? ['address', 'address', 'i128'] : null;
+  const role = contractRole(contract, config);
+  if (!role) return null;
+  const spec = roleSpec(role, contract, config);
+  if (!spec.funcs().some((entry) => entry.name.toString() === fnName)) return null;
+  const types = spec.getFunc(fnName).inputs.map((input) => AUTH_ARG_TYPES[input.type.type]);
+  return types.every((type): type is AuthArgType => Boolean(type)) ? types : null;
+}
+
+function typedAuthArg(value: unknown, type: AuthArgType): TypedAuthArg {
+  if (type === 'bool') {
+    if (typeof value !== 'boolean') throw new Error('Expected a boolean authorization argument.');
+    return { type, value };
+  }
+  if (type === 'address' || type === 'symbol' || type === 'string') {
+    if (typeof value !== 'string') throw new Error(`Expected a ${type} authorization argument.`);
+    return { type, value };
+  }
+  return { type, value: integer(value) };
+}
+
+/**
+ * `AuthNode.args` is `Vec<Val>`, and the indexer records those values without their types (an
+ * i128 amount reads as "950000"), so an indexed authorize call cannot be rebuilt as it is. The
+ * Treasury only authorizes a call whose arguments equal what the callee receives, so the callee's
+ * signature gives each argument's type exactly. Drafts and already-typed arguments pass through.
+ */
+function typeAuthNodes(nodes: unknown, config: ProposalEncodingContext): unknown {
+  if (!Array.isArray(nodes)) return nodes;
+  return nodes.map((node) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node) || 'fnName' in node) return node;
+    const { contract, fn_name: fnName, args, sub } = node as Record<string, unknown>;
+    const typedSub = typeAuthNodes(sub, config);
+    if (!Array.isArray(args) || args.every((arg) => arg instanceof xdr.ScVal || isTypedAuthArg(arg)))
+      return { ...node, sub: typedSub };
+    const types =
+      typeof contract === 'string' && typeof fnName === 'string' ? authorizedCallTypes(contract, fnName, config) : null;
+    if (!types || types.length !== args.length)
+      throw new Error(
+        `Untyped authorization arguments for ${String(contract)}.${String(fnName)}; submission is disabled.`
+      );
+    return { ...node, args: args.map((arg, i) => typedAuthArg(arg, types[i]!)), sub: typedSub };
+  });
+}
 
 function integer(value: unknown): string {
   if (typeof value === 'number' && !Number.isSafeInteger(value))
@@ -231,56 +335,22 @@ export function encodeSupportedCall(
     if (typeof args[1] !== 'string') throw new Error('Expected a string proposal argument.');
     return spec.funcArgsToScVals(fn, { token_address: args[0], new_slug: args[1] });
   }
-  const pendingKind = target ? config.pendingModules?.[target] : undefined;
-  const role = pendingKind
-    ? pendingKind
-    : target && target === config.tokenContractId
-      ? 'token'
-      : target && target === config.governorContractId
-        ? 'governor'
-        : target && target === config.auctionContractId
-          ? 'auction'
-          : target && target === config.treasuryContractId
-            ? 'treasury'
-            : target && target === config.marketplaceContractId
-              ? 'marketplace'
-              : target && target === config.metadataContractId
-                ? 'metadata'
-                : target && target === config.claimsContractId
-                  ? 'claims'
-                  : null;
+  const role = contractRole(target, config);
   if (role && (supported[role] as readonly string[]).includes(fn)) {
-    const Clients = {
-      token: TokenClient,
-      governor: GovernorClient,
-      auction: AuctionClient,
-      treasury: TreasuryClient,
-      marketplace: MarketplaceClient,
-      metadata: MetadataClient,
-      claims: ClaimMinterClient
-    };
-    const spec: Spec = new Clients[role]({
-      contractId: target,
-      rpcUrl: config.rpcUrl,
-      networkPassphrase: config.passphrase
-    }).spec;
+    const spec = roleSpec(role, target, config);
     // `authorize` is not an entry point: Treasury.execute intercepts it as a
     // self-call. Its one Vec<AuthNode> argument has check_authorization's shape.
-    const specFn = role === 'treasury' && fn === 'authorize' ? 'check_authorization' : fn;
+    const authorize = role === 'treasury' && fn === 'authorize';
+    const specFn = authorize ? 'check_authorization' : fn;
     const inputs = spec.getFunc(specFn).inputs;
     if (args.length !== inputs.length) throw new Error(`Unsupported argument count for ${role}.${fn}.`);
+    const values = authorize ? [typeAuthNodes(args[0], config)] : args;
     return spec.funcArgsToScVals(
       specFn,
-      Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(args[i], input.type, spec)]))
+      Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(values[i], input.type, spec)]))
     );
   }
-  if (
-    getTreasuryAssets(config.name).some(
-      (asset) => (asset.isNative ? Asset.native().contractId(config.passphrase) : asset.contractId) === target
-    ) &&
-    fn === 'transfer' &&
-    args.length === 3
-  ) {
+  if (isTreasuryAsset(target, config) && fn === 'transfer' && args.length === 3) {
     return [
       nativeToScVal(args[0], { type: 'address' }),
       nativeToScVal(args[1], { type: 'address' }),

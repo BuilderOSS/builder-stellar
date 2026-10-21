@@ -46,4 +46,27 @@
 **Priority:** P2
 **Depends on:** testnet redeploy of the storage-diet release
 
+## Indexer
+
+### Index proposal call arguments with their types
+
+**What:** Carry every proposal call argument from the chain to the API in its typed form (the `ScVal`, not just its value), so the proposal page re-encodes any call exactly and checks the proposal ID without knowing the callee's signature. Then remove the web-side type recovery.
+
+**Why:** The decoder (`packages/goldsky/src/decoded-events.script.js` `native`) drops each value's type: an `i128` and a `u32` both read as numbers or digit strings, `Vec<Val>` contents lose their types, bytes and strings look alike. The page can only rebuild a call when it already knows the callee's signature: the DAO's own contracts (bindings specs) and a treasury asset's `transfer` (`authorizedCallTypes` in `apps/web/src/lib/proposal-supported-calls.ts`, added for treasury purchases). A valid proposal that calls an external contract, or authorizes a call to one, can't be verified, so the page disables vote, queue and execute for it.
+
+**Context:**
+- The typed form already reaches the database: `chain.raw_events.data` holds Goldsky's XDR-JSON for each `proposal_created` event, including `args`. A view or column can expose it per proposal (for example `args_typed` on `governance.proposals` and `app.proposal_detail`) without changing the decoder, so no replay would be needed. Storing typed args in the decoder instead needs a full replay (Redeploy checklist in `packages/goldsky/README.md`).
+- XDR-JSON strings are escape-bytes encoded; unescape them as the decoder does.
+- On the web side:
+  - the API route `app/api/dao/[daoId]/proposals/[proposalId]` serves the typed args;
+  - the proposal page (`encodingError`, `verifiedCallPayload`) builds `ScVal`s from them directly;
+  - drop `typeAuthNodes`, `authorizedCallTypes`, the untagging in `normalizeProposalCallArgs`, and the "Unsupported external call" refusal for re-encoding.
+- What the composer may submit stays a separate allowlist.
+- Converting XDR-JSON to `ScVal` in JS needs either `@stellar/stellar-xdr-json` (WASM) or a small converter for the `ScVal` cases contracts emit.
+- Test with a proposal whose calls cover `Vec<Val>`, an external contract, `u64`/`i128`/`u32`, bytes and an option. Assert that the page's recomputed ID matches the chain.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** the indexer's string fix (#66) and the treasury-purchase re-encode (#67), which this replaces
+
 ## Completed
