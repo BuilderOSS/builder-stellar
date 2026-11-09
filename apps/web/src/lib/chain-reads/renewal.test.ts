@@ -18,6 +18,9 @@ import {
   parseRenewalPage,
   planBatches,
   proposalIsLive,
+  rentRate,
+  restoredExtendEstimate,
+  restoredExtendLimit,
   summarizeInventory,
   yearlyRentEstimate
 } from './renewal';
@@ -445,5 +448,26 @@ describe('effectiveUpgradeDelay', () => {
     ]);
     expect(effectiveUpgradeDelay(reducing, 999)).toBe(720);
     expect(effectiveUpgradeDelay(reducing, 1_000)).toBe(60);
+  });
+});
+
+describe('restoredExtendEstimate', () => {
+  const base = { bytes: 1_000, minPersistentTtl: 120_960, extendTo: 1_000_000, restoreFee: 5_000_000n };
+
+  it('prices the ledgers restored entries gain past the minimum TTL at the sweep’s rate', () => {
+    const rate = rentRate({ present: [{ bytes: 500, liveUntil: 100 }], latestLedger: 100 }, 1_000_000, 50_000n);
+    // 50,000 stroops for 500 × 1,000,000 byte-ledgers; restored: 1,000 × 879,040.
+    expect(restoredExtendEstimate({ ...base, rate })).toBe(87_904n + 100n);
+  });
+
+  it('falls back to the restore’s own rate, and is zero when nothing is gained', () => {
+    // 5,000,000 stroops over 1,000 × 120,960 byte-ledgers, for 1,000 × 879,040.
+    expect(restoredExtendEstimate({ ...base, rate: null })).toBe(36_335_979n + 100n);
+    expect(restoredExtendEstimate({ ...base, extendTo: 100_000, rate: null })).toBe(0n);
+    expect(restoredExtendEstimate({ ...base, bytes: 0, rate: null })).toBe(0n);
+  });
+
+  it('allows half again plus 0.01 XLM before stopping for a new quote', () => {
+    expect(restoredExtendLimit(1_000_000n)).toBe(1_600_000n);
   });
 });

@@ -18,7 +18,7 @@ import {
   summarizePlatform,
   type usePlatformStorage
 } from '@/lib/platform/storage';
-import { submitRenewal } from '@/lib/renewal-queries';
+import { restoredStep, submitRenewal } from '@/lib/renewal-queries';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
 
@@ -63,6 +63,7 @@ export function PlatformStorage({
   const [preset, setPreset] = useState(String(DEFAULT_PLATFORM_RENEWAL_DAYS));
   const [custom, setCustom] = useState('');
   const [quote, setQuote] = useState<PlatformQuote | null>(null);
+  const restored = quote ? restoredStep(quote.transactions) : undefined;
   const [busy, setBusy] = useState<'quote' | 'renew' | null>(null);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
@@ -200,6 +201,13 @@ export function PlatformStorage({
                       ? `One transaction, about ${xlm(quote.totalFee)} in network fees.`
                       : `${quote.transactions.length} transactions, about ${xlm(quote.totalFee)} in network fees.`}
                   </p>
+                  {restored ? (
+                    <p className={muted}>
+                      Archived items come back with only days to live, so a last step extends them for {quote.days} days
+                      once they are restored. It is estimated at about {xlm(restored.estimatedFee)}; if it would cost
+                      much more, renewal stops there and asks for a new quote.
+                    </p>
+                  ) : null}
                   {quote.yearlyFee !== null ? (
                     <p className={muted}>
                       At this rate, keeping it all alive costs about {xlm(quote.yearlyFee)} a year.

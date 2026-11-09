@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { Account, Keypair } from '@stellar/stellar-sdk';
+import { Account, Keypair, type Transaction } from '@stellar/stellar-sdk';
 import { Api, Server } from '@stellar/stellar-sdk/rpc';
 
 import {
@@ -19,15 +19,20 @@ import {
   CLASS_LABELS,
   estimateDate,
   extendToLedgers,
-  extendTransaction,
-  planBatches,
+  prepareExtendBatches,
+  prepareRestoredExtend,
+  readArchivalSettings,
+  rentRate,
+  restoredExtendEstimate,
+  restoredExtendLimit,
   restoreTransaction,
   rpcLedgerRead,
   rpcModuleRenewal,
+  sorobanWriteBytes,
   summarizeInventory
 } from '../lib/chain-reads/renewal';
 
-const FALLBACK_MAX_ENTRY_TTL = 3_110_400;
+const xlm = (stroops: bigint) => `${Number(stroops) / 1e7} XLM`;
 
 function flag(name: string, fallback?: string) {
   const args = process.argv.slice(2);
@@ -88,48 +93,82 @@ async function main() {
   const keypair = Keypair.fromSecret(secret);
   const loaded = await server.getAccount(keypair.publicKey());
   const account = new Account(keypair.publicKey(), loaded.sequenceNumber());
-  const extendTo = extendToLedgers(days, FALLBACK_MAX_ENTRY_TTL);
-  const unsigned = [
-    ...(inventory.missing.length
-      ? [
-          restoreTransaction(
-            account,
-            inventory.missing.map((k) => k.key),
-            artifact.config.networkPassphrase
-          )
-        ]
-      : []),
-    ...planBatches(inventory.present).map((batch) =>
-      extendTransaction(
-        account,
-        batch.map((k) => k.key),
+  const passphrase = artifact.config.networkPassphrase;
+  const { maxEntryTtl, minPersistentTtl } = await readArchivalSettings(server);
+  const extendTo = extendToLedgers(days, maxEntryTtl);
+  const missing = inventory.missing.map((k) => k.key);
+
+  // 1. Restore archived keys. 2. Extend present ones. 3. Extend what the restore brought back:
+  // restored entries return with the network's minimum TTL, and they cannot be simulated until the
+  // restore lands, so step 3 is estimated now and prepared once the steps before it confirm (§ 7).
+  const restore = missing.length
+    ? await server.prepareTransaction(restoreTransaction(account, missing, passphrase))
+    : null;
+  const extensions = await prepareExtendBatches({
+    rpc: server,
+    account,
+    keys: inventory.present,
+    extendTo,
+    days,
+    passphrase
+  });
+  const extendFee = extensions.reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n);
+  const restoredEstimate = restore
+    ? restoredExtendEstimate({
+        bytes: sorobanWriteBytes(restore),
+        minPersistentTtl,
         extendTo,
-        artifact.config.networkPassphrase
-      )
-    )
-  ];
-  const prepared = [];
-  for (const tx of unsigned) prepared.push(await server.prepareTransaction(tx));
-  const fee = prepared.reduce((sum, tx) => sum + BigInt(tx.fee), 0n);
+        restoreFee: BigInt(restore.fee),
+        rate: rentRate(inventory, extendTo, extendFee)
+      })
+    : 0n;
+  const prepared = [...(restore ? [restore] : []), ...extensions.map(({ tx }) => tx)];
+  const fee = prepared.reduce((sum, tx) => sum + BigInt(tx.fee), 0n) + restoredEstimate;
+  if (restore) console.info(`  Restore archived items: ${missing.length} keys, ${xlm(BigInt(restore.fee))}`);
+  if (extensions.length)
+    console.info(
+      `  Extend: ${inventory.present.length} keys in ${extensions.length} transaction(s), ${xlm(extendFee)}`
+    );
+  if (restoredEstimate > 0n)
+    console.info(
+      `  Extend restored items: ${missing.length} keys, about ${xlm(restoredEstimate)} (estimated; prepared after the restore, stops above ${xlm(restoredExtendLimit(restoredEstimate))})`
+    );
   console.info(
-    `${prepared.length} transaction(s) to renew ${inventory.present.length} keys for ${days} days: about ${Number(fee) / 1e7} XLM, paid by ${keypair.publicKey()}`
+    `Renew ${inventory.present.length + missing.length} keys for ${days} days: about ${xlm(fee)}, paid by ${keypair.publicKey()}`
   );
   if (dryRun) return;
 
-  for (const [index, tx] of prepared.entries()) {
+  let sent = 0;
+  const submit = async (tx: Transaction) => {
     tx.sign(keypair);
-    const sent = await server.sendTransaction(tx);
-    if (sent.status === 'ERROR' || sent.status === 'TRY_AGAIN_LATER')
-      throw new Error(`Transaction ${index + 1} was not accepted (${sent.status}).`);
+    const result = await server.sendTransaction(tx);
+    if (result.status === 'ERROR' || result.status === 'TRY_AGAIN_LATER')
+      throw new Error(`Transaction ${sent + 1} was not accepted (${result.status}).`);
     for (;;) {
-      const result = await server.getTransaction(sent.hash);
-      if (result.status === Api.GetTransactionStatus.SUCCESS) break;
-      if (result.status === Api.GetTransactionStatus.FAILED) throw new Error(`Transaction ${sent.hash} failed.`);
+      const status = await server.getTransaction(result.hash);
+      if (status.status === Api.GetTransactionStatus.SUCCESS) break;
+      if (status.status === Api.GetTransactionStatus.FAILED) throw new Error(`Transaction ${result.hash} failed.`);
       await new Promise((r) => setTimeout(r, 2_000));
     }
-    console.info(`  ${index + 1}/${prepared.length} confirmed: ${sent.hash}`);
+    sent += 1;
+    console.info(`  ${sent} confirmed: ${result.hash}`);
+  };
+  for (const tx of prepared) await submit(tx);
+
+  if (restoredEstimate > 0n) {
+    const restored = await prepareRestoredExtend({
+      rpc: server,
+      source: keypair.publicKey(),
+      restored: missing,
+      extendTo,
+      days,
+      estimatedFee: restoredEstimate,
+      passphrase
+    });
+    console.info(`  Extend restored items: ${xlm(restored.fee)}`);
+    for (const tx of restored.transactions) await submit(tx);
   }
-  console.info('Renewed.');
+  console.info(`Renewed in ${sent} transaction(s).`);
 }
 
 main().catch((error) => {
