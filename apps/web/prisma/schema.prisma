@@ -57,7 +57,7 @@ view ManagerDao {
 
 /** The implementation registry from ImplementationRegistered/Revoked events. The chain has no enumeration. */
 view ManagerImplementation {
-  eventId         String    @unique @map("event_id")
+  eventId         String    @map("event_id") @unique
   deploymentId    String    @map("deployment_id")
   managerContract String    @map("manager_contract")
   name            String?
@@ -80,7 +80,7 @@ view ManagerModuleVersion {
   daoId          String  @map("dao_id")
   moduleRole     String  @map("module_role")
   kind           String?
-  moduleContract String  @unique @map("module_contract")
+  moduleContract String  @map("module_contract") @unique
   registered     Boolean?
   currentHash    String? @map("current_hash")
   currentVersion String? @map("current_version")
