@@ -467,8 +467,11 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
   (TTL_ECONOMICS.md). The 2× resource fee was stellar-sdk 17.1.0 `AssembledTransaction.sign` passing
   `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; fixed by a pnpm patch with a
   regression test.
-- **Platform admin dashboard:** not built (TODOS.md). `scripts/renew-code-ttl.mjs` covers the platform's renewal
-  duty: the Manager instance, every `Implementation(hash)` record and every running code hash.
+- **Platform admin dashboard:** `/platform` (`components/platform`, `lib/platform`). It renews the platform's keys
+  (the Manager instance, every running code hash, its `Implementation(hash)` record and each `LatestImplementation(name)`,
+  collected as `scripts/renew-code-ttl.mjs` does) with the same quote-before-sign sweep as the Renewal tab, lists every
+  tribe's storage worst first, and runs the registry and factory actions for the Manager admin. The script stays as the
+  command-line path.
 - **`TTL_ECONOMICS.md` is the storage and TTL reference** (D17): for every module and key, the storage class,
   contents, size bound, TTL target and threshold, who renews it and the measured cost. It changes with any storage
   layout change.

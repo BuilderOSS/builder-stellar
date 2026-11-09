@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Platform renewal: shared contract code and the Manager (docs/STORAGE_DIET.md § 7, D28).
+// Platform renewal: shared contract code and the Manager (docs/STORAGE_DIET.md § 7, D28). The same keys are
+// renewed from the web at /platform; this is the command-line path.
 //
 // Every DAO deployed from a WASM hash shares that code entry, and contracts only ever bump code a few days
 // (`common::ttl::CODE_TTL_EXTEND_TO`), so shared code is the platform's to renew. This script extends:
