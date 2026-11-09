@@ -41,11 +41,26 @@ export type RenewalReport = {
   code: CodeHealth;
 };
 
-function server(config: DaoNetworkConfig) {
+/** The fields a storage report reads: the network and the tribe's contracts. */
+export type RenewalReportConfig = Pick<
+  DaoNetworkConfig,
+  | 'rpcUrl'
+  | 'passphrase'
+  | 'tokenContractId'
+  | 'metadataContractId'
+  | 'treasuryContractId'
+  | 'governorContractId'
+  | 'auctionContractId'
+  | 'marketplaceContractId'
+  | 'claimsContractId'
+>;
+
+function server(config: Pick<DaoNetworkConfig, 'rpcUrl'>) {
   return new Server(config.rpcUrl, { allowHttp: config.rpcUrl.startsWith('http://') });
 }
 
-async function readMaxEntryTtl(rpc: Server): Promise<number> {
+/** The network's maximum entry TTL (ledgers), or the testnet value when it cannot be read. */
+export async function readMaxEntryTtl(rpc: Server): Promise<number> {
   try {
     const key = xdr.LedgerKey.configSetting(
       new xdr.LedgerKeyConfigSetting({ configSettingId: xdr.ConfigSettingId.configSettingStateArchival })
@@ -79,7 +94,7 @@ async function readCodeHealth(rpc: Server, inventory: DaoInventory): Promise<Cod
   return { liveUntil: lives.length ? Math.min(...lives) : null, hashes: hashes.size, evicted };
 }
 
-export async function loadRenewalReport(config: DaoNetworkConfig): Promise<RenewalReport> {
+export async function loadRenewalReport(config: RenewalReportConfig): Promise<RenewalReport> {
   const rpc = server(config);
   const inventory = await buildDaoInventory(rpcLedgerRead(rpc), {
     manager: getDeploymentConfig().managerAddress,
@@ -114,13 +129,88 @@ export type RenewalQuote = {
   days: number;
   extendTo: number;
   /** Restore archived keys first (one transaction), then extend (usually one). */
-  transactions: Array<{ kind: 'restore' | 'extend'; tx: Transaction; keys: number }>;
+  transactions: SweepTransaction[];
   totalFee: bigint;
   /** Each class priced on its own, for the breakdown; the sweep itself bundles them. */
   classFees: Array<{ cls: RenewalClass; label: string; fee: bigint }>;
   /** Keeping everything alive for a year at this quote's rate (stroops), when it can be inferred. */
   yearlyFee: bigint | null;
 };
+
+/**
+ * The most one renewal transaction may carry in fees (stroops): the transaction fee is a u32, and a
+ * large code entry extended for months comes close (scripts/lib.mjs `SAFE_RESOURCE_FEE_STROOPS`).
+ */
+export const MAX_SWEEP_TX_FEE = 3_000_000_000n;
+
+export type SweepKey = { key: xdr.LedgerKey; bytes: number; liveUntil: number };
+export type SweepTransaction = { kind: 'restore' | 'extend'; tx: Transaction; keys: number };
+
+/**
+ * Build and simulate a sweep over any keys: restore `missing` first, then extend `present` in
+ * batches under the footprint, read-bytes and fee limits. A batch over the fee limit is split; a
+ * single key over it means the period is too long for one step. Nothing is signed.
+ */
+export async function quoteSweep(input: {
+  rpcUrl: string;
+  passphrase: string;
+  source: string;
+  days: number;
+  maxEntryTtl: number;
+  latestLedger: number;
+  present: SweepKey[];
+  missing: xdr.LedgerKey[];
+}) {
+  const rpc = server(input);
+  const extendTo = extendToLedgers(input.days, input.maxEntryTtl);
+  const loaded = await rpc.getAccount(input.source);
+  // One account object, so consecutive transactions get consecutive sequence numbers.
+  const account = new Account(input.source, loaded.sequenceNumber());
+  const transactions: SweepTransaction[] = [];
+  if (input.missing.length) {
+    const tx = await rpc.prepareTransaction(restoreTransaction(account, input.missing, input.passphrase));
+    transactions.push({ kind: 'restore', tx, keys: input.missing.length });
+  }
+  const extend = async (batch: SweepKey[]): Promise<void> => {
+    // Price on a throwaway sequence first, so a split never leaves a gap in the real sequence.
+    const probe = await rpc.prepareTransaction(
+      extendTransaction(
+        new Account(input.source, account.sequenceNumber()),
+        batch.map((k) => k.key),
+        extendTo,
+        input.passphrase
+      )
+    );
+    if (BigInt(probe.fee) > MAX_SWEEP_TX_FEE) {
+      if (batch.length === 1)
+        throw new Error(
+          `One entry would cost more than ${Number(MAX_SWEEP_TX_FEE / 10_000_000n)} XLM to renew for ${input.days} days in one transaction. Choose fewer days and renew again later.`
+        );
+      const half = Math.ceil(batch.length / 2);
+      await extend(batch.slice(0, half));
+      await extend(batch.slice(half));
+      return;
+    }
+    const tx = await rpc.prepareTransaction(
+      extendTransaction(
+        account,
+        batch.map((k) => k.key),
+        extendTo,
+        input.passphrase
+      )
+    );
+    transactions.push({ kind: 'extend', tx, keys: batch.length });
+  };
+  for (const batch of planBatches(input.present)) await extend(batch);
+  const extendFee = transactions.filter((t) => t.kind === 'extend').reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n);
+  return {
+    days: input.days,
+    extendTo,
+    transactions,
+    totalFee: transactions.reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n),
+    yearlyFee: yearlyRentEstimate({ present: input.present, latestLedger: input.latestLedger }, extendTo, extendFee)
+  };
+}
 
 /** Build and simulate the sweep. Nothing is signed. */
 export async function quoteRenewal(
@@ -130,57 +220,30 @@ export async function quoteRenewal(
   source: string
 ): Promise<RenewalQuote> {
   const rpc = server(config);
-  const extendTo = extendToLedgers(days, report.maxEntryTtl);
-  const loaded = await rpc.getAccount(source);
-  // One account object, so consecutive transactions get consecutive sequence numbers.
-  const account = new Account(source, loaded.sequenceNumber());
-  const transactions: RenewalQuote['transactions'] = [];
   const { present, missing } = report.inventory;
-  if (missing.length) {
-    const tx = await rpc.prepareTransaction(
-      restoreTransaction(
-        account,
-        missing.map((k: InventoryKey) => k.key),
-        config.passphrase
-      )
-    );
-    transactions.push({ kind: 'restore', tx, keys: missing.length });
-  }
-  for (const batch of planBatches(present)) {
-    const tx = await rpc.prepareTransaction(
-      extendTransaction(
-        account,
-        batch.map((k) => k.key),
-        extendTo,
-        config.passphrase
-      )
-    );
-    transactions.push({ kind: 'extend', tx, keys: batch.length });
-  }
+  const sweep = await quoteSweep({
+    rpcUrl: config.rpcUrl,
+    passphrase: config.passphrase,
+    source,
+    days,
+    maxEntryTtl: report.maxEntryTtl,
+    latestLedger: report.inventory.latestLedger,
+    present,
+    missing: missing.map((k: InventoryKey) => k.key)
+  });
   // Per-class prices come from separate simulations on a throwaway sequence.
-  const priced = new Account(source, loaded.sequenceNumber());
+  const priced = new Account(source, (await rpc.getAccount(source)).sequenceNumber());
   const classes = [...new Set(present.map((k) => k.cls))];
   const classFees = await Promise.all(
     classes.map(async (cls) => {
       const keys = present.filter((k) => k.cls === cls).map((k) => k.key);
       const tx = await rpc.prepareTransaction(
-        extendTransaction(new Account(source, priced.sequenceNumber()), keys, extendTo, config.passphrase)
+        extendTransaction(new Account(source, priced.sequenceNumber()), keys, sweep.extendTo, config.passphrase)
       );
       return { cls, label: CLASS_LABELS[cls], fee: BigInt(tx.fee) };
     })
   );
-  return {
-    days,
-    extendTo,
-    transactions,
-    totalFee: transactions.reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n),
-    classFees,
-    yearlyFee: yearlyRentEstimate(
-      report.inventory,
-      extendTo,
-      transactions.filter((t) => t.kind === 'extend').reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n)
-    )
-  };
+  return { ...sweep, classFees };
 }
 
 /**
@@ -188,8 +251,8 @@ export async function quoteRenewal(
  * confirmed if a later one fails; the report is reloaded either way.
  */
 export async function submitRenewal(
-  config: DaoNetworkConfig,
-  quote: RenewalQuote,
+  config: Pick<DaoNetworkConfig, 'rpcUrl' | 'passphrase'>,
+  quote: Pick<RenewalQuote, 'transactions'>,
   sign: (xdr: string) => Promise<string>,
   onProgress: (done: number, total: number) => void
 ) {

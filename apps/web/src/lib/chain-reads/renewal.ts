@@ -124,6 +124,9 @@ function dataKey(contract: string, key: xdr.ScVal): xdr.LedgerKey {
   );
 }
 
+/** A persistent contract-data key: `key` stored by `contract`. */
+export const persistentDataKey = (contract: string, key: xdr.ScVal) => dataKey(contract, key);
+
 export const instanceKey = (contract: string) => dataKey(contract, xdr.ScVal.scvLedgerKeyContractInstance());
 const ns = (contract: string, variant: string, ...args: xdr.ScVal[]) =>
   dataKey(contract, namespacedKey(variant, ...args));
@@ -156,6 +159,10 @@ const nsGet = (map: InstanceMap, variant: string) => map.get(namespacedKey(varia
 const ozGet = (map: InstanceMap, variant: string) => map.get(ozKey(variant).toXDR('base64'));
 function native<T>(value: xdr.ScVal | undefined): T | undefined {
   return value === undefined ? undefined : (scValToNative(value) as T);
+}
+/** A namespaced instance-storage value of a contract (`common::ns(env, Key::Variant)`), decoded. */
+export function instanceValue<T>(entry: LedgerEntryInfo | undefined, variant: string): T | undefined {
+  return native<T>(nsGet(instanceStorage(entry), variant));
 }
 const count = (value: unknown) => (value === undefined || value === null ? 0 : Number(value));
 
@@ -643,7 +650,7 @@ export function instanceWasmHash(value: xdr.ScVal): string | null {
  * transaction overhead, so a longer renewal is never more expensive per year.
  */
 export function yearlyRentEstimate(
-  inventory: Pick<DaoInventory, 'present' | 'latestLedger'>,
+  inventory: { present: Array<{ bytes: number; liveUntil: number }>; latestLedger: number },
   extendTo: number,
   extendFee: bigint
 ): bigint | null {

@@ -94,7 +94,7 @@ export function memberNotice(data: Pick<PlatformUpgrades, 'manager' | 'errors'>)
 }
 
 export async function loadPlatformUpgrades(
-  config: DaoNetworkConfig,
+  config: Pick<DaoNetworkConfig, 'rpcUrl' | 'passphrase' | 'launchAdmin'>,
   address?: string | null
 ): Promise<PlatformUpgrades> {
   const managerAddress = getDeploymentConfig().managerAddress;

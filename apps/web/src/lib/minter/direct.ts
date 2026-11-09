@@ -12,7 +12,11 @@ import { signWithWallet } from '@/lib/wallet-sign';
  * claim calls (refund, launch when ready) and the launch admin's Setup calls. The wallet
  * builds and signs the exact call shown, so no server review is involved.
  */
-export function walletClientOptions(config: DaoNetworkConfig, address: string, contractId: string) {
+export function walletClientOptions(
+  config: Pick<DaoNetworkConfig, 'name' | 'rpcUrl' | 'passphrase'>,
+  address: string,
+  contractId: string
+) {
   return {
     contractId,
     rpcUrl: config.rpcUrl,
