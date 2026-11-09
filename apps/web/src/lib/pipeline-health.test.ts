@@ -5,7 +5,8 @@ import {
   fetchPipelineReport,
   parsePipelineLastLedger,
   PIPELINE_NOT_CONFIGURED,
-  type PipelineReport
+  type PipelineReport,
+  settleBy
 } from './pipeline-health';
 
 const running = (lastLedger: number | null): PipelineReport => ({
@@ -99,5 +100,23 @@ describe('fetchPipelineReport', () => {
       errors: [],
       lastLedger: null
     });
+  });
+});
+
+describe('settleBy', () => {
+  it('returns the value of a check that finishes before the deadline', async () => {
+    const result = await settleBy(async () => 42, new Promise<void>(() => {}), null);
+    expect(result).toMatchObject({ value: 42, timedOut: false });
+    expect(result.ms).not.toBeNull();
+  });
+
+  it('falls back when the deadline passes first', async () => {
+    const result = await settleBy(() => new Promise<number>(() => {}), Promise.resolve(), null);
+    expect(result).toEqual({ value: null, ms: null, timedOut: true });
+  });
+
+  it('falls back without throwing when the check rejects', async () => {
+    const result = await settleBy(() => Promise.reject(new Error('down')), new Promise<void>(() => {}), 'unknown');
+    expect(result).toMatchObject({ value: 'unknown', timedOut: false });
   });
 });

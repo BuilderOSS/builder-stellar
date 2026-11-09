@@ -54,6 +54,7 @@ export function parsePipelineLastLedger(state: unknown): number | null {
   return next.length ? Math.min(...next) - 1 : null;
 }
 
+/** GET a Goldsky API path as JSON; throws on a non-2xx response or after REQUEST_TIMEOUT_MS. */
 async function getJson(path: string, token: string, fetchImpl: typeof fetch): Promise<unknown> {
   const response = await fetchImpl(`${GOLDSKY_API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -122,4 +123,31 @@ export function assessPipeline(report: PipelineReport, chainLedger: number | nul
     lagLedgers,
     alerts: { pipeline_lag: lagDegraded, pipeline_failed: failed, pipeline_unknown: unknown }
   };
+}
+
+/** The whole health check answers within this many milliseconds; a check still running then is reported as unknown. */
+export const HEALTH_BUDGET_MS = 5000;
+
+export type Settled<T> = {
+  value: T;
+  /** How long the check took, or null when it did not finish before the deadline. */
+  ms: number | null;
+  timedOut: boolean;
+};
+
+/**
+ * Run a check until `deadline` resolves. Never rejects: a check that throws or is still running at
+ * the deadline yields `fallback` (the work itself is not cancelled, only no longer awaited).
+ */
+export async function settleBy<T>(work: () => Promise<T>, deadline: Promise<void>, fallback: T): Promise<Settled<T>> {
+  const started = Date.now();
+  const outcome = await Promise.race([
+    work().then(
+      (value) => ({ value, timedOut: false }),
+      () => ({ value: fallback, timedOut: false })
+    ),
+    deadline.then(() => ({ value: fallback, timedOut: true }))
+  ]);
+  if (outcome.timedOut) return { value: fallback, ms: null, timedOut: true };
+  return { value: outcome.value, ms: Date.now() - started, timedOut: false };
 }

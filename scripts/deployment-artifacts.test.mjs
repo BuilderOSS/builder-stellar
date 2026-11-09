@@ -41,6 +41,22 @@ test('ignores e2e rehearsal artifacts even when they are newer', () => {
   }
 });
 
+test('ignores artifacts marked as a rehearsal copy', () => {
+  const directory = directoryWith({
+    'builder-testnet-manager.json': { manager: 'CREAL', deployedAt: '2026-10-13T12:36:44.291Z' },
+    'rehearsal-testnet-manager.json': {
+      manager: 'CREAL',
+      deployedAt: '2026-10-14T08:35:10.027Z',
+      rehearsalOf: 'deploys/builder-testnet-manager.json'
+    }
+  });
+  try {
+    assert.equal(latestManagerArtifact(directory).fileName, 'builder-testnet-manager.json');
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
 test('fails when only e2e artifacts exist', () => {
   const directory = directoryWith({
     'e2e-1-testnet-manager.json': { manager: 'CREHEARSAL', deployedAt: '2026-10-14T08:35:10.027Z' }
@@ -56,6 +72,18 @@ test('rejects an artifact without a manager or deployedAt', () => {
   const directory = directoryWith({ 'broken-testnet-manager.json': { manager: 'C1' } });
   try {
     assert.throws(() => latestManagerArtifact(directory), /must define manager and deployedAt/);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test('names the file whose deployedAt does not parse', () => {
+  const directory = directoryWith({
+    'builder-testnet-manager.json': { manager: 'CREAL', deployedAt: '2026-10-13T12:36:44.291Z' },
+    'typo-testnet-manager.json': { manager: 'C1', deployedAt: 'yesterday' }
+  });
+  try {
+    assert.throws(() => latestManagerArtifact(directory), /typo-testnet-manager\.json has an unparseable deployedAt: "yesterday"/);
   } finally {
     rmSync(directory, { recursive: true });
   }
