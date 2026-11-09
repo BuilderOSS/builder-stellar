@@ -9,7 +9,7 @@ dao_id        = <DAO Token contract address>
 
 ## Deployment selection
 
-[generate-web-deployment.mjs](../scripts/generate-web-deployment.mjs) selects the newest `deploys/*-manager.json` by `deployedAt` and generates `DEPLOYMENT_ID`. This is a build/dev selection, not a user-supplied query parameter. `NEXT_PUBLIC_NETWORK` independently selects network settings; it must match the artifact. The generator does not filter artifacts by that environment variable.
+[generate-web-deployment.mjs](../scripts/generate-web-deployment.mjs) selects the newest `deploys/*-manager.json` by `deployedAt`, skipping the gitignored `e2e-*` rehearsal artifacts and generates `DEPLOYMENT_ID`. This is a build/dev selection, not a user-supplied query parameter. `NEXT_PUBLIC_NETWORK` independently selects network settings; it must match the artifact. The generator does not filter artifacts by that environment variable.
 
 The Goldsky generator instead uses its explicit `MANAGER_DEPLOYMENT_FILE`. Keep web selection, pipeline artifact, network, and database deployment rows consistent. Do not set a manual `NEXT_PUBLIC_DEPLOYMENT_ID` override.
 
