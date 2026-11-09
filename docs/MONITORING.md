@@ -6,10 +6,17 @@ Monitor database access, matching event freshness, RPC access, and contract TTL 
 
 | Endpoint | Meaning and status |
 | --- | --- |
-| `GET /api/health` | RPC latest ledger, most recent deployment activity ledger, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. |
+| `GET /api/health` | Chain head, the pipeline's own position and Goldsky status (with `GOLDSKY_API_TOKEN`), the newest ledger with a DAO event, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. |
 | `GET /api/goldsky/health` | Read-only `app.indexer_status` query. `healthy` returns 200, `unhealthy` 503; no-store. A missing row can still return healthy with null latest ledger/zero events. |
 
-The first endpoint emits `rpc_latest_ledger`, `db_latest_ledger`, `pipeline_lag_ledgers`, `dao_count`, `recent_activity_1h`; timings include `rpc_check`, `event_check`, `dao_check`, `activity_check`, `total`. Alerts include `high_event_lag`, `no_recent_activity`, `db_slow`, `rpc_unreachable`. High lag is >100 ledgers; DB slow is total >5 seconds. RPC uses `NEXT_PUBLIC_STELLAR_RPC_URL` if set, otherwise the testnet URL; verify that separately for non-testnet operation.
+The first endpoint emits `rpc_latest_ledger`, `pipeline_last_ledger`, `pipeline_lag_ledgers`, `db_latest_ledger`, `db_latest_event_age_ledgers`, `dao_count`, `recent_activity_1h`, and a `pipeline` object (`configured`, `status`, `errors`); timings include `rpc_check`, `event_check`, `pipeline_check`, `dao_check`, `total`. Alerts include `pipeline_lag`, `pipeline_failed`, `pipeline_unknown`, `no_recent_activity`, `db_slow`, `rpc_unreachable`.
+
+How status is decided:
+
+- **Pipeline (needs `GOLDSKY_API_TOKEN`, a Viewer-role Goldsky API token, server-side only; `GOLDSKY_PIPELINE_NAME` overrides the default `builder-stellar-<network>`).** `pipeline_lag_ledgers` is the chain head minus the ledger the pipeline last read (its source's `next_number`, the same value `goldsky turbo state list <pipeline>` shows). More than 100 ledgers (about 8 minutes) is `degraded`; more than 1,000 is `unhealthy`. A Goldsky status of `FAILED`, `STOPPED` or `PAUSED` is `unhealthy`; `RESTARTING`, `DEPLOYING`, `UNKNOWN`, or a position that cannot be read, is `degraded`. Without a token the pipeline is not judged (`pipeline.configured` is false) and a stall is invisible to this endpoint: check it with the CLI or the Goldsky health dashboard. The Goldsky state response is not documented, so the position is found by field name; confirm `pipeline_last_ledger` is not null after setting the token.
+- **Database.** No rows for this deployment (`db_latest_ledger` null) is `unhealthy`: the app is pointed at a Manager the database does not hold, or the database is empty after a reset.
+- **Quiet chain.** `db_latest_ledger` is the newest ledger that contains a DAO event, so it stands still while nothing happens. `db_latest_event_age_ledgers` shows how old it is; it never degrades health by itself.
+- RPC uses `NEXT_PUBLIC_STELLAR_RPC_URL` if set, otherwise the testnet URL; verify that separately for non-testnet operation. DB slow is total >5 seconds.
 
 ```bash
 # Use your configured app origin; these are HTTP reads, not performed by this guide.
@@ -17,7 +24,7 @@ curl -s http://localhost:4242/api/health
 curl -s http://localhost:4242/api/goldsky/health
 ```
 
-An inactive DAO deployment can have no recent matching events while the pipeline is processing normally. Event age is not source processing lag. A 200 response is not proof that the last mutation is indexed or that every contract is usable.
+An inactive DAO deployment can have no recent matching events while the pipeline is processing normally. Event age is not source processing lag; that is what `pipeline_lag_ledgers` measures. A 200 response is not proof that the last mutation is indexed or that every contract is usable.
 
 Sources: [health route](../apps/web/src/app/api/health/route.ts), [Goldsky route](../apps/web/src/app/api/goldsky/health/route.ts), [health helper](../apps/web/src/lib/goldsky.ts).
 
