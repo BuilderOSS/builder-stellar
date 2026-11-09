@@ -55,6 +55,40 @@ view ManagerDao {
   @@schema("manager")
 }
 
+/** The implementation registry from ImplementationRegistered/Revoked events. The chain has no enumeration. */
+view ManagerImplementation {
+  eventId         String    @map("event_id") @unique
+  deploymentId    String    @map("deployment_id")
+  managerContract String    @map("manager_contract")
+  name            String?
+  version         String?
+  wasmHash        String?   @map("wasm_hash")
+  publishedLedger BigInt?   @map("published_ledger")
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String?   @map("transaction_hash")
+  revoked         Boolean
+  revokedLedger   BigInt?   @map("revoked_ledger")
+
+  @@map("implementations")
+  @@schema("manager")
+}
+
+/** The code every DAO module runs (current_hash), mirroring on-chain version(). */
+view ManagerModuleVersion {
+  deploymentId   String  @map("deployment_id")
+  daoId          String  @map("dao_id")
+  moduleRole     String  @map("module_role")
+  kind           String?
+  moduleContract String  @map("module_contract") @unique
+  registered     Boolean?
+  currentHash    String? @map("current_hash")
+  currentVersion String? @map("current_version")
+
+  @@map("module_versions")
+  @@schema("manager")
+}
+
 // Read-only mappings of views in db/migrations. Never migrate these models.
 view MarketplaceModuleLaunch {
   deploymentId   String   @map("deployment_id")

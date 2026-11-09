@@ -124,6 +124,9 @@ function dataKey(contract: string, key: xdr.ScVal): xdr.LedgerKey {
   );
 }
 
+/** A persistent contract-data key: `key` stored by `contract`. */
+export const persistentDataKey = (contract: string, key: xdr.ScVal) => dataKey(contract, key);
+
 export const instanceKey = (contract: string) => dataKey(contract, xdr.ScVal.scvLedgerKeyContractInstance());
 const ns = (contract: string, variant: string, ...args: xdr.ScVal[]) =>
   dataKey(contract, namespacedKey(variant, ...args));
@@ -156,6 +159,10 @@ const nsGet = (map: InstanceMap, variant: string) => map.get(namespacedKey(varia
 const ozGet = (map: InstanceMap, variant: string) => map.get(ozKey(variant).toXDR('base64'));
 function native<T>(value: xdr.ScVal | undefined): T | undefined {
   return value === undefined ? undefined : (scValToNative(value) as T);
+}
+/** A namespaced instance-storage value of a contract (`common::ns(env, Key::Variant)`), decoded. */
+export function instanceValue<T>(entry: LedgerEntryInfo | undefined, variant: string): T | undefined {
+  return native<T>(nsGet(instanceStorage(entry), variant));
 }
 const count = (value: unknown) => (value === undefined || value === null ? 0 : Number(value));
 
@@ -534,6 +541,169 @@ export function restoreTransaction(source: Account, keys: xdr.LedgerKey[], passp
 
 export type PreparedSweep = { transactions: Transaction[]; fee: bigint };
 
+/** Used when the network's archival settings cannot be read (testnet, 2026-10-12). */
+export const FALLBACK_MAX_ENTRY_TTL = 3_110_400;
+/** What a restored persistent entry lives for when the settings cannot be read (testnet: 7 days). */
+export const FALLBACK_MIN_PERSISTENT_TTL = 120_960;
+
+export type ArchivalSettings = { maxEntryTtl: number; minPersistentTtl: number };
+
+/** The network's maximum entry TTL and restored-entry TTL (ledgers), or the testnet values. */
+export async function readArchivalSettings(rpc: {
+  getLedgerEntries: (...keys: xdr.LedgerKey[]) => Promise<{ entries: Array<{ val: xdr.LedgerEntryData }> }>;
+}): Promise<ArchivalSettings> {
+  try {
+    const key = xdr.LedgerKey.configSetting(
+      new xdr.LedgerKeyConfigSetting({ configSettingId: xdr.ConfigSettingId.configSettingStateArchival })
+    );
+    const response = await rpc.getLedgerEntries(key);
+    const entry = response.entries[0]?.val;
+    if (entry?.type === 'configSetting' && entry.configSetting.type === 'configSettingStateArchival') {
+      const settings = entry.configSetting.stateArchivalSettings;
+      return { maxEntryTtl: settings.maxEntryTtl, minPersistentTtl: settings.minPersistentTtl };
+    }
+  } catch {
+    // fall through
+  }
+  return { maxEntryTtl: FALLBACK_MAX_ENTRY_TTL, minPersistentTtl: FALLBACK_MIN_PERSISTENT_TTL };
+}
+
+/**
+ * The most one renewal transaction may carry in fees (stroops): the transaction fee is a u32, and a
+ * large code entry extended for months comes close (scripts/lib.mjs `SAFE_RESOURCE_FEE_STROOPS`).
+ */
+export const MAX_SWEEP_TX_FEE = 3_000_000_000n;
+
+/**
+ * Prepare `ExtendFootprintTTL` transactions over `keys` to `extendTo`, in batches under the
+ * footprint, read-bytes and fee limits, taking consecutive sequence numbers from `account`. A batch
+ * over the fee limit is split; a single key over it means the period is too long for one step.
+ */
+export async function prepareExtendBatches(input: {
+  rpc: { prepareTransaction: (tx: Transaction) => Promise<Transaction> };
+  account: Account;
+  keys: Array<{ key: xdr.LedgerKey; bytes: number }>;
+  extendTo: number;
+  days: number;
+  passphrase: string;
+}): Promise<Array<{ tx: Transaction; keys: number }>> {
+  const { rpc, account, extendTo, passphrase } = input;
+  const prepared: Array<{ tx: Transaction; keys: number }> = [];
+  const extend = async (batch: Array<{ key: xdr.LedgerKey }>): Promise<void> => {
+    // Price on a throwaway sequence first, so a split never leaves a gap in the real sequence.
+    const probe = await rpc.prepareTransaction(
+      extendTransaction(
+        new Account(account.accountId(), account.sequenceNumber()),
+        batch.map((k) => k.key),
+        extendTo,
+        passphrase
+      )
+    );
+    if (BigInt(probe.fee) > MAX_SWEEP_TX_FEE) {
+      if (batch.length === 1)
+        throw new Error(
+          `One entry would cost more than ${Number(MAX_SWEEP_TX_FEE / 10_000_000n)} XLM to renew for ${input.days} days in one transaction. Choose fewer days and renew again later.`
+        );
+      const half = Math.ceil(batch.length / 2);
+      await extend(batch.slice(0, half));
+      await extend(batch.slice(half));
+      return;
+    }
+    const tx = await rpc.prepareTransaction(
+      extendTransaction(
+        account,
+        batch.map((k) => k.key),
+        extendTo,
+        passphrase
+      )
+    );
+    prepared.push({ tx, keys: batch.length });
+  };
+  for (const batch of planBatches(input.keys)) await extend(batch);
+  return prepared;
+}
+
+/**
+ * Prepare the restored-items step once the restore has landed: read the restored entries for their
+ * size, then batch and simulate as any extension. Throws, with nothing signed, when it would cost
+ * more than `restoredExtendLimit(estimatedFee)`; a new quote then prices those items as present.
+ */
+export async function prepareRestoredExtend(input: {
+  rpc: Parameters<typeof rpcLedgerRead>[0] & {
+    prepareTransaction: (tx: Transaction) => Promise<Transaction>;
+    getAccount: (address: string) => Promise<{ sequenceNumber: () => string }>;
+  };
+  source: string;
+  restored: xdr.LedgerKey[];
+  extendTo: number;
+  days: number;
+  estimatedFee: bigint;
+  passphrase: string;
+}): Promise<{ transactions: Transaction[]; fee: bigint }> {
+  const { entries } = await rpcLedgerRead(input.rpc)(input.restored);
+  const keys = input.restored.flatMap((key) => {
+    const info = entries.get(key.toXDR('base64'));
+    return info ? [{ key, bytes: info.bytes }] : [];
+  });
+  if (!keys.length) return { transactions: [], fee: 0n };
+  const loaded = await input.rpc.getAccount(input.source);
+  const prepared = await prepareExtendBatches({
+    rpc: input.rpc,
+    account: new Account(input.source, loaded.sequenceNumber()),
+    keys,
+    extendTo: input.extendTo,
+    days: input.days,
+    passphrase: input.passphrase
+  });
+  const fee = prepared.reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n);
+  if (fee > restoredExtendLimit(input.estimatedFee))
+    throw new Error(
+      `The archived items are restored, but extending them now costs about ${Number(fee) / 1e7} XLM, more than the ${Number(input.estimatedFee) / 1e7} XLM quoted. Get a new quote to extend them.`
+    );
+  return { transactions: prepared.map(({ tx }) => tx), fee };
+}
+
+/** Bytes a prepared transaction writes; for a restore, the size of the entries it brings back. */
+export function sorobanWriteBytes(tx: Transaction): number {
+  const envelope = tx.toEnvelope();
+  if (envelope.type !== 'envelopeTypeTx') return 0;
+  const ext = envelope.v1.tx.ext;
+  return ext.type === 'sorobanData' ? ext.sorobanData.resources.writeBytes : 0;
+}
+
+/** Slack over the quoted estimate the restored-items step may cost before it stops for a new quote. */
+export function restoredExtendLimit(estimate: bigint): bigint {
+  return estimate + estimate / 2n + 100_000n;
+}
+
+/**
+ * What extending just-restored entries to `extendTo` should cost (stroops). They come back with
+ * `minPersistentTtl` ledgers to live, so together they gain `bytes * (extendTo - minPersistentTtl)`
+ * byte-ledgers. Priced at the rate the sweep's own extensions imply when there are any, otherwise
+ * at the restore's (its fee over `bytes * minPersistentTtl`, which also carries write fees and so
+ * errs high). The step cannot be simulated in advance: the entries are archived until the restore
+ * lands. Zero when the restored entries already live past `extendTo`.
+ */
+export function restoredExtendEstimate(input: {
+  bytes: number;
+  minPersistentTtl: number;
+  extendTo: number;
+  restoreFee: bigint;
+  /** The sweep's extension rate, from `rentRate`. */
+  rate: RentRate | null;
+}): bigint {
+  const gained = Math.max(0, input.extendTo - input.minPersistentTtl);
+  if (!gained || !input.bytes) return 0n;
+  const byteLedgers = BigInt(input.bytes) * BigInt(gained);
+  const rate = input.rate ?? {
+    fee: input.restoreFee,
+    byteLedgers: BigInt(input.bytes) * BigInt(Math.max(1, input.minPersistentTtl))
+  };
+  if (rate.byteLedgers <= 0n) return 0n;
+  // Round up and add the base inclusion fee, so the estimate never reads as free.
+  return (rate.fee * byteLedgers + rate.byteLedgers - 1n) / rate.byteLedgers + 100n;
+}
+
 /** Ledgers from now to extend to, capped one under the network's maximum entry TTL. */
 export function extendToLedgers(days: number, maxEntryTtl: number) {
   return Math.max(1, Math.min(Math.round(days * LEDGERS_PER_DAY), maxEntryTtl - 1));
@@ -642,21 +812,33 @@ export function instanceWasmHash(value: xdr.ScVal): string | null {
  * days twice costs what renewing for 30 days twelve times does, minus the
  * transaction overhead, so a longer renewal is never more expensive per year.
  */
-export function yearlyRentEstimate(
-  inventory: Pick<DaoInventory, 'present' | 'latestLedger'>,
+/** Stroops per byte-ledger a set of extensions implies, as a fraction; null when nothing gained time. */
+export type RentRate = { fee: bigint; byteLedgers: bigint };
+
+export function rentRate(
+  inventory: { present: Array<{ bytes: number; liveUntil: number }>; latestLedger: number },
   extendTo: number,
   extendFee: bigint
-): bigint | null {
+): RentRate | null {
   let byteLedgers = 0;
-  let bytes = 0;
   for (const key of inventory.present) {
     const remaining = key.liveUntil - inventory.latestLedger;
     byteLedgers += key.bytes * Math.max(0, extendTo - remaining);
-    bytes += key.bytes;
   }
   if (byteLedgers === 0 || extendFee <= 0n) return null;
+  return { fee: extendFee, byteLedgers: BigInt(byteLedgers) };
+}
+
+export function yearlyRentEstimate(
+  inventory: { present: Array<{ bytes: number; liveUntil: number }>; latestLedger: number },
+  extendTo: number,
+  extendFee: bigint
+): bigint | null {
+  const rate = rentRate(inventory, extendTo, extendFee);
+  if (!rate) return null;
+  const bytes = inventory.present.reduce((sum, key) => sum + key.bytes, 0);
   const year = BigInt(bytes) * BigInt(365 * LEDGERS_PER_DAY);
-  return (extendFee * year) / BigInt(byteLedgers);
+  return (rate.fee * year) / rate.byteLedgers;
 }
 
 /**

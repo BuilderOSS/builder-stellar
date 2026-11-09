@@ -402,7 +402,14 @@ as a whole when `extend_to` exceeds the temporary maximum.
 - sign and submit in sequence with progress; confirmed batches survive a later failure; the rows refresh.
 Archived keys (a key the inventory says must exist that `getLedgerEntries` does not return, or returns with a
 past `liveUntilLedgerSeq`) are routed to `RestoreFootprint` first from the same inventory, quoted the same way;
-a restore reporting no such entry is surfaced as an error. `scripts/renew-dao.mjs` offers the same choices on
+a restore reporting no such entry is surfaced as an error. A restored entry comes back with only the network's
+minimum persistent TTL (about a week on testnet), and it cannot be in the extend transaction, which is simulated
+before the restore lands. So a sweep with archived keys has a third step, *Extend restored items*: it is priced in
+the quote by estimate (the restored bytes, from the restore's simulated write bytes, times the ledgers they gain
+past the minimum TTL, at the rate the sweep's own extensions imply, or at the restore's rate when there are none),
+and prepared, simulated and signed in the same run once the restore confirms. If the simulated price is over the
+estimate by more than half again plus 0.01 XLM, the run stops before signing that step and asks for a new quote,
+which then prices the restored keys as present. `scripts/renew-dao.mjs` offers the same choices on
 the command line for the RPC-only path. Payer is the signing wallet; a Treasury cannot submit a
 transaction-level operation, so a DAO reimburses by proposal if it wants to.
 
@@ -467,8 +474,11 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
   (TTL_ECONOMICS.md). The 2× resource fee was stellar-sdk 17.1.0 `AssembledTransaction.sign` passing
   `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; fixed by a pnpm patch with a
   regression test.
-- **Platform admin dashboard:** not built (TODOS.md). `scripts/renew-code-ttl.mjs` covers the platform's renewal
-  duty: the Manager instance, every `Implementation(hash)` record and every running code hash.
+- **Platform admin dashboard:** `/platform` (`components/platform`, `lib/platform`). It renews the platform's keys
+  (the Manager instance, every running code hash, its `Implementation(hash)` record and each `LatestImplementation(name)`,
+  collected as `scripts/renew-code-ttl.mjs` does) with the same quote-before-sign sweep as the Renewal tab, lists every
+  tribe's storage worst first, and runs the registry and factory actions for the Manager admin. The script stays as the
+  command-line path.
 - **`TTL_ECONOMICS.md` is the storage and TTL reference** (D17): for every module and key, the storage class,
   contents, size bound, TTL target and threshold, who renews it and the measured cost. It changes with any storage
   layout change.

@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Moon, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
+import { LogOut, Moon, ServerCog, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css } from 'styled-system/css';
@@ -14,6 +14,7 @@ import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { useIsPlatformAdmin } from '@/lib/platform/registry';
 import { DISCORD_URL } from '@/lib/site';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
@@ -150,6 +151,8 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
   };
   const dao = useOptionalDaoContext();
   const preference = useThemePreference();
+  // Only the live Manager admin sees the link; the page itself is readable by anyone.
+  const isPlatformAdmin = useIsPlatformAdmin(wallet.isAuthenticated ? wallet.address : null);
 
   return (
     <Sheet
@@ -276,6 +279,17 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             media={<Settings aria-hidden="true" />}
             title="Manage"
             meta="Settings, roles and setup"
+          />
+        </section>
+      ) : null}
+
+      {isPlatformAdmin ? (
+        <section className={block} aria-label="Platform">
+          <ListRow
+            href={'/platform' as Route}
+            media={<ServerCog aria-hidden="true" />}
+            title="Platform"
+            meta="Shared storage, the registry and every tribe's renewal"
           />
         </section>
       ) : null}

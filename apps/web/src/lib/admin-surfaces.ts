@@ -4,7 +4,11 @@ import useSWR from 'swr';
 
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 
-export function adminReadOptions(config: DaoNetworkConfig, contractId: string, address?: string | null) {
+export function adminReadOptions(
+  config: Pick<DaoNetworkConfig, 'rpcUrl' | 'passphrase' | 'launchAdmin'>,
+  contractId: string,
+  address?: string | null
+) {
   return {
     contractId,
     rpcUrl: config.rpcUrl,

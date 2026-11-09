@@ -1,19 +1,5 @@
 # TODOS
 
-## Platform
-
-### `/platform` admin dashboard
-
-**What:** A `/platform` area gated to the Manager admin wallet: platform renewals (Manager instance, `Implementation(hash)` records, shared WASM code) with the same quote-before-sign flow as the DAO Renewal tab; the registry actions the scripts perform today (register, approve, set latest, set current implementations); a per-DAO health table (earliest expiry per class, last sweep).
-
-**Why:** Platform duty lives in scripts and `deploys/*.json`; the operator has no view of which communities are about to archive. Deferred from the storage-diet release (`docs/STORAGE_DIET.md` D20) to keep that release to DAO-facing work.
-
-**Context:** Build on the storage-diet release: the `apps/web/src/lib/chain-reads/` module (key shapes, inventory) and the Renewal tab are the building blocks; `scripts/renew-code-ttl.mjs` (extended to Manager and registry keys in that release) is the key list to replace. See `docs/STORAGE_DIET.md` § 7–8.
-
-**Effort:** L
-**Priority:** P2
-**Depends on:** storage-diet release merged (chain-reads module, Renewal tab)
-
 ## Membership
 
 ### Vote delay for pool purchases
@@ -87,3 +73,7 @@
 **Depends on:** the indexer's string fix (#66) and the treasury-purchase re-encode (#67), which this replaces
 
 ## Completed
+
+### `/platform` admin dashboard (2026-11-09)
+
+The operator's page at `/platform`: shared storage renewal (quote before signing), every tribe's storage health worst first, the implementation registry (register by hash, approve upgrade paths, set latest, choose what new tribes get, revoke), the factory switch and the Manager's upgrade notice. Anyone can read it; actions and the You-sheet link appear only for the live Manager admin. "Last sweep" per tribe is not observable (renewals emit no event), so the earliest expiry stands in for it. Admin handover stays in the scripts.

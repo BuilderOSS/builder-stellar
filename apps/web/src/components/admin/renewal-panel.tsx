@@ -4,18 +4,8 @@ import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import {
-  Address,
-  Button,
-  Callout,
-  Chip,
-  Disclosure,
-  FieldLabel,
-  Input,
-  ListRow,
-  SegmentedControl,
-  Skeleton
-} from '@/components/ui';
+import { chosenDays, RenewalDuration } from '@/components/admin/renewal-duration';
+import { Address, Button, Callout, Chip, Disclosure, ListRow, Skeleton } from '@/components/ui';
 import { formatStroops } from '@/lib/auction-values';
 import {
   CLASS_LABELS,
@@ -31,6 +21,7 @@ import {
   quoteRenewal,
   type RenewalQuote,
   type RenewalReport,
+  restoredStep,
   submitRenewal,
   useDaoRenewal
 } from '@/lib/renewal-queries';
@@ -41,9 +32,6 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const stack = css({ display: 'grid', gap: '5' });
 const rows = css({ display: 'grid' });
-const controls = css({ display: 'grid', gap: '3', maxW: '32rem' });
-const customRow = css({ display: 'flex', alignItems: 'center', gap: '2' });
-const days = css({ maxW: '8rem' });
 const quoteBox = css({ display: 'grid', gap: '2', textStyle: 'body' });
 const muted = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 const mono = css({ textStyle: 'mono', fontSize: '0.8125rem' });
@@ -156,12 +144,13 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
   const [preset, setPreset] = useState(DEFAULT_PRESET);
   const [custom, setCustom] = useState('');
   const [quote, setQuote] = useState<RenewalQuote | null>(null);
+  const restored = quote ? restoredStep(quote.transactions) : undefined;
   const [busy, setBusy] = useState<'quote' | 'renew' | null>(null);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
 
   const maxDays = report.data ? Math.floor((report.data.maxEntryTtl - 1) / LEDGERS_PER_DAY) : 180;
-  const chosen = preset === 'custom' ? Number(custom) : Number(preset);
+  const chosen = chosenDays(preset, custom);
   const validDays = Number.isInteger(chosen) && chosen >= 1 && chosen <= maxDays;
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const networkReady =
@@ -260,38 +249,18 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
       ) : null}
       <Classes report={report.data} />
 
-      <div className={controls}>
-        <SegmentedControl
-          label="Renew for"
-          value={preset}
-          onValueChange={(value) => {
-            setPreset(value);
-            setQuote(null);
-          }}
-          options={[
-            ...PRESETS.map((value) => ({ value, label: `${value} days` })),
-            { value: 'custom', label: 'Other' }
-          ]}
-        />
-        {preset === 'custom' ? (
-          <div className={customRow}>
-            <FieldLabel htmlFor="renewal-days">Days</FieldLabel>
-            <Input
-              id="renewal-days"
-              className={days}
-              inputMode="numeric"
-              value={custom}
-              placeholder={String(maxDays)}
-              aria-invalid={(custom !== '' && !validDays) || undefined}
-              onChange={(event) => {
-                setCustom(event.target.value.replace(/\D/g, ''));
-                setQuote(null);
-              }}
-            />
-            <span className={muted}>up to {maxDays}</span>
-          </div>
-        ) : null}
-      </div>
+      <RenewalDuration
+        id="renewal-days"
+        presets={PRESETS}
+        preset={preset}
+        custom={custom}
+        maxDays={maxDays}
+        onChange={(next) => {
+          setPreset(next.preset);
+          setCustom(next.custom);
+          setQuote(null);
+        }}
+      />
 
       {!address ? <p className={muted}>Connect a wallet to see the price and renew.</p> : null}
 
@@ -302,6 +271,13 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
               ? `One transaction, about ${xlm(quote.totalFee)} in network fees.`
               : `${quote.transactions.length} transactions, about ${xlm(quote.totalFee)} in network fees.`}
           </p>
+          {restored ? (
+            <p className={muted}>
+              Archived items come back with only days to live, so a last step extends them for {quote.days} days once
+              they are restored. It is estimated at about {xlm(restored.estimatedFee)}; if it would cost much more,
+              renewal stops there and asks for a new quote.
+            </p>
+          ) : null}
           {quote.yearlyFee !== null ? (
             <p className={muted}>
               At this rate, keeping everything alive costs about {xlm(quote.yearlyFee)} a year, however often you renew.

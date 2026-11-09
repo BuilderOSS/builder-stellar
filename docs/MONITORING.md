@@ -59,6 +59,14 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 - Primary/secondary sale identifiers differ. An open listing past sale expiry may await permissionless cleanup; it is not purchasable merely because the index still says open.
 - Watch registry/admin changes and deployed hash transitions using their actual event identities. Revocation blocks pending launch (`PendingDaoUsesRevokedImplementation`, 7121) and target upgrades, not normal operation of an already-Launched DAO. `get_latest_implementation` returns the admin-selected hash and `None` once it is revoked; use `get_implementation(hash)` for security decisions.
 
+## Platform page
+
+`/platform` is the operator's view, readable by anyone and linked from the You sheet only for the Manager admin:
+
+- **Shared storage:** shared code, the registry records and the Manager instance, rated against the platform thresholds (renew soon under 60 days, renew now under 14). The admin gets a price and renews from the page; values at or under the contracts' own 4-day code bump are refused.
+- **Tribes:** every tribe of this deployment, checked from chain three at a time and sorted worst first, each linking to its Renewal tab. A renewal (`ExtendFootprintTTL`) emits no event, so when a tribe last renewed is not observable; the earliest expiry is shown instead.
+- **Registry and factory:** registered versions (listed from the index, re-checked on chain), what new tribes get, the factory switch, the upgrade notice and the admin.
+
 ## Maintenance and investigation
 
 **Shared contract code is the platform's to renew, and nothing renews it automatically.** Owner: whoever holds the
