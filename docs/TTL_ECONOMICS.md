@@ -273,10 +273,10 @@ legitimately costs about 10 XLM of instance rent on testnet. Before D27 a single
 above the guard. The Renewal tab passes the price the member already saw as the allowance.
 
 stellar-sdk 17.1.0 counted the resource fee twice when `AssembledTransaction.sign` rebuilt a transaction, which
-doubled every displayed Soroban fee and overflowed u32 above ~214 XLM. `patches/@stellar__stellar-sdk@17.1.0.patch`
-fixes it; `apps/web/src/lib/fee/sdk-sign-fee.test.ts` fails if a new SDK version brings it back. Reported
-upstream as [stellar/js-stellar-sdk#1807](https://github.com/stellar/js-stellar-sdk/issues/1807) with fix
-[#1808](https://github.com/stellar/js-stellar-sdk/pull/1808); drop the patch once a release includes it.
+doubled every displayed Soroban fee and overflowed u32 above ~214 XLM. The app carried a pnpm patch until the upstream
+fix ([stellar/js-stellar-sdk#1807](https://github.com/stellar/js-stellar-sdk/issues/1807),
+[#1808](https://github.com/stellar/js-stellar-sdk/pull/1808)) shipped; it now runs SDK 17.4.0 unpatched.
+`apps/web/src/lib/fee/sdk-sign-fee.test.ts` fails if a new SDK version brings it back.
 
 ## Archival boundary
 

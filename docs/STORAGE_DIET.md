@@ -472,8 +472,8 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
   u32 overflow error or a silent charge. **Implemented at 50 XLM, not the 10 XLM first planned:** testnet rent
   measured at implementation is ~0.0098 XLM per KB-day, so creating a DAO already pays ~10 XLM of instance rent
   (TTL_ECONOMICS.md). The 2× resource fee was stellar-sdk 17.1.0 `AssembledTransaction.sign` passing
-  `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; fixed by a pnpm patch with a
-  regression test.
+  `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; patched until SDK 17.4.0 shipped the
+  fix, and pinned by a regression test (`lib/fee/sdk-sign-fee.test.ts`).
 - **Platform admin dashboard:** `/platform` (`components/platform`, `lib/platform`). It renews the platform's keys
   (the Manager instance, every running code hash, its `Implementation(hash)` record and each `LatestImplementation(name)`,
   collected as `scripts/renew-code-ttl.mjs` does) with the same quote-before-sign sweep as the Renewal tab, lists every
