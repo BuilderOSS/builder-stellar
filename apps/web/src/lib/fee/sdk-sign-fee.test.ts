@@ -2,10 +2,10 @@
  * docs/STORAGE_DIET.md D29: the app reported about twice the
  * simulated resource fee. stellar-sdk 17.1.0 `AssembledTransaction.sign` rebuilds
  * with `fee: this.built.fee` (which already includes the resource fee), and
- * `build()` adds the resource fee again. patches/@stellar__stellar-sdk@17.1.0.patch
- * drops that override; this test pins the fixed behavior. Upstream:
- * https://github.com/stellar/js-stellar-sdk/issues/1807 (fix in PR #1808); the
- * patch can go once a released SDK includes it.
+ * `build()` adds the resource fee again. The app patched it until the fix
+ * shipped upstream (https://github.com/stellar/js-stellar-sdk/issues/1807, PR #1808;
+ * released by 17.4.0, which the app now uses unpatched); this test pins the fixed
+ * behavior so a regression in a later SDK is caught.
  */
 import {
   Account,
