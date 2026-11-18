@@ -165,7 +165,10 @@ The work:
    - Third-party wallet modals (the Stellar Wallets Kit theme) need a light theme, synced to ours.
    - `themeColor` meta.
    - Charts, QR codes and the explorer links' icons.
-4. **Output.** `docs/qa/THEME_AUDIT.md`, a table of screen, state, issue, severity and fix PR. Visual baselines are committed for both themes.
+4. **Pass/fail rules** (decision 8A):
+   - Token art always sits on its own art tile, with the image outline, and never touches the page canvas in either theme.
+   - The Stellar Wallets Kit modal theme follows our `data-theme` on every switch, including System changes. The state tour checks it in both themes.
+5. **Output.** `docs/qa/THEME_AUDIT.md`, a table of screen, state, issue, severity and fix PR. Visual baselines are committed for both themes.
 
 ## 5. docs.tribes.build
 
@@ -235,18 +238,67 @@ Every guide uses the same sections:
 6. **Related.**
 
 ### 5.4 Docs design (/plan-design-review will grade this)
-- **Mode.** Operate, as in the app, not a marketing site. The home page gets a single Persuade hero with the Dusk tile.
+- **Mode.** Read: structure for comprehension and wayfinding. The home page is an index, not a marketing page (decision 1A). Its order, top to bottom:
+  ```
+  [top bar: mark + "Tribe Builder Docs" | search ⌘K | theme]
+  H1 "Pull up a chair" + one line; DAO line beneath in muted
+  ┌ I'm joining a tribe  → connect, bid, vote, delegate      ┐  two large ListRows,
+  └ I'm starting a tribe → create, set up, launch, first vote┘  not cards
+  Core ideas: What's a tribe · Votes · Proposals · Treasury · Modules · Upgrades
+  Strip: "Follow one tribe from first meeting to first decision" + one framed shot
+  ```
+  There's no hero art, no card grid and no CTA buttons. Each path row opens an ordered sequence of guides with "Next" links at the foot of every page.
 - **Layout.**
   - Desktop has three columns: nav, content and an on-page table of contents.
   - Tablet has two: the table of contents is folded into a Disclosure at the top.
   - Mobile has one column, with the nav in a sheet using `--ease-drawer` (240ms in, 180ms out) and a sticky "On this page" control.
-- **Type.** Bricolage for headings, Figtree for body, JetBrains Mono for code and addresses. The measure is 66 to 72 characters.
+- **Type.** Bricolage for headings, Figtree for body, JetBrains Mono for code and addresses.
+  - **The docs body is 17px Figtree at line-height 1.6, with a 68ch measure** (decision 4A).
+  - UI chrome (nav, table of contents, labels) keeps the app's `{typography.body}` at 15px and `{typography.label}` at 13px.
+  - Headings use `{typography.display}` and `{typography.title}`, with more space above a heading than below it.
 - **Screenshots.**
   - Each one sits in a device-agnostic frame with a 1px outline using the image outline values from §4, and concentric radius (frame radius = image radius + padding).
   - There's no drop-shadow stack in light mode.
   - Images are lazy-loaded with fixed aspect ratios, so there's no layout shift.
 - **Motion.** None on page load, and none on keyboard navigation. The search dialog opens instantly. Sidebar sections use the Disclosure's standard motion, and press is `scale(0.96)`.
+- **Browser surfaces** (decision 5A), the same in both themes:
+  - Links are in `signal` with a 1px underline at a 0.2em offset.
+  - Visited links are `signal` mixed 70/30 with `text-muted`.
+  - `::selection` is `signal` at 25%.
+  - Focus rings are 2px `signal` with a 2px offset.
+  - Scrollbars are thin, in `rule` on `canvas`.
+  - These are proposed to DESIGN.md as shared tokens, so the app can adopt them too.
 - **Theme switch.** Dark, Light and System, the same control as the app's You sheet, with transitions suppressed during the switch.
+
+### 5.4c Accessibility (decision 6A)
+- **Structure.** A "Skip to content" link comes first in the tab order. Landmarks are `header`, `nav` (labelled "Docs"), `main` and `aside` ("On this page"). The current page in the nav has `aria-current="page"`.
+- **Search.** ⌘K, Ctrl K or `/` opens the dialog. Focus is trapped while it's open. Arrow keys move through results and Enter opens one. Escape closes it and returns focus to the trigger.
+- **Touch and pointer.** Touch targets are at least 44px on mobile. Hover effects apply only under `(hover: hover) and (pointer: fine)`.
+- **Text and motion.**
+  - Alt text says what the state shows ("The proposal composer with two actions added"), not "screenshot".
+  - Contrast is AA or better for body text and markers in both themes.
+  - Reduced motion removes the sheet slide but keeps the fades.
+- **Checks.** axe runs in CI on every docs page in both themes, with zero serious or critical issues allowed. A keyboard-only walkthrough of the home page, one guide and search is in `docs/qa/DOCS_REVIEW.md`.
+
+### 5.4b Reader journey (storyboard)
+| Step | Reader does | Reader feels | What supports it |
+|---|---|---|---|
+| 1 | Lands on the docs home from the app or search | Unsure: "is this for me?" | Two plain paths, the warm headline, the DAO term one line down |
+| 2 | Picks "I'm starting a tribe" | Committed but wary of jargon | An ordered path with a time estimate per guide; concepts linked inline, never required first |
+| 3 | Follows "Create a tribe" with the app open | Focused | Each step's shot matches their theme and device; one action per step; the outcome named |
+| 4 | Signs a transaction | A spike of risk | "What happens on chain" states fees, waits and who can see it, before the step, never after |
+| 5 | Waits for voting to open | Impatient | Exact durations from the generated limits; "what you can do while you wait" links |
+| 6 | First proposal executes | Pride, and some ownership | The guide ends on the tribe's own page in the shot, the brass seat of "yours", and a Next link |
+| 5-year | Comes back to look something up | Expects the same place | Stable URLs, a changelog, and screenshots re-captured each release |
+
+### 5.4a Docs states (decision 2A)
+| Surface | Loading | Empty / none | Error | Notes |
+|---|---|---|---|---|
+| Search (⌘K dialog) | Results appear as you type, with no spinner (static index) | "No pages match "…". Try the glossary, or one of these:" then 3 popular guides | Index failed to load: "Search isn't available right now. Browse the guides instead." with a link to Guides | Opens instantly; Escape closes |
+| 404 | n/a | "This page has moved or never existed." with both paths (joining or starting) and a search field | n/a | Same chrome as every page |
+| Screenshot | A fixed-aspect placeholder in the `raised` token, with no shimmer, so there is no layout shift | Missing image: the frame shows "Screenshot coming" in muted text; the step text stays complete on its own | A stale image (manifest commit older than the docs release) fails `pnpm docs:check` and never ships | Every step must read correctly with no image |
+| Mobile nav sheet | n/a | n/a | n/a | Opens at the current section, current page marked; closes on navigation |
+| Theme | The boot script sets the theme before paint, so there is no flash | n/a | Cookie unreadable: falls back to localStorage, then System | |
 
 ### 5.5 One source for terms
 `packages/glossary` holds each term's plain definition, its DAO term and a link slug. The app's `GlossaryTerm`, the docs glossary and the guide tooltips all read it, so the copy can't drift.
@@ -259,8 +311,14 @@ Every guide uses the same sections:
   - Before capture, the spec waits for fonts, settled network and no animations (reduced motion forced on, then a frame wait).
 - **Output.**
   - Files go to `apps/docs/public/shots/<id>/{desktop,mobile}-{light,dark}.webp`, with a `manifest.json` holding the app commit, testnet ledger, capture time and viewport.
+  - **Device match (decision 7A).** Readers under 768px see the mobile capture; tablet and desktop readers see desktop. Each figure has a quiet "Show desktop / Show mobile" toggle, a two-option SegmentedControl that remembers the choice for the session.
   - The docs `<Shot id>` component renders a `<picture>` that follows the docs theme, `data-theme` first and then `prefers-color-scheme`.
   - Any image whose manifest commit is older than the release it documents is flagged in review.
+- **Markers (decision 3A).**
+  - Each capture spec names its target locator. The manifest stores that element's bounding box per variant, as fractions of the image.
+  - `<Shot>` draws a 2px `signal` ring, at the control radius plus 4px, and a numbered marker (a 20px disc in `signal` with `on-primary` digits) over the untouched image. The overlay follows the docs theme.
+  - The marker has text for assistive technology: "Step 2: the New proposal button".
+  - A box that falls outside the image fails capture.
 - **Privacy.** Only testnet test identities appear. Personal data is never typed. Wallet addresses are test addresses, and an allowlist check fails capture on any address it doesn't know.
 
 ## 6. Copy and media review (double-checked)
@@ -370,6 +428,11 @@ The deck and the MIDAO team update use the wording "space optional" and present 
 | Date | Decision | By |
 |---|---|---|
 | 2026-11-18 | Plan drafted | Claude |
+| 2026-11-18 | Q1: a test-only E2E Wallet module, flag-gated with a production build assertion, plus one manual Freighter smoke pass per release | User |
+| 2026-11-18 | E1: a separate testnet e2e Manager with its own indexer pipeline and deployment id | User |
+| 2026-11-18 | Q4: the docs are a custom Next.js MDX site on a Panda preset shared with the app | User |
+| 2026-11-18 | Q3: hybrid responsive coverage. Chain flows run at desktop on each run, with a full mobile and tablet rotation weekly. The state and form tour covers 3 viewports × 2 themes. | User |
+| 2026-11-18 | Defaults, pending override: E2 signs in-process through `exposeBinding`; E3 uses a shared theme cookie on `.tribes.build`; Q5 hosts the docs on Vercel at docs.tribes.build; Q6 keeps a ledger in the repo plus GitHub issues for P0 and P1; Q7 the showcase art is designed by us; Q8 covers members and founders, with a short operator page and NQG shown as coming; Q9 keeps share cards Dusk-only; Q10 registers a test implementation with the platform admin key; Q11 puts funded testnet secrets in GitHub Actions | Claude, stated to the user |
 
 ## 13. Engineering review (/plan-eng-review, 2026-11-18)
 
@@ -445,21 +508,34 @@ Lane A runs the preset extraction, then the docs scaffold. Lane B runs the harne
 
 Outside voice: Codex is not installed, so no outside review ran. This is missing coverage.
 
+## 14. Design review (/plan-design-review, 2026-11-18)
+
+No mockups: the gstack designer has no OpenAI key configured, so this review is text only. No outside design voices ran (Codex is not installed).
+
+| Pass | Before | After | Change, and what's still missing |
+|---|---|---|---|
+| 1. Information architecture | 6 | 9 | 1A: the home page is a Read-mode index with two paths. Missing: a per-guide time estimate, to be measured in P7 |
+| 2. States | 4 | 9 | 2A: states table for search, 404, screenshots, nav sheet and theme |
+| 3. Journey | 7 | 9 | Storyboard added (§5.4b) |
+| 4. AI slop | 7 | 9 | 3A: markers drawn by the docs. Hard rejections: none. Litmus: brand in the first screen yes; one anchor (headline plus two paths) yes; scannable yes; one job per section yes; cards not used; motion limited to sheets and dialogs; nothing relies on shadows |
+| 5. Design system | 7 | 9 | 4A: 17px docs body. 5A: browser surfaces, proposed as shared DESIGN.md tokens |
+| 6. Responsive and accessibility | 6 | 9 | 6A: full accessibility spec. 7A: screenshots match the device |
+| 7. Unresolved | — | — | 8A: app theme pass rules for art tiles and wallet-modal sync. No open design decisions remain |
+
+Overall: 6/10 before, 9/10 after. It isn't a 10 because none of it has been seen as pixels: no mockups exist. The first docs preview build (P5) is the visual check, reviewed in both themes at 3 viewports.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | not run (user excluded) | — |
 | Outside Review | codex | Independent 2nd opinion | 0 | unavailable (codex not installed) | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 12 issues, 1 critical gap (prod strip check, remedy proposed) |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | pending | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 12 issues, 1 critical gap; E1, Q1, Q3 and Q4 decided, other defaults stated |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean | score: 6/10 → 9/10, 8 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | not run (user excluded) | — |
 
-- **OUTSIDE COVERAGE:** codex unavailable (not installed); native fallback not run.
-- **VERDICT:** no review cleared yet; eng review required (decisions E1 to E3 and §11 open).
+- **OUTSIDE COVERAGE:** codex unavailable for eng and design; design mockups unavailable (no OpenAI key).
+- **VERDICT:** DESIGN CLEARED. The eng review has its key decisions answered; E2, E3 and Q5 to Q11 run on stated defaults until you override them.
 
 **UNRESOLVED DECISIONS:**
-- E1 walkthrough tribes out of public testnet listings
-- E2 signer arrangement
-- E3 theme carryover between app and docs
-- §11 Q1 to Q11
+- E2, E3 and Q5 to Q11 are on defaults stated to the user and need confirmation or an override
