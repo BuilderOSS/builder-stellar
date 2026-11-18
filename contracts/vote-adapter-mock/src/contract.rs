@@ -1,6 +1,5 @@
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
-    Env, Vec,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Env, Vec,
 };
 
 #[contracterror]
@@ -28,16 +27,6 @@ enum Key {
 pub struct Checkpoint {
     pub ledger: u32,
     pub votes: u128,
-}
-
-/// Emitted by `set_votes`.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MockVotesSet {
-    #[topic]
-    pub account: Address,
-    pub votes: u128,
-    pub total: u128,
 }
 
 const TTL_THRESHOLD: u32 = 17_280 * 30;
@@ -81,13 +70,6 @@ impl VoteAdapterMock {
         e.storage()
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
-
-        MockVotesSet {
-            account,
-            votes,
-            total,
-        }
-        .publish(e);
     }
 
     /// Current votes of `account`.

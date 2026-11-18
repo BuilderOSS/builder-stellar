@@ -60,7 +60,7 @@ function rewritePackageJsonName(outputDir, packageJsonName) {
   const packageJsonPath = `${outputDir}/package.json`;
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
   packageJson.name = packageJsonName;
-  packageJson.dependencies['@stellar/stellar-sdk'] = '^17.0.1';
+  packageJson.dependencies['@stellar/stellar-sdk'] = '^17.4.0';
   writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 

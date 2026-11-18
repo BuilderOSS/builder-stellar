@@ -498,6 +498,8 @@ transforms:
           // Membership models: a module deployed into a pending DAO, an assurance drive opened (its
           // slug reserved) and a failed drive's slug released.
           ModuleCreated: ['token_address', 'kind'], AssuranceOpened: ['token_address'], SlugReleased: ['token_address', 'slug'],
+          // A vote source approved (or withdrawn) for new DAOs (docs/designs/governance-adapter.md).
+          VoteSourceApproved: ['source'],
           // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
           // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
           AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'],
@@ -880,6 +882,7 @@ transforms:
           UpgradeApproved: 'manager.upgrade_approved',
           ImplementationRevoked: 'manager.implementation_revoked',
           ImplementationRegistered: 'manager.implementation_registered',
+          VoteSourceApproved: 'manager.vote_source_approved',
           CurrentImplementationsUpdated: 'manager.implementations_updated',
           LatestImplementationSet: 'manager.latest_implementation_set',
           PendingSlugUpdated: 'manager.pending_slug_updated',
@@ -985,6 +988,7 @@ transforms:
           UpgradeApproved: 'Upgrade approved',
           ImplementationRevoked: 'Implementation revoked',
           ImplementationRegistered: 'Implementation registered',
+          VoteSourceApproved: 'Vote source approval changed',
           CurrentImplementationsUpdated: 'Implementations updated',
           LatestImplementationSet: 'Latest implementation set',
           PendingSlugUpdated: 'Requested slug changed',
@@ -1166,6 +1170,10 @@ transforms:
           MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
           Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
           ManagerUpgraded: function() { return 'Manager upgraded to version ' + (pick(data, ['to_version']) || '?') + ' (was ' + (pick(data, ['from_version']) || '?') + ')'; },
+          VoteSourceApproved: function() {
+            var name = pick(data, ['name']) || 'unknown';
+            return (pick(data, ['approved']) === 'true' ? 'Vote source approved: ' : 'Vote source withdrawn: ') + name;
+          },
           ImplementationRevoked: function() {
             var h = pick(data, ['wasm_hash']);
             return 'Contract code ' + (h ? String(h).slice(0, 8) : '?') + ' withdrawn by the platform; communities running it should upgrade when a replacement is announced';
