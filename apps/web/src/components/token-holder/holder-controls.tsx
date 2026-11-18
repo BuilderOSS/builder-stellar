@@ -52,8 +52,9 @@ export function HolderControls({
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
-  // A tribe voting through another source: delegating a token moves no votes, so it isn't offered.
-  const delegation = useVoteSource(config).voteSource?.isToken !== false;
+  // Delegation is offered only for a token-weighted tribe: through another source (or while the
+  // source can't be read) delegating a token may move no votes.
+  const delegation = useVoteSource(config).voteSource?.isToken === true;
   const membersOnly = config.tokenSettings.membersOnlyDelegation;
   const queryAction = useSyncExternalStore(
     (listener) => {

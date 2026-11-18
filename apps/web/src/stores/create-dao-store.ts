@@ -74,7 +74,8 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
       queueDelay: 3600,
       quorumBps: 1000,
       proposalThreshold: 1,
-      voteSource: ''
+      voteSource: '',
+      voteSourceDecimals: 0
     }
   };
 }

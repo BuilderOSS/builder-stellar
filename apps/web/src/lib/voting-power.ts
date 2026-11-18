@@ -53,7 +53,7 @@ async function fetchVotingPower([
 
 /** The account's voting power from the tribe's vote source (its token unless it chose an adapter). */
 export function useVotingPower(config: DaoNetworkConfig, account: string, ledger?: number | null) {
-  const { voteSource, isLoading } = useVoteSource(config);
+  const { voteSource, isLoading, error: sourceError } = useVoteSource(config);
   const key =
     config.tokenContractId && account && voteSource && !isLoading
       ? ([
@@ -67,5 +67,7 @@ export function useVotingPower(config: DaoNetworkConfig, account: string, ledger
         ] as const)
       : null;
 
-  return useSWR(key, fetchVotingPower, { keepPreviousData: true });
+  const swr = useSWR(key, fetchVotingPower, { keepPreviousData: true });
+  // An unreadable vote source is the reader's error too: there is nothing to read votes from.
+  return sourceError && !swr.error ? { ...swr, error: sourceError as Error } : swr;
 }

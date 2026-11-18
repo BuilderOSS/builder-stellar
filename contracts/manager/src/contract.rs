@@ -329,7 +329,7 @@ impl ManagerContract {
     /// if any, are gated by this Manager (docs/designs/governance-adapter.md).
     /// The mock adapter is for testnet and local networks only.
     ///
-    /// Approving probes the interface (`get_total_supply`, `decimals`).
+    /// Approving probes every read the Governor makes, plus `decimals`.
     /// Withdrawing an approval stops new DAOs and pending DAOs from
     /// launching with the source; DAOs already launched keep it (it is
     /// permanent in their Governor).
@@ -348,8 +348,19 @@ impl ManagerContract {
         let key = ManagerKey::ApprovedVoteSource(source.clone());
         if approved {
             let client = VoteSourceClient::new(&env, &source);
-            let answers = matches!(client.try_get_total_supply(), Ok(Ok(_)))
-                && matches!(client.try_decimals(), Ok(Ok(_)));
+            let mut answers = matches!(client.try_get_total_supply(), Ok(Ok(_)))
+                && matches!(client.try_decimals(), Ok(Ok(_)))
+                && matches!(client.try_voting_supply_at_previous_ledger(), Ok(Ok(_)));
+            // The checkpoint reads take a past ledger, so they are probed
+            // once one exists (always on a live network).
+            if let Some(past) = env.ledger().sequence().checked_sub(1) {
+                answers = answers
+                    && matches!(client.try_get_total_supply_at_checkpoint(&past), Ok(Ok(_)))
+                    && matches!(
+                        client.try_get_votes_at_checkpoint(&source, &past),
+                        Ok(Ok(_))
+                    );
+            }
             if !answers {
                 return Err(ManagerError::InvalidVoteSource);
             }
@@ -1538,8 +1549,10 @@ impl ManagerContract {
             if !Self::is_vote_source_approved(env.clone(), vote_source.clone()) {
                 return Err(ManagerError::VoteSourceNotApproved);
             }
-            if VoteSourceClient::new(&env, &vote_source).get_total_supply() == 0 {
-                return Err(ManagerError::LaunchSupplyZero);
+            match VoteSourceClient::new(&env, &vote_source).try_get_total_supply() {
+                Ok(Ok(0)) => return Err(ManagerError::LaunchSupplyZero),
+                Ok(Ok(_)) => {}
+                _ => return Err(ManagerError::InvalidVoteSource),
             }
         }
         // Payment assets are tunable in Setup; each module launches only with

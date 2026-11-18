@@ -74,7 +74,7 @@ export function GovernanceStep() {
         value={voteSource || TOKEN_SOURCE}
         onValueChange={(value) => {
           if (value === TOKEN_SOURCE) {
-            update({ voteSource: '' });
+            update({ voteSource: '', voteSourceDecimals: 0 });
             useCreateDaoStore.getState().clearValidationError('voteSource');
           }
         }}
@@ -164,7 +164,11 @@ export function GovernanceStep() {
             <CreationField
               id="proposalThreshold"
               label="Votes needed to propose"
-              hint="A number of tokens, not a percentage."
+              hint={
+                voteSource
+                  ? 'Whole votes from the vote source, not a percentage.'
+                  : 'A number of tokens, not a percentage.'
+              }
             >
               <Input
                 id="proposalThreshold"
@@ -198,7 +202,9 @@ export function GovernanceStep() {
                       : [])
                   ]}
                   onValueChange={(value) => {
-                    update({ voteSource: value === TOKEN_SOURCE ? '' : value });
+                    const entry = approved.find((source) => source.source === value);
+                    if (entry) update({ voteSource: entry.source, voteSourceDecimals: entry.decimals });
+                    else if (value === TOKEN_SOURCE) update({ voteSource: '', voteSourceDecimals: 0 });
                     useCreateDaoStore.getState().clearValidationError('voteSource');
                   }}
                 />

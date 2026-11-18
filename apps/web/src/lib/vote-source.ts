@@ -21,7 +21,7 @@ export type VoteSource = {
   decimals: number;
 };
 
-export type ApprovedVoteSource = { source: string; name: string };
+export type ApprovedVoteSource = { source: string; name: string; /** The source's `decimals()`. */ decimals: number };
 
 /** The token-weighted default, used until the Governor answers (and by Governors older than the view). */
 export function tokenVoteSource(token: string): VoteSource {
@@ -39,17 +39,28 @@ async function fetchVoteSource([, governor, token, rpcUrl, passphrase]: readonly
   let address = token;
   try {
     address = (await new GovernorClient({ ...options, contractId: governor }).vote_source()).result;
-  } catch {
-    // A Governor older than vote_source() votes with the token.
+  } catch (error) {
+    // Only a Governor older than vote_source() votes with the token; any other failure (RPC
+    // down, archived entry) is an error, so an adapter tribe is never shown as token-weighted.
+    if (!isMissingFunction(error)) throw error;
   }
   if (address === token) return tokenVoteSource(token);
-  // The adapter's spec is read from chain; `decimals` is part of the vote source interface.
+  return { address, isToken: false, decimals: await readDecimals(options, address) };
+}
+
+/** Whether a contract call failed because the contract has no such function (an older version). */
+export function isMissingFunction(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /non-existent contract function|MissingValue/i.test(message);
+}
+
+type RpcOptions = { rpcUrl: string; networkPassphrase: string; allowHttp: boolean };
+
+/** A vote source's `decimals()`; its spec is read from chain, as adapters have no bindings here. */
+async function readDecimals(options: RpcOptions, address: string): Promise<number> {
   const adapter = await contract.Client.from({ ...options, contractId: address });
-  const decimals = await (adapter as unknown as { decimals: () => Promise<{ result: number }> })
-    .decimals()
-    .then((tx) => Number(tx.result))
-    .catch(() => 0);
-  return { address, isToken: false, decimals };
+  const tx = await (adapter as unknown as { decimals: () => Promise<{ result: number }> }).decimals();
+  return Number(tx.result);
 }
 
 /** The tribe's vote source, read from its Governor. */
@@ -63,8 +74,8 @@ export function useVoteSource(
   const swr = useSWR(key, fetchVoteSource, { revalidateOnFocus: false, dedupingInterval: 60_000 });
   return {
     ...swr,
-    /** The token until the Governor answers. */
-    voteSource: swr.data ?? (config.tokenContractId ? tokenVoteSource(config.tokenContractId) : null)
+    /** The token until the Governor answers; null when the read failed (the source is unknown). */
+    voteSource: swr.data ?? (config.tokenContractId && !swr.error ? tokenVoteSource(config.tokenContractId) : null)
   };
 }
 
@@ -79,27 +90,35 @@ export function formatVotes(units: bigint, decimals: number): string {
 /** Whether the Manager approves `source` for new tribes now (the chain's answer, not the index). */
 export async function isVoteSourceApproved(source: string): Promise<boolean> {
   const deployment = getDeploymentConfig();
-  const manager = new ManagerClient({
-    contractId: deployment.managerAddress,
+  const manager = new ManagerClient({ ...deploymentRpc(), contractId: deployment.managerAddress });
+  return (await manager.is_vote_source_approved({ source })).result;
+}
+
+function deploymentRpc(): RpcOptions {
+  const deployment = getDeploymentConfig();
+  return {
     rpcUrl: deployment.rpcUrl,
     networkPassphrase: deployment.networkPassphrase,
     allowHttp: deployment.rpcUrl.startsWith('http://')
-  });
-  return (await manager.is_vote_source_approved({ source })).result;
+  };
 }
 
 async function fetchApprovedVoteSources(): Promise<ApprovedVoteSource[]> {
   const response = await fetch('/api/platform/vote-sources', { cache: 'no-store' });
   if (!response.ok) return [];
-  const body = (await response.json()) as { sources?: ApprovedVoteSource[] };
+  const body = (await response.json()) as { sources?: Omit<ApprovedVoteSource, 'decimals'>[] };
   const indexed = body.sources ?? [];
-  // The index can lag a withdrawal: keep only what the Manager still approves.
+  // The index can lag a withdrawal: keep only what the Manager still approves, with the
+  // decimals the proposal threshold is scaled by.
   const checked = await Promise.all(
-    indexed.map((entry) =>
-      isVoteSourceApproved(entry.source)
-        .then((approved) => (approved ? entry : null))
-        .catch(() => null)
-    )
+    indexed.map(async (entry) => {
+      try {
+        if (!(await isVoteSourceApproved(entry.source))) return null;
+        return { ...entry, decimals: await readDecimals(deploymentRpc(), entry.source) };
+      } catch {
+        return null;
+      }
+    })
   );
   return checked.filter((entry): entry is ApprovedVoteSource => entry !== null);
 }

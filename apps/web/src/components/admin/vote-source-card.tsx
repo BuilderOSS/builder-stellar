@@ -11,7 +11,16 @@ import { useVoteSource } from '@/lib/vote-source';
  */
 export function VoteSourceCard({ config }: { config: DaoNetworkConfig }) {
   const { voteSource, error } = useVoteSource(config);
-  if (!voteSource) return null;
+  if (!voteSource) {
+    return error ? (
+      <Card p="5">
+        <Stack gap="2">
+          <Heading size="heading">How votes are counted</Heading>
+          <Text size="sm">The vote source couldn&apos;t be read right now. Try again in a moment.</Text>
+        </Stack>
+      </Card>
+    ) : null;
+  }
   return (
     <Card p="5">
       <Stack gap="2">
@@ -31,7 +40,6 @@ export function VoteSourceCard({ config }: { config: DaoNetworkConfig }) {
             <Address value={voteSource.address} label="Vote source" />
           </>
         )}
-        {error ? <Text size="sm">The vote source couldn&apos;t be read right now; showing the token.</Text> : null}
       </Stack>
     </Card>
   );

@@ -121,7 +121,9 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
                 {custom
                   ? sourcePower.data
                     ? formatVotes(sourcePower.data.votes, sourcePower.data.decimals)
-                    : '…'
+                    : sourcePower.error
+                      ? 'Unavailable'
+                      : '…'
                   : member.voting_power}
               </span>
               <span className={statLabel}>

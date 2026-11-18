@@ -143,7 +143,9 @@ const governanceSchema = z.object({
   voteSource: z
     .string()
     .refine((value) => value === '' || StrKey.isValidContract(value), 'Choose an approved vote source')
-    .default('')
+    .default(''),
+  /** The vote source's `decimals()`: `proposalThreshold` is in whole votes and scaled by it. */
+  voteSourceDecimals: z.number().int().min(0).max(38).optional()
 });
 export const draftConfigurationSchema = z.object({
   basicInfo: basicInfoSchema,

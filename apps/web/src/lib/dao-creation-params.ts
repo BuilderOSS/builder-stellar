@@ -79,7 +79,10 @@ export function formDataToCreationParams(
         voting_period: data.governance.votingPeriod,
         queue_delay: data.governance.queueDelay,
         quorum_bps: data.governance.quorumBps,
-        proposal_threshold: BigInt(data.governance.proposalThreshold),
+        // Entered in whole votes; a vote source with decimals counts in smaller units.
+        proposal_threshold:
+          BigInt(data.governance.proposalThreshold) *
+          10n ** BigInt(data.governance.voteSource ? (data.governance.voteSourceDecimals ?? 0) : 0),
         // Token-weighted unless the creator chose an approved vote source.
         vote_source: data.governance.voteSource || null
       }

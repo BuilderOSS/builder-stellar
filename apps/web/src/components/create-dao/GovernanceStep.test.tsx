@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ADAPTER = `C${'B'.repeat(55)}`;
 const state = vi.hoisted(() => ({
-  approved: [] as Array<{ source: string; name: string }>,
+  approved: [] as Array<{ source: string; name: string; decimals: number }>,
   voteSource: '',
   /** Custom timings (no pace) open Advanced settings. */
   votingDelay: 86400
@@ -48,7 +48,7 @@ describe('governance type choice', () => {
   });
 
   it('adds the chosen approved source as the selected way votes are counted', () => {
-    const options = voteTypeOptions(ADAPTER, [{ source: ADAPTER, name: 'Mock adapter' }]);
+    const options = voteTypeOptions(ADAPTER, [{ source: ADAPTER, name: 'Mock adapter', decimals: 0 }]);
     expect(options.at(-1)).toMatchObject({ value: ADAPTER, label: 'Mock adapter' });
   });
 
@@ -61,7 +61,7 @@ describe('governance type choice', () => {
   });
 
   it('warns that a chosen vote source is permanent', () => {
-    state.approved = [{ source: ADAPTER, name: 'Mock adapter' }];
+    state.approved = [{ source: ADAPTER, name: 'Mock adapter', decimals: 0 }];
     state.voteSource = ADAPTER;
     const html = renderToStaticMarkup(<GovernanceStep />);
     expect(html).toContain('Mock adapter');
@@ -69,7 +69,7 @@ describe('governance type choice', () => {
   });
 
   it('lists approved sources in Advanced settings', () => {
-    state.approved = [{ source: ADAPTER, name: 'Mock adapter' }];
+    state.approved = [{ source: ADAPTER, name: 'Mock adapter', decimals: 0 }];
     state.votingDelay = 4000; // custom timings keep Advanced open
     const html = renderToStaticMarkup(<GovernanceStep />);
     expect(html).toContain('Only sources the platform approved are listed.');

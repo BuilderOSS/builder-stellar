@@ -106,6 +106,16 @@ describe('one current creation configuration', () => {
     expect(createDaoSchema.safeParse(config).success).toBe(true);
     expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.vote_source).toBe(adapter);
   });
+  it('scales the threshold, entered in whole votes, by the vote source decimals', () => {
+    const config = valid();
+    config.governance.proposalThreshold = 2;
+    config.governance.voteSourceDecimals = 9;
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.proposal_threshold).toBe(2n);
+    config.governance.voteSource = StrKey.encodeContract(Buffer.alloc(32, 1));
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.proposal_threshold).toBe(
+      2_000_000_000n
+    );
+  });
   it.each(['not-an-address', wallet, `C${'A'.repeat(54)}`])('rejects vote source %s', (voteSource) => {
     const config = valid();
     config.governance.voteSource = voteSource;
