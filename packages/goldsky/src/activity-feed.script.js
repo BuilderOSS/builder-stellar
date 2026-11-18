@@ -205,6 +205,7 @@ function invoke(data) {
     UpgradeApproved: 'manager.upgrade_approved',
     ImplementationRevoked: 'manager.implementation_revoked',
     ImplementationRegistered: 'manager.implementation_registered',
+    VoteSourceApproved: 'manager.vote_source_approved',
     CurrentImplementationsUpdated: 'manager.implementations_updated',
     LatestImplementationSet: 'manager.latest_implementation_set',
     PendingSlugUpdated: 'manager.pending_slug_updated',
@@ -310,6 +311,7 @@ function invoke(data) {
     UpgradeApproved: 'Upgrade approved',
     ImplementationRevoked: 'Implementation revoked',
     ImplementationRegistered: 'Implementation registered',
+    VoteSourceApproved: 'Vote source approval changed',
     CurrentImplementationsUpdated: 'Implementations updated',
     LatestImplementationSet: 'Latest implementation set',
     PendingSlugUpdated: 'Requested slug changed',
@@ -491,6 +493,10 @@ function invoke(data) {
     MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
     Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
     ManagerUpgraded: function() { return 'Manager upgraded to version ' + (pick(data, ['to_version']) || '?') + ' (was ' + (pick(data, ['from_version']) || '?') + ')'; },
+    VoteSourceApproved: function() {
+      var name = pick(data, ['name']) || 'unknown';
+      return (pick(data, ['approved']) === 'true' ? 'Vote source approved: ' : 'Vote source withdrawn: ') + name;
+    },
     ImplementationRevoked: function() {
       var h = pick(data, ['wasm_hash']);
       return 'Contract code ' + (h ? String(h).slice(0, 8) : '?') + ' withdrawn by the platform; communities running it should upgrade when a replacement is announced';

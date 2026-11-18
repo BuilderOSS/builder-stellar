@@ -293,6 +293,7 @@ fn test_create_dao_when_paused_fails() {
                 queue_delay: 1,
                 proposal_threshold: 1,
                 quorum_bps: 1,
+                vote_source: None,
             },
             modules: soroban_sdk::vec![
                 &env,
@@ -696,6 +697,7 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
                 queue_delay: 300,
                 proposal_threshold: 1,
                 quorum_bps: 1000,
+                vote_source: None,
             },
             modules: soroban_sdk::vec![
                 env,
@@ -834,6 +836,11 @@ impl MockLaunchModule {
             .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
     }
     pub fn launch(_e: Env, _treasury: Address) {}
+    /// A Governor's vote source when a test set one (key 3); otherwise the
+    /// call fails, as on a Governor older than the view.
+    pub fn vote_source(e: Env) -> Address {
+        e.storage().instance().get(&3u32).unwrap()
+    }
 }
 
 #[contract]
@@ -3605,4 +3612,128 @@ fn create_dao_refuses_transfer_agents_it_does_not_create() {
     }
     // Nothing was deployed: the same nonce still creates a DAO.
     client.create_dao(&dao_params(&env, &deployer, 1));
+}
+
+// ============================================================================
+// Vote sources (docs/designs/governance-adapter.md)
+// ============================================================================
+
+use crate::error::ManagerError;
+use vote_adapter_mock::{VoteAdapterMock, VoteAdapterMockClient};
+
+fn mock_adapter(env: &Env) -> VoteAdapterMockClient<'static> {
+    let id = env.register(VoteAdapterMock, (Address::generate(env), 9u32));
+    VoteAdapterMockClient::new(env, &id)
+}
+
+#[test]
+fn approve_vote_source_probes_and_revokes() {
+    let (env, client, _admin) = setup();
+    let adapter = mock_adapter(&env);
+    let name = String::from_str(&env, "Mock adapter");
+    assert!(!client.is_vote_source_approved(&adapter.address));
+    client.approve_vote_source(&adapter.address, &true, &name);
+    assert!(client.is_vote_source_approved(&adapter.address));
+    client.approve_vote_source(&adapter.address, &false, &name);
+    assert!(!client.is_vote_source_approved(&adapter.address));
+
+    // A contract without the interface is refused.
+    let not_adapter = env.register(MockLaunchModule, ());
+    assert_eq!(
+        client.try_approve_vote_source(&not_adapter, &true, &name),
+        Err(Ok(ManagerError::InvalidVoteSource))
+    );
+}
+
+#[test]
+#[should_panic]
+fn approve_vote_source_needs_the_admin() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let id = env.register(
+        ManagerContract,
+        (
+            admin,
+            BytesN::from_array(&env, &[0u8; 32]),
+            String::from_str(&env, "0.1.0"),
+            TEST_UPGRADE_DELAY,
+        ),
+    );
+    let client = ManagerContractClient::new(&env, &id);
+    let adapter = mock_adapter(&env);
+    client.approve_vote_source(&adapter.address, &true, &String::from_str(&env, "x"));
+}
+
+#[test]
+fn create_dao_accepts_only_approved_vote_sources() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    let adapter = mock_adapter(&env);
+
+    let mut params = dao_params(&env, &deployer, 1);
+    params.initial_config.governance.vote_source = Some(adapter.address.clone());
+    assert_eq!(
+        client.try_create_dao(&params),
+        Err(Ok(ManagerError::VoteSourceNotApproved))
+    );
+
+    client.approve_vote_source(&adapter.address, &true, &String::from_str(&env, "Mock"));
+    assert!(client.try_create_dao(&params).is_ok());
+
+    // Naming the DAO's own (predicted) token is token-weighted voting.
+    let mut own = dao_params(&env, &deployer, 2);
+    let predicted = client.predict_addresses(&deployer, &2);
+    own.initial_config.governance.vote_source = Some(predicted.token);
+    assert!(client.try_create_dao(&own).is_ok());
+}
+
+/// A pending mock DAO whose Governor reports `source` as its vote source.
+fn seed_pending_with_source(
+    env: &Env,
+    client: &ManagerContractClient,
+    slug: &str,
+    source: &Address,
+) -> Address {
+    let token = seed_mock_pending(env, client, slug);
+    let pending = client.get_pending_dao(&token).unwrap();
+    env.as_contract(&pending.addresses.governor, || {
+        env.storage().instance().set(&3u32, source);
+    });
+    token
+}
+
+#[test]
+fn launch_requires_an_approved_vote_source_with_votes() {
+    let (env, client, _admin) = setup();
+    let adapter = mock_adapter(&env);
+    let name = String::from_str(&env, "Mock");
+    client.approve_vote_source(&adapter.address, &true, &name);
+    let token = seed_pending_with_source(&env, &client, "adapter-dao", &adapter.address);
+
+    // No adapter votes yet: launching would leave no one able to propose.
+    assert_eq!(
+        client.try_launch_dao(&token, &launch_cfg(&env)),
+        Err(Ok(ManagerError::LaunchSupplyZero))
+    );
+    adapter.set_votes(&Address::generate(&env), &1);
+
+    // Withdrawn between create and launch: the pending DAO can't launch.
+    client.approve_vote_source(&adapter.address, &false, &name);
+    assert_eq!(
+        client.try_launch_dao(&token, &launch_cfg(&env)),
+        Err(Ok(ManagerError::VoteSourceNotApproved))
+    );
+
+    client.approve_vote_source(&adapter.address, &true, &name);
+    client.launch_dao(&token, &launch_cfg(&env));
+}
+
+#[test]
+fn launch_with_a_governor_older_than_vote_source_uses_the_token() {
+    // seed_mock_pending's Governor has no vote source set, so its
+    // `vote_source` fails like a 0.4.0 Governor's.
+    let (env, client, _admin) = setup();
+    let token = seed_mock_pending(&env, &client, "old-governor");
+    client.launch_dao(&token, &launch_cfg(&env));
 }

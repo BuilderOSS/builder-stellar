@@ -3,6 +3,7 @@
 import { useGovernorSettings } from '@/lib/admin-queries';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
+import { formatVotes } from '@/lib/vote-source';
 import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
 
 function isMember(member: ReturnType<typeof useGoldskyMember>['data']) {
@@ -24,7 +25,7 @@ export function formatProposalEligibilityMessage(
   if (!votingPower || proposalThreshold === undefined) {
     return 'Connect a DAO member wallet with enough voting power to create proposals.';
   }
-  return `You need at least ${proposalThreshold.toString()} votes to create proposals. Current voting power: ${votingPower.votes.toString()}.`;
+  return `You need at least ${formatVotes(proposalThreshold, votingPower.decimals)} votes to create proposals. Current voting power: ${formatVotes(votingPower.votes, votingPower.decimals)}.`;
 }
 
 export function useProposalEligibility(config: DaoNetworkConfig, address: string | null, enabled = true) {

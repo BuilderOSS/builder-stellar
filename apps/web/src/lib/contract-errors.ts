@@ -80,6 +80,8 @@ const ERRORS: Record<number, string> = {
   7141: 'The assurance drive passed its deadline without launching: it ends in refunds (AssuranceFailed).',
   7142: 'The assurance drive has not failed (AssuranceNotFailed).',
   7143: 'A transfer agent must be a module this tribe is created with (UnknownAgentKind).', // token
+  7144: 'That vote source is not one the platform has approved, or its approval was withdrawn (VoteSourceNotApproved).',
+  7145: 'That contract does not answer as a vote source (InvalidVoteSource).',
   7201: 'This module may not mint (MintAuthorityNotAllowed).',
   7202: 'Invalid token input.',
   7203: 'Treasury mismatch.',

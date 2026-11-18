@@ -68,7 +68,15 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
     marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
     claims: { enabled: false },
     tokenSettings: { ...OPEN_MEMBERSHIP },
-    governance: { votingDelay: 86400, votingPeriod: 259200, queueDelay: 3600, quorumBps: 1000, proposalThreshold: 1 }
+    governance: {
+      votingDelay: 86400,
+      votingPeriod: 259200,
+      queueDelay: 3600,
+      quorumBps: 1000,
+      proposalThreshold: 1,
+      voteSource: '',
+      voteSourceDecimals: 0
+    }
   };
 }
 export function sameWorkspace(scope: WorkspaceScope, other: WorkspaceScope) {

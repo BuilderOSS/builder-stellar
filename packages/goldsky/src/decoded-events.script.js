@@ -123,6 +123,8 @@ function invoke(data) {
     // Membership models: a module deployed into a pending DAO, an assurance drive opened (its
     // slug reserved) and a failed drive's slug released.
     ModuleCreated: ['token_address', 'kind'], AssuranceOpened: ['token_address'], SlugReleased: ['token_address', 'slug'],
+    // A vote source approved (or withdrawn) for new DAOs (docs/designs/governance-adapter.md).
+    VoteSourceApproved: ['source'],
     // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
     // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
     AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'],

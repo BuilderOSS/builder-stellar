@@ -91,3 +91,18 @@ export async function indexedTribes(): Promise<PlatformTribe[]> {
     }
   }));
 }
+
+/** An approved vote source as indexed; clients re-check approval on chain before using it. */
+export type IndexedVoteSource = { source: string; name: string };
+
+/**
+ * Vote sources new tribes may choose (docs/designs/governance-adapter.md). The chain cannot
+ * list them, so the list comes from `manager.vote_sources` for this deployment.
+ */
+export async function indexedVoteSources(): Promise<IndexedVoteSource[]> {
+  const rows = await prisma.managerVoteSource.findMany({
+    where: { deploymentId: DEPLOYMENT_ID },
+    orderBy: [{ approvedLedger: 'asc' }, { eventId: 'asc' }]
+  });
+  return rows.map((row) => ({ source: row.source, name: row.name || row.source }));
+}

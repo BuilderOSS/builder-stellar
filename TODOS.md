@@ -84,7 +84,31 @@
 **Priority:** P1
 **Depends on:** our MIDAO contact sharing a sample bundle
 
+## Governance
+
+### NQG vote source adapter
+
+**What:** an `NqgVotes` adapter that implements the vote source interface over an NQG governance contract, plus enabling the "Neural Quorum Governance (NQG)" choice in the create flow.
+
+**Why:** this is the Tranche 2 NQG deliverable. The Governor already reads votes through a vote source (`docs/designs/governance-adapter.md`), and the create flow shows NQG as coming.
+
+**Context:**
+- The adapter design is `docs/designs/nqg-compatibility.md` §4. It uses ledger-keyed epoch snapshots (`stage` then `activate`), clamps scores and scales them from 1e18 to 9 decimals, and gates power by membership token.
+- It must meet the interface's semantics, including the one-supply invariant (governance-adapter.md §1) and approval policy §4 (admin = the tribe's Treasury).
+- The web side:
+  - enable the `nqg` option in `voteTypeOptions` (`apps/web/src/components/create-dao/GovernanceStep.tsx`), offered only on locked tokens as nqg-compatibility.md §9 asks;
+  - show the epoch's age.
+- Per-tribe adapters each need a Manager approval. Consider approval by code hash or an adapter factory (governance-adapter.md §10).
+
+**Effort:** M
+**Priority:** P1 (SCF Tranche 2)
+**Depends on:** a maintained NQG testnet contract (nqg-compatibility.md §8, Q1)
+
 ## Completed
+
+### Governance adapter: vote source interface and configuration (2026-11-18)
+
+The Governor reads all voting power through `common::clients::VoteSourceApi` on its permanent OZ token-contract slot. It is the DAO's token by default, or an adapter the Manager admin approved. The Manager's allowlist is checked at create and at launch, and a mock adapter crate drives Governor, Manager and e2e tests. The create flow asks how votes are counted (Token-weighted, or NQG shown as coming), and the governance page and every voting-power view follow the source. See `docs/designs/governance-adapter.md`.
 
 ### Legal entity export (2026-11-18)
 

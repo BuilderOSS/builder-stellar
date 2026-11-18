@@ -7,6 +7,7 @@ import { css } from 'styled-system/css';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import type { AdminValueDraft } from '@/components/admin/admin-action-forms';
+import { VoteSourceCard } from '@/components/admin/vote-source-card';
 import { PageSection } from '@/components/page-section';
 import { SettingActionCard } from '@/components/proposal-actions/setting-action-card';
 import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
@@ -146,6 +147,7 @@ export default function GovernanceAdminPage() {
             </Stack>
           ) : null}
         </Callout>
+        <VoteSourceCard config={config} />
       </PageSection>
     );
   }
@@ -187,6 +189,8 @@ export default function GovernanceAdminPage() {
             ) : null}
           </Stack>
         </Card>
+
+        <VoteSourceCard config={config} />
 
         <Grid columns={{ base: 1, xl: 2 }} gap="4">
           {RULES.map((rule) => (

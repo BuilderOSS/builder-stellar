@@ -456,7 +456,12 @@ export async function buildDaoInventory(
         add('proposals', `ProposalVote(${core.seq})`, oz(governor, 'ProposalVote', id), false)
       );
     });
-    await fetch([...live, ...checkpoints]);
+    // A tribe voting through an adapter (docs/designs/governance-adapter.md): the adapter's
+    // instance is renewed with the DAO; its own per-voter storage is the adapter's to keep.
+    const voteSource = native<string>(ozGet(gov, 'TokenContract'));
+    const adapter =
+      voteSource && voteSource !== scope.token ? [add('contracts', 'Vote source', instanceKey(voteSource))] : [];
+    await fetch([...live, ...checkpoints, ...adapter]);
   }
 
   const present: DaoInventory['present'] = [];

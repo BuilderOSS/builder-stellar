@@ -176,7 +176,16 @@ export const ManagerError = {
    * `transfer_agents` names a kind (or names it twice) that `modules`
    * does not create exactly once
    */
-  7143 : { message: "UnknownAgentKind" }
+  7143 : { message: "UnknownAgentKind" },
+  /**
+   * The vote source is not one the Manager admin approved
+   */
+  7144 : { message: "VoteSourceNotApproved" },
+  /**
+   * The address does not answer the vote source interface
+   * (`common::clients::VoteSourceApi`)
+   */
+  7145 : { message: "InvalidVoteSource" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -381,6 +390,18 @@ export interface PendingSlugUpdatedEvent {
 }
 
 /**
+ * A vote source approved (or its approval withdrawn) for new DAOs.
+ */
+export interface VoteSourceApprovedEvent {
+  name: "VoteSourceApproved";
+  data: {
+    source: string;
+    approved?: boolean;
+    name?: string;
+  };
+}
+
+/**
  * Event: ImplementationRevoked
  */
 export interface ImplementationRevokedEvent {
@@ -557,6 +578,13 @@ export interface GovernanceConfig {
   proposal_threshold: bigint;
   queue_delay: number;
   quorum_bps: number;
+  /**
+   * Where voting power comes from: `None` (or the DAO's own token) for
+   * token-weighted voting, else a vote source the Manager admin approved
+   * (`approve_vote_source`). Permanent once the DAO is created
+   * (docs/designs/governance-adapter.md).
+   */
+  vote_source: string | null;
   voting_delay: number;
   voting_period: number;
 }
@@ -791,5 +819,5 @@ export interface UpgradeDelayChangedEvent {
     effective_ledger?: number;
   };
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | SlugReleasedEvent | AdminProposedEvent | FactoryPausedEvent | ModuleCreatedEvent | AssuranceOpenedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | UpgradeDelayChangedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | SlugReleasedEvent | AdminProposedEvent | FactoryPausedEvent | ModuleCreatedEvent | AssuranceOpenedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | VoteSourceApprovedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | UpgradeDelayChangedEvent;
     
