@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db = vi.hoisted(() => ({
   managerImplementation: { findMany: vi.fn() },
   managerModuleVersion: { findMany: vi.fn() },
-  managerDao: { findMany: vi.fn() }
+  managerDao: { findMany: vi.fn() },
+  managerVoteSource: { findMany: vi.fn() }
 }));
 vi.mock('@/lib/prisma', () => ({ prisma: db }));
 vi.mock('@/config/deployments.generated', () => ({ DEPLOYMENT_ID: 'manager:CTEST' }));
 
-import { indexedRegistry, indexedTribes } from '@/lib/platform/indexed';
+import { indexedRegistry, indexedTribes, indexedVoteSources } from '@/lib/platform/indexed';
 
 const h = (c: string) => c.repeat(64);
 
@@ -70,5 +71,19 @@ describe('indexed platform reads', () => {
         }
       }
     ]);
+  });
+
+  it("lists this deployment's approved vote sources, named by their address when unnamed", async () => {
+    db.managerVoteSource.findMany.mockResolvedValue([
+      { source: 'CADAPTER', name: 'Mock adapter' },
+      { source: 'CNONAME', name: null }
+    ]);
+    expect(await indexedVoteSources()).toEqual([
+      { source: 'CADAPTER', name: 'Mock adapter' },
+      { source: 'CNONAME', name: 'CNONAME' }
+    ]);
+    expect(db.managerVoteSource.findMany.mock.calls[0]![0]).toMatchObject({
+      where: { deploymentId: 'manager:CTEST' }
+    });
   });
 });

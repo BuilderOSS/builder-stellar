@@ -5,24 +5,31 @@ import { Server } from '@stellar/stellar-sdk/rpc';
 import useSWR from 'swr';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { useVoteSource } from '@/lib/vote-source';
 
 export type VotingPowerSnapshot = {
+  /** Votes in the vote source's units (divide by 10^decimals to display). */
   votes: bigint;
   snapshotLedger: number;
+  /** The vote source's decimal places (0 for the token). */
+  decimals: number;
 };
 
-type VotingPowerKey = readonly ['voting-power', string, string, string, string, number | 'latest'];
+type VotingPowerKey = readonly ['voting-power', string, string, string, string, number | 'latest', number];
 
 async function fetchVotingPower([
   ,
-  tokenContractId,
+  sourceContractId,
   rpcUrl,
   passphrase,
   account,
-  ledger
+  ledger,
+  decimals
 ]: VotingPowerKey): Promise<VotingPowerSnapshot> {
+  // The token's client calls `get_votes_at_checkpoint(account, ledger)`, which every vote
+  // source implements with the same signature (common::clients::VoteSourceApi).
   const token = new TokenClient({
-    contractId: tokenContractId,
+    contractId: sourceContractId,
     rpcUrl,
     networkPassphrase: passphrase,
     publicKey: account
@@ -39,20 +46,24 @@ async function fetchVotingPower([
 
   return {
     votes: votes.result,
-    snapshotLedger
+    snapshotLedger,
+    decimals
   };
 }
 
+/** The account's voting power from the tribe's vote source (its token unless it chose an adapter). */
 export function useVotingPower(config: DaoNetworkConfig, account: string, ledger?: number | null) {
+  const { voteSource, isLoading } = useVoteSource(config);
   const key =
-    config.tokenContractId && account
+    config.tokenContractId && account && voteSource && !isLoading
       ? ([
           'voting-power',
-          config.tokenContractId,
+          voteSource.address,
           config.rpcUrl,
           config.passphrase,
           account,
-          typeof ledger === 'number' ? ledger : 'latest'
+          typeof ledger === 'number' ? ledger : 'latest',
+          voteSource.decimals
         ] as const)
       : null;
 

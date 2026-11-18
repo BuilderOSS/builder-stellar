@@ -186,6 +186,12 @@ function validateDaoConfig(config) {
   }
   intRange('governance.quorumBps', gov.quorumBps, 1, LIMITS.maxBps);
   const threshold = bigint('governance.proposalThreshold', gov.proposalThreshold, 1n);
+  // Optional: an approved vote source (docs/designs/governance-adapter.md); omitted = token-weighted.
+  if (gov.voteSource !== undefined && gov.voteSource !== null) {
+    if (typeof gov.voteSource !== 'string' || !/^C[A-Z2-7]{55}$/.test(gov.voteSource)) {
+      err('governance.voteSource must be a contract address (C...) the Manager approved, or omitted');
+    }
+  }
 
   for (const kind of MODULE_KINDS) {
     const section = config[kind];
@@ -242,7 +248,9 @@ function validateDaoConfig(config) {
     }
     if (founderTotal > 0xffffffff) err('founder allocation total exceeds u32');
   }
-  if (threshold !== null && founderTotal > 0 && threshold > BigInt(founderTotal)) {
+  // With a vote source the founders' tokens carry no votes, so the threshold is the adapter's to meet
+  // (launch checks the adapter has voting power).
+  if (!gov.voteSource && threshold !== null && founderTotal > 0 && threshold > BigInt(founderTotal)) {
     err(`governance.proposalThreshold (${threshold}) exceeds the founder supply (${founderTotal}); nobody could propose at launch`);
   }
 
@@ -509,7 +517,8 @@ function initialConfig() {
       voting_period: u32(daoConfig.governance.votingPeriod),
       queue_delay: u32(queueDelay),
       proposal_threshold: u128(daoConfig.governance.proposalThreshold),
-      quorum_bps: u32(daoConfig.governance.quorumBps)
+      quorum_bps: u32(daoConfig.governance.quorumBps),
+      vote_source: daoConfig.governance.voteSource ?? null
     },
     // ModuleSpec enum: one { Variant: config } object per module, each kind at most once.
     modules: MODULE_KINDS.filter((kind) => modules[kind]).map((kind) => {

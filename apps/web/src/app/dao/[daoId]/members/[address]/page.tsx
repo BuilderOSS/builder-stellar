@@ -25,6 +25,8 @@ import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useDirectoryMember, useDirectoryTokens } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
+import { formatVotes, useVoteSource } from '@/lib/vote-source';
+import { useVotingPower } from '@/lib/voting-power';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const back = css({ justifySelf: 'start', ml: '-3' });
@@ -54,7 +56,10 @@ export default function MemberProfilePage() {
 }
 
 function Profile({ daoId, address }: { daoId: string; address: string | null }) {
-  const { routeId } = useDaoContext();
+  const { routeId, daoConfig } = useDaoContext();
+  // A tribe voting through another source: votes come from that source and delegation doesn't apply.
+  const custom = useVoteSource(daoConfig).voteSource?.isToken === false;
+  const sourcePower = useVotingPower(daoConfig, custom ? address || '' : '');
   const [tokenPage, setTokenPage] = useState(0);
   const viewer = useAuthSessionStore((state) => state.address);
   const profile = useDirectoryMember(daoId, address);
@@ -112,17 +117,24 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
               <span className={statLabel}>{member.owned_token_count === '1' ? 'Token' : 'Tokens'}</span>
             </div>
             <div className={stat}>
-              <span className={statValue}>{member.voting_power}</span>
+              <span className={statValue}>
+                {custom
+                  ? sourcePower.data
+                    ? formatVotes(sourcePower.data.votes, sourcePower.data.decimals)
+                    : '…'
+                  : member.voting_power}
+              </span>
               <span className={statLabel}>
                 Votes{' '}
                 <HelpTip label="Votes">
-                  Votes include any delegated to this address and leave out their own if they delegated elsewhere.
-                  Delegating never moves a token. The directory can lag the chain a little.
+                  {custom
+                    ? "This tribe's votes come from its vote source, not from tokens, so delegating a token doesn't move them."
+                    : 'Votes include any delegated to this address and leave out their own if they delegated elsewhere. Delegating never moves a token. The directory can lag the chain a little.'}
                 </HelpTip>
               </span>
             </div>
           </div>
-          {member.delegated_to && member.delegated_to !== member.address ? (
+          {!custom && member.delegated_to && member.delegated_to !== member.address ? (
             <ListRow
               href={daoRoute(routeId, `members/${member.delegated_to}`)}
               media={<Avatar address={member.delegated_to} size="sm" />}
@@ -133,7 +145,7 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
         </>
       ) : null}
 
-      {isViewer && inventory.data?.items[0] ? (
+      {!custom && isViewer && inventory.data?.items[0] ? (
         <div>
           <ButtonLink
             variant="secondary"

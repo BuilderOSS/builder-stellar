@@ -40,6 +40,7 @@ import { isRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { formatVotes } from '@/lib/vote-source';
 import { useVotingPower } from '@/lib/voting-power';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -542,7 +543,7 @@ export default function ProposalDetailPage() {
         busy={busy}
         voteReason={voteReason}
         selectedVoteType={selectedVoteType}
-        votingPower={votingPower?.votes.toString() ?? null}
+        votingPower={votingPower ? formatVotes(votingPower.votes, votingPower.decimals) : null}
         votingPowerLoading={votingPowerLoading}
         votingPowerError={votingPowerError?.message ?? ''}
         unavailableReason={

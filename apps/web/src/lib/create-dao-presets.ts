@@ -3,7 +3,8 @@ import { configuredCreationNetwork, type DraftConfiguration } from './create-dao
 type Auction = DraftConfiguration['auction'];
 type Marketplace = DraftConfiguration['marketplace'];
 type TokenSettings = DraftConfiguration['tokenSettings'];
-type Governance = DraftConfiguration['governance'];
+/** The voting timings a pace sets; the vote source is chosen apart from the pace. */
+type Governance = Omit<DraftConfiguration['governance'], 'voteSource'>;
 
 /**
  * How people join a community. A type decides which modules the community is created with:

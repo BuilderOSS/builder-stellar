@@ -79,7 +79,9 @@ export function formDataToCreationParams(
         voting_period: data.governance.votingPeriod,
         queue_delay: data.governance.queueDelay,
         quorum_bps: data.governance.quorumBps,
-        proposal_threshold: BigInt(data.governance.proposalThreshold)
+        proposal_threshold: BigInt(data.governance.proposalThreshold),
+        // Token-weighted unless the creator chose an approved vote source.
+        vote_source: data.governance.voteSource || null
       }
     }
   };

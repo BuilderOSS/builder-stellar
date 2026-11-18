@@ -26,6 +26,7 @@ import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useDirectoryMembers } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
+import { useVoteSource } from '@/lib/vote-source';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const finder = css({
@@ -65,9 +66,18 @@ function MemberDirectory({ daoId }: { daoId: string }) {
   const [message, setMessage] = useState('');
   const [lookup, setLookup] = useState('');
   const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page, order);
+  // A tribe voting through another source: the directory's token votes and delegation don't apply.
+  const custom = useVoteSource(daoConfig).voteSource?.isToken === false;
 
   return (
-    <PageSection title="Members" daoNote="Each membership is an NFT with one vote.">
+    <PageSection
+      title="Members"
+      daoNote={
+        custom
+          ? "Each membership is an NFT. Votes come from the tribe's vote source."
+          : 'Each membership is an NFT with one vote.'
+      }
+    >
       <form
         className={finder}
         onSubmit={(event) => {
@@ -177,7 +187,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                 const isViewer = Boolean(viewer && viewer === member.address);
                 const delegation = system
                   ? 'Held by the tribe, no votes'
-                  : !member.delegated_to
+                  : custom || !member.delegated_to
                     ? ''
                     : member.delegated_to === member.address
                       ? ''
@@ -200,9 +210,11 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                           {formatCount(member.owned_token_count)}{' '}
                           {member.owned_token_count === '1' ? 'token' : 'tokens'}
                         </Chip>
-                        <Chip tone="outline">
-                          {formatCount(member.voting_power)} {member.voting_power === '1' ? 'vote' : 'votes'}
-                        </Chip>
+                        {custom ? null : (
+                          <Chip tone="outline">
+                            {formatCount(member.voting_power)} {member.voting_power === '1' ? 'vote' : 'votes'}
+                          </Chip>
+                        )}
                       </span>
                     }
                   />

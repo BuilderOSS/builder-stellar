@@ -20,7 +20,7 @@ export const FORM_SECTIONS = [
     id: 'voting',
     stored: 'governance',
     title: 'Voting',
-    description: 'Pick a pace for decisions. The exact rules are in Advanced settings.'
+    description: 'Choose how votes are counted and how fast decisions happen. The exact rules are in Advanced settings.'
   },
   {
     id: 'review',

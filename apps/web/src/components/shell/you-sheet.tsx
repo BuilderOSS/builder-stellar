@@ -16,6 +16,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { useIsPlatformAdmin } from '@/lib/platform/registry';
 import { DISCORD_URL } from '@/lib/site';
+import { formatVotes } from '@/lib/vote-source';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
@@ -98,7 +99,8 @@ function YouDrafts() {
 
 function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
   const routeId = useOptionalDaoContext()?.routeId ?? daoId;
-  const { member, isMember, isLoading, isLaunchAdmin, tokenCount, votingPower } = useDaoMembership(config);
+  const { member, isMember, isLoading, isLaunchAdmin, tokenCount, votingPower, voteDecimals, customVoteSource } =
+    useDaoMembership(config);
 
   return (
     <section className={block} aria-label={`Your membership in ${config.tokenName}`}>
@@ -116,19 +118,21 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
           </div>
           <div className={stat}>
             <span className={statLabel}>Voting power</span>
-            <span className={statValue}>{votingPower.toString()}</span>
+            <span className={statValue}>{formatVotes(votingPower, voteDecimals)}</span>
           </div>
-          <div className={stat}>
-            <span className={statLabel}>Votes go to</span>
-            <span className={statValue}>
-              {!member.delegated_to || member.delegated_to === member.address ? 'You' : 'A delegate'}
-            </span>
-          </div>
+          {customVoteSource ? null : (
+            <div className={stat}>
+              <span className={statLabel}>Votes go to</span>
+              <span className={statValue}>
+                {!member.delegated_to || member.delegated_to === member.address ? 'You' : 'A delegate'}
+              </span>
+            </div>
+          )}
           <NextLink
             href={daoRoute(routeId, `members/${member.address}`)}
             className={css({ textStyle: 'label', color: 'signal' })}
           >
-            View your tokens and delegation
+            {customVoteSource ? 'View your tokens' : 'View your tokens and delegation'}
           </NextLink>
         </>
       ) : (

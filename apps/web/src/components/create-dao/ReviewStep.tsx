@@ -5,6 +5,7 @@ import { Disclosure, Input } from '@/components/ui';
 import { membershipRulesOf, membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { formatDuration } from '@/lib/duration';
+import { useApprovedVoteSources } from '@/lib/vote-source';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
@@ -23,6 +24,9 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
   const update = useCreateDaoStore((s) => s.updateBasicInfo);
   const assets = creationAssets(configuredCreationNetwork());
   const assetName = (id: string) => assets.find((a) => a.contractId === id)?.code ?? id;
+  const approved = useApprovedVoteSources().data ?? [];
+  const voteSource = governance.voteSource ?? '';
+  const sourceName = approved.find((entry) => entry.source === voteSource)?.name;
   const rows = [
     ['Name', [basic.tokenName, basic.tokenSymbol].filter(Boolean).join(' · ') || 'Not set yet'],
     ['About', basic.description || 'Not set yet'],
@@ -39,6 +43,12 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
             ? 'The DAO can move any membership by vote.'
             : 'Only a member moves their own token.'
         ].join(' ')
+    ],
+    [
+      'Votes counted by',
+      voteSource
+        ? `${sourceName ?? 'An approved vote source'} (${voteSource.slice(0, 4)}…${voteSource.slice(-4)}). Fixed for good once created.`
+        : "The tribe's token: one membership, one vote."
     ],
     ['Voting pace', votingPaceOf(governance)?.title ?? 'Custom'],
     [

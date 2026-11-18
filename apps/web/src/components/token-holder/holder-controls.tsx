@@ -33,6 +33,7 @@ import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { useVoteSource } from '@/lib/vote-source';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -51,6 +52,8 @@ export function HolderControls({
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
+  // A tribe voting through another source: delegating a token moves no votes, so it isn't offered.
+  const delegation = useVoteSource(config).voteSource?.isToken !== false;
   const membersOnly = config.tokenSettings.membersOnlyDelegation;
   const queryAction = useSyncExternalStore(
     (listener) => {
@@ -61,7 +64,8 @@ export function HolderControls({
     () => null
   );
   const [selectedKind, setKind] = useState<HolderAction['action'] | null>(null);
-  const kind: HolderAction['action'] = selectedKind ?? (queryAction === 'delegate' ? 'delegate' : 'transfer');
+  const kind: HolderAction['action'] =
+    selectedKind ?? (queryAction === 'delegate' && delegation ? 'delegate' : 'transfer');
   const [typed, setDestination] = useState('');
   // A locked community: a token moves only back to the Treasury, or by a vote the Treasury runs.
   const fixedToTreasury = locked && (kind === 'transfer' || kind === 'approve');
@@ -290,29 +294,28 @@ export function HolderControls({
           // On a locked community the only useful approval is one that outlasts a vote: suggest it.
           if (value === 'approve' && locked && !expiry) void suggestVoteApproval();
         }}
-        options={
-          locked
-            ? [
-                { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
-                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-                { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
-                {
-                  value: 'revoke',
-                  label: 'Cancel token approval',
-                  description: 'Remove permission to transfer this token'
-                }
-              ]
-            : [
-                { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
-                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-                { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
-                {
-                  value: 'revoke',
-                  label: 'Cancel token approval',
-                  description: 'Remove permission to transfer this token'
-                }
-              ]
-        }
+        options={(locked
+          ? [
+              { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
+              { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+              { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
+              {
+                value: 'revoke',
+                label: 'Cancel token approval',
+                description: 'Remove permission to transfer this token'
+              }
+            ]
+          : [
+              { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
+              { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+              { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
+              {
+                value: 'revoke',
+                label: 'Cancel token approval',
+                description: 'Remove permission to transfer this token'
+              }
+            ]
+        ).filter((option) => delegation || option.value !== 'delegate')}
       />
       <div className={form}>
         {fixedToTreasury ? (
