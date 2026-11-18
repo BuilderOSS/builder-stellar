@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import useSWR from 'swr';
 
 import { useGovernorSettings } from '@/lib/admin-queries';
@@ -10,14 +11,29 @@ import { directoryFetch, directoryKey } from '@/lib/member-directory/hooks';
 import type { DirectoryMember, DirectoryPage, OwnedToken } from '@/lib/member-directory/types';
 import { siteHref } from '@/lib/site';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
+import { useVoteSource } from '@/lib/vote-source';
 
-import type { ChainFacts } from './bundle';
+import type { ChainFacts, Holder } from './bundle';
 
 /**
- * Holders read for the beneficial-ownership check. Anyone at 25% or more is among the top four,
- * so the first page always covers them.
+ * Holders read for the beneficial-ownership check, ranked once by tokens owned and once by voting
+ * power. Anyone at 25% or more of either is among the top four of that ranking, so one page each
+ * always covers them.
  */
 const HOLDER_PAGE = 25;
+
+/** The two rankings merged into one list of holders, each address once. */
+export function mergeHolders(...pages: Array<DirectoryMember[] | undefined>): Holder[] {
+  const byAddress = new Map<string, Holder>();
+  for (const member of pages.flatMap((page) => page ?? [])) {
+    byAddress.set(member.address, {
+      address: member.address,
+      ownedTokens: BigInt(member.owned_token_count),
+      votingPower: BigInt(member.voting_power)
+    });
+  }
+  return [...byAddress.values()];
+}
 
 const CONTRACT_ROLES: Array<[keyof DaoNetworkConfig, string]> = [
   ['tokenContractId', 'Token (membership and DAO ID)'],
@@ -40,11 +56,13 @@ export function contractList(config: DaoNetworkConfig) {
 
 /** Everything the bundle takes from the chain and the index; each part loads and fails on its own. */
 export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: string) {
-  const members = useSWR(directoryKey(daoId, 'legal-holders'), () =>
+  const holderPage = (by: 'votes' | 'tokens') =>
     directoryFetch<DirectoryPage<DirectoryMember>>(
-      `/api/dao/${encodeURIComponent(daoId)}/members?limit=${HOLDER_PAGE}&offset=0&order=desc`
-    )
-  );
+      `/api/dao/${encodeURIComponent(daoId)}/members?limit=${HOLDER_PAGE}&offset=0&order=desc&by=${by}`
+    );
+  const members = useSWR(directoryKey(daoId, 'legal-holders'), () => holderPage('votes'));
+  const owners = useSWR(directoryKey(daoId, 'legal-owners'), () => holderPage('tokens'));
+  const voteSource = useVoteSource(config);
   const supply = useSWR(directoryKey(daoId, 'legal-supply'), () =>
     directoryFetch<DirectoryPage<OwnedToken> & { totalSupply: string; votingSupply: string | null }>(
       `/api/dao/${encodeURIComponent(daoId)}/tokens?limit=1&offset=0`
@@ -53,9 +71,11 @@ export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: 
   const governor = useGovernorSettings(config, config.launchAdmin, true);
   const treasury = useTreasuryBalances(config);
 
-  const loading = members.isLoading || supply.isLoading || governor.isLoading || treasury.isLoading;
+  const loading = members.isLoading || owners.isLoading || supply.isLoading || governor.isLoading || treasury.isLoading;
+  const holders = useMemo(() => mergeHolders(owners.data?.items, members.data?.items), [owners.data, members.data]);
   const problems = [
-    members.error ? 'members' : null,
+    members.error || owners.error ? 'members' : null,
+    voteSource.error ? 'vote source' : null,
     supply.error ? 'token supply' : null,
     governor.error ? 'voting rules' : null,
     treasury.error ? 'treasury balances' : null
@@ -82,6 +102,9 @@ export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: 
         votingSupply: supply.data?.votingSupply ?? null,
         ...config.tokenSettings
       },
+      voteSource: voteSource.voteSource
+        ? { address: voteSource.voteSource.address, isToken: voteSource.voteSource.isToken }
+        : null,
       launchModes: {
         auction: Boolean(config.auctionContractId) && config.auctionEnabled !== false,
         claims: Boolean(config.claimsContractId),
@@ -108,7 +131,7 @@ export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: 
       },
       members: {
         count: members.data?.total ?? null,
-        holders: (members.data?.items ?? []).map((m) => ({ address: m.address, votingPower: BigInt(m.voting_power) }))
+        holders
       }
     };
   }
@@ -118,6 +141,7 @@ export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: 
     problems,
     snapshot,
     votingSupply: supply.data?.votingSupply ?? null,
-    holders: members.data?.items ?? []
+    totalSupply: supply.data?.totalSupply ?? null,
+    holders
   };
 }

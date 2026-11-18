@@ -8,6 +8,7 @@ import {
   emptyDraft,
   type EntityDraft,
   hasErrors,
+  holderKind,
   kycAssessment,
   LEGAL_EXPORT_SCHEMA,
   shareBps,
@@ -18,6 +19,8 @@ import {
 const G1 = `G${'A'.repeat(55)}`;
 const G2 = `G${'B'.repeat(55)}`;
 const G3 = `G${'C'.repeat(55)}`;
+const C_MULTISIG = `C${'M'.repeat(55)}`;
+const C_TREASURY = `C${'T'.repeat(55)}`;
 
 const draft = (overrides: Partial<EntityDraft> = {}): EntityDraft => ({
   ...emptyDraft('Lantern Club', 'A neighbourhood tribe that funds street lights.'),
@@ -45,9 +48,15 @@ const facts = (overrides: Partial<ChainFacts> = {}): ChainFacts => ({
     membersOnlyDelegation: false,
     daoRecovery: false
   },
+  voteSource: { address: 'CTOKEN', isToken: true },
   launchModes: { auction: true, claims: false, marketplace: true },
   contracts: [
-    { role: 'Token', address: 'CTOKEN', explorerUrl: 'https://stellar.expert/explorer/testnet/contract/CTOKEN' }
+    { role: 'Token', address: 'CTOKEN', explorerUrl: 'https://stellar.expert/explorer/testnet/contract/CTOKEN' },
+    {
+      role: 'Treasury',
+      address: C_TREASURY,
+      explorerUrl: `https://stellar.expert/explorer/testnet/contract/${C_TREASURY}`
+    }
   ],
   governance: {
     votingDelaySeconds: 86_400,
@@ -60,9 +69,10 @@ const facts = (overrides: Partial<ChainFacts> = {}): ChainFacts => ({
   members: {
     count: 3,
     holders: [
-      { address: G1, votingPower: 5n },
-      { address: G2, votingPower: 3n },
-      { address: G3, votingPower: 2n }
+      { address: G1, ownedTokens: 5n, votingPower: 5n },
+      { address: G2, ownedTokens: 3n, votingPower: 3n },
+      { address: G3, ownedTokens: 2n, votingPower: 2n },
+      { address: C_TREASURY, ownedTokens: 2n, votingPower: 0n }
     ]
   },
   ...overrides
@@ -73,14 +83,30 @@ describe('suggestLegalName', () => {
     expect(suggestLegalName('Lantern Club')).toBe('Lantern Club DAO LLC');
     expect(suggestLegalName('Lantern DAO')).toBe('Lantern DAO LLC');
     expect(suggestLegalName('Lantern DAO LLC')).toBe('Lantern DAO LLC');
+    // MIDAO's own example: the space before "DAO LLC" is the optional one.
+    expect(suggestLegalName('MIDAO')).toBe('MIDAO LLC');
     expect(suggestLegalName('  ')).toBe('');
   });
 });
 
 describe('validateDraft', () => {
-  it('accepts a complete draft, with or without the space before LLC', () => {
+  it('accepts names ending in "DAO LLC", with or without a space before DAO', () => {
     expect(hasErrors(validateDraft(draft()))).toBe(false);
-    expect(hasErrors(validateDraft(draft({ legalName: 'Lantern DAOLLC' })))).toBe(false);
+    expect(hasErrors(validateDraft(draft({ legalName: 'MIDAO LLC' })))).toBe(false);
+    expect(hasErrors(validateDraft(draft({ legalName: 'MI DAO LLC' })))).toBe(false);
+  });
+
+  it('rejects "DAOLLC": the phrase keeps its space', () => {
+    expect(validateDraft(draft({ legalName: 'Lantern DAOLLC' })).legalName).toBeTruthy();
+  });
+
+  it('asks a non-profit for its kind of good works, and checks the dollar estimate', () => {
+    expect(validateDraft(draft({ entityType: 'non-profit' })).nonProfitPurpose).toBeTruthy();
+    expect(
+      validateDraft(draft({ entityType: 'non-profit', nonProfitPurpose: 'educational' })).nonProfitPurpose
+    ).toBeUndefined();
+    expect(validateDraft(draft({ fundingUsdEstimate: '45,000' })).fundingUsdEstimate).toBeUndefined();
+    expect(validateDraft(draft({ fundingUsdEstimate: 'lots' })).fundingUsdEstimate).toBeTruthy();
   });
 
   it('needs the suffix, a real purpose and a contact', () => {
@@ -110,19 +136,45 @@ describe('kycAssessment', () => {
     expect(shareBps(1n, 0n)).toBe(0);
   });
 
-  it('lists holders at or above 25% as category A', () => {
-    const { category, owners } = kycAssessment(facts().members.holders, 10n, []);
+  const supply = { minted: 12n, voting: 10n };
+  const tribe = ['CTOKEN', C_TREASURY];
+
+  it("counts ownership of all tokens minted, and leaves the tribe's own contracts out of the owners", () => {
+    const { category, owners, tribeHeld } = kycAssessment(facts().members.holders, supply, [], tribe);
     expect(category).toBe('A');
-    expect(owners.map((o) => [o.address, o.bps])).toEqual([
-      [G1, 5_000],
-      [G2, 3_000]
+    expect(owners.map((o) => [o.address, o.ownershipBps])).toEqual([
+      [G1, 4_166],
+      [G2, 2_500]
     ]);
+    expect(tribeHeld).toEqual([]);
+  });
+
+  it('reports a delegate with 25% of the votes beside the owners, not as one', () => {
+    const holders = [
+      { address: G1, ownedTokens: 1n, votingPower: 6n },
+      { address: G2, ownedTokens: 5n, votingPower: 0n }
+    ];
+    const { owners, votingOnly } = kycAssessment(holders, { minted: 10n, voting: 10n }, [], tribe);
+    expect(owners.map((o) => o.address)).toEqual([G2]);
+    expect(votingOnly.map((o) => [o.address, o.votingBps])).toEqual([[G1, 6_000]]);
+  });
+
+  it('flags a contract owner for a KYB look-through and lists tribe-held tokens apart', () => {
+    const holders = [
+      { address: C_MULTISIG, ownedTokens: 4n, votingPower: 4n },
+      { address: C_TREASURY, ownedTokens: 4n, votingPower: 0n }
+    ];
+    const { owners, tribeHeld } = kycAssessment(holders, { minted: 10n, voting: 6n }, [], tribe);
+    expect(owners.map((o) => o.kind)).toEqual(['contract']);
+    expect(tribeHeld.map((o) => o.address)).toEqual([C_TREASURY]);
+    expect(holderKind(G1, tribe)).toBe('account');
   });
 
   it('falls back to managers, then to any member', () => {
-    const spread = [1n, 1n, 1n, 1n, 1n].map((votingPower, i) => ({ address: `G${i}`, votingPower }));
-    expect(kycAssessment(spread, 5n, [{ name: 'Bo', role: '', wallet: '' }]).category).toBe('B');
-    expect(kycAssessment(spread, 5n, []).category).toBe('C');
+    const spread = [1n, 1n, 1n, 1n, 1n].map((n, i) => ({ address: `G${i}`, ownedTokens: n, votingPower: n }));
+    const five = { minted: 5n, voting: 5n };
+    expect(kycAssessment(spread, five, [{ name: 'Bo', role: '', wallet: '' }], tribe).category).toBe('B');
+    expect(kycAssessment(spread, five, [], tribe).category).toBe('C');
   });
 });
 
@@ -133,13 +185,50 @@ describe('buildBundle', () => {
     expect(bundle.entity.proposedLegalName).toBe('Lantern Club DAO LLC');
     expect(bundle.entity.managers).toEqual([{ name: 'Bo', role: 'Ops', wallet: null }]);
     expect(bundle.beneficialOwnership.category).toBe('A');
-    expect(bundle.beneficialOwnership.holdersAtOrAboveThreshold[0]).toEqual({
+    expect(bundle.beneficialOwnership.owners[0]).toMatchObject({
       address: G1,
+      kind: 'account',
+      tokensOwned: '5',
+      ownershipShareBps: 4_166,
       votingPower: '5',
-      shareBps: 5_000
+      votingShareBps: 5_000
     });
+    expect(bundle.operatingAgreementProfile).toMatchObject({
+      membershipTracking: 'blockchain',
+      voting: 'one-token-one-vote',
+      governance: 'smart-contract'
+    });
+    expect(bundle.entity.management).toMatch(/^Governance delegated to the smart contracts/);
+    expect(bundle.smartContracts.every((c) => c.status === 'live')).toBe(true);
+    expect(bundle.initialContributions.treasuryAddress).toBe('CTREASURY');
+    expect(bundle.sources.naming).toContain('docs.midao.org');
     // Bigints never reach JSON.stringify.
     expect(() => JSON.stringify(bundle)).not.toThrow();
+  });
+
+  it('marks a tribe in setup as not yet live and describes an adapter vote source', () => {
+    const bundle = buildBundle(
+      draft(),
+      facts({
+        tribe: { ...facts().tribe, status: 'pending' },
+        voteSource: { address: C_MULTISIG, isToken: false }
+      })
+    );
+    expect(bundle.smartContracts[0].status).toBe('deployed, not yet live');
+    expect(bundle.operatingAgreementProfile.voting).toBe('vote-source-weighted');
+    expect(bundle.membership.voteSource).toBe(C_MULTISIG);
+  });
+
+  it('keeps for-profit and non-profit answers only for their own type', () => {
+    const forProfit = buildBundle(
+      draft({ entityType: 'for-profit', usMembers: 'yes', nonProfitPurpose: 'charitable' }),
+      facts()
+    );
+    expect(forProfit.entity.forProfit).toEqual({ profitAllocation: null, usMembers: 'yes' });
+    expect(forProfit.entity.nonProfitPurposeCategory).toBeNull();
+    const nonProfit = buildBundle(draft({ entityType: 'non-profit', nonProfitPurpose: 'educational' }), facts());
+    expect(nonProfit.entity.forProfit).toBeNull();
+    expect(nonProfit.entity.nonProfitPurposeCategory).toBe('educational');
   });
 
   it('still builds when the governor or treasury could not be read', () => {
@@ -155,7 +244,9 @@ describe('bundleToMarkdown', () => {
     expect(markdown.split('\n')[2]).toMatch(/^> .*not legal advice/);
     expect(markdown).toContain('**Quorum:** 10% of tokens with votes');
     expect(markdown).toContain('**Voting period:** 3 days');
-    expect(markdown).toContain(`| ${G1} | 5 | 50% |`);
+    expect(markdown).toContain(`| ${G1} | Stellar account | 5 | 41.66% | 5 | 50% |`);
+    expect(markdown).toContain('## Operating agreement profile');
+    expect(markdown).toContain('## Sources');
   });
 });
 

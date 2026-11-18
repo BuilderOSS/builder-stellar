@@ -10,6 +10,7 @@ import {
   Callout,
   Chip,
   ChoiceGroup,
+  Disclosure,
   FieldHelperText,
   FieldLabel,
   IconButton,
@@ -34,13 +35,17 @@ import {
   type EntityDraft,
   type EntityType,
   hasErrors,
+  HOLDER_KIND_TEXT,
   KYC_CATEGORY_TEXT,
   kycAssessment,
   MAX_MANAGERS,
   MAX_PURPOSE_LENGTH,
+  NON_PROFIT_PURPOSE_LABELS,
+  type NonProfitPurpose,
+  type UsMembers,
   validateDraft
 } from '@/lib/legal-export/bundle';
-import { useLegalFacts } from '@/lib/legal-export/facts';
+import { contractList, useLegalFacts } from '@/lib/legal-export/facts';
 
 const stack = css({ display: 'grid', gap: '5' });
 const field = css({ display: 'grid', gap: '1.5' });
@@ -86,6 +91,14 @@ const ENTITY_OPTIONS = [
   { value: 'undecided', label: 'Not decided yet', description: 'Talk it through with the registrar first.' }
 ];
 
+const NON_PROFIT_OPTIONS = Object.entries(NON_PROFIT_PURPOSE_LABELS).map(([value, label]) => ({ value, label }));
+
+const US_MEMBER_OPTIONS = [
+  { value: 'no', label: 'No' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'unknown', label: 'Not known yet' }
+];
+
 function download(name: string, type: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const link = document.createElement('a');
@@ -100,7 +113,8 @@ const pct = (bps: number) => `${(bps / 100).toLocaleString('en-GB', { maximumFra
 
 /** Which steps a set of errors belongs to, so Continue stops on the step that needs fixing. */
 function stepErrors(errors: DraftErrors, step: number) {
-  if (step === 0) return Boolean(errors.legalName || errors.purpose);
+  if (step === 0)
+    return Boolean(errors.legalName || errors.purpose || errors.nonProfitPurpose || errors.fundingUsdEstimate);
   if (step === 1) return Boolean(errors.contactName || errors.contactEmail || errors.managers);
   return false;
 }
@@ -122,15 +136,22 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
     setDraft((current) => ({ ...current, ...patch }));
   };
   const setContact = (patch: Partial<EntityDraft['contact']>) => set({ contact: { ...draft.contact, ...patch } });
+  const setAgent = (patch: Partial<EntityDraft['representativeAgent']>) =>
+    set({ representativeAgent: { ...draft.representativeAgent, ...patch } });
 
+  const tribeContracts = useMemo(() => contractList(config).map((c) => c.address), [config]);
   const kyc = useMemo(
     () =>
       kycAssessment(
-        facts.holders.map((h) => ({ address: h.address, votingPower: BigInt(h.voting_power) })),
-        facts.votingSupply ? BigInt(facts.votingSupply) : 0n,
-        draft.managers
+        facts.holders,
+        {
+          minted: facts.totalSupply ? BigInt(facts.totalSupply) : 0n,
+          voting: facts.votingSupply ? BigInt(facts.votingSupply) : 0n
+        },
+        draft.managers,
+        tribeContracts
       ),
-    [facts.holders, facts.votingSupply, draft.managers]
+    [facts.holders, facts.totalSupply, facts.votingSupply, draft.managers, tribeContracts]
   );
 
   const bundle = step === 3 && frozen && !hasErrors(errors) ? buildBundle(draft, frozen) : null;
@@ -186,7 +207,7 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
                   </p>
                 ) : (
                   <FieldHelperText id="legal-name-help">
-                    Ends with “DAO LLC”, for example Lantern DAO LLC.
+                    Ends with “DAO LLC”, for example Lantern DAO LLC or LanternDAO LLC.
                   </FieldHelperText>
                 )}
               </div>
@@ -203,6 +224,47 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
               value={draft.entityType}
               onValueChange={(value) => set({ entityType: value as EntityType })}
             />
+            <p className={muted}>
+              MIDAO can&apos;t convert this later: changing between non-profit and for-profit means forming a new
+              entity.
+            </p>
+            {draft.entityType === 'non-profit' ? (
+              <div className={field}>
+                <ChoiceGroup
+                  label="What kind of good works?"
+                  options={NON_PROFIT_OPTIONS}
+                  value={draft.nonProfitPurpose}
+                  onValueChange={(value) => set({ nonProfitPurpose: value as NonProfitPurpose })}
+                />
+                {shown.nonProfitPurpose ? (
+                  <p className={error} role="alert">
+                    {shown.nonProfitPurpose}
+                  </p>
+                ) : (
+                  <FieldHelperText>A non-profit DAO LLC can&apos;t distribute earnings to its members.</FieldHelperText>
+                )}
+              </div>
+            ) : null}
+            {draft.entityType === 'for-profit' ? (
+              <div className={stack}>
+                <div className={field}>
+                  <FieldLabel htmlFor="profit-allocation">How profits are shared (optional)</FieldLabel>
+                  <Textarea
+                    id="profit-allocation"
+                    rows={3}
+                    value={draft.profitAllocation}
+                    onChange={(e) => set({ profitAllocation: e.target.value })}
+                  />
+                  <FieldHelperText>In your own words, for example by tokens held.</FieldHelperText>
+                </div>
+                <ChoiceGroup
+                  label="Are any members US persons?"
+                  options={US_MEMBER_OPTIONS}
+                  value={draft.usMembers}
+                  onValueChange={(value) => set({ usMembers: value as UsMembers })}
+                />
+              </div>
+            ) : null}
             <div className={field}>
               <FieldLabel htmlFor="legal-purpose">Purpose</FieldLabel>
               <Textarea
@@ -221,6 +283,39 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
                 <FieldHelperText>What the tribe does and why. Starts from your tribe description.</FieldHelperText>
               )}
             </div>
+            <Disclosure title="More for the registrar (optional)">
+              <div className={stack}>
+                <div className={field}>
+                  <FieldLabel htmlFor="funding-usd">Treasury plus funding, in US dollars</FieldLabel>
+                  <Input
+                    id="funding-usd"
+                    inputMode="decimal"
+                    value={draft.fundingUsdEstimate}
+                    aria-invalid={Boolean(shown.fundingUsdEstimate) || undefined}
+                    onChange={(e) => set({ fundingUsdEstimate: e.target.value })}
+                  />
+                  {shown.fundingUsdEstimate ? (
+                    <p className={error} role="alert">
+                      {shown.fundingUsdEstimate}
+                    </p>
+                  ) : (
+                    <FieldHelperText>An estimate. MIDAO&apos;s fees are tiered by it.</FieldHelperText>
+                  )}
+                </div>
+                <div className={field}>
+                  <FieldLabel htmlFor="contributions">Other initial contributions</FieldLabel>
+                  <Textarea
+                    id="contributions"
+                    rows={3}
+                    value={draft.contributions}
+                    onChange={(e) => set({ contributions: e.target.value })}
+                  />
+                  <FieldHelperText>
+                    One per line, such as a domain, a social account or code. The Treasury is included already.
+                  </FieldHelperText>
+                </div>
+              </div>
+            </Disclosure>
           </div>
         </Section>
       ) : null}
@@ -278,7 +373,7 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
               <FieldLabel htmlFor="manager-0-name">Managers (optional)</FieldLabel>
               <p className={muted}>
                 A DAO LLC can be run entirely by its contracts. List anyone who acts for the tribe off chain, such as
-                signing agreements. With no holder at 25%, managers are the ones a registrar verifies.
+                signing agreements. With no member owning 25%, managers are the ones a registrar verifies.
               </p>
               {draft.managers.map((manager, i) => (
                 <div key={i} className={managerRow}>
@@ -338,6 +433,29 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
             </div>
 
             <div className={field}>
+              <FieldLabel htmlFor="agent-name">Representative Agent (optional)</FieldLabel>
+              <p className={muted}>
+                MIDAO files the consent of a Representative Agent with the formation documents. Name them if you know
+                who it will be.
+              </p>
+              <div className={twoCol}>
+                <Input
+                  id="agent-name"
+                  aria-label="Representative Agent name"
+                  placeholder="Name"
+                  value={draft.representativeAgent.name}
+                  onChange={(e) => setAgent({ name: e.target.value })}
+                />
+                <Input
+                  aria-label="Representative Agent role"
+                  placeholder="Role"
+                  value={draft.representativeAgent.role}
+                  onChange={(e) => setAgent({ role: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className={field}>
               <FieldLabel htmlFor="legal-notes">Notes for the registrar (optional)</FieldLabel>
               <Textarea
                 id="legal-notes"
@@ -361,7 +479,7 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
           ) : null}
           <Section
             title="Who a registrar would verify"
-            description={`MIDAO asks anyone with ${pct(BENEFICIAL_OWNER_BPS)} or more of the governance rights to complete KYC. Voting power changes as tokens move, so this is as of now.`}
+            description={`MIDAO asks anyone who owns ${pct(BENEFICIAL_OWNER_BPS)} or more of the governance rights to complete KYC. This counts membership tokens owned, of all tokens minted, as of now.`}
           >
             {facts.loading ? (
               <Skeleton className={css({ height: '14', borderRadius: 'control' })} />
@@ -372,23 +490,33 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
                   meta={KYC_CATEGORY_TEXT[kyc.category]}
                   wrap
                   trailing={
-                    <Chip tone={kyc.category === 'A' ? 'warning' : 'neutral'}>{kyc.owners.length} at 25%+</Chip>
+                    <Chip tone={kyc.category === 'A' ? 'warning' : 'neutral'}>{kyc.owners.length} own 25%+</Chip>
                   }
                 />
-                {kyc.owners.map((owner) => (
-                  <ListRow
-                    key={owner.address}
-                    title={
-                      <Address
-                        value={owner.address}
-                        compact
-                        explorerUrl={getExplorerAccountUrl(config.name, owner.address)}
-                      />
-                    }
-                    meta={`${owner.votingPower.toString()} votes`}
-                    trailing={<Chip tone="warning">{pct(owner.bps)}</Chip>}
-                  />
-                ))}
+                {[...kyc.owners, ...kyc.votingOnly, ...kyc.tribeHeld].map((holder) => {
+                  const owner = kyc.owners.includes(holder);
+                  return (
+                    <ListRow
+                      key={holder.address}
+                      title={
+                        <Address
+                          value={holder.address}
+                          compact
+                          explorerUrl={getExplorerAccountUrl(config.name, holder.address)}
+                        />
+                      }
+                      meta={`${owner ? 'Owns' : holder.kind === 'tribe-contract' ? 'Holds' : 'Votes with'} ${owner || holder.kind === 'tribe-contract' ? `${holder.ownedTokens.toString()} tokens` : `${holder.votingPower.toString()} votes`} · ${HOLDER_KIND_TEXT[holder.kind]}`}
+                      wrap
+                      trailing={
+                        <Chip tone={owner ? 'warning' : 'neutral'}>
+                          {owner || holder.kind === 'tribe-contract'
+                            ? pct(holder.ownershipBps)
+                            : `${pct(holder.votingBps)} of votes`}
+                        </Chip>
+                      }
+                    />
+                  );
+                })}
               </div>
             )}
           </Section>

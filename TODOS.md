@@ -76,7 +76,7 @@
 
 ### MIDAO review of the legal entity export
 
-**What:** Get MIDAO to confirm the export bundle (`docs/LEGAL_EXPORT.md`) is useful for their intake, then fold their answers into schema v2 if needed: missing fields, the format, whether the 25% test counts delegated votes, and whether they want code hashes and versions alongside contract addresses.
+**What:** Get MIDAO to confirm the export bundle (`docs/LEGAL_EXPORT.md`) is useful for their intake, then fold their answers into the next schema version. Schema v2 (2026-11-18) already follows the published docs.midao.org guidance; the ten open questions are in `docs/LEGAL_EXPORT.md`.
 
 **Why:** The SCF Tranche 2 sign-off reads "DAO registrar exports a bundle that is confirmed by MIDAO as useful for their intake process".
 

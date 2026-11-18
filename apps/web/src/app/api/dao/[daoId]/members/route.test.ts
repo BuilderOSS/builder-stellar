@@ -19,15 +19,18 @@ describe('members API', () => {
     mocks.list.mockClear();
     const invalid = await request('order=invalid');
     expect(invalid.status).toBe(400);
+    expect((await request('by=stake')).status).toBe(400);
     expect(mocks.list).not.toHaveBeenCalled();
   });
   it('passes pagination beyond 100 through and disables HTTP caches', async () => {
     const response = await request('limit=25&offset=100');
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(mocks.list).toHaveBeenCalledWith('dao-a', { limit: 25, offset: 100 }, 'desc');
+    expect(mocks.list).toHaveBeenCalledWith('dao-a', { limit: 25, offset: 100 }, 'desc', 'votes');
     await request('limit=25&offset=0', 'dao-b');
     expect(mocks.list.mock.calls[1][0]).toBe('dao-b');
+    await request('limit=25&offset=0&by=tokens');
+    expect(mocks.list.mock.calls[2][3]).toBe('tokens');
   });
   it('looks up a valid address directly and treats a missing member as a normal null', async () => {
     const response = await request(`address=${address}`);

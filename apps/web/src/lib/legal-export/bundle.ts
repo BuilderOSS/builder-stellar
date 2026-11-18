@@ -1,29 +1,50 @@
 /**
  * The legal wrapper export (docs/LEGAL_EXPORT.md): a structured bundle a tribe forwards to a DAO
  * registrar such as MIDAO for due diligence. It combines what the chain and index already say about
- * the tribe (contracts, voting rules, treasury, who holds voting power) with the few things only the
- * founders can state (the proposed legal name, purpose, entity type, managers and a contact).
+ * the tribe (contracts, voting rules, treasury, who owns and who votes with the membership tokens)
+ * with the things only the founders can state (the proposed legal name, purpose, entity type,
+ * managers, a Representative Agent and a contact).
  *
  * Nothing here is legal advice and nothing leaves the browser: the bundle is built client-side and
- * downloaded. The thresholds follow MIDAO's published guidance (docs.midao.org) and are marked as
- * such in the bundle, so a registrar can correct them.
+ * downloaded. Each rule follows MIDAO's published guidance (docs.midao.org, read 2026-11-18) and the
+ * bundle links the exact page in `sources`, so a registrar can correct our reading.
  */
 
 import { formatDuration } from '@/lib/duration';
 
-export const LEGAL_EXPORT_SCHEMA = 'https://tribes.build/schemas/legal-export/v1';
+export const LEGAL_EXPORT_SCHEMA = 'https://tribes.build/schemas/legal-export/v2';
 
-/** MIDAO: anyone with 25% or more of the governance rights completes KYC (category A). */
+/** MIDAO: anyone who owns 25% or more of the governance rights is a beneficial owner (category A). */
 export const BENEFICIAL_OWNER_BPS = 2_500;
 
-/** MIDAO: "Every DAO LLC must have 'DAO LLC' at the end of the entity name"; the space is optional. */
-const LEGAL_NAME_RE = /\bDAO ?LLC$/i;
+/** The MIDAO pages each rule in the bundle comes from. */
+export const MIDAO_SOURCES = {
+  registration: 'https://docs.midao.org/rmi-dao-llc-registration-and-compliance/registration-process',
+  naming:
+    'https://docs.midao.org/rmi-dao-llc-registration-and-compliance/naming-your-dao-llc-and-dba-doing-business-as',
+  beneficialOwnership:
+    'https://docs.midao.org/rmi-dao-llc-registration-and-compliance/kyc-kyb-and-beneficial-ownership-reporting',
+  entityType: 'https://docs.midao.org/dao-llc-structuring/non-profit-vs.-for-profit',
+  operatingAgreement: 'https://docs.midao.org/dao-llc-structuring/dao-llc-operating-agreements-and-amendments',
+  smartContracts: 'https://docs.midao.org/dao-llc-structuring/use-of-smart-contracts',
+  members: 'https://docs.midao.org/dao-llc-structuring/members-membership-interests-managing-members',
+  fees: 'https://docs.midao.org/midao-pricing-and-services/pricing-cost-comparison-and-payments'
+} as const;
+
+/**
+ * MIDAO: the name ends in "DAO LLC". The optional space is between the project name and "DAO LLC"
+ * ("MIDAO LLC" or "MI DAO LLC"), so the check is only that the name ends with that phrase; the
+ * phrase itself keeps its space ("DAOLLC" is not a DAO LLC name).
+ */
+const LEGAL_NAME_RE = /DAO LLC$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACCOUNT_RE = /^[GC][A-Z2-7]{55}$/;
+const USD_RE = /^\d{1,13}(\.\d{1,2})?$/;
 
 export const MIN_PURPOSE_LENGTH = 20;
 export const MAX_PURPOSE_LENGTH = 2_000;
 export const MAX_MANAGERS = 10;
+export const MAX_CONTRIBUTIONS = 20;
 
 export type EntityType = 'non-profit' | 'for-profit' | 'undecided';
 
@@ -33,6 +54,19 @@ export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   undecided: 'Not decided yet'
 };
 
+/** MIDAO: a non-profit DAO LLC's purpose is charitable, educational, scientific or similar good works. */
+export type NonProfitPurpose = '' | 'charitable' | 'educational' | 'scientific' | 'religious' | 'other-good-works';
+
+export const NON_PROFIT_PURPOSE_LABELS: Record<Exclude<NonProfitPurpose, ''>, string> = {
+  charitable: 'Charitable',
+  educational: 'Educational',
+  scientific: 'Scientific',
+  religious: 'Religious',
+  'other-good-works': 'Other good works'
+};
+
+export type UsMembers = 'yes' | 'no' | 'unknown';
+
 export type Manager = { name: string; role: string; wallet: string };
 
 /** What the founders fill in. */
@@ -40,20 +74,34 @@ export type EntityDraft = {
   legalName: string;
   tradeName: string;
   entityType: EntityType;
+  nonProfitPurpose: NonProfitPurpose;
   purpose: string;
+  /** For-profit only: how profits are allocated, in the founders' words. */
+  profitAllocation: string;
+  /** For-profit only: whether any member is a US person (MIDAO notes the IRS Form 8832 election). */
+  usMembers: UsMembers;
   managers: Manager[];
+  /** MIDAO files Form 1 with the consent of a Representative Agent. */
+  representativeAgent: { name: string; role: string };
   contact: { name: string; email: string; role: string };
+  /** Initial contributions beyond the Treasury, one per line: domains, accounts, IP. */
+  contributions: string;
+  /** Treasury plus funding in USD, an estimate: MIDAO's fees are tiered by it. */
+  fundingUsdEstimate: string;
   notes: string;
 };
 
-export type DraftErrors = Partial<Record<'legalName' | 'purpose' | 'contactName' | 'contactEmail', string>> & {
-  managers?: Record<number, string>;
-};
+export type DraftField =
+  'legalName' | 'purpose' | 'nonProfitPurpose' | 'contactName' | 'contactEmail' | 'fundingUsdEstimate';
+
+export type DraftErrors = Partial<Record<DraftField, string>> & { managers?: Record<number, string> };
 
 export function suggestLegalName(tribeName: string) {
   const name = tribeName.trim().replace(/\s+/g, ' ');
   if (!name) return '';
-  return LEGAL_NAME_RE.test(name) ? name : `${name.replace(/\s+DAO$/i, '')} DAO LLC`;
+  if (LEGAL_NAME_RE.test(name)) return name;
+  // "Lantern DAO" and "MIDAO" become "Lantern DAO LLC" and "MIDAO LLC"; anything else gains " DAO LLC".
+  return /DAO$/i.test(name) ? `${name} LLC` : `${name} DAO LLC`;
 }
 
 export function emptyDraft(tribeName: string, description: string): EntityDraft {
@@ -61,9 +109,15 @@ export function emptyDraft(tribeName: string, description: string): EntityDraft 
     legalName: suggestLegalName(tribeName),
     tradeName: tribeName.trim(),
     entityType: 'undecided',
+    nonProfitPurpose: '',
     purpose: description.trim().slice(0, MAX_PURPOSE_LENGTH),
+    profitAllocation: '',
+    usMembers: 'unknown',
     managers: [],
+    representativeAgent: { name: '', role: '' },
     contact: { name: '', email: '', role: '' },
+    contributions: '',
+    fundingUsdEstimate: '',
     notes: ''
   };
 }
@@ -78,9 +132,15 @@ export function validateDraft(draft: EntityDraft): DraftErrors {
   if (purpose.length < MIN_PURPOSE_LENGTH) errors.purpose = 'Say in a sentence or two what the tribe does.';
   else if (purpose.length > MAX_PURPOSE_LENGTH) errors.purpose = `At most ${MAX_PURPOSE_LENGTH} characters.`;
 
+  if (draft.entityType === 'non-profit' && !draft.nonProfitPurpose)
+    errors.nonProfitPurpose = 'Choose the kind of good works the tribe does.';
+
   if (!draft.contact.name.trim()) errors.contactName = 'Who should the registrar contact?';
   const email = draft.contact.email.trim();
   if (email && !EMAIL_RE.test(email)) errors.contactEmail = 'Enter a valid email address, or leave it empty.';
+
+  const usd = draft.fundingUsdEstimate.trim().replace(/,/g, '');
+  if (usd && !USD_RE.test(usd)) errors.fundingUsdEstimate = 'Enter an amount in US dollars, such as 45000.';
 
   const managers: Record<number, string> = {};
   draft.managers.forEach((manager, i) => {
@@ -96,33 +156,76 @@ export function hasErrors(errors: DraftErrors) {
   return Object.keys(errors).length > 0;
 }
 
-/** A holder's share of the voting supply, in basis points, rounded down. */
-export function shareBps(votingPower: bigint, votingSupply: bigint) {
-  if (votingSupply <= 0n || votingPower <= 0n) return 0;
-  return Number((votingPower * 10_000n) / votingSupply);
+/** A part's share of a whole, in basis points, rounded down. */
+export function shareBps(part: bigint, whole: bigint) {
+  if (whole <= 0n || part <= 0n) return 0;
+  return Number((part * 10_000n) / whole);
 }
 
-export type Holder = { address: string; votingPower: bigint };
+export type Holder = { address: string; ownedTokens: bigint; votingPower: bigint };
+
+/** A Stellar account (G…) is a person or company; a contract (C…) needs a look-through. */
+export type HolderKind = 'account' | 'contract' | 'tribe-contract';
+
+export const HOLDER_KIND_TEXT: Record<HolderKind, string> = {
+  account: 'Stellar account',
+  contract: 'Smart contract or multisig: confirm KYB and who controls it',
+  'tribe-contract': "The tribe's own contract: not a beneficial owner"
+};
+
+export function holderKind(address: string, tribeContracts: readonly string[]): HolderKind {
+  if (tribeContracts.includes(address)) return 'tribe-contract';
+  return address.startsWith('C') ? 'contract' : 'account';
+}
 
 export type KycCategory = 'A' | 'B' | 'C';
 
+export type AssessedHolder = Holder & { kind: HolderKind; ownershipBps: number; votingBps: number };
+
 /**
- * Who a registrar would ask to verify, under MIDAO's three categories: holders of 25% or more of
- * the voting power (A); if none, every manager (B); if none, any member (C).
+ * Who a registrar would ask to verify, under MIDAO's three categories.
+ *
+ * MIDAO counts who *owns* 25% or more of the governance rights, so the main basis here is
+ * membership tokens owned, of all tokens minted. Voting power (which includes delegated votes) is
+ * reported beside it for the registrar to weigh, since a delegate does not own the votes it casts.
+ * Tokens held by the tribe's own contracts (Treasury, Auction, Marketplace) are listed but are not
+ * a beneficial owner.
+ *
+ * Category A: anyone owning 25% or more. If none, B: every manager. If none, C: any member.
  */
-export function kycAssessment(holders: Holder[], votingSupply: bigint, managers: Manager[]) {
-  const owners = holders
-    .map((holder) => ({ ...holder, bps: shareBps(holder.votingPower, votingSupply) }))
-    .filter((holder) => holder.bps >= BENEFICIAL_OWNER_BPS)
-    .sort((a, b) => b.bps - a.bps);
+export function kycAssessment(
+  holders: Holder[],
+  supply: { minted: bigint; voting: bigint },
+  managers: Manager[],
+  tribeContracts: readonly string[]
+) {
+  const assessed: AssessedHolder[] = holders.map((holder) => ({
+    ...holder,
+    kind: holderKind(holder.address, tribeContracts),
+    ownershipBps: shareBps(holder.ownedTokens, supply.minted),
+    votingBps: shareBps(holder.votingPower, supply.voting)
+  }));
+  const byOwnership = assessed
+    .filter((h) => h.ownershipBps >= BENEFICIAL_OWNER_BPS)
+    .sort((a, b) => b.ownershipBps - a.ownershipBps);
+  const owners = byOwnership.filter((h) => h.kind !== 'tribe-contract');
+  const tribeHeld = byOwnership.filter((h) => h.kind === 'tribe-contract');
+  const votingOnly = assessed
+    .filter(
+      (h) =>
+        h.kind !== 'tribe-contract' &&
+        h.votingBps >= BENEFICIAL_OWNER_BPS &&
+        !owners.some((o) => o.address === h.address)
+    )
+    .sort((a, b) => b.votingBps - a.votingBps);
   const category: KycCategory = owners.length ? 'A' : managers.length ? 'B' : 'C';
-  return { category, owners };
+  return { category, owners, votingOnly, tribeHeld };
 }
 
 export const KYC_CATEGORY_TEXT: Record<KycCategory, string> = {
-  A: 'Holders of 25% or more of the voting power are beneficial owners and complete KYC.',
-  B: 'No holder has 25% of the voting power, so every listed manager completes KYC.',
-  C: 'No holder has 25% of the voting power and no managers are listed, so at least one member completes KYC.'
+  A: 'Members who own 25% or more of the membership tokens are beneficial owners and complete KYC.',
+  B: 'No member owns 25% or more of the membership tokens, so every listed manager is a beneficial owner and completes KYC.',
+  C: 'No member owns 25% or more of the membership tokens and no managers are listed, so the registrar asks any member to complete KYC. MIDAO does not treat a category C member as a beneficial owner, but still reports them.'
 };
 
 export type ChainFacts = {
@@ -147,6 +250,8 @@ export type ChainFacts = {
     membersOnlyDelegation: boolean;
     daoRecovery: boolean;
   };
+  /** Where voting power comes from (docs/designs/governance-adapter.md); null when unread. */
+  voteSource: { address: string; isToken: boolean } | null;
   launchModes: { auction: boolean; claims: boolean; marketplace: boolean };
   contracts: Array<{ role: string; address: string; explorerUrl: string }>;
   governance: {
@@ -160,15 +265,47 @@ export type ChainFacts = {
   members: { count: number | null; holders: Holder[] };
 };
 
+const lines = (text: string, max: number) =>
+  text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, max);
+
+function votingModel(facts: ChainFacts) {
+  if (!facts.voteSource || facts.voteSource.isToken) return 'One token, one vote, with delegation';
+  return `Weighted by an approved vote source (${facts.voteSource.address}); membership is still the token`;
+}
+
 /** The JSON bundle. Bigints become strings; every derived figure says where it came from. */
 export function buildBundle(draft: EntityDraft, facts: ChainFacts) {
-  const votingSupply = facts.token.votingSupply ? BigInt(facts.token.votingSupply) : 0n;
   const managers = draft.managers.map((m) => ({
     name: m.name.trim(),
     role: m.role.trim(),
     wallet: m.wallet.trim() || null
   }));
-  const kyc = kycAssessment(facts.members.holders, votingSupply, draft.managers);
+  const tribeContracts = facts.contracts.map((c) => c.address);
+  const kyc = kycAssessment(
+    facts.members.holders,
+    {
+      minted: facts.token.totalSupply ? BigInt(facts.token.totalSupply) : 0n,
+      voting: facts.token.votingSupply ? BigInt(facts.token.votingSupply) : 0n
+    },
+    draft.managers,
+    tribeContracts
+  );
+  const live = facts.tribe.status === 'operational';
+  const agent = { name: draft.representativeAgent.name.trim(), role: draft.representativeAgent.role.trim() };
+  const governedByToken = !facts.voteSource || facts.voteSource.isToken;
+  const holderRow = (h: AssessedHolder) => ({
+    address: h.address,
+    kind: h.kind,
+    kindNote: HOLDER_KIND_TEXT[h.kind],
+    tokensOwned: h.ownedTokens.toString(),
+    ownershipShareBps: h.ownershipBps,
+    votingPower: h.votingPower.toString(),
+    votingShareBps: h.votingBps
+  });
   return {
     $schema: LEGAL_EXPORT_SCHEMA,
     generatedAt: facts.generatedAt,
@@ -180,16 +317,34 @@ export function buildBundle(draft: EntityDraft, facts: ChainFacts) {
       tradeName: draft.tradeName.trim() || null,
       jurisdiction: 'Republic of the Marshall Islands (DAO LLC), proposed',
       entityType: draft.entityType,
+      entityTypeNote:
+        'MIDAO: the choice between non-profit and for-profit cannot be converted later; changing it means forming a new entity.',
+      nonProfitPurposeCategory: draft.entityType === 'non-profit' ? draft.nonProfitPurpose || null : null,
       purpose: draft.purpose.trim(),
+      forProfit:
+        draft.entityType === 'for-profit'
+          ? { profitAllocation: draft.profitAllocation.trim() || null, usMembers: draft.usMembers }
+          : null,
       management: managers.length
-        ? 'Algorithmic, through the smart contracts below, with listed managers'
-        : 'Algorithmic, through the smart contracts below',
-      managers
+        ? 'Governance delegated to the smart contracts below under the operating agreement, with listed managers acting off chain'
+        : 'Governance delegated to the smart contracts below under the operating agreement',
+      managers,
+      representativeAgent: agent.name ? agent : null,
+      representativeAgentNote:
+        'MIDAO files Form 1, the consent of a Representative Agent, with the formation documents.'
     },
     contact: {
       name: draft.contact.name.trim(),
       email: draft.contact.email.trim() || null,
       role: draft.contact.role.trim() || null
+    },
+    operatingAgreementProfile: {
+      entityType: draft.entityType,
+      membershipTracking: 'blockchain',
+      voting: governedByToken ? 'one-token-one-vote' : 'vote-source-weighted',
+      governance: 'smart-contract',
+      treasuryCommittee: 'none: the Treasury executes only proposals that passed',
+      note: 'MIDAO matches its operating agreement template to these four choices. The agreement prevails over the smart contracts where they conflict, and may delegate governance to them.'
     },
     tribe: facts.tribe,
     blockchain: { network: 'Stellar', environment: facts.network, networkPassphrase: facts.networkPassphrase },
@@ -197,7 +352,8 @@ export function buildBundle(draft: EntityDraft, facts: ChainFacts) {
       record: 'On chain: membership tokens of the token contract below',
       tokenName: facts.token.name,
       tokenSymbol: facts.token.symbol,
-      votingModel: 'One token, one vote, with delegation',
+      votingModel: votingModel(facts),
+      voteSource: facts.voteSource && !facts.voteSource.isToken ? facts.voteSource.address : null,
       totalSupply: facts.token.totalSupply,
       votingSupply: facts.token.votingSupply,
       memberCount: facts.members.count,
@@ -222,20 +378,30 @@ export function buildBundle(draft: EntityDraft, facts: ChainFacts) {
             'Each contract upgrades only by a passed proposal, to a version the Tribe Builder registry has published and approved'
         }
       : null,
-    smartContracts: facts.contracts,
+    smartContracts: facts.contracts.map((c) => ({ ...c, status: live ? 'live' : 'deployed, not yet live' })),
     treasury: facts.treasury,
+    initialContributions: {
+      treasuryAddress: facts.treasury.address,
+      items: lines(draft.contributions, MAX_CONTRIBUTIONS)
+    },
+    fees: {
+      treasuryAndFundingUsdEstimate: draft.fundingUsdEstimate.trim().replace(/,/g, '') || null,
+      note: 'An estimate from the founders. MIDAO tiers its registration and annual fees by treasury plus funding in US dollars.'
+    },
     beneficialOwnership: {
-      basis: 'MIDAO guidance: 25% or more of governance rights (docs.midao.org); confirm with the registrar',
+      basis:
+        'MIDAO: anyone who owns 25% or more of the governance rights. Measured here as membership tokens owned, of all tokens minted; voting power, which includes delegated votes, is shown beside it. Confirm the measure with the registrar.',
       thresholdBps: BENEFICIAL_OWNER_BPS,
       category: kyc.category,
       explanation: KYC_CATEGORY_TEXT[kyc.category],
-      holdersAtOrAboveThreshold: kyc.owners.map((owner) => ({
-        address: owner.address,
-        votingPower: owner.votingPower.toString(),
-        shareBps: owner.bps
-      })),
+      ownershipDenominator: { tokensMinted: facts.token.totalSupply },
+      votingDenominator: { tokensWithVotes: facts.token.votingSupply },
+      owners: kyc.owners.map(holderRow),
+      votingPowerAtOrAboveThreshold: kyc.votingOnly.map(holderRow),
+      heldByTribeContracts: kyc.tribeHeld.map(holderRow),
       measuredAt: facts.generatedAt
     },
+    sources: MIDAO_SOURCES,
     notes: draft.notes.trim() || null
   };
 }
@@ -249,10 +415,25 @@ const duration = (seconds: number | null) =>
 const orDash = (value: string | number | null | undefined) =>
   value === null || value === undefined || value === '' ? '—' : String(value);
 const yesNo = (value: boolean) => (value ? 'Yes' : 'No');
+const US_MEMBERS_TEXT: Record<UsMembers, string> = { yes: 'Yes', no: 'No', unknown: 'Not known yet' };
+
+type HolderRow = LegalBundle['beneficialOwnership']['owners'][number];
+
+function holderTable(rows: HolderRow[]) {
+  const out = [
+    '| Address | Kind | Tokens owned | Share owned | Voting power | Share of votes |',
+    '| --- | --- | --- | --- | --- | --- |'
+  ];
+  for (const h of rows)
+    out.push(
+      `| ${h.address} | ${h.kindNote} | ${h.tokensOwned} | ${percent(h.ownershipShareBps)} | ${h.votingPower} | ${percent(h.votingShareBps)} |`
+    );
+  return [...out, ''];
+}
 
 /** A readable summary of the same bundle, for people rather than intake systems. */
 export function bundleToMarkdown(bundle: LegalBundle) {
-  const lines: string[] = [
+  const out: string[] = [
     `# ${bundle.entity.proposedLegalName}: registrar intake summary`,
     '',
     `> ${bundle.disclaimer}`,
@@ -264,25 +445,41 @@ export function bundleToMarkdown(bundle: LegalBundle) {
     `- **Proposed legal name:** ${bundle.entity.proposedLegalName}`,
     `- **Trading name:** ${orDash(bundle.entity.tradeName)}`,
     `- **Jurisdiction:** ${bundle.entity.jurisdiction}`,
-    `- **Entity type:** ${ENTITY_TYPE_LABELS[bundle.entity.entityType]}`,
-    `- **Management:** ${bundle.entity.management}`,
-    '',
-    '### Purpose',
-    '',
-    bundle.entity.purpose,
-    ''
+    `- **Entity type:** ${ENTITY_TYPE_LABELS[bundle.entity.entityType]}. ${bundle.entity.entityTypeNote}`
   ];
-  if (bundle.entity.managers.length) {
-    lines.push('### Managers', '', '| Name | Role | Wallet |', '| --- | --- | --- |');
-    for (const m of bundle.entity.managers) lines.push(`| ${m.name} | ${orDash(m.role)} | ${orDash(m.wallet)} |`);
-    lines.push('');
+  if (bundle.entity.nonProfitPurposeCategory)
+    out.push(`- **Non-profit purpose:** ${NON_PROFIT_PURPOSE_LABELS[bundle.entity.nonProfitPurposeCategory]}`);
+  if (bundle.entity.forProfit) {
+    out.push(`- **Profit allocation:** ${orDash(bundle.entity.forProfit.profitAllocation)}`);
+    out.push(`- **Any US members:** ${US_MEMBERS_TEXT[bundle.entity.forProfit.usMembers]}`);
   }
-  lines.push(
+  out.push(`- **Management:** ${bundle.entity.management}`, '', '### Purpose', '', bundle.entity.purpose, '');
+  if (bundle.entity.managers.length) {
+    out.push('### Managers', '', '| Name | Role | Wallet |', '| --- | --- | --- |');
+    for (const m of bundle.entity.managers) out.push(`| ${m.name} | ${orDash(m.role)} | ${orDash(m.wallet)} |`);
+    out.push('');
+  }
+  const agent = bundle.entity.representativeAgent;
+  out.push(
+    '### Representative Agent',
+    '',
+    agent ? `${agent.name}${agent.role ? `, ${agent.role}` : ''}.` : 'Not named yet.',
+    bundle.entity.representativeAgentNote,
+    '',
     '## Contact',
     '',
     `- **Name:** ${bundle.contact.name}`,
     `- **Email:** ${orDash(bundle.contact.email)}`,
     `- **Role:** ${orDash(bundle.contact.role)}`,
+    '',
+    '## Operating agreement profile',
+    '',
+    `- **Membership:** tracked on a blockchain`,
+    `- **Voting:** ${bundle.operatingAgreementProfile.voting === 'one-token-one-vote' ? 'one token, one vote' : 'weighted by an approved vote source'}`,
+    `- **Governance:** by smart contract`,
+    `- **Treasury committee:** ${bundle.operatingAgreementProfile.treasuryCommittee}`,
+    '',
+    bundle.operatingAgreementProfile.note,
     '',
     '## Tribe',
     '',
@@ -291,8 +488,8 @@ export function bundleToMarkdown(bundle: LegalBundle) {
     `- **Status:** ${bundle.tribe.status === 'operational' ? 'Live' : 'In setup'}`,
     `- **Network:** Stellar ${bundle.blockchain.environment}`
   );
-  for (const link of bundle.tribe.links) lines.push(`- **${link.label}:** ${link.url}`);
-  lines.push(
+  for (const link of bundle.tribe.links) out.push(`- **${link.label}:** ${link.url}`);
+  out.push(
     '',
     '## Membership',
     '',
@@ -308,7 +505,7 @@ export function bundleToMarkdown(bundle: LegalBundle) {
   );
   if (bundle.governance) {
     const g = bundle.governance;
-    lines.push(
+    out.push(
       '## Governance',
       '',
       `- **Executor:** ${g.executor}`,
@@ -321,23 +518,43 @@ export function bundleToMarkdown(bundle: LegalBundle) {
       ''
     );
   }
-  lines.push('## Smart contracts', '', '| Role | Address |', '| --- | --- |');
-  for (const c of bundle.smartContracts) lines.push(`| ${c.role} | [${c.address}](${c.explorerUrl}) |`);
-  lines.push('', '## Treasury', '', `- **Address:** ${bundle.treasury.address}`);
-  if (bundle.treasury.balances === null) lines.push('- **Balances:** could not be read when this was generated');
-  else if (!bundle.treasury.balances.length) lines.push('- **Balances:** empty');
-  else for (const b of bundle.treasury.balances) lines.push(`- **${b.asset}:** ${b.amount}`);
+  out.push('## Smart contracts', '', '| Role | Address | Status |', '| --- | --- | --- |');
+  for (const c of bundle.smartContracts) out.push(`| ${c.role} | [${c.address}](${c.explorerUrl}) | ${c.status} |`);
+  out.push('', '## Treasury', '', `- **Address:** ${bundle.treasury.address}`);
+  if (bundle.treasury.balances === null) out.push('- **Balances:** could not be read when this was generated');
+  else if (!bundle.treasury.balances.length) out.push('- **Balances:** empty');
+  else for (const b of bundle.treasury.balances) out.push(`- **${b.asset}:** ${b.amount}`);
+  out.push(
+    '',
+    '## Initial contributions',
+    '',
+    `- The Treasury contract: ${bundle.initialContributions.treasuryAddress}`
+  );
+  for (const item of bundle.initialContributions.items) out.push(`- ${item}`);
+  out.push(
+    '',
+    '## Fees',
+    '',
+    `- **Treasury plus funding, estimated:** ${bundle.fees.treasuryAndFundingUsdEstimate ? `US$${bundle.fees.treasuryAndFundingUsdEstimate}` : 'not given'}`,
+    `- ${bundle.fees.note}`
+  );
   const bo = bundle.beneficialOwnership;
-  lines.push('', '## Beneficial ownership', '', `${bo.explanation} (Category ${bo.category}; ${bo.basis}.)`, '');
-  if (bo.holdersAtOrAboveThreshold.length) {
-    lines.push('| Address | Voting power | Share |', '| --- | --- | --- |');
-    for (const h of bo.holdersAtOrAboveThreshold)
-      lines.push(`| ${h.address} | ${h.votingPower} | ${percent(h.shareBps)} |`);
-    lines.push('');
-  }
-  lines.push(`Measured at ${bo.measuredAt}; voting power changes as tokens move.`);
-  if (bundle.notes) lines.push('', '## Notes', '', bundle.notes);
-  return `${lines.join('\n')}\n`;
+  out.push('', '## Beneficial ownership', '', `**Category ${bo.category}.** ${bo.explanation}`, '', bo.basis, '');
+  if (bo.owners.length) out.push('### Beneficial owners', '', ...holderTable(bo.owners));
+  if (bo.votingPowerAtOrAboveThreshold.length)
+    out.push(
+      '### Voting power at 25% or more without owning it',
+      '',
+      'Delegates casting votes for others. Listed for the registrar to weigh; they are not counted as owners here.',
+      '',
+      ...holderTable(bo.votingPowerAtOrAboveThreshold)
+    );
+  if (bo.heldByTribeContracts.length)
+    out.push("### Held by the tribe's own contracts", '', ...holderTable(bo.heldByTribeContracts));
+  out.push(`Measured at ${bo.measuredAt}; ownership and voting power change as tokens move.`, '', '## Sources', '');
+  for (const [rule, url] of Object.entries(bundle.sources)) out.push(`- ${rule}: ${url}`);
+  if (bundle.notes) out.push('', '## Notes', '', bundle.notes);
+  return `${out.join('\n')}\n`;
 }
 
 /** `acme-dao-llc-2026-11-18`, from the proposed legal name. */
