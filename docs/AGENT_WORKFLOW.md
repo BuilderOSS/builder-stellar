@@ -6,6 +6,18 @@ Code. OpenCode definitions live in `.opencode/agent/`; Claude Code definitions l
 services, frontend, design, and documentation surfaces so changes follow the same path
 as the product data: contract event to indexer to read model to API to UI.
 
+## Branches
+
+`main` is frozen. It holds the last promoted release and changes only when the team
+decides to promote `dev` to `main`; no agent makes that call.
+
+- Start work from an up-to-date `dev`: `git fetch origin && git switch -c <branch> origin/dev`.
+- Open every pull request against `dev`: `gh pr create --base dev`. Stacked pull
+  requests target the branch below them, with the bottom of the stack on `dev`.
+- Never commit, push, merge, or open a pull request into `main`, and never rebase
+  `dev` onto `main`. If a tool defaults to `main`, change the base to `dev`.
+- When this section changes, update the matching notes in `CLAUDE.md` and `AGENTS.md`.
+
 ## Roles
 
 | Agent | Ownership | Required handoff |
