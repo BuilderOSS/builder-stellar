@@ -133,6 +133,9 @@ jobs:
       - name: Run TypeScript type checking
         run: pnpm --dir apps/web typecheck
 
+      - name: Type check the shared design tokens
+        run: pnpm --dir packages/design-tokens typecheck
+
       - name: Run web tests
         run: pnpm --dir apps/web test
 

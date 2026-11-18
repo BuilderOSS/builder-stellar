@@ -1,5 +1,5 @@
 /*
- * Global base for Warm Ink · Dusk. Tokens live in panda.config.ts (see
+ * Global base for Warm Ink · Dusk. Tokens live in packages/design-tokens (see
  * DESIGN.md); this file only sets element defaults and accessibility helpers.
  * Do not add component or page classes here: build them with Panda.
  *
