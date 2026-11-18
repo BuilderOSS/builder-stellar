@@ -189,6 +189,10 @@ ledger from which the upgrade may run; rerun it then. The same latest-only rule 
 7131): the script announces the hash as latest for `Manager` first. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
 
+A Manager release that changes a `create_dao` argument type (for example `GovernanceConfig.vote_source`,
+`docs/designs/governance-adapter.md` §9) breaks old web clients against the new Manager and the reverse. Pause the
+factory (`pause_factory`) across the Manager upgrade and the matching web deploy, then unpause.
+
 ## Module upgrades (Auction, Marketplace, ClaimMinter)
 
 Modules are per DAO, so they upgrade exactly like the core contracts: the Manager admin registers and approves

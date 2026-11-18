@@ -37,6 +37,7 @@ Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tr
 - [Membership models (design)](designs/membership-models.md): mint allowances, the module registry, ClaimMinter, the assurance launch and quick-buy pools; retires the shared Minter
 - [Membership token settings (design)](designs/locked-tokens.md): locked transfers, members-only delegation, DAO recovery and transfer agents
 - [Add and remove modules (design)](designs/module-attach-ui.md): the Modules card in Manage, as built and proven on testnet
+- [Governance adapter (design)](designs/governance-adapter.md): the Governor's vote source interface, the Manager's approved sources, and how to write an adapter
 - [Agent workflow and acceptance checks](AGENT_WORKFLOW.md)
 - Contracts: [Manager](../contracts/manager/README.md), [Token](../contracts/token/README.md), [Metadata](../contracts/metadata/README.md), [Auction](../contracts/auction/README.md), [Governor](../contracts/governor/README.md), [Treasury](../contracts/treasury/README.md), [Marketplace](../contracts/marketplace/README.md), [ClaimMinter](../contracts/minter/README.md)
 - Support: [common](../contracts/common/README.md), [in-memory integration tests](../contracts/e2e/README.md)
