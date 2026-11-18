@@ -6,7 +6,8 @@
   "description": "Warm Ink · Dusk: the Panda preset and fonts shared by apps/web and apps/docs (DESIGN.md is the specification).",
   "exports": {
     ".": "./src/index.ts",
-    "./fonts": "./src/fonts.ts"
+    "./fonts": "./src/fonts.ts",
+    "./theme": "./src/theme.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
