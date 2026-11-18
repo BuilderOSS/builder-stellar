@@ -8,7 +8,7 @@ specification; these values must match it.
 | `warmInkPreset` (`.`)                  | Tokens, semantic tokens (light is `base`, dark is `_dark`), the `dark` and `light` conditions, the `sm` breakpoint, text styles and keyframes |
 | `@builder-stellar/design-tokens/fonts` | The three `next/font/google` faces and their CSS variables (`--font-display`, `--font-ui`, `--font-mono`)                                     |
 
-Recipes stay in each app's `panda.config.ts`. A consuming app lists the preset after
+A consuming app lists the preset after
 `@pandacss/preset-panda` and adds the package to `transpilePackages` in `next.config.mjs`
 (the fonts module runs through the Next font loader).
 
