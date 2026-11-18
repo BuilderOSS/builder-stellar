@@ -460,8 +460,8 @@ fn from_record(env: &Env, record: &Record) -> Vec<u32> {
         return out;
     }
     out.push_back(record.len as u32);
-    for k in 0..record.len as usize {
-        out.push_back(record.items[k] as u32);
+    for item in record.items.iter().take(record.len as usize) {
+        out.push_back(*item as u32);
     }
     out
 }
