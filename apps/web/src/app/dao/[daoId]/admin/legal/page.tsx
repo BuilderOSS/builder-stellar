@@ -1,0 +1,17 @@
+'use client';
+
+import { LegalExport } from '@/components/admin/legal-export';
+import { PageSection } from '@/components/page-section';
+import { useDaoContext } from '@/contexts/dao-context';
+
+export default function LegalExportPage() {
+  const { daoConfig: config, daoId, routeId } = useDaoContext();
+  return (
+    <PageSection
+      title="Legal entity export"
+      description="Gather what a DAO registrar needs to start forming a legal entity for your tribe."
+    >
+      <LegalExport config={config} daoId={daoId} routeId={routeId} />
+    </PageSection>
+  );
+}

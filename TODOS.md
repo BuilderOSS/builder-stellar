@@ -72,7 +72,23 @@
 **Priority:** P2
 **Depends on:** the indexer's string fix (#66) and the treasury-purchase re-encode (#67), which this replaces
 
+## Legal
+
+### MIDAO review of the legal entity export
+
+**What:** Get MIDAO to confirm the export bundle (`docs/LEGAL_EXPORT.md`) is useful for their intake, then fold their answers into schema v2 if needed: missing fields, the format, whether the 25% test counts delegated votes, and whether they want code hashes and versions alongside contract addresses.
+
+**Why:** The SCF Tranche 2 sign-off reads "DAO registrar exports a bundle that is confirmed by MIDAO as useful for their intake process".
+
+**Effort:** S (code), external (review)
+**Priority:** P1
+**Depends on:** our MIDAO contact sharing a sample bundle
+
 ## Completed
+
+### Legal entity export (2026-11-18)
+
+Manage → Legal entity export is a four-step flow (entity, people, review, export) that downloads a JSON bundle and a Markdown summary for a DAO registrar's intake. It combines the founders' answers with the tribe's contracts, voting rules, treasury, and MIDAO's 25% beneficial-ownership test. It stays in the browser and is explicitly not legal advice ([docs/LEGAL_EXPORT.md](docs/LEGAL_EXPORT.md)).
 
 ### `/platform` admin dashboard (2026-11-09)
 
