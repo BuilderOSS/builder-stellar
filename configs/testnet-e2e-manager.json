@@ -1,0 +1,8 @@
+{
+  "network": "testnet",
+  "label": "e2e-walk",
+  "adminAddress": "GBDL73TP5PRXVSBK5WN3BW2QWDPE6FUK7TQJTIX2HQRR5V5LVXHIC7JL",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "upgradeDelayLedgers": 720
+}

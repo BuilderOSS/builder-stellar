@@ -1,0 +1,23 @@
+{
+  "name": "@builder-stellar/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:app": "node scripts/build-app.mjs",
+    "preflight": "node --experimental-strip-types --no-warnings src/preflight-cli.ts",
+    "smoke": "playwright test --grep @smoke",
+    "test:e2e": "playwright test",
+    "report": "node scripts/open-report.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@playwright/test": "1.62.1",
+    "@stellar/stellar-sdk": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
+  }
+}

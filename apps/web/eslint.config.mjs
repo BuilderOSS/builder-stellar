@@ -87,7 +87,7 @@ const config = [
     }
   },
   {
-    ignores: ['styled-system/**']
+    ignores: ['styled-system/**', '.next-e2e/**']
   }
 ];
 

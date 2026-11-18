@@ -8,6 +8,7 @@ target
 node_modules
 .pnpm-store/
 .next
+.next-e2e
 apps/web/.env*.local
 apps/web/styled-system
 apps/web/tsconfig.tsbuildinfo
@@ -36,3 +37,9 @@ deploys/e2e-*
 *_feedback.md
 *_bugs.md
 *_feedback-record.md
+
+# Walkthrough suite output (apps/e2e)
+apps/e2e/reports/
+apps/e2e/test-results/
+apps/e2e/.state/
+apps/e2e/.env*.local

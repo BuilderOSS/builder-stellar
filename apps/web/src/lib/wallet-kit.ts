@@ -3,7 +3,7 @@
 import { defaultModules } from '@creit.tech/stellar-wallets-kit/modules/utils';
 import { WalletConnectModule, WalletConnectTargetChain } from '@creit.tech/stellar-wallets-kit/modules/wallet-connect';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { Networks } from '@creit.tech/stellar-wallets-kit/types';
+import { type ModuleInterface, Networks } from '@creit.tech/stellar-wallets-kit/types';
 
 import type { NetworkName } from '@/config/networks';
 import { SITE_NAME } from '@/lib/site';
@@ -28,6 +28,14 @@ export function initializeWalletKit(network: NetworkName) {
         allowedChains: [network === 'public' ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET]
       })
     );
+  }
+
+  // Walkthrough builds only (apps/e2e). The flag is inlined at build time, so in every other build
+  // this branch is the constant `false` and the bundler never resolves the module.
+  // scripts/assert-e2e-wallet.mjs fails the build if it shows up anyway.
+  if (process.env.NEXT_PUBLIC_E2E_WALLET === '1') {
+    const { E2EWalletModule } = require('./e2e-wallet/module') as { E2EWalletModule: new () => ModuleInterface };
+    modules.unshift(new E2EWalletModule());
   }
 
   StellarWalletsKit.init({
