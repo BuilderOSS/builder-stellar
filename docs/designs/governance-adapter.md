@@ -4,7 +4,7 @@ This document covers the SCF #44 Tranche 2 deliverable "Governance adapter inter
 
 The Governor no longer assumes that its voting power is the DAO's NFT. It reads votes from a **vote source**. By default that is the DAO's Token (token-weighted voting). It can instead be an adapter the platform approved, for example a mock in tests, or Neural Quorum Governance (NQG) once an NQG adapter exists. The Token remains the DAO's identity and its membership and auction NFT either way.
 
-Related: [`nqg-compatibility.md`](nqg-compatibility.md), on the `docs/nqg-compatibility` branch, specifies the NQG adapter that plugs into this interface.
+Related: [`nqg-compatibility.md`](nqg-compatibility.md) specifies the NQG adapter that plugs into this interface.
 
 ## 1. The interface
 

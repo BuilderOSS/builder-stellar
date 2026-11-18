@@ -72,6 +72,18 @@
 **Priority:** P2
 **Depends on:** the indexer's string fix (#66) and the treasury-purchase re-encode (#67), which this replaces
 
+## Legal
+
+### MIDAO review of the legal entity export
+
+**What:** Get MIDAO to confirm the export bundle (`docs/LEGAL_EXPORT.md`) is useful for their intake, then fold their answers into schema v2 if needed: missing fields, the format, whether the 25% test counts delegated votes, and whether they want code hashes and versions alongside contract addresses.
+
+**Why:** The SCF Tranche 2 sign-off reads "DAO registrar exports a bundle that is confirmed by MIDAO as useful for their intake process".
+
+**Effort:** S (code), external (review)
+**Priority:** P1
+**Depends on:** our MIDAO contact sharing a sample bundle
+
 ## Governance
 
 ### NQG vote source adapter
@@ -81,7 +93,7 @@
 **Why:** this is the Tranche 2 NQG deliverable. The Governor already reads votes through a vote source (`docs/designs/governance-adapter.md`), and the create flow shows NQG as coming.
 
 **Context:**
-- The adapter design is `docs/designs/nqg-compatibility.md` §4, on branch `docs/nqg-compatibility`. It uses ledger-keyed epoch snapshots (`stage` then `activate`), clamps scores and scales them from 1e18 to 9 decimals, and gates power by membership token.
+- The adapter design is `docs/designs/nqg-compatibility.md` §4. It uses ledger-keyed epoch snapshots (`stage` then `activate`), clamps scores and scales them from 1e18 to 9 decimals, and gates power by membership token.
 - It must meet the interface's semantics, including the one-supply invariant (governance-adapter.md §1) and approval policy §4 (admin = the tribe's Treasury).
 - The web side:
   - enable the `nqg` option in `voteTypeOptions` (`apps/web/src/components/create-dao/GovernanceStep.tsx`), offered only on locked tokens as nqg-compatibility.md §9 asks;
@@ -97,6 +109,10 @@
 ### Governance adapter: vote source interface and configuration (2026-11-18)
 
 The Governor reads all voting power through `common::clients::VoteSourceApi` on its permanent OZ token-contract slot. It is the DAO's token by default, or an adapter the Manager admin approved. The Manager's allowlist is checked at create and at launch, and a mock adapter crate drives Governor, Manager and e2e tests. The create flow asks how votes are counted (Token-weighted, or NQG shown as coming), and the governance page and every voting-power view follow the source. See `docs/designs/governance-adapter.md`.
+
+### Legal entity export (2026-11-18)
+
+Manage → Legal entity export is a four-step flow (entity, people, review, export) that downloads a JSON bundle and a Markdown summary for a DAO registrar's intake. It combines the founders' answers with the tribe's contracts, voting rules, treasury, and MIDAO's 25% beneficial-ownership test. It stays in the browser and is explicitly not legal advice ([docs/LEGAL_EXPORT.md](docs/LEGAL_EXPORT.md)).
 
 ### `/platform` admin dashboard (2026-11-09)
 
