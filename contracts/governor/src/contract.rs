@@ -5,12 +5,9 @@ use core::convert::TryInto;
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Symbol, Val, Vec,
 };
-use stellar_governance::{
-    governor::{
-        self as governor, emit_proposal_cancelled, emit_proposal_created, emit_proposal_executed,
-        emit_vote_cast, Governor, GovernorError, ProposalState,
-    },
-    votes::VotesClient,
+use stellar_governance::governor::{
+    self as governor, emit_proposal_cancelled, emit_proposal_created, emit_proposal_executed,
+    emit_vote_cast, Governor, GovernorError, ProposalState,
 };
 
 use crate::error::CustomGovernorError;
@@ -72,7 +69,8 @@ impl DaoGovernorContract {
     /// # Arguments
     ///
     /// * `admin` - Setup-phase admin (the launch admin); becomes the Treasury at launch
-    /// * `token_contract` - The governance token contract (must implement Votes trait)
+    /// * `token_contract` - The vote source: the DAO's Token, or an approved
+    ///   adapter implementing `common::clients::VoteSourceApi`. Permanent.
     /// * `treasury_contract` - The treasury contract that executes approved proposals
     /// * `voting_delay` - Delay in seconds between proposal creation and vote start
     /// * `voting_period` - Duration in seconds that voting remains open
@@ -260,8 +258,7 @@ impl DaoGovernorContract {
 
         // A threshold above the voting supply would lock governance. Only
         // checked once votes exist (setup may configure before minting).
-        let token = governor::get_token_contract(e);
-        let total_supply = VotesClient::new(e, &token).get_total_supply();
+        let total_supply = Self::votes(e).get_total_supply();
         if total_supply > 0 && proposal_threshold > total_supply {
             panic_with_error!(e, CustomGovernorError::InvalidProposalThreshold);
         }
@@ -355,6 +352,22 @@ impl DaoGovernorContract {
         )
     }
 
+    /// Where this Governor's voting power comes from: the DAO's Token, or an
+    /// adapter the Manager approved when the DAO was created. Fixed for the
+    /// Governor's life (OZ's token-contract slot is set once).
+    ///
+    /// Stored in OpenZeppelin's token-contract slot, so OZ's
+    /// `get_token_contract()` returns the same address; for an adapter DAO it
+    /// is the adapter, not the membership NFT (find that through the Treasury
+    /// or the Manager).
+    pub fn vote_source(e: &Env) -> Address {
+        governor::get_token_contract(e)
+    }
+
+    fn votes(e: &Env) -> common::clients::VoteSourceClient<'_> {
+        common::clients::VoteSourceClient::new(e, &governor::get_token_contract(e))
+    }
+
     fn queue_delay(e: &Env) -> u32 {
         e.storage()
             .instance()
@@ -374,8 +387,7 @@ impl DaoGovernorContract {
     /// still voting with them (contract review H1). Both reads touch only
     /// the latest checkpoints, never archived history.
     fn quorum_now(e: &Env) -> u128 {
-        let token = governor::get_token_contract(e);
-        let supply = common::clients::NftClient::new(e, &token).voting_supply_at_previous_ledger();
+        let supply = Self::votes(e).voting_supply_at_previous_ledger();
         Self::quorum_of(e, supply, Self::quorum_bps(e) as u128)
     }
 
@@ -603,8 +615,7 @@ impl Governor for DaoGovernorContract {
     /// latest of each is renewed by the DAO sweep); restore them to read.
     fn quorum(e: &Env, ledger: u32) -> u128 {
         let quorum_bps = governor::get_quorum(e, ledger);
-        let token = governor::get_token_contract(e);
-        let total_supply = VotesClient::new(e, &token).get_total_supply_at_checkpoint(&ledger);
+        let total_supply = Self::votes(e).get_total_supply_at_checkpoint(&ledger);
         Self::quorum_of(e, total_supply, quorum_bps)
     }
 
@@ -685,9 +696,7 @@ impl Governor for DaoGovernorContract {
         let proposal_threshold = Self::proposal_threshold(e);
         let current_ledger = e.ledger().sequence();
         let snapshot_ledger = current_ledger.saturating_sub(1);
-        let token = governor::get_token_contract(e);
-        let proposer_votes =
-            VotesClient::new(e, &token).get_votes_at_checkpoint(&proposer, &snapshot_ledger);
+        let proposer_votes = Self::votes(e).get_votes_at_checkpoint(&proposer, &snapshot_ledger);
         if proposer_votes < proposal_threshold {
             panic_with_error!(e, GovernorError::InsufficientProposerVotes);
         }
@@ -796,9 +805,7 @@ impl Governor for DaoGovernorContract {
             panic_with_error!(e, GovernorError::ProposalNotActive);
         }
 
-        let token = governor::get_token_contract(e);
-        let voter_weight =
-            VotesClient::new(e, &token).get_votes_at_checkpoint(&voter, &proposal.vote_snapshot);
+        let voter_weight = Self::votes(e).get_votes_at_checkpoint(&voter, &proposal.vote_snapshot);
 
         // Prevent voting with zero weight (spam/griefing protection)
         if voter_weight == 0 {

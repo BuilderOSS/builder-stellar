@@ -49,6 +49,42 @@ pub trait NftApi {
     fn transfer_from(e: &Env, spender: Address, from: Address, to: Address, token_id: u32);
 }
 
+/// Where a Governor's voting power comes from (docs/designs/governance-adapter.md).
+///
+/// The DAO's Token implements it unchanged: the first three are the OZ
+/// `Votes` reads and the fourth is the Token's own extension. An adapter (a
+/// mock in tests, NQG later) implements all five. The Governor calls only
+/// the four vote reads; `decimals` is for the Manager's approval probe and
+/// for clients that display voting power.
+///
+/// Every read is keyed by ledger sequence. An adapter that has rounds or
+/// epochs maps each ledger to the epoch active at that ledger. Invariant:
+/// `voting_supply_at_previous_ledger()` equals
+/// `get_total_supply_at_checkpoint(current_ledger - 1)`, so a proposal's
+/// quorum and its voters' weights describe the same supply.
+#[contractclient(name = "VoteSourceClient")]
+pub trait VoteSourceApi {
+    /// Voting power of `account` at `ledger` (a past ledger).
+    fn get_votes_at_checkpoint(e: &Env, account: Address, ledger: u32) -> u128;
+    /// Total voting power at `ledger` (a past ledger).
+    fn get_total_supply_at_checkpoint(e: &Env, ledger: u32) -> u128;
+    /// Total voting power now.
+    fn get_total_supply(e: &Env) -> u128;
+    /// Total voting power at the previous ledger, without a search over
+    /// history that may have archived.
+    fn voting_supply_at_previous_ledger(e: &Env) -> u128;
+    /// Decimal places of one vote. The Token has none (it isn't asked);
+    /// adapters report theirs so clients can display power as units.
+    fn decimals(e: &Env) -> u32;
+}
+
+/// The Governor's vote source view (Governor 0.5.0+; older Governors read
+/// the Token, so callers treat a failed call as the Token).
+#[contractclient(name = "GovernorVoteSourceClient")]
+pub trait GovernorVoteSourceApi {
+    fn vote_source(e: &Env) -> Address;
+}
+
 /// Metadata's on-chain SEP-50 token JSON (the token forwards `token_uri`).
 #[contractclient(name = "TokenUriClient")]
 pub trait TokenUriApi {

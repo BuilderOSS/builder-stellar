@@ -39,6 +39,11 @@ pub struct GovernanceConfig {
     pub queue_delay: u32,
     pub proposal_threshold: u128,
     pub quorum_bps: u32,
+    /// Where voting power comes from: `None` (or the DAO's own token) for
+    /// token-weighted voting, else a vote source the Manager admin approved
+    /// (`approve_vote_source`). Permanent once the DAO is created
+    /// (docs/designs/governance-adapter.md).
+    pub vote_source: Option<Address>,
 }
 
 #[contracttype]
@@ -288,6 +293,10 @@ pub enum ManagerKey {
     /// pending DAO's life (a failed drive keeps it: the DAO never launches).
     /// Persistent, renewed by the DAO's sweep while pending.
     Assurance(Address),
+    /// source -> display name: a vote source (`common::clients::VoteSourceApi`)
+    /// the Manager admin approved for new DAOs. Persistent; platform state,
+    /// renewed with the implementation records (`scripts/renew-code-ttl.mjs`).
+    ApprovedVoteSource(Address),
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
@@ -364,7 +373,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 20;
+    pub const VARIANTS: usize = 21;
 
     pub fn index(key: &ManagerKey) -> usize {
         match key {
@@ -388,6 +397,7 @@ pub(crate) mod key_samples {
             ManagerKey::CurrentClaimsWasm => 17,
             ManagerKey::ModuleCount(..) => 18,
             ManagerKey::Assurance(_) => 19,
+            ManagerKey::ApprovedVoteSource(_) => 20,
         }
     }
 
@@ -417,6 +427,7 @@ pub(crate) mod key_samples {
             ManagerKey::CurrentClaimsWasm,
             ManagerKey::ModuleCount(a.clone(), soroban_sdk::Symbol::new(e, "claims")),
             ManagerKey::Assurance(a.clone()),
+            ManagerKey::ApprovedVoteSource(a.clone()),
         ];
         common::testutils::assert_every_variant_sampled(
             "ManagerKey",

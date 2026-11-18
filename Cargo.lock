@@ -426,6 +426,7 @@ dependencies = [
  "stellar-tokens",
  "token",
  "treasury",
+ "vote-adapter-mock",
 ]
 
 [[package]]
@@ -770,6 +771,7 @@ dependencies = [
  "stellar-governance",
  "token",
  "treasury",
+ "vote-adapter-mock",
 ]
 
 [[package]]
@@ -1003,6 +1005,7 @@ dependencies = [
  "stellar-access",
  "token",
  "treasury",
+ "vote-adapter-mock",
 ]
 
 [[package]]
@@ -1888,6 +1891,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "vote-adapter-mock"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]

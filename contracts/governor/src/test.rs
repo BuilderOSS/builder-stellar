@@ -2134,3 +2134,178 @@ fn every_proposal_state_code_round_trips() {
         assert_eq!(ProposalCoreTime::unpack(&e, &stored).state, state);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Vote source adapters (docs/designs/governance-adapter.md)
+// ---------------------------------------------------------------------------
+
+use vote_adapter_mock::{VoteAdapterMock, VoteAdapterMockClient};
+
+/// A launched Governor whose vote source is the mock adapter.
+fn setup_with_adapter() -> (
+    Env,
+    VoteAdapterMockClient<'static>,
+    DaoTreasuryContractClient<'static>,
+    DaoGovernorContractClient<'static>,
+    TargetContractClient<'static>,
+) {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+
+    let owner = Address::generate(&e);
+    let adapter_id = e.register(VoteAdapterMock, (owner.clone(), 0u32));
+    let adapter = VoteAdapterMockClient::new(&e, &adapter_id);
+
+    let governor_id = Address::generate(&e);
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            governor_id.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
+    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    e.register_at(
+        &governor_id,
+        DaoGovernorContract,
+        (
+            owner.clone(),
+            adapter_id.clone(),
+            treasury_id.clone(),
+            300_u32,
+            300_u32,
+            300_u32,
+            1_u128,
+            5_000_u32, // 50% quorum
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
+    let governor = DaoGovernorContractClient::new(&e, &governor_id);
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
+    (e, adapter, treasury, governor, target)
+}
+
+fn next_ledger(e: &Env, seconds: u64) {
+    e.ledger().set_sequence_number(e.ledger().sequence() + 1);
+    e.ledger().set_timestamp(e.ledger().timestamp() + seconds);
+}
+
+#[test]
+fn vote_source_defaults_to_the_token() {
+    let (_e, token, _treasury, governor, _target, _owner) = setup();
+    assert_eq!(governor.vote_source(), token.address);
+}
+
+#[test]
+fn adapter_weights_drive_propose_vote_quorum_and_execution() {
+    let (e, adapter, treasury, governor, target) = setup_with_adapter();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let carol = Address::generate(&e);
+    adapter.set_votes(&alice, &30);
+    adapter.set_votes(&bob, &50);
+    adapter.set_votes(&carol, &20);
+    next_ledger(&e, 5);
+    assert_eq!(governor.vote_source(), adapter.address);
+
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "Adapter proposal");
+    let id = governor.propose(&targets, &functions, &args, &description, &alice);
+
+    // Quorum fixed at proposal time from the adapter's previous-ledger supply.
+    let info = governor.proposal(&id);
+    assert_eq!(info.quorum, 50); // ceil(100 * 50%)
+    assert_eq!(info.quorum, governor.quorum(&info.vote_snapshot));
+
+    // Weights changed after the snapshot don't count.
+    adapter.set_votes(&carol, &1_000);
+    e.ledger().set_timestamp(e.ledger().timestamp() + 301);
+    next_ledger(&e, 0);
+    governor.cast_vote(&id, &1, &String::from_str(&e, ""), &bob);
+    governor.cast_vote(&id, &0, &String::from_str(&e, ""), &carol);
+    e.ledger().set_timestamp(e.ledger().timestamp() + 301);
+    next_ledger(&e, 0);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
+
+    let desc_hash = e.crypto().keccak256(&description.to_bytes()).to_bytes();
+    governor.queue(&targets, &functions, &args, &desc_hash, &0, &alice);
+    e.ledger().set_timestamp(e.ledger().timestamp() + 301);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(target.get_value(), 42);
+}
+
+#[test]
+fn adapter_quorum_matches_the_snapshot_when_weights_change_in_the_proposing_ledger() {
+    let (e, adapter, _treasury, governor, target) = setup_with_adapter();
+    let alice = Address::generate(&e);
+    adapter.set_votes(&alice, &10);
+    next_ledger(&e, 5);
+    // Raised in the proposing ledger: neither quorum nor weight sees it.
+    adapter.set_votes(&Address::generate(&e), &90);
+    let id = governor.propose(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &String::from_str(&e, "Same-ledger change"),
+        &alice,
+    );
+    let info = governor.proposal(&id);
+    assert_eq!(info.quorum, 5);
+    next_ledger(&e, 0);
+    assert_eq!(info.quorum, governor.quorum(&info.vote_snapshot));
+}
+
+#[test]
+fn account_without_adapter_weight_cannot_propose_or_vote() {
+    let (e, adapter, _treasury, governor, target) = setup_with_adapter();
+    let alice = Address::generate(&e);
+    let nobody = Address::generate(&e);
+    adapter.set_votes(&alice, &10);
+    next_ledger(&e, 5);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    assert!(governor
+        .try_propose(
+            &targets,
+            &functions,
+            &proposal_args(&e),
+            &String::from_str(&e, "No weight"),
+            &nobody,
+        )
+        .is_err());
+    let id = governor.propose(
+        &targets,
+        &functions,
+        &proposal_args(&e),
+        &String::from_str(&e, "Weighted"),
+        &alice,
+    );
+    e.ledger().set_timestamp(e.ledger().timestamp() + 301);
+    next_ledger(&e, 0);
+    assert_eq!(
+        governor.try_cast_vote(&id, &1, &String::from_str(&e, ""), &nobody),
+        Err(Ok(CustomGovernorError::ZeroVotingWeight.into()))
+    );
+}
+
+#[test]
+fn proposal_threshold_is_checked_against_the_adapter_supply() {
+    let (e, adapter, treasury, governor, _target) = setup_with_adapter();
+    adapter.set_votes(&Address::generate(&e), &10);
+    // The admin is the Treasury once live; mock_all_auths covers it.
+    let _ = treasury;
+    assert_eq!(
+        governor.try_set_proposal_threshold(&11),
+        Err(Ok(CustomGovernorError::InvalidProposalThreshold.into()))
+    );
+    governor.set_proposal_threshold(&10);
+}

@@ -2948,6 +2948,7 @@ fn slug_params_with(
                 queue_delay: 300,
                 proposal_threshold: 1,
                 quorum_bps: 1000,
+                vote_source: None,
             },
             modules,
             token_settings: Default::default(),
@@ -5822,3 +5823,6 @@ mod membership;
 
 #[path = "locked.rs"]
 mod locked;
+
+#[path = "vote_adapter.rs"]
+mod vote_adapter;

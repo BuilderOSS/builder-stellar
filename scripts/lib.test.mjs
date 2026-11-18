@@ -9,7 +9,8 @@ import {
   parseCodeTtlDays,
   positionalArg,
   SAFE_RESOURCE_FEE_STROOPS,
-  scv
+  scv,
+  contractIdBytes
 } from './lib.mjs';
 
 // Code rent measured on testnet (2026-10-12): ~514 stroops per byte per day.
@@ -69,6 +70,19 @@ test('namespaced keys match the bytes pinned in contracts/common', () => {
     hex(namespacedKeyXdr('Listing', scv.u32(7))),
     '0000001000000001000000020000000f000000076275696c646572000000001000000001000000020000000f000000074c697374696e67000000000300000007'
   );
+});
+
+test('contract addresses encode as ScVal addresses', () => {
+  // Pairs from `stellar strkey encode/decode`.
+  const zero = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4';
+  assert.equal(contractIdBytes(zero).toString('hex'), '00'.repeat(32));
+  assert.equal(
+    contractIdBytes('CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD').toString('hex'),
+    '9614805d1b3de4ee658572ececbc86e75e0b2a0cfb900e3327c39797700208af'
+  );
+  assert.equal(scv.address(zero).toString('hex'), '00000012' + '00000001' + '00'.repeat(32));
+  assert.throws(() => contractIdBytes('CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC5'));
+  assert.throws(() => contractIdBytes('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'));
 });
 
 test('the artifact is found after a valueless flag and never as a flag value', () => {

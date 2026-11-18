@@ -8,8 +8,10 @@
 //     `current_implementations()` (what `create_dao` and `create_module` deploy) and each name's latest
 //     implementation, the hash every known DAO module runs (every entry of the Token's module registry,
 //     ClaimMinters included), plus the artifact's hashes and any --hash;
-//   - the Manager instance, each hash's `Implementation(hash)` record (every `version()` reads it) and
-//     each `LatestImplementation(name)` record.
+//   - the Manager instance, each hash's `Implementation(hash)` record (every `version()` reads it),
+//     each `LatestImplementation(name)` record and each approved vote source's `ApprovedVoteSource(source)`
+//     record (docs/designs/governance-adapter.md), with that source's instance and code. Vote sources come
+//     from --vote-source and, with DATABASE_URL set, the indexer (manager.vote_sources).
 // DAO-owned keys (module instances, artwork, proposals, holdings) are renewed by each DAO's own sweep
 // (scripts/renew-dao.mjs).
 //
@@ -21,7 +23,7 @@
 // large code entry to 170 days comes close to the u32 total-fee cap) is done in steps.
 //
 // Usage: node scripts/renew-code-ttl.mjs <deploys/<label>-<network>-manager.json>
-//          [--days 170] [--identity <name>] [--hash <hex>]... [--token <C...>]... [--dry-run]
+//          [--days 170] [--identity <name>] [--hash <hex>]... [--token <C...>]... [--vote-source <C...>]... [--dry-run]
 // --days defaults to 170 and must be above the 4 days contracts bump code to themselves.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -49,7 +51,7 @@ const flag = (name, fallback) => {
 const flags = (name) => args.flatMap((a, i) => (a === name && args[i + 1] ? [args[i + 1]] : []));
 if (!artifactPath) {
   console.error(
-    'Usage: node scripts/renew-code-ttl.mjs <deploys/<label>-<network>-manager.json> [--days 170] [--identity <name>] [--hash <hex>]... [--token <C...>]... [--dry-run]'
+    'Usage: node scripts/renew-code-ttl.mjs <deploys/<label>-<network>-manager.json> [--days 170] [--identity <name>] [--hash <hex>]... [--token <C...>]... [--vote-source <C...>]... [--dry-run]'
   );
   process.exit(1);
 }
@@ -149,6 +151,22 @@ for (const token of tokens) {
     add(tryView(address, 'wasm_hash'), `${module} of ${token.slice(0, 6)}… (running)`);
   }
 }
+// Approved vote sources: --vote-source and the indexer. The chain can't list them.
+const voteSources = new Set(flags('--vote-source'));
+if (process.env.DATABASE_URL) {
+  const r = runQuiet('psql', [
+    process.env.DATABASE_URL,
+    '-At',
+    '-c',
+    `SELECT source FROM manager.vote_sources WHERE deployment_id = 'manager:${manager}'`
+  ]);
+  if (r.ok) {
+    for (const source of r.stdout.split('\n')) if (source.trim().startsWith('C')) voteSources.add(source.trim());
+  } else {
+    console.warn(`Vote source lookup skipped: ${(r.stderr || r.stdout).trim().split('\n')[0]}`);
+  }
+}
+for (const source of voteSources) add(tryView(source, 'wasm_hash'), `vote source ${source.slice(0, 6)}…`);
 for (const [label, hash] of Object.entries(artifact.implementations || {})) add(hash, `${label} (artifact)`);
 for (const hash of flags('--hash')) add(hash, 'extra');
 
@@ -184,6 +202,16 @@ for (const name of latest.pointerNames) {
     '--key-xdr',
     namespacedKeyXdr('LatestImplementation', scv.string(name))
   ]);
+}
+for (const source of voteSources) {
+  if (tryView(manager, 'is_vote_source_approved', ['--source', source]) !== true) continue;
+  extend(`approved vote source ${source.slice(0, 6)}…`, [
+    '--id',
+    manager,
+    '--key-xdr',
+    namespacedKeyXdr('ApprovedVoteSource', scv.address(source))
+  ]);
+  extend(`vote source ${source.slice(0, 6)}… instance`, ['--id', source]);
 }
 extend('Manager instance', ['--id', manager]);
 
