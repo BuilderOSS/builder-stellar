@@ -11,8 +11,9 @@ const LEGACY_KEPT_PATHS = ['api/', 'images/', 'assets/', 'samples/', '_next/'];
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: true,
-  // Shared Warm Ink fonts run through the Next font loader (packages/design-tokens).
-  transpilePackages: ['@builder-stellar/design-tokens'],
+  // Shared workspace sources: the Warm Ink fonts run through the Next font loader
+  // (packages/design-tokens), and the glossary is plain TypeScript (packages/glossary).
+  transpilePackages: ['@builder-stellar/design-tokens', '@builder-stellar/glossary'],
   // Share cards read their OFL fonts from disk (src/lib/og/fonts.ts); tracing can't see that path.
   outputFileTracingIncludes: {
     '/opengraph-image': ['./src/assets/fonts/**'],

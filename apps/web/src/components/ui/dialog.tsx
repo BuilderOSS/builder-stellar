@@ -63,7 +63,22 @@ const dialog = sva({
       justifyContent: 'flex-end',
       gap: '2'
     }
-  }
+  },
+  variants: {
+    instant: {
+      // Opened from the keyboard (a search shortcut): no motion, so it is there on the keypress.
+      true: {
+        backdrop: { _open: { animation: 'none' }, _closed: { animation: 'none' } },
+        content: {
+          _open: { animation: 'none' },
+          _closed: { animation: 'none' },
+          '@media (prefers-reduced-motion: reduce)': { _open: { animation: 'none' }, _closed: { animation: 'none' } }
+        }
+      },
+      false: {}
+    }
+  },
+  defaultVariants: { instant: false }
 });
 
 /**
@@ -79,7 +94,9 @@ export function Dialog({
   footer,
   role = 'dialog',
   closeOnInteractOutside = true,
-  initialFocusEl
+  initialFocusEl,
+  finalFocusEl,
+  instant = false
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -91,8 +108,12 @@ export function Dialog({
   closeOnInteractOutside?: boolean;
   /** Element to focus on open, e.g. the safe choice in a destructive confirm. */
   initialFocusEl?: () => HTMLElement | null;
+  /** Element to focus on close, when it isn't the one focused before opening (a shortcut opened it). */
+  finalFocusEl?: () => HTMLElement | null;
+  /** Open and close with no motion. */
+  instant?: boolean;
 }) {
-  const classes = dialog();
+  const classes = dialog({ instant });
   return (
     <ArkDialog.Root
       open={open}
@@ -100,6 +121,7 @@ export function Dialog({
       role={role}
       closeOnInteractOutside={closeOnInteractOutside}
       initialFocusEl={initialFocusEl}
+      finalFocusEl={finalFocusEl}
       lazyMount
       unmountOnExit
     >

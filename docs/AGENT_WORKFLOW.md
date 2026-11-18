@@ -60,11 +60,13 @@ Run the relevant checks before handing work to another agent:
 | Contract | `pnpm contracts:test`, `cargo fmt --all --check` |
 | Indexer | `pnpm indexer:test`, then pipeline generation or validation when affected |
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
+| Docs site | `pnpm --dir apps/docs lint`, `typecheck` and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
 | Database | Forward migration, rollback, permission, and query-plan evidence |
 
 Checks are requirements, not a claim of a passing run. Current CI runs Cargo
 workspace tests, web codegen before lint/typecheck/web tests, Goldsky tests, and
-a separate Build Web job. It caches node_modules and uses Node 23. Configuration
+a separate Build Web job, which also builds the docs site and checks every docs page in
+both themes. It caches node_modules and uses Node 23. Configuration
 changes belong to implementation owners, not docs-steward.
 
 ## Documentation handoff and acceptance

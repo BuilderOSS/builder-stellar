@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Tribe Builder">
+  <!-- Dedicated 16px drawing of BrandMark (components/shell/brand-mark.tsx): flat, empty seat. -->
+  <!-- Heads and seat sit on whole pixels so they stay crisp; blue is colors.signal (#0068D6 light, #0085FF dark). -->
+  <style>
+    .m { fill: #0068D6; stroke: #0068D6; }
+    @media (prefers-color-scheme: dark) { .m { fill: #0085FF; stroke: #0085FF; } }
+  </style>
+  <g class="m">
+    <path stroke="none" fill-rule="evenodd" d="M5 5h6v6H5zM6 6v4h2V6z"/>
+    <circle stroke="none" cx="8" cy="2" r="2"/>
+    <circle stroke="none" cx="14" cy="8" r="2"/>
+    <circle stroke="none" cx="2" cy="8" r="2"/>
+    <circle fill="none" cx="8" cy="14" r="1.5" stroke-width="1"/>
+  </g>
+</svg>

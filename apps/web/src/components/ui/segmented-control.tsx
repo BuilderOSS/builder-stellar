@@ -49,7 +49,8 @@ const segmented = sva({
       _checked: { color: 'ink' },
       _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '1px' },
       '& svg': { width: '4', height: '4' },
-      '@media (pointer: coarse)': { minH: '10' }
+      // Touch targets are 44px (sizes.touch, DESIGN.md).
+      '@media (pointer: coarse)': { minH: 'touch' }
     },
     text: {}
   },

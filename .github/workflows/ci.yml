@@ -133,8 +133,19 @@ jobs:
       - name: Run TypeScript type checking
         run: pnpm --dir apps/web typecheck
 
-      - name: Type check the shared design tokens
-        run: pnpm --dir packages/design-tokens typecheck
+      - name: Type check the shared design tokens and glossary
+        run: |
+          pnpm --dir packages/design-tokens typecheck
+          pnpm --dir packages/glossary typecheck
+
+      - name: Generate docs styles
+        run: pnpm --dir apps/docs codegen
+
+      - name: Lint, type check and test the docs
+        run: |
+          pnpm --dir apps/docs lint
+          pnpm --dir apps/docs typecheck
+          pnpm --dir apps/docs test
 
       - name: Run web tests
         run: pnpm --dir apps/web test
@@ -183,3 +194,15 @@ jobs:
 
       - name: Build Next.js app
         run: pnpm build
+
+      # docs.tribes.build: the static export plus its Pagefind index, then every page at
+      # 375, 768 and 1440px in light and dark (axe, horizontal scroll, console errors) and
+      # the keyboard and touch states (docs plan §5.4c).
+      - name: Build the docs site
+        run: pnpm docs:build
+
+      - name: Install Chromium for the docs checks
+        run: pnpm --dir apps/docs exec playwright-core install --with-deps chromium
+
+      - name: Check every docs page in both themes
+        run: pnpm docs:check
