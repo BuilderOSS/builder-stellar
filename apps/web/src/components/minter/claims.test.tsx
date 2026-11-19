@@ -8,7 +8,8 @@ import type { ClaimListView, ClaimState } from '@/lib/minter/types';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const state = vi.hoisted(() => ({
   claims: undefined as unknown,
-  config: {} as Record<string, unknown>
+  config: {} as Record<string, unknown>,
+  canManage: false
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -36,6 +37,7 @@ vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
 vi.mock('./allocation-draft', () => ({ ClaimListDraftForm: () => null }));
+vi.mock('@/hooks/use-dao-membership', () => ({ useDaoMembership: () => ({ canManage: state.canManage }) }));
 
 import { Claims } from './claims';
 
@@ -102,5 +104,36 @@ describe('Claims on a failed launch drive', () => {
     state.config = { ...state.config, assuranceDeadline: deadline };
     state.claims = claimsState([{ ...baseList, assurance: null }]);
     expect(render()).not.toContain('Free the link');
+  });
+});
+
+describe('Claims, the way to manage lists', () => {
+  beforeEach(() => {
+    state.claims = claimsState([{ ...baseList, assurance: null }]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, status: 'operational' };
+    state.canManage = false;
+  });
+
+  it('is hidden from visitors who cannot manage', () => {
+    const html = render();
+    expect(html).not.toContain('Manage claim lists');
+    expect(html).not.toContain('Propose a claim list');
+  });
+
+  it('is a proposal for members once the tribe is live', () => {
+    state.canManage = true;
+    const html = render();
+    expect(html).toContain('Propose a claim list');
+    expect(html).toContain('href="/dao/lantern-club/admin/claims"');
+  });
+
+  it('is direct management for the launch admin in Setup', () => {
+    state.canManage = true;
+    state.config = { ...state.config, status: 'pending' };
+    expect(render()).toContain('Manage claim lists');
+  });
+
+  it('always offers the member view from the manage view', () => {
+    expect(render(true)).toContain('See the member view');
   });
 });
