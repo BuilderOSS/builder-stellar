@@ -161,3 +161,19 @@ None.
 - **Fix:** the guided sequence never closes on an outside press or focus; Close, Stop here, Done and
   Escape still close it. This also keeps a stray press from dropping a sequence part way.
 - **Regression test:** `components/marketplace/sell-sequence.test.tsx`; W10's Change price case.
+
+### BUG-011 · Every resale purchase failed with "does not match the reviewed listing"
+- **Flow:** W10, buy a listing. Found at desktop dark; every viewport (server side).
+- **Severity:** P1 (no member could buy a resale listing).
+- **Steps:** as another member, open a resale listing's Details, press Buy, then Check.
+- **Expected:** the review shows the price and network fee, then Sign and send.
+- **Actual:** "The simulated purchase does not match the reviewed listing. Refresh the listing and
+  review it again; nothing was submitted." on every attempt.
+- **Root cause:** `lib/marketplace/purchase-cycle.ts` proves the listing's creation from RPC
+  `getEvents` and kept only events with `inSuccessfulContractCall` true. Current Stellar RPC servers
+  return only successful-call events and no longer send that field (deprecated in the SDK), so the
+  creation event was always dropped and the check failed closed.
+- **Fix:** an event counts unless the field is explicitly `false`, which still rejects a failed call's
+  events from an older server.
+- **Regression test:** `lib/marketplace/purchase-cycle.test.ts` (an event without the field passes,
+  one marked `false` fails); W10's buy case.
