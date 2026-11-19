@@ -18,6 +18,7 @@ Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tr
 ## How-to and operations
 
 - [Deploy Manager](MANAGER_DEPLOYMENT.md)
+- [dev.tribes.build: the `dev` deployment](DEV_DEPLOYMENT.md) (its own Manager, database, pipeline and hostname)
 - [Create, configure, and launch a DAO](DAO_DEPLOYMENT.md)
 - [Upgrade DAO contracts (step-by-step runbook)](CONTRACT_UPGRADES.md)
 - [Set up Goldsky](GOLDSKY_SETUP.md) and [package reference](../packages/goldsky/README.md)
