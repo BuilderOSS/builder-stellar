@@ -251,12 +251,13 @@ None.
 - **Expected:** the second delegation lands.
 - **Actual:** the transaction failed with "trying to access contract data key outside of the
   footprint" for the new delegate's `DelegateCheckpoint`.
-- **Root cause:** `/api/dao/<id>/tokens/prepare` simulated on an RPC node that hadn't yet applied the
-  ledger with the first delegation, so the footprint lacked the checkpoint that delegation created.
-  Testnet RPC is load-balanced, and a confirmation seen from one node says nothing about the next.
+- **Root cause:** `/api/dao/<id>/tokens/prepare` simulated the second delegation on the ledger that
+  held the first one (or an earlier one). The votes library writes one checkpoint per account per
+  ledger: simulated in that ledger, the new delegate's checkpoint is updated in place, but the real
+  transaction lands in a later ledger and writes a new checkpoint key the footprint doesn't include.
 - **Fix:** the holder form remembers the ledger of its last confirmed action and sends it as
   `afterLedger`; `prepareHolderAction` (`lib/token-holder/actions.ts`) simulates again, up to five
-  times two seconds apart, while the simulation's `latestLedger` is behind it, then asks the member to
+  times two seconds apart, until the simulation's `latestLedger` is past it, then asks the member to
   wait a few seconds instead of handing over a transaction bound to fail.
 - **Regression test:** `lib/token-holder/actions.test.ts` ("simulates again until RPC has the ledger
   of the last confirmed action"); W14's members-only @chain case.

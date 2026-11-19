@@ -119,8 +119,8 @@ describe('holder binding actions', () => {
       needsNonInvokerSigningBy: () => [],
       toXdr: () => envelope
     });
-    const stale = at(990);
-    mocks.delegate.mockResolvedValueOnce(stale).mockResolvedValueOnce(at(1000));
+    const stale = at(1000);
+    mocks.delegate.mockResolvedValueOnce(stale).mockResolvedValueOnce(at(1001));
     const action = { action: 'delegate' as const, tokenId: '0', destination, afterLedger: '1000' };
     await prepareHolderAction('dao-a', actor, action, { pauseMs: 0 });
     expect(mocks.delegate).toHaveBeenCalledTimes(2);

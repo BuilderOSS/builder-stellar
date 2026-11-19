@@ -81,9 +81,9 @@ export function holderXdr(tx: AssembledTransaction<void>) {
   return tx.toXdr();
 }
 /**
- * Prepare a holder action. With `afterLedger`, a simulation served by an RPC node that hasn't yet
- * applied that ledger is thrown away and run again: its footprint would miss the keys the last
- * action created (a new vote checkpoint, say) and the signed transaction would fail on chain.
+ * Prepare a holder action. With `afterLedger`, a simulation run on that ledger or an earlier one is
+ * thrown away and run again: its footprint would miss the vote checkpoint the real transaction
+ * creates in a later ledger, and the signed transaction would fail on chain.
  */
 export async function prepareHolderAction(
   daoId: string,
@@ -94,7 +94,9 @@ export async function prepareHolderAction(
   const after = action.afterLedger ? Number(action.afterLedger) : 0;
   for (let attempt = 1; ; attempt++) {
     const { prepared, simulatedAt } = await prepareOnce(daoId, actor, action);
-    if (!after || simulatedAt === null || simulatedAt >= after) return prepared;
+    // Strictly after: simulated in the last action's own ledger, a vote checkpoint written then is
+    // updated in place, while the real transaction lands later and needs a new checkpoint key.
+    if (!after || simulatedAt === null || simulatedAt > after) return prepared;
     if (attempt >= attempts)
       throw new HolderError(
         'The network doesn’t show your last transaction yet. Wait a few seconds, then review again.',
