@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as GovernorClient, GovernorError } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { BookOpen, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -42,7 +42,7 @@ import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-re
 import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { proposalIdToRouteId } from '@/lib/proposal-id';
+import { simulatedProposalId } from '@/lib/proposal-id';
 import {
   encodeProposalMetadata,
   PROPOSAL_DESCRIPTION_MAX_BYTES,
@@ -245,7 +245,8 @@ export default function ProposalCreatePage() {
         proposer: session.address
       });
 
-      const proposalId = assembled.result ? proposalIdToRouteId(assembled.result) : '';
+      // A proposal the Governor would refuse (already exists, too few votes) fails here, before signing.
+      const proposalId = simulatedProposalId(assembled.result, GovernorError);
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
