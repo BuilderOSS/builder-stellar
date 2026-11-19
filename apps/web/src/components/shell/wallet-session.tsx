@@ -24,7 +24,7 @@ import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
 import { openConnectModal } from '@/lib/wallet-connect-modal';
 import { hasSeenWalletIntro, markWalletIntroSeen } from '@/lib/wallet-intro';
-import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
+import { initializeWalletKit, isWalletConnectSelected, walletConnectEnabled } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { WalletIntro } from './wallet-intro';
@@ -362,6 +362,8 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
           setIntroOpen(open);
         }}
         networkLabel={network.label}
+        testnet={network.name === 'testnet'}
+        walletConnect={walletConnectEnabled(network.name)}
         onContinue={isAuthenticated ? undefined : continueFromIntro}
       />
     </WalletSessionContext.Provider>

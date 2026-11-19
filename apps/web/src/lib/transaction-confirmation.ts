@@ -15,12 +15,31 @@ export type TransactionConfirmationOptions = {
 };
 
 /**
+ * The wait ran out before the network reported an outcome. The transaction may still confirm, so
+ * this is a recovery state, not a failure: show the hash, let the person check again, and never
+ * sign the same action a second time without checking.
+ */
+export class ConfirmationUnknownError extends Error {
+  readonly hash: string;
+
+  constructor(hash: string, timeout: number) {
+    super(`Transaction ${hash} is not confirmed yet (confirmation timeout after ${timeout}ms).`);
+    this.name = 'ConfirmationUnknownError';
+    this.hash = hash;
+  }
+}
+
+export function isConfirmationUnknown(error: unknown): error is ConfirmationUnknownError {
+  return error instanceof ConfirmationUnknownError;
+}
+
+/**
  * Wait for a transaction to be confirmed on the Stellar network
  *
  * @param hash - Transaction hash to wait for
  * @param rpcUrl - Stellar RPC server URL
  * @param options - Configuration options
- * @throws Error if transaction fails or times out
+ * @throws Error if the transaction fails, ConfirmationUnknownError if it is still unconfirmed at the timeout
  */
 export async function waitForConfirmation(
   hash: string,
@@ -56,6 +75,6 @@ export async function waitForConfirmation(
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  // Timeout reached
-  throw new Error(`Transaction confirmation timeout after ${timeout}ms`);
+  // Timeout reached: the outcome is unknown, not failed.
+  throw new ConfirmationUnknownError(hash, timeout);
 }

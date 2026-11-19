@@ -103,7 +103,7 @@ WHERE deployment_id = 'manager:<Manager contract address>'
 
 SQL names are `launched_*`; frontend DTO aliases may be `finalized_*`. `GET /api/dao/<Token contract address>` returns lookup status. For missing rows, inspect the selected artifact/start ledger and pipeline status from `packages/goldsky`; see [indexer setup](GOLDSKY_SETUP.md). Do not manually change the view's lifecycle status.
 
-Launch errors include `LaunchSupplyZero` (7120), `SlugTaken` (7123), `LaunchAdminNotOwner` (7126), `FactoryPaused` (7111), `PendingDaoUsesRevokedImplementation` (7121), `PlatformMinterNotSet` (7108), `PlatformMinterMismatch` (7110), and module payment-asset mismatch errors. A revoked pending module can be upgraded along an approved transition before retrying launch. Error codes are unique across contracts (one 100-code block per contract, 7000-7899).
+Launch errors include `LaunchSupplyZero` (7120), `SlugTaken` (7123), `LaunchAdminNotOwner` (7126), `FactoryPaused` (7111), `PendingDaoUsesRevokedImplementation` (7121), and the module payment-asset mismatch `PaymentAssetMismatch` (7132). (7108 and 7110 were retired with the shared Minter.) A revoked pending module can be upgraded along an approved transition before retrying launch. Error codes are unique across contracts (one 100-code block per contract, 7000-7899).
 
 ## Storage renewal
 

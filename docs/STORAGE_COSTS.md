@@ -20,7 +20,7 @@ eleven transactions. Longer is never dearer per year.
 
 | Role | You write | You pay up front | You renew | If you do not |
 |---|---|---|---|---|
-| **Platform operator** | Contract code, the Manager registry, the shared Minter | ~2,000 XLM per 170 days for one copy of every contract's code | Code every ~5 months, with one command | Members start paying a few days of code rent per transaction; code archives after ~4 more days and every DAO stops until it is restored |
+| **Platform operator** | Contract code and the Manager registry | ~2,000 XLM per 170 days for one copy of every contract's code | Code every ~5 months, with one command | Members start paying a few days of code rent per transaction; code archives after ~4 more days and every DAO stops until it is restored |
 | **DAO creator** | Six contract instances, the artwork, founder tokens, the link | ~30 XLM for a DAO with 300 artwork items | Nothing more as creator | Handed to the DAO at launch |
 | **DAO (whoever renews it)** | Nothing new | ~57 XLM per 180 days for the reference DAO | Everything the DAO owns, in one signature, from Manage → Storage renewal | Entries archive after 180 days; anyone restores them for about the same rent, plus a fee |
 | **Member** | Your own ownership, balance and vote records | ~0.02 XLM with your first token | Automatically, 30 days, every time you act | After a quiet month the app restores your records before your next action (one extra signature, ~0.03 XLM) |
@@ -34,14 +34,14 @@ eleven transactions. Longer is never dearer per year.
 ## Platform operator
 
 **What you keep alive.** Shared contract code (one entry per wasm hash, shared by every DAO on it), the Manager
-instance and registry records (`Implementation`, `LatestImplementation`, `PlatformMinter`), and the shared Minter
-instance. Code is the expensive part:
+instance and its registry records (`Implementation`, `LatestImplementation`). There is no shared or platform
+minter: each DAO mints only through its own modules. Code is the expensive part:
 
 | | Size | 170 days | Per year |
 |---|---|---|---|
 | All eight contracts, one version each | 231 KB | ~2,020 XLM | ~4,330 XLM |
 | One extra Governor version still run by older DAOs | 37 KB | ~325 XLM | ~700 XLM |
-| Registry records, Manager and Minter instances | a few KB | under 10 XLM | under 20 XLM |
+| Registry records and the Manager instance | a few KB | under 10 XLM | under 20 XLM |
 
 Every version a DAO still runs costs its own share, so an upgrade adds to the bill until the last DAO moves off
 the old hash. Expect the bill to grow with the number of live versions, not with the number of DAOs.
@@ -53,7 +53,7 @@ node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170 
 node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170             # pay
 ```
 
-It finds every hash from chain (current, latest, running on the Manager and Minter, and running on every known
+It finds every hash from chain (current, latest, running on the Manager, and running on every known
 DAO), simulates each extension, and splits any that would exceed 300 XLM in one transaction. New code is extended
 to 170 days at upload by `deploy-manager.mjs` and `upgrade-contract.mjs`.
 
@@ -65,12 +65,11 @@ lands in those days the code archives, and every DAO on it stops until someone s
 the hash (which costs roughly a renewal). `renew-code-ttl.mjs` refuses to run when it cannot read the Manager
 itself (its code or instance archived): restore the Manager first.
 
-**Your upgrades are on notice.** The Manager's own upgrade and the shared Minter's apply only `upgrade_delay()`
-ledgers after you approve them (set at deployment with `upgradeDelayLedgers`; 7 days recommended on a public
-network). You can lengthen the notice at once; shortening it waits out the notice in force. Every DAO pins the
-Minter as a mint authority; a DAO that distrusts a pending upgrade revokes it by proposal within the notice. A
-DAO whose governance cycle is longer than the notice cannot, and is trusting you for the Minter as it does for
-the Manager. Pick the notice with that in mind.
+**Your upgrades are on notice.** The Manager's own upgrade applies only `upgrade_delay()` ledgers after you
+approve it (set at deployment with `upgradeDelayLedgers`; 7 days recommended on a public network). You can
+lengthen the notice at once; shortening it waits out the notice in force. No DAO depends on a platform minter, so
+a Manager upgrade does not change who can mint for a DAO. Every DAO still relies on the Manager's registry to
+approve its own upgrades, so it trusts you for that registry. Pick the notice with that in mind.
 
 ## DAO creator (launch admin)
 

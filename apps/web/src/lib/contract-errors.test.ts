@@ -32,6 +32,19 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
   });
 
+  it('drops retired codes and words the governor lifecycle codes accurately', () => {
+    // Retired in contracts/token/src/error.rs and contracts/auction/src/error.rs; codes are never reused.
+    expect(getContractErrorMessage(undefined, 7204)).toBeUndefined();
+    expect(getContractErrorMessage(undefined, 7415)).toBeUndefined();
+    expect(getContractErrorMessage('manager', 7130)).toContain('UpgradeDelayNotElapsed');
+    expect(getContractErrorMessage('manager', 7143)).toContain('UnknownAgentKind');
+    // Queue raises 5006 for an already-queued proposal too.
+    expect(getContractErrorMessage('governor', 5006)).toContain('already queued');
+    expect(getContractErrorMessage('governor', 5009)).toBe(
+      'Only the person who made a proposal can cancel it, and only before voting closes.'
+    );
+  });
+
   it('identifies the owning contract from the code alone', () => {
     expect(contractForErrorCode(7001)).toBe('common');
     expect(contractForErrorCode(7123)).toBe('manager');

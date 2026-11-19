@@ -36,7 +36,7 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
       membershipRulesOf(tokenSettings)?.description ??
         [
           tokenSettings.transfersLocked
-            ? 'Memberships change hands only with DAO approval.'
+            ? 'Memberships change hands only with the tribe’s approval.'
             : 'Members can sell their tokens.',
           tokenSettings.membersOnlyDelegation ? 'Votes stay among members.' : 'Votes can be delegated to anyone.',
           tokenSettings.daoRecovery

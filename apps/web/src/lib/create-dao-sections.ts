@@ -26,7 +26,7 @@ export const FORM_SECTIONS = [
     id: 'review',
     stored: 'review',
     title: 'Review and create',
-    description: 'Everything above in plain words. Nothing is signed until you press Create.'
+    description: 'Everything above in plain words. Nothing is signed until you press Create tribe.'
   }
 ] as const satisfies ReadonlyArray<{ id: string; stored: CreateDaoSection; title: string; description: string }>;
 

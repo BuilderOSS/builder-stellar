@@ -23,6 +23,7 @@ import {
 } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { formatStroops } from '@/lib/auction-values';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { claimMinterClient } from '@/lib/minter/client';
@@ -69,6 +70,8 @@ function claimCount(list: ClaimListView, entry: Entry) {
 export function Claims({ admin = false }: { admin?: boolean }) {
   const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
+  // Managing lists follows Manage: the launch admin in Setup, members once live (by proposal).
+  const { canManage } = useDaoMembership(config);
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const current = useCurrentClaims(config.tokenContractId, address);
   const [page, setPage] = useState(0);
@@ -287,9 +290,15 @@ export function Claims({ admin = false }: { admin?: boolean }) {
             : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
         </p>
         <div className={styles.row}>
-          <ButtonLink href={`${base}/${admin ? 'claims' : 'admin/claims'}` as Route} variant="secondary" size="sm">
-            {admin ? 'See the member view' : 'Manage claim lists'}
-          </ButtonLink>
+          {admin ? (
+            <ButtonLink href={`${base}/claims` as Route} variant="secondary" size="sm">
+              See the member view
+            </ButtonLink>
+          ) : canManage ? (
+            <ButtonLink href={`${base}/admin/claims` as Route} variant="secondary" size="sm">
+              {config.status === 'pending' ? 'Manage claim lists' : 'Propose a claim list'}
+            </ButtonLink>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"

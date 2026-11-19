@@ -14,7 +14,8 @@ export const MEMBERSHIP_TYPES = [
   {
     id: 'auction',
     title: 'Daily auction',
-    description: 'One new token is auctioned each day. Every sale funds the treasury. The Nouns way.',
+    description:
+      'The tribe auctions one new token at a time, and the next auction starts when one ends. Every sale funds the treasury.',
     recommended: true,
     auction: true,
     marketplace: false,
@@ -23,7 +24,7 @@ export const MEMBERSHIP_TYPES = [
   {
     id: 'auction-resale',
     title: 'Auction + resale',
-    description: 'Daily auctions, and members can resell their tokens to others.',
+    description: 'Auctions one token at a time, and members can resell their tokens to others.',
     recommended: false,
     auction: true,
     marketplace: true,
@@ -70,7 +71,7 @@ export const MEMBERSHIP_RULES = [
     id: 'club',
     title: 'Members-only club',
     description:
-      'Memberships change hands only with the DAO’s approval, votes stay among members, and the DAO can move any membership by vote, for example to rescue a lost key.',
+      'Memberships change hands only with the tribe’s approval, votes stay among members, and the tribe can move any membership by vote, for example to recover one from a lost key.',
     settings: { transfersLocked: true, membersOnlyDelegation: true, daoRecovery: true }
   }
 ] as const;
@@ -88,11 +89,12 @@ export function membershipRulesOf(settings: TokenSettings) {
 
 /** Advanced: each switch in plain words. */
 export const MEMBERSHIP_SWITCHES: Array<{ key: keyof TokenSettings; label: string }> = [
-  { key: 'transfersLocked', label: 'Membership changes hands only with DAO approval' },
+  { key: 'transfersLocked', label: 'Membership changes hands only with the tribe’s approval' },
   { key: 'membersOnlyDelegation', label: 'Members can hand their vote only to fellow members' },
   {
     key: 'daoRecovery',
-    label: 'The DAO can rescue a member who loses their keys (it can then move any membership by vote)'
+    label:
+      'The tribe can recover a membership for a member who loses their keys (it can then move any membership by vote)'
   }
 ];
 
