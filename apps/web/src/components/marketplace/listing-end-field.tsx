@@ -32,9 +32,8 @@ export function ListingEndField({
         id={`${id}-preset`}
         label="Listing ends"
         value={preset}
-        onValueChange={(value) => {
-          if (!disabled) onPresetChange(value as ListingEndPreset);
-        }}
+        disabled={disabled}
+        onValueChange={(value) => onPresetChange(value as ListingEndPreset)}
         options={LISTING_END_PRESETS}
       />
       {preset === 'custom' ? (

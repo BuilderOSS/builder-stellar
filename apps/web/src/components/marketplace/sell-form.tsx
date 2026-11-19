@@ -108,8 +108,8 @@ export function SellForm({
   const networkIssue = signedIn ? session.walletNetworkIssue : '';
   const enabled = data.launched && !config.paused && signedIn && !networkIssue && supportedAsset;
   const tokenIds = (inventory.data?.tokenIds ?? []).filter((id) => !hiddenTokenIds?.has(id));
-  // A token from a Sell link stays choosable while your tokens load, or when it sits on another page.
-  // A token from a Sell link is preselected only when it is one of yours (shown while your tokens load).
+  // A token from a Sell link shows while your tokens load; once they load, it stays chosen only if it
+  // is one of yours on the page shown.
   if (tokenId && !inventory.data && !hiddenTokenIds?.has(tokenId)) tokenIds.unshift(tokenId);
   const selected = tokenIds.includes(tokenId) ? tokenId : '';
   let proceeds = '';
