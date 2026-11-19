@@ -87,7 +87,11 @@ None.
   (`apps/web/src/lib/proposal-actions/use-setting-values.ts`,
   `apps/web/src/components/marketplace/admin-marketplace.tsx`); the catalog shows it, and the contract
   id only for an asset it can't name (`apps/web/src/lib/proposal-actions/catalog.ts`).
-- **Regression test:** `catalog.test.ts`, "names a known market asset by its code"; W09 picks
+  The draft's and proposal page's summary had the same fault ("Change the market payment asset to
+  CBIELTK…"): `getProposalActionSummary` now names a known asset by its code (`knownAssetCode` in
+  `apps/web/src/lib/assets-config.ts`, used by `apps/web/src/lib/proposal-call.ts`).
+- **Regression test:** `catalog.test.ts`, "names a known market asset by its code";
+  `proposal-call.test.ts`, "payment asset summaries"; W09 picks
   `Change the market payment asset Now: XLM`.
 
 ### BUG-W09-2 · Manage overview doesn't say Market and Artwork need a vote after launch

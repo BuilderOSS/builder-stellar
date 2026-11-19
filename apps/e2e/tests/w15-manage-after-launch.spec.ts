@@ -41,6 +41,11 @@ const launched = loadTribe('manage');
 const setup = loadTribe('setup');
 const SPEC = 'w15';
 const PROPOSER = 'e2e-founder';
+/**
+ * Proposes, votes, queues and executes W15's proposals. Member A's 2 votes pass alone at the 10%
+ * quorum, and W09 signs as the founder, so the two walks can run side by side.
+ */
+const MANAGER = 'e2e-member-a';
 const MEMBER_B = 'e2e-member-b';
 const TAG = runTag();
 const KEYS = ['profile', 'token', 'governance', 'auction', 'marketplace'];
@@ -155,7 +160,7 @@ async function propose(page: Page, wallet: E2ESigner, key: string, why: string, 
   await writeAndReview(page, { title, why, actions });
   await expectNoHorizontalScroll(page);
   if (process.env.E2E_COMPOSE_ONLY === '1') test.skip(true, `E2E_COMPOSE_ONLY: ${key} composed, not submitted`);
-  const id = await submitProposal(page, wallet, PROPOSER, actions);
+  const id = await submitProposal(page, wallet, MANAGER, actions);
   saveRunState(SPEC, (state) => {
     state.proposals[key] = { id, title, actions, before };
   });
@@ -163,7 +168,7 @@ async function propose(page: Page, wallet: E2ESigner, key: string, why: string, 
 
 async function startOn(page: Page, wallet: E2ESigner, section: string) {
   await page.goto(launched.path());
-  await signInAs(page, wallet, PROPOSER);
+  await signInAs(page, wallet, MANAGER);
   await page.goto(launched.path(section));
 }
 
@@ -230,7 +235,8 @@ test.describe('W15 manage after launch', { tag: '@chain' }, () => {
     await change.getByRole('textbox', { name: 'Starting price' }).fill(String(Number(reserve) / 10_000_000));
     await expect(change.getByRole('radio', { name: 'Resume auctions' })).toBeChecked();
     await expect(change.getByText(GOVERNANCE)).toBeVisible();
-    await change.getByRole('button', { name: 'Add to proposal' }).click();
+    // Pause, the new price, resume: "Add 3 steps to proposal".
+    await change.getByRole('button', { name: 'Add 3 steps to proposal' }).click();
     await confirmAdd(page);
     await propose(page, wallet, 'auction', 'Walkthrough W15: the starting price, from Manage.', { reserve });
   });
@@ -255,7 +261,7 @@ test.describe('W15 manage after launch', { tag: '@chain' }, () => {
     test.setTimeout(45 * 60_000);
     const made = KEYS.filter((key) => runState(SPEC).proposals[key]);
     test.skip(!made.length, 'no W15 proposal was made');
-    await driveToExecuted(page, wallet, PROPOSER, launched, SPEC, made, (line) => console.info(`W15 ${line}`));
+    await driveToExecuted(page, wallet, MANAGER, launched, SPEC, made, (line) => console.info(`W15 ${line}`));
   });
 
   test('W15 every change took effect', async ({ page }) => {

@@ -57,11 +57,12 @@ import type { E2ESigner } from '../src/wallet/signer.ts';
  *   auction   Pause, duration, late-bid time, starting price, minimum increase, payment asset,
  *             Cancel the current auction, Resume
  *   market    mint allowance, quick-buy pool (Manage → Market), Treasury purchase (Manage → Market),
- *             resale fee, payment asset USDC → XLM, Pause → Reopen
+ *             resale fee, payment asset to USDC, Pause → Reopen
  *   slug      Change the link (Manage → Tribe profile), on its own as the app requires
  *   profile   Tribe profile description (Manage → Tribe profile), renderer (Manage → Artwork)
  *   modules   Add a module: claims (Manage → Membership), create and register
- *   cleanup   Close a pool, the three switches off again, Remove a module (round 2)
+ *   cleanup   Close a pool, the switches off again, the market back on XLM, Remove a module
+ *             (round 2: whatever round 1 left on)
  *
  * Switches go on in round 1 and off in round 2 (recovery on and off around its transfer), so every
  * run starts from the same settings. Values that change for good (durations, the name, the slug)
@@ -377,7 +378,7 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
     test.skip(Boolean(runState(SPEC).proposals.market), 'proposed earlier in this run');
     const config = marketConfig(tribe);
     expect(config.paused).toBe(false);
-    expect(config.payment_asset, 'each run puts the market back on XLM').toBe(NATIVE_SAC);
+    expect(config.payment_asset, 'round 2 puts the market back on XLM').toBe(NATIVE_SAC);
     // The fixture: the founder lists a token for 1 XLM, for the treasury to buy (an open listing left
     // by an earlier run that never got bought is used again).
     type Listings = { listings: { tokenId: string | null; seller: string | null; price: string; status: string }[] };
@@ -477,10 +478,10 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
     await pickAction(page, /^Change the resale fee/, (form) =>
       form.getByRole('textbox', { name: 'Resale fee (%)' }).fill(String(before.fee / 100))
     );
-    for (const label of ['USDC · USD Coin', 'XLM · Lumens'])
-      await pickAction(page, /^Change the market payment asset Now: XLM$/, async (form) => {
-        await form.getByRole('combobox', { name: 'Buyers pay in' }).selectOption({ label });
-      });
+    // To USDC after the purchase (the listing is in XLM); round 2 puts it back.
+    await pickAction(page, /^Change the market payment asset Now: XLM$/, async (form) => {
+      await form.getByRole('combobox', { name: 'Buyers pay in' }).selectOption({ label: 'USDC · USD Coin' });
+    });
     await pickAction(page, /^Pause the market Now: Open$/, async () => undefined);
     await pickAction(page, /^Reopen the market/, async () => undefined);
     await propose(
@@ -630,7 +631,7 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
   test('W09 market: allowance, pool, purchase, fee and asset', async () => {
     const { before } = proposalOf(SPEC, 'market') as ProposalRecord & { before: Record<string, any> };
     const config = marketConfig(tribe);
-    expect(config).toMatchObject({ paused: false, payment_asset: NATIVE_SAC, default_secondary_fee_bps: before.fee });
+    expect(config).toMatchObject({ paused: false, payment_asset: USDC_SAC, default_secondary_fee_bps: before.fee });
     expect(ownerOf(tribe, before.listed)).toBe(tribe.treasury);
     expect(Number(read(tribe.marketplace!, 'next_pool_id'))).toBe(before.nextPool + 1);
     const pool = read<{ size: number; closed: boolean }>(
@@ -674,46 +675,70 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
     });
   });
 
-  test('W09 round 2: close the pool, switches off, remove the claims module, in one proposal', async ({
+  test('W09 round 2: close the pool, switches off, market back on XLM, remove the claims module', async ({
     page,
     wallet
   }) => {
     test.setTimeout(45 * 60_000);
     const { notes } = runState(SPEC);
-    test.skip(notes.pool === undefined || !notes.claims, 'round 1 did not open a pool and add a module');
+    const settings = tokenSettings(tribe);
+    const agents = transferAgents(tribe);
+    const market = marketConfig(tribe);
+    const claims = tokenModules(tribe).some((module) => module.kind === 'claims');
+    const work = [
+      notes.pool !== undefined,
+      settings.transfers_locked,
+      settings.members_only_delegation,
+      agents.length > 0,
+      market.payment_asset !== NATIVE_SAC,
+      claims
+    ];
+    test.skip(!runState(SPEC).proposals.cleanup && !work.some(Boolean), 'round 1 left nothing to undo');
     if (!runState(SPEC).proposals.cleanup) {
       await startDraft(page, wallet);
-      await pickAction(page, /^Close a pool/, (form) => fillText(form, 'Pool', String(notes.pool)));
-      await pickAction(page, /^Lock memberships Now: On$/, (form) => setSwitch(form, /^Lock memberships/, false));
-      await pickAction(page, /^Members-only delegation Now: On$/, (form) =>
-        setSwitch(form, /^Members-only delegation/, false)
-      );
-      await pickAction(
-        page,
-        /^Change a transfer agent/,
-        async (form) => {
-          await fillText(form, 'Module', tribe.auction!);
-          await setSwitch(form, /^Can move memberships/, false);
-        },
-        { advanced: true }
-      );
-      await page.goto(tribe.path('admin/owner'));
-      await page
-        .getByRole('button', { name: /^Claims? .*options$|options$/ })
-        .filter({ hasNotText: /Auction|Market/ })
-        .last()
-        .click();
-      await page.getByRole('menuitem', { name: /^Remove from tribe/ }).click();
-      const remove = page.getByRole('dialog', { name: /^Remove the/ });
-      const add = remove.getByRole('button', { name: /^Add \d+ actions? to your proposal$/ });
-      await waitForUi('removal checked', (timeout) => expect(add).toBeEnabled({ timeout }), { governingS: 30 });
-      await add.click();
-      await confirmAdd(page);
-      await propose(page, wallet, 'cleanup', 'Walkthrough W09: round 2, what only exists once round 1 ran.', notes);
+      if (notes.pool !== undefined)
+        await pickAction(page, /^Close a pool/, (form) => fillText(form, 'Pool', String(notes.pool)));
+      if (settings.transfers_locked)
+        await pickAction(page, /^Lock memberships Now: On$/, (form) => setSwitch(form, /^Lock memberships/, false));
+      if (settings.members_only_delegation)
+        await pickAction(page, /^Members-only delegation Now: On$/, (form) =>
+          setSwitch(form, /^Members-only delegation/, false)
+        );
+      for (const agent of agents)
+        await pickAction(
+          page,
+          /^Change a transfer agent/,
+          async (form) => {
+            await fillText(form, 'Module', agent);
+            await setSwitch(form, /^Can move memberships/, false);
+          },
+          { advanced: true }
+        );
+      if (market.payment_asset !== NATIVE_SAC)
+        await pickAction(page, /^Change the market payment asset Now: USDC$/, async (form) => {
+          await form.getByRole('combobox', { name: 'Buyers pay in' }).selectOption({ label: 'XLM · Lumens' });
+        });
+      if (claims) {
+        await page.goto(tribe.path('admin/owner'));
+        await page.getByRole('button', { name: 'Claims options' }).click();
+        await page.getByRole('menuitem', { name: /^Remove from tribe/ }).click();
+        const remove = page.getByRole('dialog', { name: /^Remove the/ });
+        const add = remove.getByRole('button', { name: /^Add \d+ actions? to your proposal$/ });
+        await waitForUi('removal checked', (timeout) => expect(add).toBeEnabled({ timeout }), { governingS: 30 });
+        await add.click();
+        await confirmAdd(page);
+      }
+      await propose(page, wallet, 'cleanup', 'Walkthrough W09: round 2, what round 1 left on, undone.', {
+        ...notes,
+        claims
+      });
     }
     await driveToExecuted(page, wallet, PROPOSER, tribe, SPEC, ROUND_2, (line) => console.info(`W09 ${line}`));
-    const pool = read<{ closed: boolean }>(tribe.marketplace!, 'get_pool', '--pool_id', String(notes.pool));
-    expect(pool.closed).toBe(true);
+    const { before } = proposalOf(SPEC, 'cleanup') as ProposalRecord & { before: Record<string, any> };
+    if (before.pool !== undefined)
+      expect(read<{ closed: boolean }>(tribe.marketplace!, 'get_pool', '--pool_id', String(before.pool)).closed).toBe(
+        true
+      );
     expect(tokenModules(tribe).map((module) => module.kind)).not.toContain('claims');
     expect(tokenSettings(tribe)).toEqual({
       dao_recovery: false,
@@ -721,5 +746,6 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
       transfers_locked: false
     });
     expect(transferAgents(tribe)).toEqual([]);
+    expect(marketConfig(tribe).payment_asset).toBe(NATIVE_SAC);
   });
 });
