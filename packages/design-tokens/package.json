@@ -1,0 +1,23 @@
+{
+  "name": "@builder-stellar/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Warm Ink · Dusk: the Panda preset and fonts shared by apps/web and apps/docs (DESIGN.md is the specification).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fonts": "./src/fonts.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@pandacss/dev": "1.11.5",
+    "next": "^15.4.0"
+  },
+  "devDependencies": {
+    "@pandacss/dev": "1.11.5",
+    "next": "^15.4.0",
+    "typescript": "^5.8.0"
+  }
+}

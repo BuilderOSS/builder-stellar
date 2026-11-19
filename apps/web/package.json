@@ -21,6 +21,7 @@
     "@ark-ui/react": "^5.37.2",
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/claim-minter-bindings": "workspace:*",
+    "@builder-stellar/design-tokens": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
     "@builder-stellar/manager-bindings": "workspace:*",
     "@builder-stellar/marketplace-bindings": "workspace:*",
