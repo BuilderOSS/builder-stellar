@@ -1,25 +1,77 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+An assurance drive, called a **launch drive** in the app, lets your tribe launch only when enough people commit. You publish a list of people who can claim a membership. They claim while the tribe is still in setup, and pay the price if there is one. Once enough people have claimed, anyone can launch the tribe. If the drive ends first, the tribe does not launch, and everyone who paid can take their payment back.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Your tribe needs a claims module. It has one if you chose **Invite only**, or turned on claim lists, when you created it. Otherwise, add one during setup: open **Manage**, select **Membership**, and use **Add a module**.
+- Add the [artwork](/guides/setup/artwork) and mint the [founder tokens](/guides/setup/founders) first. Once the drive opens, they can't change.
+- Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network.
+- Prepare the list of people who can claim: a CSV file with each wallet address and how many tokens it can claim, up to 10,000 wallets. You can also paste the addresses.
+
+<Callout title="Opening a drive passes control of the tribe to its treasury at once" description="After you sign, you can't change settings, artwork, founder tokens, or modules. The tribe launches with the choices you made when you opened the drive. You can't undo this." />
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Open **Manage** and select **Claim lists**. In **Open a claim list**, set **List type** to **Launch drive**. A warning explains what opening a drive does.
+
+   <Shot id="setup/assurance-drives/01" alt="The Open a claim list form with List type set to Launch drive and the warning about passing control to the treasury" />
+
+2. Under **Who can claim**, select **Choose a file** for your CSV, or **Paste addresses instead**. The page checks each row and lists any problems with their line numbers.
+
+   <Shot id="setup/assurance-drives/02" alt="The Who can claim area with a CSV loaded and a preview of the wallets" />
+
+3. Fill in the terms:
+   - **Price per token**: in the tribe's payment asset, with up to 7 decimal places. 0 makes it free.
+   - **Claims stay open for (days)**: from 1 to 365 days.
+   - **People who must claim before launch**: each person counts once, however many tokens they claim.
+   - **The drive ends after (days)**: at most 90 days, and no later than claims close.
+
+   <Shot id="setup/assurance-drives/03" alt="The drive terms with a price, the number of people needed, and the drive length" />
+
+4. If your tribe has an auction or a market, choose **Start the auction at launch** and **Open the marketplace at launch**. These choices are fixed when the drive opens.
+
+   <Shot id="setup/assurance-drives/04" alt="The Start the auction at launch and Open the marketplace at launch checkboxes" />
+
+5. Select **Review the launch drive**. The dialog **Open the launch drive?** sums up the terms: who can claim and at what price, how many people must claim and by which date, and what happens if they don't. Select **Publish and open the drive**. The page builds the claim list, publishes it to IPFS, and asks you to sign one transaction.
+
+   <Shot id="setup/assurance-drives/05" alt="The Open the launch drive? dialog with the terms and the Publish and open the drive button" />
+
+6. Follow the drive on your tribe's **Claims** page. The **Set up and launch** page also shows **Launch drive open** with **See the drive**. A progress bar shows how many people have claimed. Payments are held until launch.
+
+   <Shot id="setup/assurance-drives/06" alt="The Launch drive card on the Claims page with a progress bar of people who have claimed" />
+
+7. When enough people have claimed, the card says "Anyone can launch the tribe now." Anyone with a connected wallet can select **Launch the tribe**. The held payments move to the [treasury](/reference/glossary#treasury).
+
+   <Shot id="setup/assurance-drives/07" alt="The Launch drive card after the goal is met, with the Launch the tribe button" />
+
+If the drive ends first, the card says "The launch drive ended", and the tribe can never launch. Each person who paid selects **Take back** with their amount on the **Claims** page. The tribe still holds its link until someone selects **Free the link**. Anyone can do that, and it costs only the network fee.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Opening the drive is one transaction to the Tribe Builder factory contract (the Manager). In it, the Manager opens the claim list on your tribe's claims contract (ClaimMinter), priced in the asset chosen at creation. It allows the claims contract to mint the listed tokens, reserves your link, and makes the treasury the admin of every contract. The tribe does not go live yet.
+
+  The full list of wallets is published to IPFS so anyone can check it. The contract stores only a fingerprint of the list (a Merkle root), so each claim proves the wallet is on the list.
+
+  Each claim is a transaction by the person claiming. Payments stay in the claims contract until launch. **Launch the tribe** calls the Manager, which checks that enough distinct people claimed before the deadline, then launches with the choices stored when the drive opened. The usual launch checks still apply. See [Launch your tribe](/guides/setup/launch).
+
+  If the deadline passes first, the drive has failed. Each person who paid takes their own payment back with **Take back**. **Free the link** releases the link so another tribe can use it. It moves no funds. Every step has a Stellar network fee, paid by the wallet that signs it.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **You don't see Launch drive.** The tribe has no claims module, or it has already launched. Add a claims module during setup first.
+- **"Claims must stay open at least until the drive ends."** Make **Claims stay open for (days)** at least as long as **The drive ends after (days)**.
+- **"The launch drive is open, so no other list can open now."** Only one drive runs at a time, and no other list opens until launch.
+- **The goal is met, but Launch the tribe is refused.** One of the launch checks failed, for example another tribe launched first with your link. Read the error message. See [Launch your tribe](/guides/setup/launch).
+- **"The drive has not ended yet"** when you free the link. The network's clock is still before the deadline. Try again in a minute.
+- **"The link is already free"**. Someone freed it first. Nothing else is needed.
 
 ## Related
+
+- [Launch your tribe](/guides/setup/launch)
+- [Make a claim list](/guides/claims/create)
+- [Claim](/guides/claims/claim)
+- [Claim refunds](/guides/claims/refund)
+- [Setup versus launched](/concepts/setup-and-launch)

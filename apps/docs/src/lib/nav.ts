@@ -122,7 +122,12 @@ export const NAV: DocSection[] = [
       guide('create', 'identity', 'Create a tribe: identity', 'Name, symbol, image, and description.'),
       guide('create', 'membership', 'Create a tribe: membership', 'How people join: auctions, sales, or invites.'),
       guide('create', 'voting', 'Create a tribe: voting rules', 'How long decisions take, and what can change later.'),
-      guide('create', 'review-and-deploy', 'Create a tribe: review and deploy', 'Check every setting, then deploy.'),
+      guide(
+        'create',
+        'review-and-deploy',
+        'Create a tribe: review and create',
+        'Check every setting, then create the tribe.'
+      ),
       guide('setup', 'artwork', 'Set up: artwork', 'Upload the layers your tokens are drawn from.'),
       guide('setup', 'founders', 'Set up: founders', 'Tokens for the people starting the tribe.'),
       guide('setup', 'slug', 'Set up: your link', 'Choose an available link for people to share.'),
@@ -141,7 +146,12 @@ export const NAV: DocSection[] = [
       guide('marketplace', 'sell', 'Sell a token', 'Approve, then list.'),
       guide('marketplace', 'buy', 'Buy a token', 'Buy a listed membership.'),
       guide('marketplace', 'cancel', 'Cancel a listing', 'Remove a token from sale.'),
-      guide('marketplace', 'pools', 'Marketplace pools', 'Pooled listings, and how they are refilled.'),
+      guide(
+        'marketplace',
+        'pools',
+        'Marketplace pools',
+        'Buy a new membership from a quick-buy pool, and how a pool is opened and restocked.'
+      ),
       guide('marketplace', 'treasury-purchases', 'Treasury purchases', 'The tribe buys through a proposal.'),
       guide('claims', 'create', 'Make a claim list', 'Who can claim, and how much.'),
       guide('claims', 'claim', 'Claim', 'Receive what a claim list holds for you.'),

@@ -1,25 +1,70 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Voting rules decide how proposals are timed and how they pass. This guide shows how to change them in **Manage → Voting rules**. During setup the launch admin changes them directly. After launch each change goes to a vote.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- **During setup**, the [launch admin](/reference/glossary#launch-admin) changes each rule directly. Connect the launch admin wallet. Each change is a direct transaction.
+- **After launch**, changes require DAO governance. Any connected wallet can add a change to a proposal draft. The rule changes only if members vote for it and the proposal is executed. To submit the proposal, you need enough votes. See [Write a proposal](/guides/proposals/write/).
+- Connect your wallet on the tribe's network. Testnet is the live network today.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open Voting rules.** Choose **Manage** in the tribe's navigation, then **Voting rules**. The line under the title says "Setup: change one rule at a time, directly." or "Requires DAO governance: change one rule at a time. Each change goes up for a vote."
+
+   <Shot id="manage/governance/01" alt="The Voting rules page with the Current rules card and the rule cards beneath it" />
+
+2. **Read the current rules.** Each rule has its own card showing its live value. **Refresh** in the **Current rules** card reads them again from the chain. **How votes are counted** shows the tribe's vote source. It is fixed when the tribe is created.
+
+   <Shot id="manage/governance/02" alt="The How votes are counted card, showing token-weighted votes, fixed at creation" />
+
+3. **Change a rule.** Edit the value in the rule's card. The five rules are:
+
+   - **Wait before voting opens** (the voting delay): how long after a proposal is made before members can vote. Between 5 minutes and 30 days.
+   - **Voting period**: how long voting stays open. Between 5 minutes and 30 days.
+   - **Votes needed to propose** (the proposal threshold): how many votes a wallet needs to make a proposal. At least 1, and no more than the tribe's voting supply.
+   - **Quorum**: the share of all votes that must be For or Abstain for a proposal to pass. With 100 votes, 10% means at least 10. See [quorum](/reference/glossary#quorum).
+   - **Safety delay** (the queue delay): how long a passed proposal waits after it is queued before it can run. Between 5 minutes and 30 days. See [safety delay](/reference/glossary#safety-delay).
+
+   <Shot id="manage/governance/03" alt="The Quorum card with a new percentage entered" />
+
+4. **Apply or add to a proposal.** During setup, choose **Apply now** on the card. Your wallet opens to show the transaction. Review it, then sign. After launch, choose **Add to proposal**. The card then shows the new value with **In your proposal**, next to the value it has now.
+
+   <Shot id="manage/governance/04" alt="The Safety delay card showing the current value and the new value marked In your proposal" />
+
+5. **Submit the proposal.** After launch, open your draft from **Review proposal** at the top of the page, then add a title and a reason. You can change several rules in one proposal. See [Write a proposal](/guides/proposals/write/).
+
+   <Shot id="manage/governance/05" alt="The proposal draft bar at the top of the Manage page with the Review proposal button" />
+
+### When a change takes effect
+
+A change applies from the moment it is executed, and only to what happens next:
+
+- The wait before voting opens, the voting period, the votes needed to propose, and the quorum apply to proposals made after the change. Each proposal keeps the timing and quorum it was created with.
+- The safety delay applies to proposals queued after the change.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Each rule is a setting on the tribe's Governor contract: `set_voting_delay`, `set_voting_period`, `set_proposal_threshold`, `set_quorum_bps` and `set_queue_delay`. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch a change runs only as part of a proposal that passes and is executed.
+
+  The Governor rejects values outside its limits. The three timings must be between 300 seconds (5 minutes) and 2,592,000 seconds (30 days). The quorum is stored in basis points, from 1 (0.01%) to 10,000 (100%). It is worked out from the voting supply, which leaves out tokens held by the tribe's Treasury, Auction and Marketplace.
+
+  Each transaction costs a Stellar network fee in XLM. Tribe Builder takes no fee. The rules and every change to them are public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Connect a wallet to change voting rules."** No wallet is connected. The current rules are still shown.
+- **A card shows an error for the value.** The value is outside the rule's limits. Check the range above.
+- **"The safety delay can't be read from the contract yet, so enter the delay you want."** The app couldn't read the current safety delay. Enter the value you want.
+- **"Voting rules didn't load."** Choose **Refresh**, or reload the page.
+- **The change was signed but the value didn't update.** Check the transaction in the notification, then choose **Refresh**.
+- **A proposal with a rule change failed when it ran.** A value outside the limits, for example a threshold above the voting supply at that moment, makes the whole proposal fail. See [Queue and execute](/guides/proposals/queue-and-execute/).
 
 ## Related
+
+- [Create a tribe: voting rules](/guides/create/voting/)
+- [Proposals](/concepts/proposals/)
+- [Vote sources](/concepts/vote-sources/)
+- [Limits and timings](/reference/limits-and-timings/)

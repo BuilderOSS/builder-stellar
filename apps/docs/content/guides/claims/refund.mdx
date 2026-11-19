@@ -1,25 +1,55 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Most claim lists need no refunds. Tokens are minted only when someone claims them, and a payment is taken only for the tokens claimed. The one case with refunds is a launch drive that ends before the tribe launches: everyone who paid can then take their payment back.
+
+## What happens to unclaimed tokens and payments
+
+- **Unclaimed tokens are never created.** When a list closes or every allocation is used, no more tokens can be claimed from it. Tokens that no one claimed are not minted. There is nothing to collect or return.
+- **Payments on a normal list go to the Treasury.** Each claim pays for the tokens it mints, in the same transaction. The money is in the tribe's [Treasury](/reference/glossary#treasury), and only a passed [proposal](/reference/glossary#proposal) can move it.
+- **Payments on a launch drive are held.** Until the tribe launches, the claims module holds every payment. If enough people claim in time, launching moves the held payments to the Treasury. If the drive's deadline passes first, the tribe does not launch, and each person can take back what they paid.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Connect and sign in with the wallet that paid, on the tribe's network.
+- Keep a small amount of XLM for the network fee.
+- The launch drive's card must be labelled **Failed**. A drive fails when its deadline passes while the tribe is still in setup.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the Claims page.** Find the launch drive's card. It is labelled **Failed** and says "The drive ended before the tribe launched. Everyone who paid can take their payment back."
+
+   <Shot id="claims/refund/01" alt="A failed launch drive card on the Claims page, with the explanation that payments can be taken back" />
+
+2. **Choose the button to take your payment back.** It names your amount, for example **Take back 30 XLM**. Your wallet opens to show the transaction. Review it and sign.
+
+   <Shot id="claims/refund/02" alt="The Take back 30 XLM button on the failed launch drive card" />
+
+3. **Check the result.** Once it is confirmed, the card says "Your payment has been returned." The amount is back in your wallet.
+
+   <Shot id="claims/refund/03" alt="The failed launch drive card saying Your payment has been returned" />
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  The button calls `refund` on the tribe's ClaimMinter for that list and your account. It works only on the launch drive (the assurance list), only once the drive has failed, and only if you have a payment held. It returns your whole held amount.
+
+  "Failed" is not a stored flag. The contract works it out each time: the deadline has passed and the tribe's Token is not live. Because of that, the contract never allows both a refund and a release of the held payments to the Treasury. A tribe that launched has no refunds. A failed drive can't release funds.
+
+  On a normal list, the contract has no refund. The part of the mint allowance a list didn't use stays with the claims module.
+
+  You pay the Stellar network fee in XLM. Refunds are public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **There is no refund button.** The drive may not have failed yet, or the tribe launched. Check the card's label and the deadline. If you paid nothing, for example on a free drive, there is nothing to take back.
+- **The refund failed with `NotFailed`.** The deadline hasn't passed, or the tribe has launched. Payments then stay with the drive or move to the Treasury.
+- **The refund failed with `NothingToRefund`.** Your payment was already returned, or the connected wallet didn't pay. Check that you are using the wallet that claimed.
+- **You want money back from a normal list.** The claims contract can't return it. The tribe can choose to pay it back by proposal from the Treasury.
 
 ## Related
+
+- [Claim](/guides/claims/claim/)
+- [Make a claim list](/guides/claims/create/)
+- [Assurance drives](/guides/setup/assurance-drives/)
+- [The Treasury](/concepts/treasury/)

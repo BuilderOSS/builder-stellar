@@ -1,3 +1,46 @@
-These are the same terms the app explains when you select a word with a dotted underline.
+Each term is in plain words first, with the DAO or Stellar term beneath it.
+
+## Terms in the app
+
+These are the same terms the app explains when you select a word with a dotted underline. The app and this page read them from one shared list, so they always match.
 
 <GlossaryList />
+
+## More terms used in these docs
+
+| Term | What it means | The precise term |
+|---|---|---|
+| Tribe | A group that holds funds and makes decisions together, by vote. | A DAO (decentralised autonomous organisation) on Stellar. |
+| Membership token | The token that makes you a member. Each one carries one vote. | A non-fungible token (NFT) on Stellar. |
+| Voting power | How many votes you can cast: your own tokens, plus any delegated to you. | Delegated votes, counted at a checkpoint. |
+| Snapshot | The moment your voting power is counted for a proposal: the ledger before the proposal is made. | The proposal's vote snapshot ledger. |
+| Votes needed to propose | How many votes someone needs to make a proposal. | The proposal threshold, an absolute number of votes. |
+| Wait before voting opens | Time between a proposal being made and voting starting, so members can read it. | The voting delay. |
+| Voting period | How long voting stays open. | The voting period. |
+| Queue | The step after a proposal passes that starts its safety delay. Anyone can do it. | Queueing a proposal in the governor. |
+| Execute | The step that runs a proposal's actions once its safety delay ends. Anyone can do it. | `Treasury.execute`. |
+| Action | One thing a proposal does when it runs, such as a payment or a setting change. | A contract call made by the Treasury. |
+| Module | A part of a tribe that people use, such as the auction, the market or claims. | A contract registered with the tribe's token. |
+| Mint allowance | How many new tokens a module may create. | The module's mint allowance on the token contract. |
+| Setup | The time before launch, when the launch admin configures the tribe. | A pending DAO. |
+| Launch | The moment control of every setting passes to the tribe's Treasury. | `launch_dao` on the Manager. |
+| Assurance drive | A way to launch only once enough people have committed. If the drive ends first, everyone can take their payment back. | A claim list with an assurance threshold and deadline, held in escrow. |
+| Claim list | A list of people who can claim tokens, with an optional price. | A Merkle tree allowlist on the claims contract. |
+| Quick-buy pool | Tokens for sale in the market at a fixed price, with limits per wallet and per period. | A marketplace pool. |
+| Locked memberships | A setting that stops members moving tokens, except by sale, by giving them to the tribe, or by a vote. | The token's `transfers_locked` setting. |
+| DAO recovery | A setting that lets the tribe move any membership by vote, for example when a member loses access to their wallet. | The token's `dao_recovery` setting. |
+| Manager | The platform contract that creates and launches tribes and lists approved releases. | The factory and implementation registry. |
+| Upgrade notice | The wait between the platform approving a new Manager release and the Manager upgrading to it. | The Manager's upgrade delay, in ledgers. |
+| Vote source | Where a tribe's votes come from: its membership tokens, or another contract the platform has approved. | A governance vote source adapter. |
+| Storage renewal | Paying to keep a contract's data on Stellar for longer. | Extending the time to live (TTL) of ledger entries. |
+| Archived | Data whose lifetime ran out. It must be restored before it can be used. | An archived ledger entry. |
+| Wallet | An app that holds your Stellar account and approves transactions. | A Stellar wallet, such as Freighter. |
+| Signing | Approving a message or transaction in your wallet. Signing alone does not send anything. | A cryptographic signature. |
+| Network fee | The small amount of XLM the network charges to process a transaction. | The transaction fee, in stroops. |
+| XLM | Stellar's own currency, used to pay network fees. | Lumens. |
+| Stroop | The smallest unit of XLM: 10,000,000 stroops make 1 XLM. | The base unit of XLM. |
+| Basis point | One hundredth of a percent: 100 basis points make 1%. | bps. |
+| Ledger | A block of Stellar transactions. A new one closes about every 5 seconds. | A ledger sequence number. |
+| Testnet | Stellar's test network. Its XLM has no value. | The Stellar test network. |
+
+Numbers used in these terms are listed in [Limits and timings](/reference/limits-and-timings).
