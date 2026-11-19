@@ -633,3 +633,70 @@ None.
 - **Fix:** the first page refetches every 30s, like the current auction does.
 - **Regression test:** `apps/web/src/lib/auction-history/hooks.test.ts`; W06 waits for the token under
   Past auctions without a reload.
+
+### BUG-CAP-1 · "Add a link" is announced as "Links"
+- **Flow:** docs capture, Create → Identity (and Manage → Tribe profile) with no links yet. All viewports.
+- **Severity:** P3 (accessibility).
+- **Expected:** the button reads "Add a link".
+- **Actual:** its accessible name was "Links". With no links, the field label pointed at the add button,
+  and a label names the control it points at.
+- **Root cause:** `htmlFor` in `apps/web/src/components/admin/profile-links-editor.tsx` fell back to the
+  add button.
+- **Fix:** with no links the label points at nothing; once a link exists it labels the first field.
+- **Regression test:** the docs capture spec `apps/e2e/capture/01-create.capture.ts` finds the button by
+  its own name.
+
+### BUG-CAP-2 · Creating or launching a tribe toasts "DAO creation envelope accepted"
+- **Flow:** docs capture, Create → Create tribe, and Setup → Launch. All viewports.
+- **Severity:** P3 (copy).
+- **Expected:** plain words, in line with the other transaction toasts ("Proposal sent", "Vote sent").
+- **Actual:** "DAO creation envelope accepted" and "DAO launch envelope accepted", with "Saved …" variants
+  on a resend. They use jargon ("envelope") and the DAO term the copy avoids.
+- **Fix:** "Creating your tribe" and "Launching your tribe" in `apps/web/src/lib/use-dao-deployment.ts`.
+- **Regression test:** none; the docs capture shows the toast when a shot keeps toasts.
+
+### BUG-CAP-3 · Opening a claim list can't publish it to IPFS
+- **Flow:** docs capture, Claims → Open a claim list (a free list or a launch drive), with uploads on.
+- **Severity:** P1. No claim list can be opened in the app where uploads are on.
+- **Expected:** "Publish the full list to IPFS" uploads the JSON list.
+- **Actual:** Pinata refuses it: "Presigned URL does not grant permissions to upload detected MIME type:
+  application/json".
+- **Root cause:** `createSignedUploadUrl` in `apps/web/src/lib/pinata-service.ts` gave only the two
+  image types their own policy; a claim list fell through to the artwork folder's `directory` policy.
+- **Fix:** a claim list gets its own policy (`application/json`, 12 MB) from `UPLOAD_POLICIES`.
+- **Regression test:** `apps/web/src/lib/pinata-service.test.ts`.
+
+### BUG-CAP-4 · "1 tokens for you", "1 claims so far" and "1 votes"
+- **Flow:** docs capture: Claims, with one token on the list and one claim made; the composer's
+  For reference → Members list, for a member with one vote.
+- **Severity:** P3 (copy).
+- **Fix:** the singular for one, in `apps/web/src/components/minter/claims.tsx` and
+  `apps/web/src/components/proposal/proposal-context-rail.tsx`.
+- **Regression test:** none yet; the claims shots show it.
+
+### BUG-CAP-5 · Open: smaller findings from the capture
+- **Manage nav "Required".** After artwork and founder tokens are done, the Manage menu still marks both
+  Required (`apps/web/src/components/admin/manage-nav.tsx`). Seen in setup/assurance-drives/01 to 05.
+- **"Manage claim lists" in setup.** On a tribe still in setup, any token holder is offered Manage claim
+  lists (`apps/web/src/hooks/use-dao-membership.ts`).
+- **"Quorum reached (5 of 1)".** The count reads backwards; "5 votes, 1 needed" would be clearer.
+- **The top bar.** It is transparent (commit 0d5f0cd), so page text shows under the tribe switcher and the
+  avatar when a page scrolls, on phones and on desktop. Awaiting a design decision.
+- **Raw ids in copy.** The pool buy dialog names the full Treasury contract id ("Pay 25 XLM to the tribe
+  Treasury CCJC…"); the Link field shows the contract id before the slug loads; action rows and the
+  review on phones show full account addresses.
+- **"Step 3 of 2".** The List for sale dialog says it after both steps are done (phones); on desktop the
+  step labels are clipped ("Allow the market to hold your tol…").
+- **The Why byte count.** An empty Why box reports "46 used" (the title and links count too, but the line
+  reads as the box's own count).
+- **Raw values in a pool's steps.** "Raise the mint allowance of CCCIPL… by 3 tokens" names the
+  marketplace by its contract id, and "closing 2026-12-04T12:30:00.000Z" shows an ISO timestamp.
+- **Collapsed steps.** "In this proposal (2 actions)" shows one row for a pool or a Treasury purchase,
+  whose two steps are folded into it.
+- **Phones.** The Market settings bar covers listing content above the tab bar; Manage pages show the
+  action button twice (inline and in the sticky bar); the CSV row cuts the file name and wraps "3 rows
+  read" onto three lines; the contract rows' badges don't line up; the legal summary preview shows two
+  lines.
+- **The pool card on the tribe home** shows an empty image area before the pool has stock.
+- **Claims toast.** After both signatures of a free list, the first toast keeps spinning with "Approve
+  the transaction in your wallet" (`apps/web/src/components/minter/allocation-draft.tsx`).

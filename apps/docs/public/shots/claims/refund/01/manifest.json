@@ -1,0 +1,44 @@
+{
+  "id": "claims/refund/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815814,
+  "capturedAt": "2026-11-19T15:38:35.821Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the explanation that payments can be taken back",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.387,
+          "w": 0.6889,
+          "h": 0.025
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.3342,
+          "w": 0.8293,
+          "h": 0.0831
+        }
+      }
+    }
+  ]
+}

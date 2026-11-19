@@ -1,0 +1,44 @@
+{
+  "id": "setup/founders/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815467,
+  "capturedAt": "2026-11-19T15:09:36.302Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Review button",
+      "box": {
+        "desktop": {
+          "x": 0.8141,
+          "y": 0.547,
+          "w": 0.0581,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.681,
+          "y": 0.7235,
+          "w": 0.223,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "id": "claims/create/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815886,
+  "capturedAt": "2026-11-19T15:44:34.862Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the notice about a wallet listed twice",
+      "box": {
+        "desktop": {
+          "x": 0.3806,
+          "y": 0.4874,
+          "w": 0.4778,
+          "h": 0.025
+        },
+        "mobile": {
+          "x": 0.2133,
+          "y": 0.4857,
+          "w": 0.6587,
+          "h": 0.0277
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Combine their amounts button",
+      "box": {
+        "desktop": {
+          "x": 0.3806,
+          "y": 0.5899,
+          "w": 0.1219,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.2133,
+          "y": 0.6476,
+          "w": 0.4683,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

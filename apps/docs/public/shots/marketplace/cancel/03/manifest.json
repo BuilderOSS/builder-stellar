@@ -1,0 +1,24 @@
+{
+  "id": "marketplace/cancel/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815990,
+  "capturedAt": "2026-11-19T15:53:14.629Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  }
+}

@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "build:app": "node scripts/build-app.mjs",
+    "build:capture": "E2E_CAPTURE=1 node scripts/build-app.mjs",
+    "capture": "E2E_CAPTURE=1 E2E_TIMELINE=${E2E_TIMELINE:-show} E2E_APP_PORT=${E2E_APP_PORT:-4545} playwright test --project=capture",
     "serve:app": "node --experimental-strip-types --no-warnings scripts/serve-app.ts",
     "preflight": "node --experimental-strip-types --no-warnings src/preflight-cli.ts",
     "smoke": "playwright test --grep @smoke",

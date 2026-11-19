@@ -1,0 +1,44 @@
+{
+  "id": "claims/refund/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815815,
+  "capturedAt": "2026-11-19T15:38:37.638Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Take back 30 XLM button",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.502,
+          "w": 0.1092,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.5171,
+          "w": 0.4193,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

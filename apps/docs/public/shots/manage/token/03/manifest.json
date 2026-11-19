@@ -1,0 +1,44 @@
+{
+  "id": "manage/token/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815706,
+  "capturedAt": "2026-11-19T15:29:35.499Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Add to proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.3444,
+          "y": 0.7652,
+          "w": 0.0993,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.6004,
+          "w": 0.3813,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

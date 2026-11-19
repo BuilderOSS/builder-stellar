@@ -1,0 +1,44 @@
+{
+  "id": "create/identity/07",
+  "appCommit": "bccf91b",
+  "ledger": 5815388,
+  "capturedAt": "2026-11-19T15:03:03.984Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Links editor",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.6511,
+          "w": 0.1111,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4723,
+          "w": 0.6907,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

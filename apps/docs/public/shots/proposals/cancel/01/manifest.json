@@ -1,0 +1,44 @@
+{
+  "id": "proposals/cancel/01",
+  "appCommit": "bccf91b",
+  "ledger": 5816014,
+  "capturedAt": "2026-11-19T15:55:12.261Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the You proposed this line",
+      "box": {
+        "desktop": {
+          "x": 0.1639,
+          "y": 0.2523,
+          "w": 0.7222,
+          "h": 0.0222
+        },
+        "mobile": {
+          "x": 0.0427,
+          "y": 0.2904,
+          "w": 0.9147,
+          "h": 0.0246
+        }
+      }
+    }
+  ]
+}

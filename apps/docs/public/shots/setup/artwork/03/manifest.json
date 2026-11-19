@@ -1,0 +1,44 @@
+{
+  "id": "setup/artwork/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815632,
+  "capturedAt": "2026-11-19T15:23:24.814Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Move up button",
+      "box": {
+        "desktop": {
+          "x": 0.3444,
+          "y": 0.4802,
+          "w": 0.0559,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.4778,
+          "w": 0.2148,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/sell/04",
+  "appCommit": "bccf91b",
+  "ledger": 5819419,
+  "capturedAt": "2026-11-19T20:38:58.357Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the last token warning",
+      "box": {
+        "desktop": {
+          "x": 0.2139,
+          "y": 0.4463,
+          "w": 0.6444,
+          "h": 0.0225
+        },
+        "mobile": {
+          "x": 0.2133,
+          "y": 0.4871,
+          "w": 0.6587,
+          "h": 0.0249
+        }
+      }
+    }
+  ]
+}

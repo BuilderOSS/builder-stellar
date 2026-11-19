@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/sell/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815848,
+  "capturedAt": "2026-11-19T15:41:24.530Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the price field",
+      "box": {
+        "desktop": {
+          "x": 0.5306,
+          "y": 0.3127,
+          "w": 0.3389,
+          "h": 0.0528
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.2895,
+          "w": 0.8293,
+          "h": 0.0585
+        }
+      }
+    }
+  ]
+}

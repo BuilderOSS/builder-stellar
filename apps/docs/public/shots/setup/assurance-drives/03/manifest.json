@@ -1,0 +1,80 @@
+{
+  "id": "setup/assurance-drives/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815694,
+  "capturedAt": "2026-11-19T15:28:35.598Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Price per token field",
+      "box": {
+        "desktop": {
+          "x": 0.3472,
+          "y": 0.4751,
+          "w": 0.1667,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.1671,
+          "w": 0.8293,
+          "h": 0.0548
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the People who must claim before launch field",
+      "box": {
+        "desktop": {
+          "x": 0.7028,
+          "y": 0.4751,
+          "w": 0.1667,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4721,
+          "w": 0.8293,
+          "h": 0.0548
+        }
+      }
+    },
+    {
+      "n": 3,
+      "label": "the drive length field",
+      "box": {
+        "desktop": {
+          "x": 0.3472,
+          "y": 0.6251,
+          "w": 0.1667,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.6384,
+          "w": 0.8293,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

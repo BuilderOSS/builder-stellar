@@ -244,9 +244,9 @@ export function waitForProposalState(page: Page, tribe: Tribe, id: string, state
   );
 }
 
-const statusColumn = (page: Page) => page.getByRole('complementary', { name: 'Status and voting' });
+export const statusColumn = (page: Page) => page.getByRole('complementary', { name: 'Status and voting' });
 
-async function openProposal(page: Page, tribe: Tribe, id: string) {
+export async function openProposal(page: Page, tribe: Tribe, id: string) {
   await page.goto(tribe.path(`proposals/${id}`));
   await waitForVisible(page.getByRole('heading', { level: 1, name: /^Proposal \d+: / }), 'proposal page');
 }
@@ -267,7 +267,7 @@ async function settleSend(page: Page, success: string, label: string) {
   }
 }
 
-async function voteFor(page: Page, wallet: E2ESigner, identity: string, tribe: Tribe, id: string) {
+export async function voteFor(page: Page, wallet: E2ESigner, identity: string, tribe: Tribe, id: string) {
   await openProposal(page, tribe, id);
   const column = statusColumn(page);
   const cast = column.getByRole('button', { name: /^Cast \d+ votes? For$/ });
@@ -279,7 +279,7 @@ async function voteFor(page: Page, wallet: E2ESigner, identity: string, tribe: T
   expect(signedTransactions(wallet, identity) - before).toBe(1);
 }
 
-async function pressAndSettle(
+export async function pressAndSettle(
   page: Page,
   wallet: E2ESigner,
   identity: string,

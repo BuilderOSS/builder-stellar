@@ -1,0 +1,48 @@
+{
+  "daoId": "CBBYW5BNELZYSXZP5XRKYCDHIMMJQ4VKOYV22WDVRJ6VPYRHA4E5OA2X",
+  "addresses": {
+    "auction": "CBFJSYUVNZJIRMZBXQ6YMEZLEHHJ7BFUFCNJG2HPY5FT4LAFJYLYBPHB",
+    "claims": "CDRVZUJ5LR44AHW6AOC3YHOW6RZ5B7GUHHQXGIXIAYSSNWAHY4PBGIPW",
+    "governor": "CDFVGFGZM54VHTD3VZUZO3QBTEJSVBH5UFT4QQHYCYIZ723BFJG2BCFU",
+    "marketplace": "CCCIPLJSN5BWQWLAH5JTIDKPYGV3S5K2AEGMJJPYAO45WWWAZP7R6CNY",
+    "metadata": "CBJVG7I3GHQQD7GLKG2RB6OBZSZAE5IIDSS5PG4YNJGRLSPRYWJVX7T6",
+    "token": "CBBYW5BNELZYSXZP5XRKYCDHIMMJQ4VKOYV22WDVRJ6VPYRHA4E5OA2X",
+    "treasury": "CCJCUA67DMAXKGRJHQHKTJRXBAGJITJTBDMP5ZRQ5BO32YXVMSZ7Q6EB"
+  },
+  "artCid": "QmVEa7oMHeYTmpvuH6MQmqmEmr5QG9fbBHcjTdVJfSL2UQ",
+  "launched": true,
+  "proposals": {
+    "workshop": "2fedb1f7fd663f86c21248a62cd6023068a9c02a23fd6b6e90493be6c7be3f08",
+    "auction": "6a834a8b484aed8728a8eda5794354bd3fe1a01bdbbe48da258910eda79ad2ee",
+    "mint": "a0ca18d190aa9618d2615583603906e38c7568308ce1fcfed86863a2023bcf01",
+    "fee": "d6a2b1a6b372eab79133957d26f83cde2366646cb22964338953ed33743ab1bb",
+    "rules": "7d244c21827ca5c184e830bf243231eed2052f80ecc4687f8047b43e052ab544",
+    "profile": "48681e0bb0493b8862a4addee469822ab3e663908d7187649d872961345afbdf",
+    "pool": "ab06e1ca0dbe629fac1b520ce8ec702ac90a8c3b1276f634aec6e34df7bfed00",
+    "purchase": "aad31cb80349e655908685123f88b0a16548b3f20b71f45a68ea0a426a51d0c8",
+    "cancel": "42459b7e3acd633f26f62af1f5ab816ba36db871aac5affb4276217d2f2c1d20",
+    "walk": "9d4f5c11887481cbeab601d02e9e84f857b2e7384ba41e52176e50953ef638ea"
+  },
+  "voted": {
+    "workshop:member-a": true
+  },
+  "firstAuctionSettled": true,
+  "firstAuctionToken": "6",
+  "market": {
+    "kept": 3,
+    "sold": true,
+    "forBuyer": 4,
+    "bought": true,
+    "cancelled": true
+  },
+  "cancelled": true,
+  "storyDone": true,
+  "members": {
+    "find": true,
+    "delegate": true,
+    "transfer": true
+  },
+  "retake": {
+    "listed": 6
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "id": "setup/artwork/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815461,
+  "capturedAt": "2026-11-19T15:09:09.472Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Add artwork button",
+      "box": {
+        "desktop": {
+          "x": 0.6047,
+          "y": 0.4205,
+          "w": 0.073,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.2027,
+          "y": 0.4772,
+          "w": 0.2805,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

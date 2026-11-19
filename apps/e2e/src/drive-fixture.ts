@@ -68,22 +68,23 @@ export type Drive = {
   proofs: Record<string, { amount: string; proof: string[] }>;
 };
 
-/**
- * Create a Setup tribe and open a drive on it: `claimers` may each claim one token at `price`;
- * the drive needs one more claimer than the list has, so it can only fail, `windowS` from now.
- */
-export function createFailingDrive({
-  claimers,
-  price,
-  windowS
-}: {
-  claimers: string[];
-  price: bigint;
-  windowS: number;
-}): Drive {
+/** What the fixture tribe looks like; the defaults are the plain "E2E Drive" tribe W12 uses. */
+export type DriveTribe = {
+  name: string;
+  symbol: string;
+  slug: string;
+  /** metadata.profile: { description, links, image } (scripts/deploy-dao.mjs). */
+  profile?: { description: string; links?: { label: string; url: string }[]; image?: string };
+  /** metadata.artwork: { ipfs: { baseUri, extension }, properties }. */
+  artwork?: unknown;
+  rendererBase?: string;
+  founders?: number;
+};
+
+/** create_dao and admin_checklist for a Setup tribe with a claims module; returns its token and claims ids. */
+function deployDriveTribe(tribe: Partial<DriveTribe>, nonce: number) {
   const founder = timelineKeyName('e2e-founder');
   const admin = execFileSync('stellar', ['keys', 'address', founder], { encoding: 'utf8' }).trim();
-  const nonce = Math.floor(Date.now() / 1000);
   const dir = mkdtempSync(join(tmpdir(), 'e2e-drive-'));
 
   const manager = JSON.parse(readFileSync(E2E_MANAGER_ARTIFACT, 'utf8')) as Record<string, unknown> & {
@@ -104,9 +105,15 @@ export function createFailingDrive({
     deployer: admin,
     launchAdmin: admin,
     nonce,
-    slug: `e2e-drive-${nonce}`,
-    token: { name: 'E2E Drive', symbol: 'E2ED' },
-    founders: [{ address: admin, amount: 1 }]
+    slug: tribe.slug ?? `e2e-drive-${nonce}`,
+    token: { name: tribe.name ?? 'E2E Drive', symbol: tribe.symbol ?? 'E2ED' },
+    metadata: {
+      ...template.metadata,
+      ...(tribe.profile ? { profile: tribe.profile } : {}),
+      ...(tribe.artwork ? { artwork: tribe.artwork } : {}),
+      ...(tribe.rendererBase ? { rendererBase: tribe.rendererBase } : {})
+    },
+    founders: [{ address: admin, amount: tribe.founders ?? 1 }]
   };
   const configPath = join(dir, 'dao.json');
   writeFileSync(configPath, JSON.stringify(config));
@@ -115,31 +122,52 @@ export function createFailingDrive({
   const artifact = JSON.parse(
     readFileSync(resolve(REPO_ROOT, `deploys/${LABEL}-testnet-dao-${nonce}.json`), 'utf8')
   ) as { addresses: { token: string; claims: string } };
-  const { token, claims } = artifact.addresses;
+  return { founder, manager: manager.manager, ...artifact.addresses };
+}
 
+function openAssurance(
+  deployed: ReturnType<typeof deployDriveTribe>,
+  args: { claimers: string[]; price: bigint; windowS: number; threshold: number },
+  treeUri: (tree: ReturnType<typeof buildClaimTree>, listId: number) => string
+): Drive {
+  const { founder, token, claims } = deployed;
   const listId = Number(
-    stellarJson(['contract', 'invoke', '--id', claims, '--source-account', founder, '--network', 'testnet', '--send', 'no', '--', 'next_list_id'])
+    stellarJson([
+      'contract',
+      'invoke',
+      '--id',
+      claims,
+      '--source-account',
+      founder,
+      '--network',
+      'testnet',
+      '--send',
+      'no',
+      '--',
+      'next_list_id'
+    ])
   );
   const tree = buildClaimTree(
-    claimers.map((address) => ({ address, amount: '1' })),
+    args.claimers.map((address) => ({ address, amount: '1' })),
     { network: TESTNET_PASSPHRASE, token, list: listId }
   );
+  const uri = treeUri(tree, listId);
   const now = Math.floor(Date.now() / 1000);
-  const deadline = now + windowS;
+  const deadline = now + args.windowS;
   const list = {
     root: { bytes: tree.merkleRoot },
-    tree_uri: `ipfs://${rawCid(claimTreeJson(tree))}`,
-    price: { i128: price.toString() },
+    tree_uri: uri,
+    price: { i128: args.price.toString() },
     expires_at: { u64: String(now + 7 * 86_400) },
     total: Number(tree.tokenTotal),
-    threshold_claimers: claimers.length + 1,
+    threshold_claimers: args.threshold,
     deadline: { u64: String(deadline) }
   };
   const opened = stellarJson([
     'contract',
     'invoke',
     '--id',
-    manager.manager,
+    deployed.manager,
     '--source-account',
     founder,
     '--network',
@@ -157,5 +185,83 @@ export function createFailingDrive({
   const proofs = Object.fromEntries(
     Object.entries(tree.claims).map(([address, entry]) => [address, { amount: entry.amount, proof: entry.proof }])
   );
-  return { daoId: token, claims, listId, deadline, price, proofs };
+  return { daoId: token, claims, listId, deadline, price: args.price, proofs };
+}
+
+/**
+ * Create a Setup tribe and open a drive on it: `claimers` may each claim one token at `price`;
+ * the drive needs one more claimer than the list has, so it can only fail, `windowS` from now.
+ */
+export function createFailingDrive({
+  claimers,
+  price,
+  windowS
+}: {
+  claimers: string[];
+  price: bigint;
+  windowS: number;
+}): Drive {
+  const deployed = deployDriveTribe({}, Math.floor(Date.now() / 1000));
+  return openAssurance(
+    deployed,
+    { claimers, price, windowS, threshold: claimers.length + 1 },
+    (tree) => `ipfs://${rawCid(claimTreeJson(tree))}`
+  );
+}
+
+/**
+ * The same, for a tribe that should look like a real one (the docs capture's sibling tribes): its
+ * own name, link, profile and artwork, a chosen threshold, and the list published by `publish`
+ * (which returns the `ipfs://` URI it pinned the tree file at), so the claims page can read it.
+ */
+export async function createDriveTribe({
+  tribe,
+  claimers,
+  price,
+  windowS,
+  threshold,
+  publish
+}: {
+  tribe: DriveTribe;
+  claimers: string[];
+  price: bigint;
+  windowS: number;
+  threshold: number;
+  publish: (json: string) => Promise<string>;
+}): Promise<Drive> {
+  const deployed = deployDriveTribe(tribe, Math.floor(Date.now() / 1000));
+  // The list id is read on chain before the tree is built, so publish between the two synchronously.
+  const listId = Number(
+    stellarJson([
+      'contract',
+      'invoke',
+      '--id',
+      deployed.claims,
+      '--source-account',
+      deployed.founder,
+      '--network',
+      'testnet',
+      '--send',
+      'no',
+      '--',
+      'next_list_id'
+    ])
+  );
+  const json = claimTreeJson(
+    buildClaimTree(
+      claimers.map((address) => ({ address, amount: '1' })),
+      { network: TESTNET_PASSPHRASE, token: deployed.token, list: listId }
+    )
+  );
+  const uri = await publish(json);
+  return openAssurance(deployed, { claimers, price, windowS, threshold }, (_tree, opened) => {
+    if (opened !== listId) throw new Error(`The next list id moved from ${listId} to ${opened}`);
+    return uri;
+  });
+}
+
+/** A Setup tribe with a claims module, its artwork and founder tokens, and no list yet; returns its ids. */
+export function createSetupTribe(tribe: DriveTribe) {
+  const { token, claims } = deployDriveTribe(tribe, Math.floor(Date.now() / 1000));
+  return { daoId: token, claims };
 }

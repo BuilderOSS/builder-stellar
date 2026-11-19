@@ -1,0 +1,44 @@
+{
+  "id": "setup/launch/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815494,
+  "capturedAt": "2026-11-19T15:11:51.605Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Sign and launch button",
+      "box": {
+        "desktop": {
+          "x": 0.5516,
+          "y": 0.5944,
+          "w": 0.0984,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.1067,
+          "y": 0.6142,
+          "w": 0.7867,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

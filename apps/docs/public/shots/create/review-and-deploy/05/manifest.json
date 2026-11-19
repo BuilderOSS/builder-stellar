@@ -1,0 +1,44 @@
+{
+  "id": "create/review-and-deploy/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815622,
+  "capturedAt": "2026-11-19T15:22:35.001Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Continue to setup button",
+      "box": {
+        "desktop": {
+          "x": 0.7492,
+          "y": 0.4275,
+          "w": 0.1091,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.5382,
+          "y": 0.4693,
+          "w": 0.4191,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

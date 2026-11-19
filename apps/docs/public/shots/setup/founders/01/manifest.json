@@ -1,0 +1,44 @@
+{
+  "id": "setup/founders/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815465,
+  "capturedAt": "2026-11-19T15:09:30.221Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Mint founder tokens button",
+      "box": {
+        "desktop": {
+          "x": 0.2056,
+          "y": 0.4798,
+          "w": 0.1073,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.2027,
+          "y": 0.4783,
+          "w": 0.412,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

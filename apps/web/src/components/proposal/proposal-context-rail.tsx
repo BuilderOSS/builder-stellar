@@ -161,7 +161,7 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
                 title={<span title={member.address}>{shortAddress(member.address)}</span>}
                 meta={
                   <>
-                    {formatNumber(member.voting_power)} votes
+                    {formatNumber(member.voting_power)} {String(member.voting_power) === '1' ? 'vote' : 'votes'}
                     {member.voting_power === '0' ? (
                       <HelpTip label="Voting power">
                         {[config.treasuryContractId, config.auctionContractId, config.marketplaceContractId].includes(

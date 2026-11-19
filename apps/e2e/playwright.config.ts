@@ -47,7 +47,31 @@ const chainProjects: Project[] = chainSizes.map((size) => ({
   use: { ...VIEWPORTS[size], browserName: 'chromium' as const, colorScheme: 'dark' as const, theme: 'dark' as const }
 }));
 
-const projects: Project[] = [...matrixProjects, ...chainProjects];
+// Docs screenshots (`pnpm docs:capture`, docs/qa/SHOWCASE_TRIBE.md): only with E2E_CAPTURE=1, one
+// worker, a 2x desktop page that `snap` resizes to mobile. Reduced motion is forced on.
+const captureProjects: Project[] = process.env.E2E_CAPTURE === '1'
+  ? [
+      {
+        name: 'capture',
+        testDir: './capture',
+        testMatch: /.*\.capture\.ts$/,
+        workers: 1,
+        fullyParallel: false,
+        timeout: 60 * 60_000,
+        use: {
+          viewport: { width: 1440, height: 900 },
+          deviceScaleFactor: 2,
+          browserName: 'chromium' as const,
+          colorScheme: 'dark' as const,
+          reducedMotion: 'reduce' as const,
+          actionTimeout: 60_000,
+          theme: 'dark' as const
+        }
+      }
+    ]
+  : [];
+
+const projects: Project[] = process.env.E2E_CAPTURE === '1' ? captureProjects : [...matrixProjects, ...chainProjects];
 
 const id = runId();
 const reports = runDir(id);

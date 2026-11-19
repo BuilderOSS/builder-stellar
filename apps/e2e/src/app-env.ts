@@ -6,13 +6,20 @@ import { E2E_WEB_AUTH_IDENTITY, loadIdentity } from './identities.ts';
 import { E2E_APP_PORT, E2E_BASE_URL, E2E_SITE_URL } from './network.ts';
 import { E2E_ROOT } from './run.ts';
 
+/**
+ * The docs capture build (`E2E_CAPTURE=1`, docs/qa/SHOWCASE_TRIBE.md) turns real IPFS uploads on, so
+ * the showcase tribe's artwork and image are pinned and the upload steps can be photographed. It needs
+ * PINATA_JWT in apps/e2e/.env.local; it builds into its own directory.
+ */
+export const E2E_CAPTURE = process.env.E2E_CAPTURE === '1';
+
 /** Build-time flags for the walkthrough build of apps/web (inlined by Next, so they must be set at build). */
 export const E2E_BUILD_ENV = {
   NEXT_PUBLIC_NETWORK: 'testnet',
   NEXT_PUBLIC_E2E_WALLET: '1',
-  NEXT_DIST_DIR: '.next-e2e',
+  NEXT_DIST_DIR: E2E_CAPTURE ? '.next-capture' : '.next-e2e',
   NEXT_PUBLIC_SITE_URL: E2E_SITE_URL,
-  NEXT_PUBLIC_PINATA_UPLOADS_ENABLED: 'false',
+  NEXT_PUBLIC_PINATA_UPLOADS_ENABLED: E2E_CAPTURE ? 'true' : 'false',
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ''
 } as const;
 
@@ -39,5 +46,10 @@ export function appServerEnv(): Record<string, string> {
     AUTH_APP_NAME: 'Tribe Builder'
   };
   if (process.env.APP_DATABASE_URL) env.APP_DATABASE_URL = process.env.APP_DATABASE_URL;
+  if (E2E_CAPTURE) {
+    if (!process.env.PINATA_JWT) throw new Error('E2E_CAPTURE=1 needs PINATA_JWT in apps/e2e/.env.local.');
+    env.PINATA_JWT = process.env.PINATA_JWT;
+    if (process.env.NEXT_PUBLIC_PINATA_GATEWAY) env.NEXT_PUBLIC_PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
+  }
   return env;
 }

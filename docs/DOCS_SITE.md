@@ -7,7 +7,7 @@ as the app. The plan and its design decisions are in
 
 This is the P5 scaffold. Every page in the information architecture exists as a
 placeholder, and the real content arrives in P7. Screenshots come from the capture
-pipeline in P6.
+pipeline in P6 (`docs/qa/SHOWCASE_TRIBE.md`).
 
 ## Commands
 
@@ -138,6 +138,10 @@ pager. The 404 and the component preview are excluded.
 <Shot id="create/identity/01" alt="The identity step with the tribe name filled in" />
 ```
 
+- **Capture.** The images come from the real app on the dev deployment, following one example tribe,
+  Lamplight. `docs/qa/SHOWCASE_TRIBE.md` has the story, the commands (`pnpm --dir apps/e2e
+  build:capture`, then `capture-story.sh` beside the `90-drive` spec) and the shots that can't be
+  captured. Desktop is 1440 × 900 and mobile 375 × 812, both at 2x, saved as WebP.
 - **Files.** `public/shots/<id>/{desktop,mobile}-{light,dark}.webp` and
   `public/shots/<id>/manifest.json`, written by the capture pipeline (P6, plan §5.6). The
   manifest shape is `ShotManifest` in `src/lib/shots.ts`: the app commit, ledger, capture

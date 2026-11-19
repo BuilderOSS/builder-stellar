@@ -1,0 +1,62 @@
+{
+  "id": "setup/artwork/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815462,
+  "capturedAt": "2026-11-19T15:09:12.692Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the demo collection button",
+      "box": {
+        "desktop": {
+          "x": 0.3444,
+          "y": 0.3631,
+          "w": 0.217,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.3482,
+          "w": 0.8333,
+          "h": 0.0542
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Choose a folder button",
+      "box": {
+        "desktop": {
+          "x": 0.3444,
+          "y": 0.476,
+          "w": 0.1156,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.4732,
+          "w": 0.4438,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

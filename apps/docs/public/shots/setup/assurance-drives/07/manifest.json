@@ -1,0 +1,44 @@
+{
+  "id": "setup/assurance-drives/07",
+  "appCommit": "bccf91b",
+  "ledger": 5815719,
+  "capturedAt": "2026-11-19T15:30:37.907Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Launch the tribe button",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.4926,
+          "w": 0.101,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.5621,
+          "w": 0.388,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}
