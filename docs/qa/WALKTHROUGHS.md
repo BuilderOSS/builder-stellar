@@ -388,6 +388,80 @@ DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs admin_checklist configs/
 DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
 ```
 
+## Run W06 (auction) and W12 (claims)
+
+Both run on the `w06` timeline, on port 4356, and share its wallets, so run them one after the other
+(the `*-chain` project does that) and never beside another `w06` run:
+
+```bash
+E2E_TIMELINE=w06 E2E_APP_PORT=4356 pnpm --dir apps/e2e build:app
+```
+
+```bash
+E2E_TIMELINE=w06 E2E_APP_PORT=4356 pnpm --dir apps/e2e test:e2e tests/w06-auction.spec.ts tests/w12-claims.spec.ts
+```
+
+**W06** (`tests/w06-auction.spec.ts`, about 10 minutes): member A bids the reserve (a bid under the
+minimum is refused before the wallet opens), member B outbids A with a comment and A's bid comes
+straight back in B's transaction (checked to the stroop on Horizon), A sees no refund to claim, then
+after the end the founder settles: B owns the token, the Treasury holds B's bid and the next auction
+starts at the reserve. If an earlier run left an auction that ended or has bids, the first case waits
+for its end and settles it, so the walk can start at any time. `@matrix` checks the page signed out,
+and signed in with a bid under the minimum, at every viewport and theme.
+
+**W12** (`tests/w12-claims.spec.ts`, about 8 minutes): the launch admin pastes rows (a bad row is
+caught first), publishes and opens a free list (two signatures: let the claims module mint, then
+open the list); a wallet that isn't on the list is refused before it signs; the listed member claims
+with the proof file; and a member who paid 1 XLM into a launch drive that failed takes it back.
+`@matrix` checks the member view signed out and the launch admin's form, both list types, at every
+viewport and theme.
+
+Not driven through the app, and why:
+
+- **IPFS.** The walkthrough build has no Pinata key, so W12 answers the upload in the browser with the
+  file's own CID (`page.route`); nothing is pinned. The server then can't fetch the list, so cards
+  show "Claim list unavailable" and members claim with the proof file, the app's own fallback.
+- **Opening the drive.** The drive form only offers whole days (1 to 90), and a refund needs the
+  deadline to pass. `src/drive-fixture.ts` opens it with `manager.open_assurance` and a 3-minute
+  deadline; claiming, the failed state and Take back go through the app.
+- **A deferred auction refund** ("Refund waiting", Claim refund). The Auction credits a refund for
+  later only when the push fails. With native XLM a push to a merged account recreates it (tried on
+  testnet: the refund arrived as a new account with 1 XLM), so it can't be forced with a 1 XLM
+  reserve. It needs a bid below the 1 XLM minimum balance or a non-native asset whose trustline is
+  removed; the contract tests cover it (`contracts/auction/src/test.rs`, `mod refunds`).
+
+### Fixture tribes
+
+Created once by `e2e-w06-founder` (`stellar keys address e2e-w06-founder` after the preflight) on the
+dev Manager. The configs and deploy artifacts are committed.
+
+| Tribe | Slug | Config | Artifact | Tribe id (token) |
+|---|---|---|---|---|
+| E2E Auction: launched, 300s auction, 1 XLM reserve, 10% raise, 60s buffer | `e2e-w06` | `configs/e2e-walk-e2e-w06-dao.json` | `deploys/dev-testnet-dao-6.json` | `CCE5QRB4IUVKDZEBREZUXWVTO2SNBZZ3POK4XZICZ7KHMGEMYXRBSBGN` |
+| E2E Claims: in Setup, claims module, native XLM | `e2e-w06-2` | `configs/e2e-walk-e2e-w06-2-dao.json` | `deploys/dev-testnet-dao-601.json` | `CC7ISZKEYU73QBMZFAJGGMYE4QKHRHE2DWYJE3ERVBLSWVUPOIWC6Z5M` |
+
+To recreate them (after a dev Manager redeploy, say), put the founder's address in each config's
+`deployer`, `launchAdmin` and founders (and the operator's for E2E Auction), delete the old artifact,
+then:
+
+```bash
+export DEPLOY_IDENTITY=e2e-w06-founder
+for phase in create_dao admin_checklist launch_dao; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-e2e-w06-dao.json configs/testnet-dev-manager.json
+done
+for phase in create_dao admin_checklist; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-e2e-w06-2-dao.json configs/testnet-dev-manager.json
+done
+```
+
+E2E Claims is never launched: in Setup the launch admin opens lists directly. Each W12 run adds one
+free list to it.
+
+The refund case makes a new Setup tribe per run ("E2E Drive", slug `e2e-drive-<unix time>`), because
+a tribe gets one drive for life. Its artifacts land in the gitignored
+`deploys/e2e-w06-drive-testnet-*.json` through a relabelled copy of the dev Manager artifact, as
+`scripts/e2e-membership.mjs` does. These tribes stay in Setup with a failed drive.
+
 ## When something fails
 
 | Failure | Meaning | What to do |

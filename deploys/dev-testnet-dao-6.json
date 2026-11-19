@@ -1,0 +1,123 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "nonce": 6,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CCE5QRB4IUVKDZEBREZUXWVTO2SNBZZ3POK4XZICZ7KHMGEMYXRBSBGN",
+    "metadata": "CBWM5PAJABVPYRM65BSM7J4UGI766BHIRHLYQ3EVJQLXFE226BBNZFOG",
+    "governor": "CATSKJMETQ2ZCQZXQU5O6EY3XSX4IMYYJY7QWNKB2QQF35RK25NTQLCH",
+    "treasury": "CCGHBPFRQTRSDH3XN65YIG52K2NVB2YJEP36WAB2Y3EKHA6Z5FOF6TVV",
+    "auction": "CCKJUXQE7F5BO4L32ML7RKMHN5G42VL4DWB4LMS6Q3T2B43AR2DKQHXI",
+    "marketplace": null,
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W06 (auction), on the dev Manager. Deployed and launched by e2e-w06-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md). Founders: e2e-w06-founder x3, e2e-w06-operator x1 (the operator holds a vote so it is never the only voter). The auction runs at the 300s minimum with a 1 XLM reserve in native XLM (SAC); e2e-w06-member-a and -member-b bid.",
+    "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+    "nonce": 6,
+    "launchAdmin": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+    "slug": "e2e-w06",
+    "token": {
+      "name": "E2E Auction",
+      "symbol": "E2EA"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for auctions (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "10000000",
+      "timeBuffer": 60,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+        "amount": 3
+      },
+      {
+        "address": "GC3SBLZNEL7KYVJL7VV6D7IWEJQGT7U3K2SWXCUO7F66DCHVBAODPUBW",
+        "amount": 1
+      }
+    ],
+    "launch": {
+      "launchAuction": true
+    }
+  },
+  "updatedAt": "2026-11-19T04:37:37.447Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "cbb82304bdbe527aab6bdcd32a814453ab1f4c14df7f1562d157cb73d85ccaf5",
+      "ledger": 5807876
+    },
+    "artworkBatches": [
+      {
+        "txHash": "b2f30a2f24fb6e4f3784d1fbf2ee8760f39b9d7bc13611bd053e53d4dee3982f",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807879
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "7f9a08238df0016c1ea4df6bc4d5a28b47a658f9e41d5b7d62e3ef696adb2362",
+        "batch": 1,
+        "tokens": 4,
+        "ledger": 5807881
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "114bd7e33f98403a7591001dae7aed9df25c959873ff49318b1d9fd3d12384fd",
+      "ledger": 5807883
+    }
+  },
+  "deploymentLedger": 5807876
+}
