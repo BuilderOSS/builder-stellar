@@ -10,6 +10,12 @@ const LEGACY_KEPT_PATHS = ['api/', 'images/', 'assets/', 'samples/', '_next/'];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The walkthrough suite (apps/e2e) builds into its own directory so it never overwrites `.next`.
+  distDir: process.env.NEXT_DIST_DIR?.trim() || '.next',
+  // Always defined, so `process.env.NEXT_PUBLIC_E2E_WALLET === '1'` in src/lib/wallet-kit.ts folds to a
+  // constant and the bundler drops the test-only wallet. Next inlines a NEXT_PUBLIC_ variable only when
+  // it is set; left unset, the guard stayed a runtime check and the module shipped (BUG-002).
+  env: { NEXT_PUBLIC_E2E_WALLET: process.env.NEXT_PUBLIC_E2E_WALLET === '1' ? '1' : '0' },
   typedRoutes: true,
   // Shared Warm Ink fonts run through the Next font loader (packages/design-tokens).
   transpilePackages: ['@builder-stellar/design-tokens'],

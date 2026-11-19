@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 /**
  * The Manager deployment the web app indexes: the newest `*-manager.json` in `deploys/` by
@@ -33,4 +33,13 @@ export function latestManagerArtifact(deploysDirectory) {
     throw new Error(`No manager deployment artifacts found in ${deploysDirectory}`);
   }
   return { artifact: latest.artifact, fileName: latest.fileName };
+}
+
+/** One named Manager artifact (MANAGER_DEPLOYMENT_FILE), checked like the ones `latestManagerArtifact` reads. */
+export function managerArtifactAt(path) {
+  const artifact = JSON.parse(readFileSync(path, 'utf8'));
+  if (!artifact.manager || !artifact.deployedAt) {
+    throw new Error(`Manager deployment artifact ${path} must define manager and deployedAt`);
+  }
+  return { artifact, fileName: basename(path) };
 }

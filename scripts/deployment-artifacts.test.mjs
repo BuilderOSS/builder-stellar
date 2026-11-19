@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { latestManagerArtifact } from './deployment-artifacts.mjs';
+import { latestManagerArtifact, managerArtifactAt } from './deployment-artifacts.mjs';
 
 function directoryWith(files) {
   const directory = mkdtempSync(join(tmpdir(), 'deploys-'));
@@ -84,6 +84,21 @@ test('names the file whose deployedAt does not parse', () => {
   });
   try {
     assert.throws(() => latestManagerArtifact(directory), /typo-testnet-manager\.json has an unparseable deployedAt: "yesterday"/);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test('managerArtifactAt reads one pinned artifact (the walkthrough build)', async () => {
+  const directory = directoryWith({
+    'e2e-walk-testnet-manager.json': { manager: 'CE2E', deployedAt: '2026-11-18T00:00:00.000Z' },
+    'broken-testnet-manager.json': { manager: 'CBROKEN' }
+  });
+  try {
+    const pinned = managerArtifactAt(join(directory, 'e2e-walk-testnet-manager.json'));
+    assert.equal(pinned.artifact.manager, 'CE2E');
+    assert.equal(pinned.fileName, 'e2e-walk-testnet-manager.json');
+    assert.throws(() => managerArtifactAt(join(directory, 'broken-testnet-manager.json')), /must define manager and deployedAt/);
   } finally {
     rmSync(directory, { recursive: true });
   }
