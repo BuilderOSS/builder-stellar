@@ -530,7 +530,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                   return (
                     <li key={item.claim_id}>
                       <p>
-                        {item.amount ?? 'Some'} tokens from{' '}
+                        {item.amount === '1' ? '1 token' : `${item.amount ?? 'Some'} tokens`} from{' '}
                         {listName(list ?? { listId: item.list_id, assurance: null })}
                         {paid && list ? `, paid ${claimAmountLabel(config.name, list.asset, paid)}` : ''}
                         {item.escrowed ? ' (held until launch)' : ''}
