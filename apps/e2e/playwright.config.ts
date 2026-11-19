@@ -9,28 +9,44 @@ import { runDir, runId } from './src/run.ts';
  * Walkthrough suite (docs/plans/walkthroughs-and-docs.md §3, runbook docs/qa/WALKTHROUGHS.md).
  *
  * Coverage is hybrid (decision Q3):
- *   - `@matrix` specs (auth, forms up to signing, the state tour) run at 3 viewports × 2 themes;
- *   - `@chain` specs run once per run at desktop (dark, the hero theme); E2E_ROTATION=1 (the weekly
- *     run) adds mobile and tablet.
+ *   - `@matrix` specs (auth, forms up to signing, the state tour) run at 3 viewports × 2 themes, in
+ *     parallel. They may sign messages but never submit a transaction;
+ *   - `@chain` specs run in their own `*-chain` projects, at desktop (dark, the hero theme);
+ *     E2E_ROTATION=1 (the weekly run) adds mobile and tablet.
+ *
+ * Chain projects run one test at a time (`workers: 1`), and each rotation project waits for the
+ * previous one (`dependencies`). The signer's per-account lock and `IdentityClaims` live in one
+ * worker's memory, so serialising chain flows is what keeps two of them from signing from one
+ * account at once (`tx_bad_seq`).
  */
 const VIEWPORTS = {
   mobile: { viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
   tablet: { viewport: { width: 768, height: 1024 }, hasTouch: true },
   desktop: { viewport: { width: 1440, height: 900 } }
 } as const;
+type Size = keyof typeof VIEWPORTS;
 const THEMES: Theme[] = ['light', 'dark'];
 const rotation = process.env.E2E_ROTATION === '1';
 
-const projects: Project[] = Object.entries(VIEWPORTS).flatMap(([size, device]) =>
-  THEMES.map((theme) => {
-    const chainHere = (size === 'desktop' && theme === 'dark') || (rotation && theme === 'dark');
-    return {
-      name: `${size}-${theme}`,
-      grep: chainHere ? /@matrix|@chain/ : /@matrix/,
-      use: { ...device, browserName: 'chromium' as const, colorScheme: theme, theme }
-    };
-  })
+const matrixProjects: Project[] = (Object.keys(VIEWPORTS) as Size[]).flatMap((size) =>
+  THEMES.map((theme) => ({
+    name: `${size}-${theme}`,
+    grep: /@matrix/,
+    use: { ...VIEWPORTS[size], browserName: 'chromium' as const, colorScheme: theme, theme }
+  }))
 );
+
+const chainSizes: Size[] = rotation ? ['desktop', 'tablet', 'mobile'] : ['desktop'];
+const chainProjects: Project[] = chainSizes.map((size, index) => ({
+  name: `${size}-dark-chain`,
+  grep: /@chain/,
+  workers: 1,
+  fullyParallel: false,
+  dependencies: index === 0 ? [] : [`${chainSizes[index - 1]}-dark-chain`],
+  use: { ...VIEWPORTS[size], browserName: 'chromium' as const, colorScheme: 'dark' as const, theme: 'dark' as const }
+}));
+
+const projects: Project[] = [...matrixProjects, ...chainProjects];
 
 const id = runId();
 const reports = runDir(id);

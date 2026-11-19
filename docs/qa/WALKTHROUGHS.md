@@ -34,7 +34,10 @@ Playwright (Node, apps/e2e)                     Browser (Chromium)
   transaction is signed only after the previous one from that account has landed, and a reused
   sequence fails at once with `SequenceCollisionError` instead of `tx_bad_seq` later.
 - **One identity per concurrent timeline.** Two flows that run at the same time never share an
-  account (`IdentityClaims` in `src/identities.ts`).
+  account. `@chain` specs run in `*-chain` projects with one worker, one after another, because
+  the signer's per-account lock and `IdentityClaims` (`src/identities.ts`) only see one worker
+  process. `@matrix` specs run in parallel, so they may sign messages but never submit a
+  transaction.
 - **Waits are conditions.** `waitForLedgerTime`, `waitForIndexed` and `waitForUi` in `src/waits.ts`
   each take the governing duration (a 300s voting period, say) and fail with their own class:
   `[ledger-late]`, `[indexer-late]` or `[ui-timeout]`. An `indexer-late` failure means Goldsky is
