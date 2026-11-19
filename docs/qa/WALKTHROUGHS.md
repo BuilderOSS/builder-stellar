@@ -321,8 +321,10 @@ pnpm --dir apps/e2e build:app && pnpm --dir apps/e2e preflight --require-manager
 pnpm --dir apps/e2e exec playwright test tests/w10-marketplace.spec.ts
 ```
 
-The chain cases run in order (one serial group) and take about ten minutes, most of it the listing
-end and the indexer. Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
+The chain cases run in order (one serial group) and take about six minutes at one viewport, most of
+it the listing end and the indexer. `E2E_ROTATION=1` runs them again at tablet and mobile, one
+viewport after another. Run one chain project at a time with `--no-deps`: several chain projects with
+`--no-deps` start together and sign from the same identities at once. Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
 the seller's tokens back: it cancels a listing an earlier run left open and sends back a token the
 buyer bought, signing with the `stellar keys` identities, then waits for the indexer to agree.
 

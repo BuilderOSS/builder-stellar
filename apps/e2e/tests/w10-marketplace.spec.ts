@@ -24,7 +24,8 @@ const [FIRST, SECOND] = market.sellerTokens.map(String) as [string, string];
 /** One run's prices, so a listing from this run can't be mistaken for an earlier one. */
 const PRICE = '5';
 const NEW_PRICE = '6';
-const COMMENT = `W10 comment ${process.env.E2E_RUN_ID ?? Date.now()}`;
+/** Unique per run and project: rotation runs the walk once per viewport in one run. */
+const comment = (project: string) => `W10 comment ${process.env.E2E_RUN_ID ?? Date.now()} ${project}`;
 
 const marketPath = `/dao/${market.slug}/marketplace`;
 const api = `/api/dao/${market.daoId}`;
@@ -174,7 +175,8 @@ test.describe.serial('W10 marketplace', { tag: '@chain' }, () => {
 
     const dialog = page.getByRole('dialog', { name: 'List your token for sale' });
     await waitForVisible(dialog, 'guided List for sale');
-    await expect(dialog.getByText('Allow the market to hold your token', { exact: true })).toBeVisible();
+    // The current step is spelled out at every width; the step list shows labels from tablet up.
+    await expect(dialog.getByText('Step 1 of 2: Allow the market to hold your token')).toBeVisible();
     await signSteps(dialog, wallet, SELLER, { total: 2, signs: [1, 2] });
     await dialog.getByRole('button', { name: 'Done' }).click();
     await expect(dialog).toBeHidden();
@@ -233,7 +235,7 @@ test.describe.serial('W10 marketplace', { tag: '@chain' }, () => {
     await form.getByRole('button', { name: 'List for sale' }).click();
     dialog = page.getByRole('dialog', { name: 'List your token for sale' });
     await signSteps(dialog, wallet, SELLER, { total: 2, signs: [2] });
-    await expect(dialog.getByText('Allow the market to hold your token (already allowed)')).toBeVisible();
+    await expect(dialog.getByText('Allow the market to hold your token (already allowed)')).toBeAttached();
     await dialog.getByRole('button', { name: 'Done' }).click();
 
     await waitForVisible(yourRow(page, SECOND).getByText('Updating', { exact: true }), 'second listing updating');
@@ -279,7 +281,8 @@ test.describe.serial('W10 marketplace', { tag: '@chain' }, () => {
     await expect(yourListings(page).getByText(new RegExp(`Token #${FIRST} · ${PRICE} XLM`))).toHaveCount(0);
   });
 
-  test('W10 a member comments on a listing', async ({ page, wallet }) => {
+  test('W10 a member comments on a listing', async ({ page, wallet }, testInfo) => {
+    const COMMENT = comment(testInfo.project.name);
     await openMarket(page);
     await signInAs(page, wallet, BUYER);
     const card = publicCard(page, SECOND);
