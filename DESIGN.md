@@ -236,9 +236,35 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 
 ## Voice
 
-Warm, plain, specific. Say "Proposals", "Treasury", "Members", "Your membership". A proposal is what members vote on; "vote" is the act, never the page. Explain consequences: "2,400 XLM moves to mira.xlm after a 2-day safety delay." Name the outcome on buttons: "Cast 3 votes For", "Place 200 XLM bid". Sentence case, contractions, no exclamation marks, no "simply" or "just". No em dashes in UI copy.
+**Clear, calm and inclusive: a professional guide for communities that decide together.** People
+trust a tribe with shared money and shared decisions, so the copy reads like a well-run
+organisation, not a party invitation. It is written for a global audience, many reading in a
+second language, and for both newcomers and crypto natives.
 
-The voice is a warm host: plain words first, the DAO term one line beneath.
+1. **Literal over clever.** No idioms, metaphors, puns, slang or cultural references ("pull up
+   a chair", "kick off", "heads-up", "hold the floor", "a seat at the table", "jump in"). They
+   don't translate, and they read as unserious next to a treasury. Say what happens.
+2. **Professional and calm.** Confident, neutral and polite. No jokes, hype or exclamation
+   marks, no "simply", "just", "easy", "magic" or "awesome". Headings describe the content
+   ("Start a tribe", "How voting works"), never a mood.
+3. **Community first.** The subject is the members and what they decide together: "Members
+   vote on proposals", "The tribe's treasury". Inclusive and neutral: no gendered or
+   region-specific examples, names from many cultures, no assumptions about wealth or skill.
+4. **Plain term first, the precise term beneath.** Newcomers lead with the plain word; crypto
+   natives find the exact term one line down or in a glossary link ("Membership token" with
+   "an NFT on Stellar" beneath). Define a crypto term the first time a page uses it.
+5. **Safe and accurate.** Never promise returns, value, safety or permanence: no "earn",
+   "invest", "profit", "guaranteed", "secure", "risk-free" or "forever" as a claim. Say what the
+   contracts do and what they don't. Testnet is labelled as testnet. Legal and money copy is
+   factual and points to the relevant terms.
+6. **Short, global sentences.** One idea per sentence, active voice, common words. British
+   spelling and the Oxford comma; sentence case; contractions are fine. Write numbers, dates and
+   amounts unambiguously (2 days, 2,400 XLM, 3 March 2026). No em dashes in UI copy.
+
+Name things precisely: say "Proposals", "Treasury", "Members", "Your membership". A proposal is
+what members vote on; "vote" is the act, never the page. Explain consequences: "2,400 XLM moves
+to mira.xlm after a 2-day safety delay." Name the outcome on buttons: "Cast 3 votes For",
+"Place 200 XLM bid".
 
 - **Tribes are tribes in copy; DAO sits one line beneath.** Name a group "tribe" everywhere: Your tribes, Find a tribe, Build a tribe, Switch tribe. Crypto natives find the DAO term on a quiet line under the plain one: the home supporting line ("A DAO on Stellar: shared treasury, onchain votes, NFT membership."), the Members subtitle ("Each membership is an NFT with one vote."), the Treasury subtitle and the footer ("Tribe Builder · DAOs on Stellar · Built by Builder DAO").
 - Savings circles are "circles", "groups" or "savers", never tribes.
@@ -277,3 +303,4 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-14 | Newcomer help lives in place: a "What's a tribe?" sheet, a wallet intro before the first Connect, glossary popovers | Explains wallets, signing and DAO words at the moment they come up, without a tour |
 | 2026-10-14 | Share cards for every page on the Dusk gradient, with a brand-card fallback | Links shared in WhatsApp, X and Discord show the tribe, proposal or auction; a broken data source still shows the brand |
 | 2026-10-14 | The product name is Tribe Builder, singular | Replaces the plural first name after feedback. The domain stays tribes.build, the home-screen label is "Tribe", the wordmark is "Tribe" bold with a muted "Builder", and groups are still "tribes" in copy |
+| 2026-11-19 | Voice: clear, calm and inclusive, replacing the warm host | "Pull up a chair" read as unprofessional. People entrust a tribe with shared money, and many readers are global or reading in a second language, so copy is literal, professional and community-first, with no idioms or claims. Plain term first and the DAO term beneath still holds |
