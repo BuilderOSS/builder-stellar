@@ -66,69 +66,17 @@ export function YourListings({
   const [changing, setChanging] = useState<MarketplaceListing | null>(null);
   const [sequence, setSequence] = useState<{ listing: MarketplaceListing; steps: SellStep[] } | null>(null);
   const shown = listings.filter((listing) => listing.kind === 'secondary');
-  if (!shown.length) return null;
   const ended = shown.filter((listing) => listing.status === 'awaiting-expiry' && !isPendingListing(listing));
-  const daoId = shown[0]!.daoId;
+  // A confirmed Cancel hides its row at once; an open review or sequence outlives the row (BUG-012).
+  const daoId = (action?.listing ?? sequence?.listing ?? changing ?? shown[0])?.daoId;
+  if (!daoId) return null;
 
   function trade(listing: MarketplaceListing, type: 'cancel' | 'expire') {
     setAction({ listing, action: { action: type, id: listing.id, kind: 'secondary', eventId: listing.eventId } });
   }
 
-  return (
-    <Section title="Your listings">
-      {ended.length ? (
-        <Callout
-          variant="warning"
-          title={
-            ended.length === 1
-              ? `Your listing of token #${ended[0]!.tokenId} has ended`
-              : `${ended.length} of your listings have ended`
-          }
-          description="The market still holds your token. Return it to your wallet to vote with it again or list it once more."
-        />
-      ) : null}
-      <div>
-        {shown.map((listing) => {
-          const state = yourListingState(listing);
-          const asset = marketplaceAssetLabel(network, listing.paymentAsset);
-          const pending = isPendingListing(listing);
-          return (
-            <div key={listing.eventId} className={item}>
-              <ListRow
-                wrap
-                title={`Token #${listing.tokenId} · ${marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} ${asset}`}
-                meta={state.meta}
-                trailing={
-                  <Chip tone={pending ? 'neutral' : listing.status === 'awaiting-expiry' ? 'warning' : 'yours'}>
-                    {state.label}
-                  </Chip>
-                }
-              />
-              {pending ? null : listing.status === 'awaiting-expiry' ? (
-                <div className={actions}>
-                  <Button size="sm" onClick={() => trade(listing, 'expire')}>
-                    Return my token
-                  </Button>
-                </div>
-              ) : listing.status === 'open' ? (
-                <div className={actions}>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={!config || !purchasesEnabled}
-                    onClick={() => setChanging(listing)}
-                  >
-                    Change price
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => trade(listing, 'cancel')}>
-                    Cancel listing
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+  const dialogs = (
+    <>
       {action ? (
         <TradeReview
           key={JSON.stringify(action.action)}
@@ -175,7 +123,70 @@ export function YourListings({
           }}
         />
       ) : null}
-    </Section>
+    </>
+  );
+  return (
+    <>
+      {shown.length ? (
+        <Section title="Your listings">
+          {ended.length ? (
+            <Callout
+              variant="warning"
+              title={
+                ended.length === 1
+                  ? `Your listing of token #${ended[0]!.tokenId} has ended`
+                  : `${ended.length} of your listings have ended`
+              }
+              description="The market still holds your token. Return it to your wallet to vote with it again or list it once more."
+            />
+          ) : null}
+          <div>
+            {shown.map((listing) => {
+              const state = yourListingState(listing);
+              const asset = marketplaceAssetLabel(network, listing.paymentAsset);
+              const pending = isPendingListing(listing);
+              return (
+                <div key={listing.eventId} className={item}>
+                  <ListRow
+                    wrap
+                    title={`Token #${listing.tokenId} · ${marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} ${asset}`}
+                    meta={state.meta}
+                    trailing={
+                      <Chip tone={pending ? 'neutral' : listing.status === 'awaiting-expiry' ? 'warning' : 'yours'}>
+                        {state.label}
+                      </Chip>
+                    }
+                  />
+                  {pending ? null : listing.status === 'awaiting-expiry' ? (
+                    <div className={actions}>
+                      <Button size="sm" onClick={() => trade(listing, 'expire')}>
+                        Return my token
+                      </Button>
+                    </div>
+                  ) : listing.status === 'open' ? (
+                    <div className={actions}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!config || !purchasesEnabled}
+                        onClick={() => setChanging(listing)}
+                      >
+                        Change price
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => trade(listing, 'cancel')}>
+                        Cancel listing
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </Section>
+      ) : null}
+      {/* Outside the section, so they keep their state when the last row hides. */}
+      {dialogs}
+    </>
   );
 }
 

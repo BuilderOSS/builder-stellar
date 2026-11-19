@@ -1,0 +1,121 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+  "nonce": 1,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CCHFKXCP6A7GJXE3JO6LGTPUQQZYES4GRCRCAEY5RSIROHOISCUG6PDN",
+    "metadata": "CBMYHSDZTJTTGQID32RDPPERZY225ZLBT5R5VBDPQH3HEAPJC2XAZGAB",
+    "governor": "CAJTADOKY23DABUG5LXSZUSEMVII3SESU54OVXQFOVZVL62GCENPXW7L",
+    "treasury": "CDPFPPPDLFI7YWGSDULLS5I4QAFBY6RVGTCOT6M5LVQ44YWT5AVQUCZ4",
+    "auction": null,
+    "marketplace": "CDO3A56FFCGE5SMB3D4DEP57TGUSQHXXSVQVRT76VSPQAKIZ7RYOMUNQ",
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W10 (marketplace), on the dev Manager. Deployed and launched by e2e-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md). Founders: e2e-founder x3, e2e-member-a x2; e2e-member-b buys. Payment asset is native XLM (SAC).",
+    "deployer": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+    "nonce": 1,
+    "launchAdmin": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+    "slug": "e2e-market",
+    "token": {
+      "name": "E2E Market",
+      "symbol": "E2EM"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for the marketplace (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+        "amount": 3
+      },
+      {
+        "address": "GDEBASDTDUPEU4G5HL4UGZCILI2TBSICVGSFRAULXPXYUZ4YH42HBRDL",
+        "amount": 2
+      }
+    ],
+    "launch": {
+      "launchMarketplace": true
+    }
+  },
+  "updatedAt": "2026-11-19T03:18:52.502Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "2335eab543ba68afe9affae5a22db07ec1557ed3114903dd150548c445663985",
+      "ledger": 5806932
+    },
+    "artworkBatches": [
+      {
+        "txHash": "179de507ce9454692d83c19628b8f6776d9788fc576e073db90ce4df2cb6315c",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5806934
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "5177e55e19ca0830aa10e4b35cc244a9b00c1caf987acb2b7abf961cf9bc7817",
+        "batch": 1,
+        "tokens": 5,
+        "ledger": 5806936
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "4c64db9b409b2752a6f31e9a7a42f0fe41e41cb21c92f1aaad03668a813acb04",
+      "ledger": 5806938
+    }
+  },
+  "deploymentLedger": 5806932
+}

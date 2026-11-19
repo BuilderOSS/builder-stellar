@@ -178,6 +178,22 @@ None.
 - **Regression test:** `lib/marketplace/purchase-cycle.test.ts` (an event without the field passes,
   one marked `false` fails); W10's buy case.
 
+### BUG-012 · Cancelling your last listing closed the review before it confirmed
+- **Flow:** W10, the seller cancels a listing. Found at desktop dark; every viewport and theme.
+- **Severity:** P2 (the cancel went through, but the member never saw it confirm; a Change price on
+  the only listing lost its sequence after the Cancel step).
+- **Steps:** with one listing, press Cancel listing in Your listings, Check, then Sign and send.
+- **Expected:** "Confirmed", the transaction and Done, then the row is gone.
+- **Actual:** on confirmation the whole dialog vanished with the row.
+- **Root cause:** a confirmed cancel hides its listing at once (the pending change), and
+  `components/marketplace/your-listings.tsx` returned nothing when no rows were left, unmounting the
+  review and the Change price sequence it renders. `ListingCard` likewise hid its own card, with its
+  review inside, on confirmation.
+- **Fix:** Your listings renders its review, Change price dialog and sequence outside the section, so
+  they stay mounted, with their state, when no rows are left; a public card reports its cancel or
+  return only when its review closes.
+- **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
+
 ### BUG-W11-1 · Market settings showed the payment asset as a contract id
 - **Flow:** W11, Market settings (`/dao/<tribe>/admin/marketplace`), "Change the market payment
   asset". Every viewport and theme.
