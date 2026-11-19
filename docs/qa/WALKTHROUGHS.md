@@ -351,8 +351,8 @@ pnpm --dir apps/e2e build:app && pnpm --dir apps/e2e preflight --require-manager
 pnpm --dir apps/e2e exec playwright test tests/w11-pools-treasury-purchase.spec.ts tests/w14-members.spec.ts
 ```
 
-W11's chain cases take about 30 minutes, most of it the three 300-second governance steps and the
-indexer; W14's take about 10. Before they start, `resetPoolsTribe` and `resetMemberTribes`
+W11's chain cases take about 20 minutes, most of it the three 300-second governance steps and the
+indexer; W14's take about 3. Before they start, `resetPoolsTribe` and `resetMemberTribes`
 (`apps/e2e/src/w11/fixtures.ts`) put the fixtures back: pools an earlier run left past their closing
 time are closed and swept (anyone may), a listing left open is cancelled, the treasury is topped up
 to at least 10 XLM, and `e2e-member-a`'s W14 tokens, delegation and approvals are restored.
