@@ -1,0 +1,58 @@
+{
+  "ready": {
+    "daoId": "CDZ3FQC2F344I7SZSEE57U3AOVS44TZSJV26P6BT24VE4SUV6KAQGVJL",
+    "name": "E2E W03 Drive Ready 305",
+    "slug": "e2e-w03-drive-ready-305",
+    "nonce": 305,
+    "config": "configs/e2e-walk-e2e-w03-drive-ready-305-dao.json",
+    "artifact": "deploys/dev-testnet-dao-305.json",
+    "root": "49b8440b39595260c648554335c652943a4a4f8747ebaca8f17b51beac233639",
+    "deadline": 1795153063,
+    "priceStroops": "10000000",
+    "threshold": 2,
+    "proofs": {
+      "e2e-member-a": {
+        "address": "GAHE7EJKA2HT65FNAUAPHL3FO4PNGBONRTMLCFIWOLWLJ2ATAVFR2LW2",
+        "amount": "1",
+        "proof": [
+          "b30781d2274f3262486c93d17882e28f48bc8a8fa0c6c4deaa13d0a3d4dee350"
+        ]
+      },
+      "e2e-member-b": {
+        "address": "GDDCJWF3JE26M5DFA3Q6BPIRIRSX2ORO7VCEWAGKLDHTAAJZXKTY6SI3",
+        "amount": "1",
+        "proof": [
+          "216430abc30177c34c935df810907d9bf6fb287daf0597b5ec37fe8b2962894a"
+        ]
+      }
+    }
+  },
+  "fail": {
+    "daoId": "CAZSWT7T6GEA6HPSUEICAMOSICOQKCKJRJAXK6SFUR5T7LMKLTG3F6DG",
+    "name": "E2E W03 Drive Fail 306",
+    "slug": "e2e-w03-drive-fail-306",
+    "nonce": 306,
+    "config": "configs/e2e-walk-e2e-w03-drive-fail-306-dao.json",
+    "artifact": "deploys/dev-testnet-dao-306.json",
+    "root": "49b8440b39595260c648554335c652943a4a4f8747ebaca8f17b51beac233639",
+    "deadline": 1795068207,
+    "priceStroops": "10000000",
+    "threshold": 2,
+    "proofs": {
+      "e2e-member-a": {
+        "address": "GAHE7EJKA2HT65FNAUAPHL3FO4PNGBONRTMLCFIWOLWLJ2ATAVFR2LW2",
+        "amount": "1",
+        "proof": [
+          "b30781d2274f3262486c93d17882e28f48bc8a8fa0c6c4deaa13d0a3d4dee350"
+        ]
+      },
+      "e2e-member-b": {
+        "address": "GDDCJWF3JE26M5DFA3Q6BPIRIRSX2ORO7VCEWAGKLDHTAAJZXKTY6SI3",
+        "amount": "1",
+        "proof": [
+          "216430abc30177c34c935df810907d9bf6fb287daf0597b5ec37fe8b2962894a"
+        ]
+      }
+    }
+  }
+}

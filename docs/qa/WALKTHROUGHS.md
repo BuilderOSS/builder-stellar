@@ -173,6 +173,76 @@ pnpm --dir apps/e2e typecheck
 pnpm --dir apps/web exec vitest run src/lib/e2e-wallet scripts
 ```
 
+## Run W03 to W05 (tribes)
+
+| Flow | Spec | Kind | What it signs |
+|---|---|---|---|
+| W03 Create a tribe | `tests/w03-create-tribe.spec.ts` | `@matrix` form cases, `@chain` deploys | Two `create_dao`: an auction tribe and a fixed-price tribe with claim lists |
+| W04 Setup and launch | `tests/w04-setup-launch.spec.ts` | `@chain` | Two tribes through artwork, founders and launch; one takes the other's link first |
+| W05 Launch drive | `tests/w05-launch-drive.spec.ts` | `@chain` | Claims with a proof file, `launch_when_ready`, a refund, `release_slug` |
+
+Every tribe they make is named `E2E W03 …` with a slug starting `e2e-w03`, plus a run tag, because a
+launched link is claimed for good. The tribes' default image and renderer point at dev.tribes.build
+(BUG-W03-1), so they render there like any other tribe.
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts tests/w04-setup-launch.spec.ts --project=desktop-dark-chain
+```
+
+The `@matrix` form cases need no wallet funds and run at all six projects:
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 E2E_SKIP_PREFLIGHT=1 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts --grep @matrix
+```
+
+To overlap a matrix run with a chain run, start the walkthrough server once and leave it up; both runs
+reuse it (Playwright's own server stops when its run ends):
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e serve:app
+```
+
+Not covered: uploading artwork or a tribe image (uploads are off in the walkthrough build, so W04 checks
+a folder in the browser, sees the upload refused, and uses the starter collection); the contracts step
+and the token-admin and payment-asset blockers (they need a withdrawn release or a changed module,
+which only the platform operator or a vote can make).
+
+### W05 fixtures
+
+Opening a launch drive in the app publishes its claim list to IPFS, which the walkthrough build can't
+do. A script opens the drives instead, through the same Manager calls:
+
+```bash
+E2E_TIMELINE=w03 node apps/e2e/scripts/w05-drive-fixtures.mjs both
+```
+
+For each of `ready` and `fail` it writes `configs/e2e-walk-<slug>-dao.json`, runs
+`scripts/deploy-dao.mjs create_dao` and `admin_checklist` as `e2e-w03-founder` (artifact
+`deploys/dev-testnet-dao-<nonce>.json`, nonces from 301 up), then `manager.open_assurance` with a list
+of member-a and member-b (one token each at 1 XLM, two people needed). The ready drive closes in a
+day; the fail drive after `E2E_FAIL_WINDOW_S` (600s by default). The ids, deadlines and the members'
+proofs go to `apps/e2e/fixtures/w05-drives.json`; members claim with those proofs, because the list
+file itself is not on IPFS.
+
+A drive is one-shot: run the script again (`ready`, `fail` or `both`) before each W05 run. Run the
+fail drive's script just before the spec, since the spec claims first and then waits out the deadline.
+For a full run of W03 to W05 in one go, give the fail drive time for W03 and W04 to finish first
+(about 15 minutes):
+
+```bash
+E2E_TIMELINE=w03 E2E_FAIL_WINDOW_S=1500 node apps/e2e/scripts/w05-drive-fixtures.mjs both
+```
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts tests/w04-setup-launch.spec.ts tests/w05-launch-drive.spec.ts
+```
+
+Leave `--reporter` off: it replaces the config's reporters, so the run writes no `summary.json`,
+`results.json` or HTML report.
+
+`fixtures/w04-states.json` names a tribe a W03 run created and nobody set up; W04's `@matrix` tour
+reads its "nothing done yet" setup page. Any W03 auction tribe can replace it.
+
 ## Running walkthroughs in parallel
 
 Chain flows in one run go one at a time (the `*-chain` projects have one worker), because two
