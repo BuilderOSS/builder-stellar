@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as GovernorClient, GovernorError } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { BookOpen, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -42,7 +42,7 @@ import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-re
 import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { proposalIdToRouteId } from '@/lib/proposal-id';
+import { simulatedProposalId } from '@/lib/proposal-id';
 import {
   encodeProposalMetadata,
   PROPOSAL_DESCRIPTION_MAX_BYTES,
@@ -72,17 +72,21 @@ const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
-const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
+// A suggested title can hold an address; let it wrap anywhere so it can't widen the page on phones (BUG-W02-7).
+const suggestion = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '2',
+  minW: '0',
+  '& > *': { minW: '0', overflowWrap: 'anywhere' }
+});
 const wideOnly = css({ display: { base: 'none', md: 'block' } });
 const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
-const referenceTrigger = css({
-  display: { base: 'inline-flex', lg: 'none' },
-  position: 'fixed',
-  zIndex: 'bar',
-  right: '4',
-  bottom: 'calc(token(sizes.tabbar) + env(safe-area-inset-bottom) + 16px)',
-  boxShadow: 'float'
-});
+// Below lg the reference rail opens as a sheet. On the review step its trigger sits in the action
+// row: a floating one covered Submit proposal at tablet width (BUG-W07-3).
+const reviewEnd = css({ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '2' });
+const referenceInline = css({ lg: { display: 'none' } });
 
 export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
@@ -245,7 +249,8 @@ export default function ProposalCreatePage() {
         proposer: session.address
       });
 
-      const proposalId = assembled.result ? proposalIdToRouteId(assembled.result) : '';
+      // A proposal the Governor would refuse (already exists, too few votes) fails here, before signing.
+      const proposalId = simulatedProposalId(assembled.result, GovernorError);
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
@@ -557,18 +562,30 @@ export default function ProposalCreatePage() {
                       <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
                         Back
                       </Button>
-                      <Button
-                        onClick={handleOpenConfirmDialog}
-                        disabled={
-                          proposalCreationLocked ||
-                          hasBlockingDraftFindings ||
-                          Boolean(actionCountError) ||
-                          !metadataValidation.valid
-                        }
-                        loading={transactionBusy}
-                      >
-                        {transactionBusy ? 'Submitting' : 'Submit proposal'}
-                      </Button>
+                      <div className={reviewEnd}>
+                        <Button
+                          variant="secondary"
+                          className={referenceInline}
+                          onClick={() => setContextRailOpen(true)}
+                          ref={contextTriggerRef}
+                          aria-haspopup="dialog"
+                        >
+                          <BookOpen aria-hidden="true" />
+                          Reference
+                        </Button>
+                        <Button
+                          onClick={handleOpenConfirmDialog}
+                          disabled={
+                            proposalCreationLocked ||
+                            hasBlockingDraftFindings ||
+                            Boolean(actionCountError) ||
+                            !metadataValidation.valid
+                          }
+                          loading={transactionBusy}
+                        >
+                          {transactionBusy ? 'Submitting' : 'Submit proposal'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -584,18 +601,6 @@ export default function ProposalCreatePage() {
           mobileTriggerRef={contextTriggerRef}
         />
       </div>
-      {step === 1 ? null : (
-        <Button
-          variant="secondary"
-          className={referenceTrigger}
-          onClick={() => setContextRailOpen(true)}
-          ref={contextTriggerRef}
-          aria-haspopup="dialog"
-        >
-          <BookOpen aria-hidden="true" />
-          Reference
-        </Button>
-      )}
 
       <ProposalActionConfirmDialog
         open={confirmDialogOpen}

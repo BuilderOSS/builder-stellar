@@ -1,0 +1,66 @@
+{
+  "$comment": "Fixture tribe for walkthrough W06 (auction), on the dev Manager. Deployed and launched by e2e-w06-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md). Founders: e2e-w06-founder x3, e2e-w06-operator x1 (the operator holds a vote so it is never the only voter). The auction runs at the 300s minimum with a 1 XLM reserve in native XLM (SAC); e2e-w06-member-a and -member-b bid.",
+  "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "nonce": 6,
+  "launchAdmin": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "slug": "e2e-w06",
+  "token": {
+    "name": "E2E Auction",
+    "symbol": "E2EA"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for auctions (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "10000000",
+    "timeBuffer": 60,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+      "amount": 3
+    },
+    {
+      "address": "GC3SBLZNEL7KYVJL7VV6D7IWEJQGT7U3K2SWXCUO7F66DCHVBAODPUBW",
+      "amount": 1
+    }
+  ],
+  "launch": {
+    "launchAuction": true
+  }
+}

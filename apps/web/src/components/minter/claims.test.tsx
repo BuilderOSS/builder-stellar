@@ -8,6 +8,7 @@ import type { ClaimListView, ClaimState } from '@/lib/minter/types';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const state = vi.hoisted(() => ({
   claims: undefined as unknown,
+  history: undefined as unknown,
   config: {} as Record<string, unknown>,
   canManage: false
 }));
@@ -31,7 +32,7 @@ vi.mock('@/stores/auth-session-store', () => ({
 vi.mock('@/lib/minter/hooks', () => ({
   claimFetch: vi.fn(),
   useCurrentClaims: () => ({ data: state.claims, isLoading: false, error: undefined, mutate: vi.fn() }),
-  useClaimHistory: () => ({ data: undefined, isLoading: false, error: undefined, mutate: vi.fn() })
+  useClaimHistory: () => ({ data: state.history, isLoading: false, error: undefined, mutate: vi.fn() })
 }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
@@ -135,5 +136,32 @@ describe('Claims, the way to manage lists', () => {
 
   it('always offers the member view from the manage view', () => {
     expect(render(true)).toContain('See the member view');
+  });
+});
+
+describe('Past claims', () => {
+  beforeEach(() => {
+    state.claims = claimsState([]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, rpcUrl: 'https://rpc.test' };
+  });
+  afterAll(() => {
+    state.history = undefined;
+  });
+
+  // BUG-W06-3: a one-token claim read "1 tokens from Claim list 1".
+  it('counts one token in the singular', () => {
+    const row = { list_id: 0, recipient: null, transaction_hash: null, paid: null, escrowed: false };
+    state.history = {
+      total: 2,
+      hasMore: false,
+      items: [
+        { ...row, claim_id: 'a', amount: '1' },
+        { ...row, claim_id: 'b', amount: '3' }
+      ]
+    };
+    const html = render();
+    expect(html).toContain('1 token from Claim list 1');
+    expect(html).toContain('3 tokens from Claim list 1');
+    expect(html).not.toContain('1 tokens');
   });
 });

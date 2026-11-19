@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { knownAssetCode } from '@/lib/assets-config';
 import { artworkAdditionTitle, mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { formatDuration } from '@/lib/duration';
@@ -259,7 +260,9 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   // "Change how much time a late bid adds to 5 minutes" reads two ways.
   if (action.type === 'set-auction-time-buffer') return `Make a late bid add ${seconds(action.value || action.amount)}`;
   if (action.type === 'set-auction-payment-token' || action.type === 'set-marketplace-payment-token') {
-    return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
+    // BUG-W09-1: "to USDC", not the asset's contract id, when the asset is a known one.
+    const asset = action.paymentToken || action.recipient;
+    return `${getProposalActionLabel(action.type)} to ${knownAssetCode(asset) ?? asset}`;
   }
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;

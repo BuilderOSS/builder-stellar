@@ -195,6 +195,9 @@ function highRiskMessage(action: ProposalQueuedAction) {
     return 'Locks memberships: members can no longer sell their tokens, only give them back to the tribe or ask for a vote.';
   if (action.type === 'set-dao-recovery' && action.enabled === true)
     return 'Lets a vote move any member’s token without their signature.';
+  // BUG-W02-2: a payout read "can change who controls the tribe, how the treasury works, or token balances".
+  if (action.type === 'transfer-sac-token')
+    return 'Sends funds out of the treasury. Check the recipient and the amount: once the proposal runs, the payment cannot be undone.';
   if (action.type === 'dao-transfer') return 'Moves a member’s token and its votes without the member’s signature.';
   if (action.type === 'create-module' || action.type === 'register-module')
     return 'Adds a contract that can mint memberships within its allowance and hold members’ tokens.';
@@ -241,6 +244,19 @@ const isTreasuryCall = (action: ProposalQueuedAction) =>
   ((action.type === 'upgrade-dao-module' || action.type === 'migrate-dao-module') && action.module === 'treasury');
 
 /** The membership switches and the indexed setting each one changes. */
+/** A membership switch's value just before the next step: the last earlier step that set it, else live. */
+function switchValueBefore(
+  type: ProposalQueuedAction['type'],
+  existing: ProposalQueuedAction[],
+  state?: ProposalDraftState
+): boolean | undefined {
+  for (let index = existing.length - 1; index >= 0; index -= 1)
+    if (existing[index].type === type && typeof existing[index].enabled === 'boolean')
+      return existing[index].enabled as boolean;
+  const setting = SWITCH_SETTINGS[type];
+  return setting ? state?.tokenSettings?.[setting] : undefined;
+}
+
 const SWITCH_SETTINGS: Partial<
   Record<ProposalQueuedAction['type'], keyof NonNullable<ProposalDraftState['tokenSettings']>>
 > = {
@@ -342,9 +358,14 @@ function prerequisiteFindings(
       );
   }
 
-  // A membership switch set to the value it already has reverts (SettingUnchanged, 7217).
+  // A membership switch set to the value it already has reverts (SettingUnchanged, 7217). "Already"
+  // means at this point in the draft: an earlier step may have changed it (BUG-W09-4).
   const setting = SWITCH_SETTINGS[action.type];
-  if (setting && typeof action.enabled === 'boolean' && state?.tokenSettings?.[setting] === action.enabled)
+  if (
+    setting &&
+    typeof action.enabled === 'boolean' &&
+    switchValueBefore(action.type, existing, state) === action.enabled
+  )
     order(
       'warning',
       action.enabled
@@ -468,6 +489,16 @@ export function analyzeProposalAction(
     }
 
     if (candidateIdentity.resourceKey !== identity.resourceKey) return;
+    // A switch turned on for the steps between and off again (recovery on, recover, recovery off) is
+    // a plan, not a clash. Back to back, the pair does nothing, so that still is one (BUG-W09-4).
+    if (
+      SWITCH_SETTINGS[action.type] &&
+      candidate.type === action.type &&
+      candidate.enabled !== action.enabled &&
+      index < existing.length - 1 &&
+      !existing.slice(index + 1).some((later) => later.type === action.type)
+    )
+      return;
     findings.push({
       severity: 'error',
       kind: 'conflict',

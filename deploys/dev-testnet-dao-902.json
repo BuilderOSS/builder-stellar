@@ -1,0 +1,124 @@
+{
+  "status": "checklist_complete",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "nonce": 902,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CA3AN2T5L5KTORIH5LE6C7X7J4YFJ2FEZDXPOIFSKDFD5X5ODDXJMHRS",
+    "metadata": "CC2GK3RJGIJVRG4UKK7JRXRDNAURGTUX5H64PFJJGKTX7NUQRGBDAYQH",
+    "governor": "CA3M6UZTNNFSUVNJBCD5GY3BQ5CYYAZ5ON4MSMBZXJHN7M5XH3W3RSB5",
+    "treasury": "CDKVZOASHEVO6ZWA22RNPO2RODHARPIYDEHQ3GXB4CSUV2GS4YUAHWAW",
+    "auction": "CDXUKYXBBZRPNVVA7BIUVHTEHLJXVKWITWJCQOJKEMOY7RVJZ5KTL4X6",
+    "marketplace": "CDJL4AANCASXC3BAOTV7NHP7Y4I4G4AHPVFPSQMY3MIQILCEUPR54WZM",
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W15, kept in its setup window: created and set up by e2e-w09-founder (create_dao and admin_checklist) but never launched, so Manage shows the Setup authority copy. Do not run launch_dao on it.",
+    "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+    "nonce": 902,
+    "launchAdmin": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+    "slug": "e2e-w09-3",
+    "token": {
+      "name": "E2E Setup",
+      "symbol": "E2ES"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture in its setup window (W15, testnet). Never launched.",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "10000000",
+      "timeBuffer": 60,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+        "amount": 6
+      },
+      {
+        "address": "GCCPSUJCCJPBIRZCCTWZGMSUWEOMUSXLBYT25HGER3KIQHWNVTVY4CFI",
+        "amount": 2
+      }
+    ],
+    "launch": {
+      "launchAuction": true,
+      "launchMarketplace": true
+    }
+  },
+  "updatedAt": "2026-11-19T04:39:12.831Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "ab9986597a748c13de500d678f962abe0d1029e2718762842930feebf8a47586",
+      "ledger": 5807898
+    },
+    "artworkBatches": [
+      {
+        "txHash": "cba453e23cedb888e0cc564cafc832d579f019a84826f89583c8dcd65bc4ff00",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807900
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "46e603a01f160fb373ecc148af884e2f388beb3587ae738cd5a31d31e7a1cd57",
+        "batch": 1,
+        "tokens": 8,
+        "ledger": 5807902
+      }
+    ],
+    "regenerated": []
+  },
+  "deploymentLedger": 5807898
+}

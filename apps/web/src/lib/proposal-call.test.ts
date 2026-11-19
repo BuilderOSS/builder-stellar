@@ -325,3 +325,20 @@ describe('admin draft wording', () => {
     ).toBe(`Send 12.5 XLM to ${recipient}`);
   });
 });
+
+describe('payment asset summaries (BUG-W09-1)', () => {
+  it('names a known asset by its code and leaves an unknown one as its contract id', () => {
+    const usdc = 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
+    const other = StrKey.encodeContract(new Uint8Array(32).fill(7));
+    const summary = (paymentToken: string) =>
+      getProposalActionSummary({
+        id: 'a',
+        type: 'set-marketplace-payment-token',
+        recipient: '',
+        amount: '',
+        paymentToken
+      } as never);
+    expect(summary(usdc)).toBe('Change the market payment asset to USDC');
+    expect(summary(other)).toBe(`Change the market payment asset to ${other}`);
+  });
+});

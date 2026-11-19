@@ -1,0 +1,128 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "nonce": 901,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CDN2VZ75LBFV4W4VLI42YAQKC5ZCJZP4PEGRD4BALRERQ6PAO5U4KMT5",
+    "metadata": "CCI7D5PA3SH47K7SBE6L6KSNCTXL5HTBS2MFOBY3ZGQ5V7CPLAVB5CJK",
+    "governor": "CAJIWWNMVN4MENVLN5ZWLMVWXDYNA6UBLIRVR2KICMTA2ENWYVMM7L77",
+    "treasury": "CDEEAYTUMMI4VDLHBRT67INMU4M5FCGDEVDPYVYZDYT3P4POAJEQNZED",
+    "auction": "CAEPBVH3DGHRTT2RTZBHTWUFIGEBU3QSLZTK7CREMJ5RTYF3TUSSZGWI",
+    "marketplace": "CBUONCERW5FJROEIJYHINLQG6HRDDSG63MHGYX4DNMAXSEQTGU6IRPQD",
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W15 (Manage after launch), on the dev Manager. Same shape as configs/e2e-walk-w09-dao.json: deployed and launched by e2e-w09-founder (x6, passes a proposal alone), e2e-w09-member-a x2; auction and marketplace in native XLM. Each W15 run changes its profile, token name, voting rules, auction and market settings by proposal.",
+    "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+    "nonce": 901,
+    "launchAdmin": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+    "slug": "e2e-w09-2",
+    "token": {
+      "name": "E2E Manage",
+      "symbol": "E2EG"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for Manage after launch (W15, testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "10000000",
+      "timeBuffer": 60,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+        "amount": 6
+      },
+      {
+        "address": "GCCPSUJCCJPBIRZCCTWZGMSUWEOMUSXLBYT25HGER3KIQHWNVTVY4CFI",
+        "amount": 2
+      }
+    ],
+    "launch": {
+      "launchAuction": true,
+      "launchMarketplace": true
+    }
+  },
+  "updatedAt": "2026-11-19T04:38:41.089Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "11d0ec00e39027a960c3abfb21c9191c85113416145c2d8382842a733593de7a",
+      "ledger": 5807890
+    },
+    "artworkBatches": [
+      {
+        "txHash": "04340a2b95250ac23b49d33472e50321916e256e2a0a06a2e9c4d1a1e097ca0f",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807892
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "8d157701e706afc420d815c3651bbf77ee19f787726631160a3b0199e8b19e74",
+        "batch": 1,
+        "tokens": 8,
+        "ledger": 5807894
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "b270c0c44cc035c98a70007b78d0780e4c3508a37ed6f4702c9575e96dc4b645",
+      "ledger": 5807896
+    }
+  },
+  "deploymentLedger": 5807890
+}

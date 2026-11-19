@@ -18,7 +18,7 @@ vi.mock('@/lib/prisma', () => ({
   }
 }));
 
-import { getAssuranceDeadlineFromDatabase, resolveDaoId } from './dao-db';
+import { getAssuranceDeadlineFromDatabase, isDaoNotFound, resolveDaoId } from './dao-db';
 
 describe('resolveDaoId', () => {
   beforeEach(() => {
@@ -49,6 +49,15 @@ describe('resolveDaoId', () => {
     await expect(resolveDaoId('night-walkers')).resolves.toBe('CPENDING');
     db.requested = [{ daoId: 'C1' }, { daoId: 'C2' }];
     await expect(resolveDaoId('night-walkers')).rejects.toThrow(/DAO not found/);
+  });
+});
+
+describe('isDaoNotFound', () => {
+  it('tells an unknown tribe from a read model that is down (BUG-W02-1)', async () => {
+    const missing = await resolveDaoId('no-such-tribe').catch((error: unknown) => error);
+    expect(isDaoNotFound(missing)).toBe(true);
+    expect(isDaoNotFound(new Error('Connection terminated unexpectedly'))).toBe(false);
+    expect(isDaoNotFound('DAO not found: x')).toBe(false);
   });
 });
 

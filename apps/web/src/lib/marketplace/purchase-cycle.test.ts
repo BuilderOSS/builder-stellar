@@ -56,6 +56,17 @@ describe('secondary listing cycle proof (real-XDR state and events)', () => {
       })
     );
   });
+  it('accepts creation events from an RPC server that omits inSuccessfulContractCall (BUG-011)', async () => {
+    const rpcServer = server();
+    const { inSuccessfulContractCall: _omitted, ...event } = creationEvent(listing);
+    rpcServer.getEvents.mockResolvedValue({ ...creationHistory(listing), events: [event] });
+    await expect(check(purchaseFixture(listing).simulation, rpcServer)).resolves.toBeUndefined();
+    rpcServer.getEvents.mockResolvedValue({
+      ...creationHistory(listing),
+      events: [{ ...event, inSuccessfulContractCall: false }]
+    });
+    await expect(check(purchaseFixture(listing).simulation, rpcServer)).rejects.toThrow('reviewed listing');
+  });
   it('rejects an identical-term replacement created in a different ledger', async () => {
     const original = purchaseFixture(listing).simulation;
     await expect(

@@ -1,0 +1,115 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+  "nonce": 2,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CD42UFRCNKKZESSEX3CGVX5E4GPONTEIC4JMZYJTTSGDZR26MBK6DZIW",
+    "metadata": "CBTEN7SLXTYC66VZUNH4N2BCRTJS7Z2DKM4Z6OOBKXA3BYRJAUCB5ANI",
+    "governor": "CAWI3D4VBNZE5Q2FPDKZCLIAJ5IWNOFBBQEKG57H3PK4YIZXNQY3QQ63",
+    "treasury": "CBI2TUYOD3IVOPVSRDLUD7RECMBAORD2Q2VWDLWT73KLM2NWYQ4D4OX4",
+    "auction": null,
+    "marketplace": null,
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthroughs W02 (discover), W13 (treasury) and W17 (renewal), on the dev Manager. Deployed and launched by e2e-w02-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W02 fixture\"). Founders: e2e-w02-founder x2, e2e-w02-member-a x1. No auction or marketplace: governance and the treasury only.",
+    "deployer": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+    "nonce": 2,
+    "launchAdmin": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+    "slug": "e2e-w02",
+    "token": {
+      "name": "E2E Discover",
+      "symbol": "E2ED"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for discovery, the treasury and storage renewal (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+        "amount": 2
+      },
+      {
+        "address": "GCXGGFPRL4HRYSE7FZAYSMVQEJALZNJQ3RF4RZWJVRRHTCNJEDAGIVPQ",
+        "amount": 1
+      }
+    ],
+    "launch": {}
+  },
+  "updatedAt": "2026-11-19T04:34:36.421Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "2bfbacce8f5d2d31377863e8a1f1dbc993e97e1857b25df21b72e3f823d57776",
+      "ledger": 5807840
+    },
+    "artworkBatches": [
+      {
+        "txHash": "160871f014f1842f3ecc2a3d7115c4a0a0e4e2cbbc552f19489c1aed4491fdbe",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807843
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "0e90d15c4f72b620b46c5bf8013fe924ff64649e2ac5edb6de7f56bf3faaafbc",
+        "batch": 1,
+        "tokens": 3,
+        "ledger": 5807845
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "c16f2a9f4250bb0114b563fdfddcefaf58e315765a7da2ce15efe1e9dfa983d2",
+      "ledger": 5807847
+    }
+  },
+  "deploymentLedger": 5807840
+}

@@ -30,7 +30,7 @@ import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/m
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { largestBuyerShare } from '@/lib/marketplace/pool-share';
 import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
-import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
+import { ACTION_CATALOG, actionAvailability, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
@@ -40,6 +40,11 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
+/** "XLM" for a known asset; undefined for one we can't name, so its contract id shows instead. */
+function knownAssetCode(network: Parameters<typeof marketplaceAssetLabel>[0], id: string) {
+  const label = marketplaceAssetLabel(network, id);
+  return label === 'Unknown asset' ? undefined : label;
+}
 const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
@@ -156,11 +161,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <div>
           <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="ghost" size="sm">
             <ChevronLeft aria-hidden="true" />
-            Tribe market
+            Market
           </ButtonLink>
         </div>
         <section className={styles.hero}>
-          <h1>Manage the marketplace</h1>
+          <h1>Market settings</h1>
           <p>
             Once the tribe has launched, members change the market by vote. Each button here adds an action to your
             proposal draft. Nothing is signed on this page.
@@ -202,8 +207,8 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             </p>
             {data?.config?.paused ? (
               <p className={styles.notice}>
-                The marketplace is paused. Add a resume-marketplace action before this one in the same proposal, or wait
-                until a resume proposal executes.
+                The market is paused. Add a Reopen the market action before this one in the same proposal, or wait until
+                a proposal that reopens the market runs.
               </p>
             ) : null}
             <div className={styles.formGrid}>
@@ -359,7 +364,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}
-          values={{ marketplace: data?.config ?? undefined }}
+          values={{
+            marketplace: data?.config
+              ? { ...data.config, assetCode: knownAssetCode(data.network, data.config.paymentAsset) }
+              : undefined
+          }}
           onQueue={(handler, draft, replaces) => {
             try {
               if (!enabled || !data) throw new Error('Connect your wallet and wait for the market to load.');
@@ -400,7 +409,10 @@ function MarketplaceSettings({
   onQueue: (handler: ActionHandler, draft: unknown, replaces?: string[]) => void;
 }) {
   const { daoConfig, routeId } = useDaoContext();
-  const handlers = marketplaceSettingHandlers(daoConfig);
+  // Pause and Reopen show only the one that applies to the market's live state, as in the composer.
+  const handlers = marketplaceSettingHandlers(daoConfig).filter(
+    (handler) => actionAvailability(handler.type, daoConfig, values).available
+  );
   return (
     <section className={styles.panel}>
       <div className={styles.stack}>

@@ -361,7 +361,6 @@ export function MembershipSettings() {
             busy={busy}
             message={message?.where === 'modules' ? message.text : null}
             propose={proposeAction}
-            onMessage={(text) => setMessage({ where: 'modules', text })}
             onChanged={() => void state.mutate()}
             onChangeAllowance={changeAllowance}
             onProposeOpen={proposeOpen}

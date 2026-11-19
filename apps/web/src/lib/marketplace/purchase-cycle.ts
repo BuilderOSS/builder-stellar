@@ -114,7 +114,9 @@ export async function assertSecondaryPurchaseCycle(
       reject();
     const creations = history.events.filter(
       (event) =>
-        event.inSuccessfulContractCall &&
+        // Newer RPC servers return only events from successful calls and omit this field
+        // (BUG-011); an older server still marks a failed call's events false.
+        event.inSuccessfulContractCall !== false &&
         event.type === 'contract' &&
         event.ledger === Number(creation.createdLedger) &&
         event.contractId?.contractId() === listing.contractId &&
