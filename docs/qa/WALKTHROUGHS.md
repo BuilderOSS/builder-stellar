@@ -288,6 +288,65 @@ wrong code. That also means dev.tribes.build is behind `dev`: upgrade the dev de
 pnpm --dir apps/e2e preflight --require-manager
 ```
 
+## The W09 and W15 fixtures
+
+W09 (one proposal per action group, `tests/w09-proposal-actions.spec.ts`) and W15 (Manage after
+launch, `tests/w15-manage-after-launch.spec.ts`) run on timeline `w09`, port 4359, against three
+tribes on the dev Manager, all made by `e2e-w09-founder` with `scripts/deploy-dao.mjs`:
+
+| Slug | Name | Config | Artifact | State |
+|---|---|---|---|---|
+| `e2e-w09` | E2E Actions | `configs/e2e-walk-w09-dao.json` | `deploys/dev-testnet-dao-9.json` | Launched; auction and market in XLM; no claims module |
+| `e2e-w09-2` | E2E Manage | `configs/e2e-walk-w09-2-dao.json` | `deploys/dev-testnet-dao-901.json` | Launched; the same shape |
+| `e2e-w09-3` | E2E Setup | `configs/e2e-walk-w09-3-dao.json` | `deploys/dev-testnet-dao-902.json` | Set up, never launched (Setup copy) |
+
+The founder holds 6 of the 8 founder votes and member A 2; at the 10% quorum either passes a
+proposal alone, and all governance timings are the 300s minimums. W09 proposes as the founder and
+W15 as member A, so the two can run at the same time (two `playwright test` invocations on the same
+port share one server). W09 changes the first tribe's slug on every run (`e2e-w09` ↔ `e2e-w09-b`), so
+the specs open tribes by id. Round 1 turns the membership switches on and the market to USDC, round 2
+undoes whatever round 1 left on, and other values alternate between two, so every run starts from
+settings it can change.
+
+Recreate them (after the preflight made the `e2e-w09-*` keys; put the founder's address,
+`stellar keys address e2e-w09-founder`, in `deployer`, `launchAdmin` and the first founder):
+
+```bash
+export DEPLOY_IDENTITY=e2e-w09-founder
+for phase in create_dao admin_checklist launch_dao; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-w09-dao.json configs/testnet-dev-manager.json
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-w09-2-dao.json configs/testnet-dev-manager.json
+done
+for phase in create_dao admin_checklist; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-w09-3-dao.json configs/testnet-dev-manager.json
+done
+```
+
+Then give each launched treasury 50 XLM for the payment W09 makes:
+
+```bash
+stellar contract invoke --id CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --source-account e2e-w09-founder --network testnet -- transfer \
+  --from "$(stellar keys address e2e-w09-founder)" --to <treasury from the artifact> --amount 500000000
+```
+
+Run them:
+
+```bash
+E2E_TIMELINE=w09 E2E_APP_PORT=4359 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w09-*.spec.ts tests/w15-*.spec.ts
+```
+
+- Round 1 of W09 makes seven proposals and drives them through one shared timeline (about 20
+  minutes); round 2 closes the pool, turns the switches off, puts the market back on XLM and removes
+  the claims module round 1 added (about 20 more). W15 makes five proposals from the Manage pages
+  and drives them together (about 18 minutes).
+- Proposal ids are kept in `apps/e2e/.state/w09-w09.json` and `w09-w15.json`. After a failure,
+  `E2E_RESUME=1` picks the run up where it stopped instead of proposing again.
+- `E2E_COMPOSE_ONLY=1` composes and reviews every proposal without submitting: a quick check of the
+  forms after a UI change. The setup steps it runs first (a token given to the treasury, an approval,
+  a listing for the treasury to buy) are signed with `stellar keys` and reused by the next run.
+
 ## W02, W13 and W17: discover, treasury and renewal
 
 Run them on the `w02` timeline, in their own worktree:

@@ -44,7 +44,6 @@ function render(props: Partial<React.ComponentProps<typeof ModulesCard>> = {}) {
       busy={false}
       message={null}
       propose={vi.fn()}
-      onMessage={vi.fn()}
       onChanged={vi.fn()}
       onChangeAllowance={() => null}
       onProposeOpen={vi.fn()}

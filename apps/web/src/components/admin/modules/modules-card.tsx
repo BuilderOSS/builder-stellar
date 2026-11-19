@@ -86,7 +86,6 @@ export function ModulesCard({
   busy,
   message,
   propose,
-  onMessage,
   onChanged,
   onChangeAllowance,
   onProposeOpen
@@ -100,8 +99,7 @@ export function ModulesCard({
   frozen: boolean;
   busy: boolean;
   message: string | null;
-  propose: (request: ActionRequest) => ProposeResult;
-  onMessage: (text: string) => void;
+  propose: (request: ActionRequest, options?: { onAdded?: () => void }) => ProposeResult;
   onChanged: () => void;
   /** Returns a problem to show, or null once the change was signed or added to the draft. */
   onChangeAllowance: (module: ModuleRowData, direction: 'increase' | 'decrease', amount: string) => string | null;
@@ -247,7 +245,6 @@ export function ModulesCard({
         present={present}
         registered={modules.length}
         propose={propose}
-        onMessage={onMessage}
         onChanged={onChanged}
       />
       <RemoveModuleSheet
@@ -258,7 +255,6 @@ export function ModulesCard({
         address={address}
         module={removing && isModuleKind(removing.kind) ? { ...removing, kind: removing.kind } : null}
         propose={propose}
-        onMessage={onMessage}
       />
       <AllowanceSheet
         open={allowing !== null}
