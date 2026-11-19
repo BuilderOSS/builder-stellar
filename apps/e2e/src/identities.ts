@@ -13,6 +13,19 @@ import { Keypair } from '@stellar/stellar-sdk';
 export const E2E_IDENTITIES = ['e2e-founder', 'e2e-member-a', 'e2e-member-b', 'e2e-operator'] as const;
 export type E2EIdentityName = (typeof E2E_IDENTITIES)[number];
 
+/**
+ * Parallel walkthroughs (docs/qa/WALKTHROUGHS.md, "Running walkthroughs in parallel"): with
+ * E2E_TIMELINE=w07 every wallet role maps to its own stellar key, e2e-w07-founder and so on, so
+ * runs started at the same time never sign from one account. Specs keep using the role names.
+ */
+export function timelineKeyName(role: string, timeline = process.env.E2E_TIMELINE?.trim() ?? ''): string {
+  if (!timeline) return role;
+  if (!/^[a-z0-9]{1,12}$/.test(timeline))
+    throw new Error(`E2E_TIMELINE must be 1-12 lower-case letters or digits, not "${timeline}"`);
+  if (!(E2E_IDENTITIES as readonly string[]).includes(role)) return role;
+  return `e2e-${timeline}-${role.slice('e2e-'.length)}`;
+}
+
 /** Signs SEP-53 challenges on the app server (`STELLAR_WEB_AUTH_SECRET`). Not a wallet. */
 export const E2E_WEB_AUTH_IDENTITY = 'e2e-web-auth';
 

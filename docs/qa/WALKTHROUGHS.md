@@ -173,6 +173,22 @@ pnpm --dir apps/e2e typecheck
 pnpm --dir apps/web exec vitest run src/lib/e2e-wallet scripts
 ```
 
+## Running walkthroughs in parallel
+
+Chain flows in one run go one at a time (the `*-chain` projects have one worker), because two
+flows signing from one account at once collide on sequence numbers. To run several walkthroughs at
+the same time, start each run in its own worktree with its own timeline and port:
+
+```bash
+E2E_TIMELINE=w07 E2E_APP_PORT=4357 pnpm --dir apps/e2e test:e2e tests/w07-*.spec.ts
+```
+
+`E2E_TIMELINE` maps every wallet role (`e2e-founder`, `e2e-member-a`, `e2e-member-b`,
+`e2e-operator`) to that timeline's own key (`e2e-w07-founder`, ...). The preflight creates and
+funds them on first use. Specs keep using the role names. The app server's sign-in key stays
+shared: it only signs challenges, never transactions. Build the walkthrough app once per worktree
+with the same `E2E_APP_PORT`.
+
 ## The dev Manager
 
 Chain flows run against **the dev deployment**: the testnet Manager behind dev.tribes.build, its
