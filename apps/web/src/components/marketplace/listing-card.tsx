@@ -2,7 +2,7 @@
 
 import type { Route } from 'next';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button, ButtonLink } from '@/components/ui';
 import type { NetworkName } from '@/config/networks';
@@ -10,6 +10,7 @@ import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel, marketplaceDisplayAmount } from '@/lib/marketplace/asset-label';
 import { useMarketplaceReadiness } from '@/lib/marketplace/hooks';
+import { formatListingEnd, isPendingListing } from '@/lib/marketplace/sell';
 import type { MarketplaceAction, MarketplaceCommunity, MarketplaceListing } from '@/lib/marketplace/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -23,7 +24,8 @@ export function ListingCard({
   network,
   trading = false,
   initiallyExpanded = false,
-  purchasesEnabled = true
+  purchasesEnabled = true,
+  onCancelled
 }: {
   listing: MarketplaceListing;
   community: MarketplaceCommunity;
@@ -31,10 +33,13 @@ export function ListingCard({
   trading?: boolean;
   initiallyExpanded?: boolean;
   purchasesEnabled?: boolean;
+  /** The seller's cancel (or an ended listing's return) confirmed, with its hash. */
+  onCancelled?: (hash: string) => void;
 }) {
   const address = useAuthSessionStore((s) => s.address);
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [action, setAction] = useState<MarketplaceAction | null>(null);
+  const confirmedHash = useRef('');
   const readiness = useMarketplaceReadiness(
     listing.daoId,
     listing.paymentAsset,
@@ -42,8 +47,13 @@ export function ListingCard({
   );
   const asset = marketplaceAssetLabel(network, listing.paymentAsset);
   // A pool past its closing time stops selling at once, even before anyone closes it on chain.
-  const status =
-    listing.kind === 'pool' && listing.status === 'awaiting-expiry' ? 'ended' : listing.status.replaceAll('-', ' ');
+  const pending = isPendingListing(listing);
+  const mine = Boolean(address) && listing.seller === address;
+  const status = pending
+    ? 'updating'
+    : listing.status === 'awaiting-expiry'
+      ? 'ended'
+      : listing.status.replaceAll('-', ' ');
   let sellerProceeds: string | null = null;
   if (listing.kind === 'secondary') {
     try {
@@ -89,7 +99,11 @@ export function ListingCard({
           {(pool.size - pool.sold).toLocaleString()} <span>available</span>
         </p>
       ) : null}
-      {trading ? (
+      {pending ? (
+        <p className={styles.muted} role="status">
+          Your listing is confirmed. The market can take a few seconds to show its details.
+        </p>
+      ) : trading ? (
         <Button variant="secondary" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide details' : 'Details'}
         </Button>
@@ -107,8 +121,8 @@ export function ListingCard({
       {expanded ? (
         <div className={styles.stack}>
           <dl className={styles.details}>
-            <dt>{pool ? 'Closes' : 'Expires'}</dt>
-            <dd>{new Date(Number(listing.expiresAt) * 1000).toLocaleString()}</dd>
+            <dt>{pool ? 'Closes' : 'Ends'}</dt>
+            <dd>{formatListingEnd(listing.expiresAt)}</dd>
             <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
             <dt>Created</dt>
@@ -123,7 +137,7 @@ export function ListingCard({
               <>
                 <dt>Seller</dt>
                 <dd className={styles.address}>{listing.seller}</dd>
-                <dt>Seller proceeds</dt>
+                <dt>Seller receives after the resale fee</dt>
                 <dd>
                   {sellerProceeds === null
                     ? 'This price is too large for the market to work out its fee.'
@@ -203,7 +217,7 @@ export function ListingCard({
                 >
                   Buy for {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} {asset}
                 </Button>
-                {listing.kind === 'secondary' && listing.seller === address ? (
+                {listing.kind === 'secondary' && mine ? (
                   <Button variant="danger" onClick={() => trade('cancel')}>
                     Cancel listing
                   </Button>
@@ -217,12 +231,19 @@ export function ListingCard({
             <p>This pool has ended and no longer sells. Unsold tokens go back to the treasury once it is swept.</p>
           ) : null}
           {listing.status === 'awaiting-expiry' && !pool ? (
-            <>
-              <p>This listing has ended but hasn't been cleared. Clearing returns the token to its seller.</p>
-              <Button variant="secondary" onClick={() => trade('expire')}>
-                Clear ended listing
-              </Button>
-            </>
+            mine ? (
+              <>
+                <p>Your listing ended without a sale. The market still holds your token until you return it.</p>
+                <Button onClick={() => trade('expire')}>Return my token</Button>
+              </>
+            ) : (
+              <>
+                <p>This listing has ended. Anyone can close it, and the token goes back to its seller.</p>
+                <Button variant="secondary" onClick={() => trade('expire')}>
+                  Return the token to its seller
+                </Button>
+              </>
+            )
           ) : null}
           {trading && !pool ? <ListingComments listing={listing} /> : null}
           <Link href={`/dao/${community.daoId}/marketplace?status=all`}>All listings and sales</Link>
@@ -233,7 +254,16 @@ export function ListingCard({
           key={JSON.stringify(action)}
           daoId={listing.daoId}
           action={action}
-          onClose={() => setAction(null)}
+          onClose={() => {
+            setAction(null);
+            // Hidden only once its review closes: hiding the card on confirmation would take the
+            // review, with its confirmation and Done, away with it (BUG-012).
+            if (confirmedHash.current) onCancelled?.(confirmedHash.current);
+            confirmedHash.current = '';
+          }}
+          onConfirmed={(hash) => {
+            if (action.action === 'cancel' || action.action === 'expire') confirmedHash.current = hash;
+          }}
         />
       ) : null}
     </article>

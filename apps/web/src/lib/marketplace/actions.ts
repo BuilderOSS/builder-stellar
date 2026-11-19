@@ -9,13 +9,20 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 import { throwIfRestoreNeeded } from '@/lib/restore-required';
 
-import { formatMarketplaceAmount, marketplaceFee, marketplaceId, parseMarketplaceAmount } from './amount';
+import {
+  formatFeePercent,
+  formatMarketplaceAmount,
+  marketplaceFee,
+  marketplaceId,
+  parseMarketplaceAmount
+} from './amount';
+import { APPROVAL_EXPIRED } from './errors';
 import { assertMarketplacePurchaseAuthorization, STALE_PURCHASE } from './purchase-authorization';
 import { assertSecondaryPurchaseCycle } from './purchase-cycle';
 import { MarketplaceError, marketplaceScope, matchesPoolSnapshot, matchesSnapshot } from './query';
 import { marketplaceAsset, marketplaceHorizon, marketplaceReadiness } from './readiness';
 import { marketplaceClient, marketplaceDao, marketplaceListing } from './service';
-import type { MarketplaceAction, MarketplaceListing, MarketplacePrepared } from './types';
+import type { MarketplaceAction, MarketplaceApproval, MarketplaceListing, MarketplacePrepared } from './types';
 
 export const marketplaceActionSchema = z.union([
   z
@@ -36,7 +43,7 @@ export const marketplaceActionSchema = z.union([
     .strict(),
   z
     .object({
-      action: z.enum(['approve', 'list']),
+      action: z.literal('list'),
       tokenId: z.string().max(10),
       price: z.string().max(60),
       expiresAt: z.string().max(20),
@@ -44,7 +51,7 @@ export const marketplaceActionSchema = z.union([
       feeBps: z.number().int().min(0).max(2_500)
     })
     .strict(),
-  z.object({ action: z.literal('revoke'), tokenId: z.string().max(10) }).strict(),
+  z.object({ action: z.enum(['approve', 'revoke']), tokenId: z.string().max(10) }).strict(),
   z.object({ action: z.literal('trustline'), paymentAsset: z.string().length(56) }).strict(),
   z
     .object({
@@ -91,6 +98,57 @@ export function marketplaceTransactionXdr<T>(transaction: AssembledTransaction<T
   return transaction.toXdr();
 }
 
+/** About 1 hour of ledgers (one every 5 seconds): time to review and sign the List step. */
+export const APPROVAL_LEDGERS = 720;
+
+type TokenReader = Pick<TokenClient, 'get_approved' | 'is_approved_for_all'>;
+
+/** Whether `market` may move `tokenId` for `owner` now: a live single-token or all-token approval. */
+export async function marketplaceMayMove(token: TokenReader, owner: string, market: string, tokenId: number) {
+  const [single, all] = await Promise.all([
+    token.get_approved({ token_id: tokenId }),
+    token.is_approved_for_all({ owner, operator: market })
+  ]);
+  return single.result === market || all.result === true;
+}
+
+function tokenClient(contractId: string, publicKey: string) {
+  const network = getDeploymentConfig();
+  return new TokenClient({
+    contractId,
+    rpcUrl: network.rpcUrl,
+    networkPassphrase: network.networkPassphrase,
+    publicKey,
+    allowHttp: network.name === 'local'
+  });
+}
+
+/** Read on chain before the List step: is the market still allowed to move this token? */
+export async function marketplaceApproval(
+  daoId: string,
+  actor: { address: string; network: string },
+  rawTokenId: string
+): Promise<MarketplaceApproval> {
+  const network = getDeploymentConfig();
+  if (actor.network !== network.name) throw new MarketplaceError('Authenticate on this deployment network.', 401);
+  let tokenId: number;
+  try {
+    tokenId = Number(marketplaceId(rawTokenId, 'secondary'));
+  } catch {
+    throw new MarketplaceError('Invalid token identifier.', 400);
+  }
+  const community = await marketplaceDao(daoId);
+  if (!community.marketplaceContract) throw new MarketplaceError('This tribe has no marketplace.', 404);
+  const token = tokenClient(community.tokenContract, actor.address);
+  return {
+    deploymentId: DEPLOYMENT_ID,
+    daoId,
+    address: actor.address,
+    tokenId: String(tokenId),
+    approved: await marketplaceMayMove(token, actor.address, community.marketplaceContract, tokenId)
+  };
+}
+
 export async function prepareMarketplaceAction(
   daoId: string,
   actor: { address: string; network: string },
@@ -116,13 +174,7 @@ export async function prepareMarketplaceAction(
   ) {
     throw new MarketplaceError('Marketplace wiring does not match this tribe.', 503);
   }
-  const token = new TokenClient({
-    contractId: config.token,
-    rpcUrl: network.rpcUrl,
-    networkPassphrase: network.networkPassphrase,
-    publicKey: actor.address,
-    allowHttp: network.name === 'local'
-  });
+  const token = tokenClient(config.token, actor.address);
   // SDK MethodOptions.restore defaults to false. No server signer or automatic submit is installed.
   const options = { timeoutInSeconds: 180 };
   let xdr: string;
@@ -163,64 +215,65 @@ export async function prepareMarketplaceAction(
           options
         )
       );
-      summary = `Revoke the current single-token approval for token #${tokenId} immediately (expiration ledger 0). No token is transferred.`;
+      summary = `Remove the market's permission to move token #${tokenId}, starting now. Your token stays with you.`;
+    } else if (action.action === 'approve') {
+      // The Allow step checks only the token: the price and end are checked when you list.
+      if (!launch?.isLive || config.paused)
+        throw new MarketplaceError('New listings require a launched, unpaused marketplace.');
+      const latest = await server.getLatestLedger();
+      xdr = marketplaceTransactionXdr(
+        await token.approve(
+          {
+            owner: actor.address,
+            spender: scope.contractId,
+            token_id: tokenId,
+            expiration_ledger: latest.sequence + APPROVAL_LEDGERS
+          },
+          options
+        )
+      );
+      summary = `Allow the market to move token #${tokenId} into its care for about 1 hour. This doesn't list it or move it yet. Your token only moves when you sign the next step, List for sale.`;
     } else {
       if (!launch?.isLive || config.paused)
         throw new MarketplaceError('New listings require a launched, unpaused marketplace.');
       if (config.payment_asset !== action.paymentAsset || config.default_secondary_fee_bps !== action.feeBps) {
         throw new MarketplaceError('The payment asset or fee changed. Refresh and review the new terms.', 409);
       }
-      if (!marketplaceAsset(network.name, action.paymentAsset))
-        throw new MarketplaceError('Only verified XLM and USDC SAC assets are supported.');
+      const asset = marketplaceAsset(network.name, action.paymentAsset);
+      if (!asset) throw new MarketplaceError('Only verified XLM and USDC SAC assets are supported.');
       const price = parseMarketplaceAmount(action.price);
       if (!/^\d{1,20}$/.test(action.expiresAt)) throw new MarketplaceError('Invalid expiry.');
       const expiry = BigInt(action.expiresAt);
-      const latest = await server.getLatestLedger();
       if (expiry <= BigInt(Math.floor(Date.now() / 1000)) || expiry > (1n << 64n) - 1n)
         throw new MarketplaceError('Choose a future expiry.');
       const readiness = await marketplaceReadiness(actor.address, network.name, paymentAsset);
       if (!readiness.trustline || !readiness.authorized) throw new MarketplaceError(readiness.issues.join(' '));
-      const sellerProceeds = price - marketplaceFee(price.toString(), action.feeBps);
-      if (
-        !marketplaceAsset(network.name, paymentAsset)?.isNative &&
-        (readiness.receivable === null || BigInt(readiness.receivable) < sellerProceeds)
-      ) {
+      const fee = marketplaceFee(price.toString(), action.feeBps);
+      const sellerProceeds = price - fee;
+      if (!asset.isNative && (readiness.receivable === null || BigInt(readiness.receivable) < sellerProceeds)) {
         throw new MarketplaceError(
           'Your USDC trustline has insufficient capacity to receive these sale proceeds. Increase its limit before listing.'
         );
       }
-      xdr =
-        action.action === 'approve'
-          ? marketplaceTransactionXdr(
-              await token.approve(
-                {
-                  owner: actor.address,
-                  spender: scope.contractId,
-                  token_id: tokenId,
-                  expiration_ledger: latest.sequence + 120
-                },
-                options
-              )
-            )
-          : marketplaceTransactionXdr(
-              await client.list(
-                {
-                  token_id: tokenId,
-                  seller: actor.address,
-                  price,
-                  expires_at: expiry,
-                  // The seller's reviewed terms: the contract rejects the listing
-                  // if governance changed the fee or asset before confirmation.
-                  max_fee_bps: action.feeBps,
-                  payment_asset: action.paymentAsset
-                },
-                options
-              )
-            );
-      summary =
-        action.action === 'approve'
-          ? `Approve only token #${tokenId} for the marketplace until ledger ${latest.sequence + 120}. This does not list or escrow the token.`
-          : `Escrow token #${tokenId} for ${formatMarketplaceAmount(price)} ${readiness.assetCode}. ${action.feeBps} bps is deducted from the sale price. Expires ${new Date(Number(expiry) * 1000).toISOString()}. These terms are bound into the transaction: if governance changes the fee or asset before confirmation, the listing fails instead of applying new terms. While listed, the token's vote leaves your delegate until it is sold or the listing is cancelled.`;
+      // List moves the token with transfer_from, so the market needs a live permission first.
+      if (!(await marketplaceMayMove(token, actor.address, scope.contractId, tokenId)))
+        throw new MarketplaceError(APPROVAL_EXPIRED, 409);
+      xdr = marketplaceTransactionXdr(
+        await client.list(
+          {
+            token_id: tokenId,
+            seller: actor.address,
+            price,
+            expires_at: expiry,
+            // The seller's reviewed terms: the contract rejects the listing
+            // if governance changed the fee or asset before confirmation.
+            max_fee_bps: action.feeBps,
+            payment_asset: action.paymentAsset
+          },
+          options
+        )
+      );
+      summary = `List token #${tokenId} for ${formatMarketplaceAmount(price)} ${asset.code}. The market holds your token until it sells, you cancel, or the listing ends. When it sells, the ${formatFeePercent(action.feeBps)} resale fee (${formatMarketplaceAmount(fee)} ${asset.code}) comes out of the price and you receive ${formatMarketplaceAmount(sellerProceeds)} ${asset.code}. If the tribe changes the fee or price asset before this confirms, the listing fails and nothing changes. While it's listed, the token's vote pauses.`;
     }
   } else if (action.action === 'comment') {
     // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment on a resale.
@@ -336,16 +389,16 @@ export async function prepareMarketplaceAction(
       ) {
         throw new MarketplaceError(STALE_PURCHASE, 409);
       }
-      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code}. Receive escrowed token #${id}; the seller pays the snapshotted ${indexed.feeBps} bps fee from the price.`;
+      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} and receive token #${id}, which the market is holding for the seller. The seller pays the ${formatFeePercent(indexed.feeBps)} resale fee from the price.`;
     } else if (action.action === 'cancel') {
       if (indexed.seller !== actor.address) throw new MarketplaceError('Only the seller can cancel this listing.', 403);
       xdr = marketplaceTransactionXdr(await client.cancel({ token_id: Number(id), seller: actor.address }, options));
-      summary = `Cancel the secondary listing and return token #${id} to its seller. No sale payment is made.`;
+      summary = `Cancel your listing. Token #${id} comes back to you and no payment is made.`;
     } else {
       if (live.expires_at > BigInt(Math.floor(Date.now() / 1000)))
         throw new MarketplaceError('The listing has not expired yet.');
       xdr = marketplaceTransactionXdr(await client.expire({ token_id: Number(id) }, options));
-      summary = `Recover expired listing #${id}. The escrowed token returns to its original seller, not the caller.`;
+      summary = `Close the ended listing of token #${id}. The market returns the token to its seller, not to the account that signs this.`;
     }
   } else {
     throw new MarketplaceError('Unsupported marketplace action.');

@@ -87,6 +87,11 @@ describe('marketplace identity and listing snapshots', () => {
     for (const drift of [{ price: 1n }, { asset: 'sac-b' }, { expires_at: 1n }, { size: 4 }, { closed: true }])
       expect(matchesPoolSnapshot(pool, { ...livePool, ...drift })).toBe(false);
   });
+  it("reads a seller's public account for Yours", () => {
+    const seller = `G${'A'.repeat(55)}`;
+    expect(parseMarketplaceQuery(new URLSearchParams(`seller=${seller}`)).seller).toBe(seller);
+    expect(parseMarketplaceQuery(new URLSearchParams('')).seller).toBe('');
+  });
   it('validates truthful capabilities, type, status and bounded pagination', () => {
     expect(
       parseMarketplaceQuery(new URLSearchParams('kind=pool&status=all&capability=auction&page=2&search=DAO')).page
@@ -97,7 +102,8 @@ describe('marketplace identity and listing snapshots', () => {
       'kind=auction',
       'capability=art',
       'status=live',
-      `search=${'a'.repeat(121)}`
+      `search=${'a'.repeat(121)}`,
+      'seller=not-an-account'
     ]) {
       expect(() => parseMarketplaceQuery(new URLSearchParams(invalid))).toThrow();
     }

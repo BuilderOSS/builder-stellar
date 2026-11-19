@@ -12,9 +12,13 @@ import {
 
 describe('marketplace exact SAC amounts', () => {
   it('round-trips seven places without a Number conversion', () => {
-    for (const value of ['0.0000001', '1.0000000', '1234567890123456789.1234567']) {
+    for (const value of ['0.0000001', '1', '4.875', '1234567890123456789.1234567']) {
       expect(formatMarketplaceAmount(parseMarketplaceAmount(value))).toBe(value);
     }
+    // Shown without trailing zeros, like the rest of the app (BUG-005).
+    expect(formatMarketplaceAmount(parseMarketplaceAmount('1.0000000'))).toBe('1');
+    expect(formatMarketplaceAmount(48_750_000n)).toBe('4.875');
+    expect(formatMarketplaceAmount(-10_000_000n)).toBe('-1');
     expect(parseMarketplaceAmount('10.05')).toBe(100_500_000n);
     expect(parseMarketplaceAmount('0', true)).toBe(0n);
     expect(parseMarketplaceAmount(formatMarketplaceAmount(MAX_I128))).toBe(MAX_I128);
