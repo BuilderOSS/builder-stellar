@@ -8,6 +8,12 @@ export const FRIENDBOT_URL = 'https://friendbot.stellar.org';
 /** Where the walkthrough build of apps/web listens (`pnpm --dir apps/e2e build:app`, then Playwright's webServer). */
 export const E2E_APP_PORT = Number(process.env.E2E_APP_PORT || 4343);
 export const E2E_BASE_URL = process.env.E2E_BASE_URL?.trim() || `http://localhost:${E2E_APP_PORT}`;
+/**
+ * The public site the build names (NEXT_PUBLIC_SITE_URL). Not where the suite browses: tribes a
+ * walkthrough creates write their default image and renderer base on chain, so they point at the
+ * dev deployment that serves them, never at localhost (BUG-W03-1).
+ */
+export const E2E_SITE_URL = process.env.E2E_SITE_URL?.trim() || process.env.E2E_BASE_URL?.trim() || 'https://dev.tribes.build';
 
 /** Contract minimums (§3.3): voting delay, voting period, queue delay and auction duration are each at least 300s. */
 export const MIN_GOVERNANCE_STEP_S = 300;

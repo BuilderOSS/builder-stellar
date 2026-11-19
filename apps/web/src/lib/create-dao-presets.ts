@@ -171,6 +171,25 @@ export function votingPaceOf(governance: Governance, network = configuredCreatio
   );
 }
 
+/**
+ * The pace a live Governor's settings match. The Governor has no getter for its queue delay, so a
+ * chain read leaves it out; it is compared only when known (the index has it). BUG-W03-2.
+ */
+export function votingPaceOfSettings(
+  settings: Omit<Governance, 'queueDelay'> & { queueDelay?: number | null },
+  network = configuredCreationNetwork()
+) {
+  return (
+    votingPaces(network).find((pace) =>
+      (Object.keys(pace.governance) as (keyof Governance)[]).every((key) =>
+        key === 'queueDelay' && (settings.queueDelay === undefined || settings.queueDelay === null)
+          ? true
+          : pace.governance[key] === settings[key]
+      )
+    ) ?? null
+  );
+}
+
 /** Super fast also makes auctions take minutes, so testers can go round the whole loop quickly. */
 const QUICK_AUCTION = { duration: 5 * MINUTE, timeBuffer: MINUTE };
 const STANDARD_AUCTION = { duration: DAY, timeBuffer: 15 * MINUTE };

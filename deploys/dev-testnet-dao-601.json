@@ -1,0 +1,110 @@
+{
+  "status": "checklist_complete",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "nonce": 601,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CC7ISZKEYU73QBMZFAJGGMYE4QKHRHE2DWYJE3ERVBLSWVUPOIWC6Z5M",
+    "metadata": "CCRUDSM7KZLDZIDUZ4TDG6S7HYACEIRSYMC5GFHTVGOUX4HAPFE44FIY",
+    "governor": "CDGACKDSDK6R7TEB5NJDRL3MZICTD5DWA5AXMB3KPWYE27F5AAU6WKK2",
+    "treasury": "CAWA6W4CN7LKR3L7LFY2AD74ZIS4OF66JPPNRBWBHWHRXMO5SW3YWKYA",
+    "auction": null,
+    "marketplace": null,
+    "claims": "CB6ORC6FUSH7RJEXOL3G4SMNUCUN6O5TXT4KFJ52B7SNDGZHJ3BXKGMF"
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W12 (claims), on the dev Manager. Created by e2e-w06-founder with scripts/deploy-dao.mjs create_dao and admin_checklist only: it stays in Setup, so the launch admin opens free claim lists directly (one per run). Founders: e2e-w06-founder x2. Claims are priced in native XLM (SAC).",
+    "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+    "nonce": 601,
+    "launchAdmin": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+    "slug": "e2e-w06-2",
+    "token": {
+      "name": "E2E Claims",
+      "symbol": "E2EC"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for claim lists (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "claims": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+        "amount": 2
+      }
+    ],
+    "launch": {}
+  },
+  "updatedAt": "2026-11-19T04:38:13.247Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "56a597d562fa8254423aab105f6bd57cedcf32e2c97888907cf0911e7907c9b6",
+      "ledger": 5807886
+    },
+    "artworkBatches": [
+      {
+        "txHash": "6c61eb5890ac322c899d2c639b9b63555fba0fe6c2087066d13f1c8d26a46b79",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807888
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "4d99a4f1ea1faa53c4190d98345a548e825086ae4cb2517554715111c321d168",
+        "batch": 1,
+        "tokens": 2,
+        "ledger": 5807890
+      }
+    ],
+    "regenerated": []
+  },
+  "deploymentLedger": 5807886
+}

@@ -15,7 +15,10 @@ const env = {
   NEXT_PUBLIC_NETWORK: 'testnet',
   NEXT_PUBLIC_E2E_WALLET: '1',
   NEXT_DIST_DIR: '.next-e2e',
-  NEXT_PUBLIC_SITE_URL: process.env.E2E_BASE_URL?.trim() || `http://localhost:${process.env.E2E_APP_PORT || 4343}`,
+  // The public site the tribes a walkthrough creates point at: their default image and renderer base
+  // are written on chain, and they are real tribes on dev.tribes.build. A localhost URL here broke
+  // both (and the default image failed "https:// or ipfs://" validation): BUG-W03-1.
+  NEXT_PUBLIC_SITE_URL: process.env.E2E_SITE_URL?.trim() || process.env.E2E_BASE_URL?.trim() || 'https://dev.tribes.build',
   NEXT_PUBLIC_PINATA_UPLOADS_ENABLED: 'false',
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ''
 };

@@ -7,7 +7,9 @@ const state = vi.hoisted(() => ({
   address: '',
   readiness: undefined as unknown,
   artwork: undefined as unknown,
-  drive: {} as Record<string, unknown>
+  drive: {} as Record<string, unknown>,
+  auction: undefined as unknown,
+  governance: undefined as unknown
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
@@ -41,14 +43,19 @@ vi.mock('@/stores/auth-session-store', () => ({
 }));
 vi.mock('swr', () => ({
   default: (key: unknown) => ({
-    data: Array.isArray(key) && key[0] === 'launch-readiness' ? state.readiness : undefined,
+    data:
+      Array.isArray(key) && key[0] === 'launch-readiness'
+        ? state.readiness
+        : typeof key === 'string' && key.endsWith('/auctions')
+          ? state.auction
+          : undefined,
     error: undefined,
     isValidating: false,
     mutate: vi.fn()
   })
 }));
 vi.mock('@/lib/admin-surfaces', () => ({ useAdminArtwork: () => ({ data: state.artwork, mutate: vi.fn() }) }));
-vi.mock('@/lib/admin-queries', () => ({ useGovernorSettings: () => ({ data: undefined }) }));
+vi.mock('@/lib/admin-queries', () => ({ useGovernorSettings: () => ({ data: state.governance }) }));
 vi.mock('@/lib/use-dao-deployment', () => ({ useDaoDeployment: () => ({ launchDao: vi.fn() }) }));
 vi.mock('@/lib/deployment-config', () => ({
   getDeploymentConfig: () => ({ name: 'testnet', managerAddress: 'CMANAGER' })
@@ -111,6 +118,18 @@ describe('LaunchSetup', () => {
     state.readiness = readiness();
     state.artwork = artwork(0);
     state.drive = {};
+    state.auction = undefined;
+    state.governance = undefined;
+  });
+
+  it('names the pace from chain reads and gives the auction price its unit (BUG-W03-2, BUG-W03-3)', () => {
+    const XLM = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+    state.auction = { config: { duration: 300, reserve_price: '10000000', payment_token: XLM } };
+    // A chain read: the Governor has no queue delay getter.
+    state.governance = { votingDelay: 300, votingPeriod: 600, quorumBps: 100, proposalThreshold: 1n, source: 'chain' };
+    const html = render();
+    expect(html).toContain('starts at 1 XLM');
+    expect(html).toContain('Super fast: votes open after 5 minutes, run 10 minutes');
   });
 
   it('starts with artwork as the clear first step, and launch disabled with a reason', () => {

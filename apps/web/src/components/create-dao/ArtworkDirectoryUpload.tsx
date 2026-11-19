@@ -5,6 +5,7 @@ import { css } from 'styled-system/css';
 
 import { Button, ButtonLink, FieldLabel } from '@/components/ui';
 import { cidToUrls, UPLOAD_POLICIES, validateImageDimensions } from '@/lib/pinata-upload';
+import { UPLOADS_OFF_NOTE, uploadsEnabled } from '@/lib/uploads-enabled';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type { ArtworkPlan } from './artwork-configuration';
@@ -31,7 +32,7 @@ export function ArtworkDirectoryUpload({
     input.current?.setAttribute('webkitdirectory', '');
   }, []);
   const upload = async () => {
-    if (busy || disabled || !wallet || auth !== 'authenticated') return;
+    if (busy || disabled || !wallet || auth !== 'authenticated' || !uploadsEnabled()) return;
     setBusy(true);
     setError('');
     try {
@@ -133,11 +134,14 @@ export function ArtworkDirectoryUpload({
       <Button
         type="button"
         variant="secondary"
-        disabled={disabled || busy || !files.length || !wallet || auth !== 'authenticated'}
+        disabled={disabled || busy || !files.length || !wallet || auth !== 'authenticated' || !uploadsEnabled()}
         onClick={() => void upload()}
       >
         {busy ? 'Uploading directory…' : `Upload ${files.length || ''} artwork files`}
       </Button>
+      {uploadsEnabled() ? null : (
+        <p className={styles.muted}>{UPLOADS_OFF_NOTE} You can check a folder here, but it can&apos;t be published.</p>
+      )}
       {error ? (
         <p className={styles.error} role="alert">
           {error}

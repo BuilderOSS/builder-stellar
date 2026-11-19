@@ -75,6 +75,61 @@ None.
   so the loading state stays up until the kit listens.
 - **Regression test:** `lib/wallet-connect-modal.test.ts`; W01's retry case picks the wallet at once.
 
+### BUG-W03-1 · Walkthrough tribes pointed their image and renderer at localhost
+- **Flow:** W03, Create (identity). Every viewport and theme. Harness defect, in `apps/e2e`.
+- **Severity:** P1 (Create blocked in the walkthrough build; on chain it would have broken the tribe's
+  art on dev.tribes.build).
+- **Steps:** build with `pnpm --dir apps/e2e build:app`, open `/create`, fill in Identity, press
+  Continue.
+- **Expected:** the default tribe image and renderer base are on the dev deployment that serves the
+  tribe, and Identity passes.
+- **Actual:** "Use an https:// or ipfs:// image address" under the image; the defaults were
+  `http://localhost:<port>/images/dao-logo.png` and `http://localhost:<port>/api/render`.
+- **Root cause:** the walkthrough build set `NEXT_PUBLIC_SITE_URL` to the local server. The app
+  derives the default image and renderer base from it, and both are written on chain at create.
+- **Fix:** `apps/e2e/scripts/build-app.mjs` and `src/app-env.ts` name the dev site
+  (`https://dev.tribes.build`, or `E2E_SITE_URL`); the suite still browses the local server.
+- **Regression test:** W03's Create cases (they fail at Identity without it).
+
+### BUG-W03-2 · Setup never names the voting pace
+- **Flow:** W03 and W04, the setup page's "Voting rules" row. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** create a tribe with the Super fast pace, open Set up and launch.
+- **Expected:** "Super fast: votes open after 5 minutes, run 10 minutes".
+- **Actual:** "votes open after 5 minutes, run 10 minutes" for every pace.
+- **Root cause:** `components/launch/launch-setup.tsx` read the Governor over RPC, which has no getter
+  for the queue delay, then compared the pace with a queue delay of 0, which no pace has.
+- **Fix:** `votingPaceOfSettings` in `lib/create-dao-presets.ts` compares the queue delay only when
+  it is known.
+- **Regression test:** `lib/create-dao-presets.test.ts` and `components/launch/launch-setup.test.tsx`;
+  W03 asserts the row.
+
+### BUG-W03-3 · Setup's auction price has no unit
+- **Flow:** W03, the setup page's "Auctions" row. Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** create an auction tribe, open Set up and launch.
+- **Expected:** "5 minutes each · starts at 1 XLM" (DESIGN.md: amounts carry their unit).
+- **Actual:** "5 minutes each · starts at 1".
+- **Root cause:** `launch-setup.tsx` formatted the reserve price without the payment asset.
+- **Fix:** the row adds the asset code from the auction's payment token (or the pending tribe's).
+- **Regression test:** `components/launch/launch-setup.test.tsx`; W03 asserts the row.
+
+### BUG-W03-4 · Artwork folder uploads ignored the deployment's upload switch
+- **Flow:** W04, Artwork. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a build with `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED=false`, choose an artwork folder and
+  press Upload.
+- **Expected:** the page says uploads are off before anyone presses Upload, and the server refuses
+  directory uploads like every other upload.
+- **Actual:** the button was enabled and failed after the click with a service error; with a Pinata
+  key configured, `/api/pinata/generate-jwt` and `/api/pinata/pin-cid` would have uploaded anyway.
+- **Root cause:** only `/api/uploads/*` checked the switch; the directory routes and the upload
+  buttons didn't.
+- **Fix:** `lib/uploads-enabled.ts` is the one check. Both directory routes answer 404
+  `FEATURE_DISABLED` while uploads are off, and the folder and tribe image upload buttons are disabled
+  with "Uploads are off on this deployment." A folder can still be checked in the browser.
+- **Regression test:** `lib/uploads-enabled.test.ts`; W04 asserts the disabled button and its note.
+
 ### BUG-W02-1 · An unknown tribe link shows "Something went wrong" instead of Page not found
 - **Flow:** W02, opening `/dao/<slug>` for a slug no tribe has. All viewports and themes.
 - **Severity:** P2.
@@ -341,3 +396,59 @@ None.
   row, next to Submit proposal, hidden from lg where the rail is always shown.
 - **Regression test:** W07's composer case (`w08-proposal-states.spec.ts`, every viewport) presses
   Submit proposal on the review step; Playwright refuses a click on a covered button.
+
+### BUG-W06-1 · An unreachable claim list shows members a gateway status code
+- **Flow:** W12, claim from a list whose published file no gateway returns. All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open a claim list whose `tree_uri` isn't pinned (or while IPFS gateways are down), then
+  open Claims.
+- **Expected:** "Claim list unavailable" says in words that the published list couldn't be loaded,
+  then points to the proof file.
+- **Actual:** "Claim list unavailable · 530 You can still claim with a proof file from the
+  organizer." The reason was the last gateway's HTTP status (or a raw timeout message).
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` threw `${response.status}`
+  for a failed gateway and rethrew the last gateway's error as the member-facing reason.
+- **Fix:** every fetch failure (status, timeout, network error, a body that isn't JSON) moves on to
+  the next gateway; when none answers, the reason is "The published list couldn't be loaded from
+  IPFS." A too-large file keeps its own reason.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts`; W12 asserts the card's text.
+
+### BUG-W06-2 · An unreachable claim list holds the Claims page for up to a minute and a half
+- **Flow:** W12, the Claims page of a tribe with a list whose file no gateway returns (found at mobile,
+  where the page was still loading when the check ran). All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open Claims for a tribe with such a list, signed out or in.
+- **Expected:** the lists show within seconds, marked "Claim list unavailable", with the proof file
+  fallback.
+- **Actual:** "Checking what you can claim…" for up to 105 seconds, every minute (the failure is
+  remembered for 60s). The proof file fallback only shows once the lists load, so it was out of reach too.
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` tried the seven gateways one
+  after another with a 15s timeout each.
+- **Fix:** ask every gateway at once, take the first JSON answer and abort the rest, all within one
+  15s budget.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts` (one budget, every gateway asked
+  at once); W12's signed-out @matrix check waits one budget, not more.
+
+### BUG-W06-3 · Past claims says "1 tokens"
+- **Flow:** W12, Past claims after a one-token claim. All viewports and themes.
+- **Severity:** P3.
+- **Expected:** "1 token from Claim list 2".
+- **Actual:** "1 tokens from Claim list 2".
+- **Root cause:** the row in `apps/web/src/components/minter/claims.tsx` always used the plural.
+- **Fix:** the singular for one token.
+- **Regression test:** `apps/web/src/components/minter/claims.test.tsx` ("Past claims"); W12 asserts the row.
+
+### BUG-W06-4 · A settled auction doesn't reach Past auctions until a reload
+- **Flow:** W06, settle from the Auction page. Desktop dark (chain run); the hook is the same at every
+  viewport.
+- **Severity:** P3.
+- **Steps:** after the end, press Settle and start the next auction, then stay on the page.
+- **Expected:** the settled token and its winner appear under Past auctions.
+- **Actual:** the next auction shows (it polls every 15s) but Past auctions stays at the earlier
+  token until the page is reloaded. It refetched once, right after confirmation, which is usually
+  before the indexer has the settlement.
+- **Root cause:** `useAuctionHistory` in `apps/web/src/lib/auction-history/hooks.ts` had no refresh;
+  the page only remounts it after its own transactions.
+- **Fix:** the first page refetches every 30s, like the current auction does.
+- **Regression test:** `apps/web/src/lib/auction-history/hooks.test.ts`; W06 waits for the token under
+  Past auctions without a reload.

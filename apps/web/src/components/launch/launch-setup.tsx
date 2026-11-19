@@ -11,8 +11,9 @@ import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
 import { useAdminArtwork } from '@/lib/admin-surfaces';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
-import { votingPaceOf } from '@/lib/create-dao-presets';
+import { votingPaceOfSettings } from '@/lib/create-dao-presets';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoAdminRoute } from '@/lib/dao-routes';
 import { getDeploymentConfig } from '@/lib/deployment-config';
@@ -29,7 +30,7 @@ const page = css({ display: 'grid', gap: '5' });
 const steps = css({ listStyle: 'none', m: '0', p: '0' });
 const head = css({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '3' });
 
-type AuctionStatus = { config: { duration: string | number; reserve_price: string } };
+type AuctionStatus = { config: { duration: string | number; reserve_price: string; payment_token?: string | null } };
 const fetchAuction = async (url: string): Promise<AuctionStatus> => {
   const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) throw new Error('Auction settings unavailable');
@@ -101,14 +102,19 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
       </section>
     );
 
+  // Amounts carry their unit (BUG-W03-3): "starts at 1 XLM", not "starts at 1".
+  const auctionAsset = paymentAssetCode(
+    config.name,
+    auction.data?.config.payment_token ?? readiness.data?.pending?.auction_payment_asset
+  );
   const auctionSummary = auction.data
-    ? `${formatDuration(Number(auction.data.config.duration), { style: 'long' })} each · starts at ${formatStroops(auction.data.config.reserve_price)}`
+    ? `${formatDuration(Number(auction.data.config.duration), { style: 'long' })} each · starts at ${formatStroops(auction.data.config.reserve_price)}${auctionAsset ? ` ${auctionAsset}` : ''}`
     : 'Price and timing chosen when you created it.';
   const pace = governance.data
-    ? votingPaceOf({
+    ? votingPaceOfSettings({
         votingDelay: governance.data.votingDelay,
         votingPeriod: governance.data.votingPeriod,
-        queueDelay: governance.data.queueDelay ?? 0,
+        queueDelay: governance.data.queueDelay,
         quorumBps: governance.data.quorumBps,
         proposalThreshold: Number(governance.data.proposalThreshold)
       })
