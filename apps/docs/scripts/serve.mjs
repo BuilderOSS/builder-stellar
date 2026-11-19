@@ -20,9 +20,15 @@ const types = {
 };
 
 function resolve(urlPath) {
-  const clean = path.normalize(decodeURIComponent(urlPath.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPath.split('?')[0]);
+  } catch {
+    return null; // A malformed escape (/%E0) is a 404, not a crash.
+  }
+  const clean = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   const file = path.join(root, clean);
-  if (!file.startsWith(root)) return null;
+  if (file !== root && !file.startsWith(root + path.sep)) return null;
   if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
   const index = path.join(file, 'index.html');
   return fs.existsSync(index) ? index : null;
