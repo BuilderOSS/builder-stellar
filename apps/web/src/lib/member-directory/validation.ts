@@ -28,6 +28,15 @@ export function holderTokenId(value: string): number {
   return id;
 }
 
+/** What the member list is ranked by: voting power (the default) or membership tokens owned. */
+export type MemberRank = 'votes' | 'tokens';
+
+export function memberRank(search: URLSearchParams): MemberRank {
+  const by = search.get('by') ?? 'votes';
+  if (by !== 'votes' && by !== 'tokens') throw new Error('Rank members by votes or by tokens.');
+  return by;
+}
+
 export function memberSort(search: URLSearchParams): 'asc' | 'desc' {
   const order = search.get('order') ?? 'desc';
   if (order !== 'asc' && order !== 'desc') throw new Error('Choose ascending or descending vote order.');

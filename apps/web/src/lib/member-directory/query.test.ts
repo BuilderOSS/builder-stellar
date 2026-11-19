@@ -34,6 +34,10 @@ describe('exact scoped directory reads', () => {
     mocks.tokens.mockResolvedValue([]);
     mocks.supply.mockResolvedValue(130);
   });
+  it('ranks by tokens owned when asked, keeping the address tie-breaker', async () => {
+    await directoryMembers('dao-a', { limit: 25, offset: 0 }, 'desc', 'tokens');
+    expect(mocks.list.mock.calls.at(-1)?.[0].orderBy).toEqual([{ ownedTokenCount: 'desc' }, { address: 'asc' }]);
+  });
   it('paginates beyond the first 100 and scopes rows and count with a deterministic tie-breaker', async () => {
     const page = await directoryMembers('dao-a', { limit: 25, offset: 100 });
     expect(mocks.list).toHaveBeenCalledWith({

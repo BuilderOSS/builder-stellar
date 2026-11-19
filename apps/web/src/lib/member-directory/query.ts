@@ -5,7 +5,7 @@ import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { prisma } from '@/lib/prisma';
 
 import type { DirectoryMember, DirectoryPage, DirectoryProfile, OwnedToken } from './types';
-import { holderTokenId, memberAddress } from './validation';
+import { holderTokenId, memberAddress, type MemberRank } from './validation';
 
 export async function directoryScope(daoId: string) {
   const config = await getDaoNetworkConfigById(daoId);
@@ -24,14 +24,15 @@ function mapMember(row: TokenMember): DirectoryMember {
 export async function directoryMembers(
   daoId: string,
   page: { limit: number; offset: number },
-  order: 'asc' | 'desc' = 'desc'
+  order: 'asc' | 'desc' = 'desc',
+  by: MemberRank = 'votes'
 ): Promise<DirectoryPage<DirectoryMember>> {
   const { deploymentId, daoId: token } = await directoryScope(daoId);
   const where = { deploymentId, daoId: token, contractId: token };
   const [rows, total] = await Promise.all([
     prisma.tokenMember.findMany({
       where,
-      orderBy: [{ votingPower: order }, { address: 'asc' }],
+      orderBy: [by === 'tokens' ? { ownedTokenCount: order } : { votingPower: order }, { address: 'asc' }],
       take: page.limit,
       skip: page.offset
     }),
