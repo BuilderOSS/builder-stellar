@@ -175,7 +175,8 @@ test.describe('W09 composer forms', { tag: '@matrix' }, () => {
 
     await page.goto(tribe.path('admin/marketplace'));
     await waitForVisible(page.getByRole('heading', { name: 'Propose a quick-buy pool' }), 'Manage → Market');
-    await expect(page.getByText('Now: XLM')).toBeVisible();
+    // The market's config loads after the page; on a busy server that can take a while.
+    await waitForVisible(page.getByText('Now: XLM'), 'market payment asset by its code', { governingS: 30 });
     await expectNoHorizontalScroll(page);
   });
 });
