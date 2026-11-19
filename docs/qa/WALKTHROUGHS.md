@@ -420,8 +420,8 @@ pnpm --dir apps/e2e exec playwright test tests/w10-marketplace.spec.ts
 
 The chain cases run in order (one serial group) and take about six minutes at one viewport, most of
 it the listing end and the indexer. `E2E_ROTATION=1` runs them again at tablet and mobile, one
-viewport after another. Run one chain project at a time with `--no-deps`: several chain projects with
-`--no-deps` start together and sign from the same identities at once. Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
+viewport after another (a rotation run uses one worker, so the viewports never sign at the same
+time). Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
 the seller's tokens back: it cancels a listing an earlier run left open and sends back a token the
 buyer bought, signing with the `stellar keys` identities, then waits for the indexer to agree.
 
@@ -479,13 +479,13 @@ E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
   pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
 ```
 
-For the weekly rotation, run each extra viewport on its own with `--no-deps`. Without it, a
-rotation project pulls in its dependency project's whole test set, every other walkthrough's chain
-specs included, and those would sign with this timeline's wallets:
+For the weekly rotation, name the spec and set `E2E_ROTATION=1`. The chain projects have no
+`dependencies` and a rotation run uses one worker, so only the named spec runs, one viewport after
+another, never two signing at once:
 
 ```bash
 E2E_ROTATION=1 E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
-  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=tablet-dark-chain --no-deps
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts
 ```
 
 Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
