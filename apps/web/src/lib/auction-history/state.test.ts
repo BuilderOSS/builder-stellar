@@ -51,6 +51,18 @@ describe('auction buyer economics and lifecycle', () => {
     );
     expect(() => validateAuctionBid(auctionFixture, auctionFixture.auction!.token_id, 10500001n, 50)).not.toThrow();
   });
+  it('names the auction asset, never "payment tokens", in a low-bid message', () => {
+    const low = () => validateAuctionBid(auctionFixture, auctionFixture.auction!.token_id, 10500000n, 50, 'XLM');
+    expect(low).toThrow('Bid at least 1.0500001 XLM (up to 7 decimals).');
+    expect(() => validateAuctionBid(auctionFixture, auctionFixture.auction!.token_id, 10500000n, 50)).toThrow(
+      'of the auction’s payment asset'
+    );
+  });
+  it('says "tribe", not "DAO", when the wallet is on another network', () => {
+    expect(() => assertAuctionWallet('GONE', 'MAIN', 'GONE', 'TEST')).toThrow(
+      'Switch your wallet to this tribe’s network before signing.'
+    );
+  });
   it('distinguishes setup, disabled, not launched, paused, active, exact expiry and settled', () => {
     expect(auctionBuyerState({ ...config, status: 'pending' }, auctionFixture, 50)).toBe('setup');
     expect(auctionBuyerState({ ...config, auctionEnabled: false }, auctionFixture, 50)).toBe('disabled');

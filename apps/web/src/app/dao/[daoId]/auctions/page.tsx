@@ -149,7 +149,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
     );
     const bidder = session.address;
     const assertWallet = async () => {
-      if (!mounted.current) throw new Error('Auction view changed. Review the current DAO before signing.');
+      if (!mounted.current) throw new Error('Auction view changed. Review the current tribe before signing.');
       const current = useAuthSessionStore.getState();
       assertAuctionWallet(current.address, current.walletNetworkPassphrase, bidder, config.passphrase);
       const [wallet, network] = await readSigningWallet();
@@ -178,7 +178,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
         assembled = await prepareBuyerRefund(client, bidder);
       } else {
         assembled = await prepareBuyerAction(client, data!, bidder, action, parsed, Math.floor(Date.now() / 1000), {
-          comment: comment.trim()
+          comment: comment.trim(),
+          assetCode: paymentAssetCode(config.name, data?.config.payment_token)
         });
       }
       // Only this explicit user action opens the wallet. Reads never sign.

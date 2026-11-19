@@ -12,7 +12,7 @@ export async function prepareBuyerAction(
   action: 'bid' | 'settle',
   amount: bigint | null,
   now = Math.floor(Date.now() / 1000),
-  { comment = '' }: { comment?: string } = {}
+  { comment = '', assetCode }: { comment?: string; assetCode?: string } = {}
 ) {
   const [auctionTx, configTx, pausedTx] = await Promise.all([
     client.get_auction(),
@@ -40,7 +40,7 @@ export async function prepareBuyerAction(
     throw new Error('Auction or payment token changed. Refresh and review before signing.');
   if (action === 'bid') {
     if (amount === null) throw new Error('Enter a positive amount with up to 7 decimal places.');
-    validateAuctionBid(live, snapshot.auction!.token_id, amount, now);
+    validateAuctionBid(live, snapshot.auction!.token_id, amount, now, assetCode);
     // Bid comments are one line of plain text, whatever the box let through.
     const line = toOneLine(comment).trim();
     if (commentBytes(line) > MAX_COMMENT_BYTES) throw new Error('Shorten your comment to send it with the bid.');
