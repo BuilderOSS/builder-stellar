@@ -1,0 +1,16 @@
+{
+  "name": "@builder-stellar/glossary",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One source for Tribe Builder's terms: the app's GlossaryTerm, the docs glossary and guide tooltips all read it.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

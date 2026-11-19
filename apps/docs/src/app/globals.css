@@ -1,0 +1,111 @@
+/*
+ * Global base for the docs, on the shared Warm Ink · Dusk tokens (packages/design-tokens,
+ * DESIGN.md). Element defaults and the browser surfaces from the docs plan (decision 5A)
+ * only; components are built with Panda. Everything sits in Panda's `base` layer so
+ * recipes and utilities still win.
+ */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    min-height: 100%;
+    background: var(--colors-canvas);
+    scrollbar-gutter: stable;
+    -webkit-text-size-adjust: 100%;
+    /* Browser surfaces: thin scrollbars in `rule` on `canvas`. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--colors-rule) var(--colors-canvas);
+    scroll-padding-top: 88px;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--colors-canvas);
+    color: var(--colors-ink);
+    font-family: var(--fonts-body);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Browser surfaces: selection is `signal` at 25%. */
+  ::selection {
+    background: color-mix(in srgb, var(--colors-signal) 25%, transparent);
+    color: var(--colors-ink);
+  }
+
+  a {
+    color: inherit;
+    text-underline-offset: 0.2em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    caret-color: var(--colors-signal);
+  }
+
+  code,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Browser surfaces: focus rings are 2px `signal` with a 2px offset. */
+  :focus-visible {
+    outline: 2px solid var(--colors-signal);
+    outline-offset: 2px;
+  }
+
+  [tabindex='-1']:focus {
+    outline: none;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  [data-theme-switching] *,
+  [data-theme-switching] *::before,
+  [data-theme-switching] *::after {
+    transition: none !important;
+  }
+}

@@ -12,6 +12,10 @@ node_modules
 apps/web/.env*.local
 apps/web/styled-system
 apps/web/tsconfig.tsbuildinfo
+apps/docs/styled-system
+apps/docs/out
+apps/docs/public/pagefind
+apps/docs/tsconfig.tsbuildinfo
 apps/web/src/config/deployments.generated.ts
 packages/contracts/counter/src/generated/dist
 

@@ -1,13 +1,17 @@
-export const WARM_INK_THEME_KEY = 'builder.warm-ink.theme.v1';
-export type WarmInkPreference = 'light' | 'dark' | 'system';
+// The theme runtime is shared with the docs site (packages/design-tokens/src/theme.ts):
+// a `tribes-theme` cookie on .tribes.build first, then this app's localStorage key.
+import {
+  isThemePreference,
+  THEME_STORAGE_KEY,
+  themeBootScript,
+  type ThemePreference
+} from '@builder-stellar/design-tokens/theme';
 
-export function isWarmInkPreference(value: unknown): value is WarmInkPreference {
-  return value === 'light' || value === 'dark' || value === 'system';
-}
+export const WARM_INK_THEME_KEY = THEME_STORAGE_KEY;
+export type WarmInkPreference = ThemePreference;
+export const isWarmInkPreference = isThemePreference;
 
 /** Dark is the hero theme: first visits (and denied storage) start dark. */
 export const WARM_INK_DEFAULT_PREFERENCE: WarmInkPreference = 'dark';
 
-// Runs in <head>, before the first body paint. Storage can be denied in private
-// browsing; the default preference must still resolve in that case.
-export const warmInkBootScript = `(()=>{let p='${WARM_INK_DEFAULT_PREFERENCE}';try{const s=localStorage.getItem('${WARM_INK_THEME_KEY}');if(s==='light'||s==='dark'||s==='system')p=s}catch{}const r=document.documentElement;r.dataset.themePreference=p;r.dataset.theme=p==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p})()`;
+export const warmInkBootScript = themeBootScript(WARM_INK_DEFAULT_PREFERENCE);

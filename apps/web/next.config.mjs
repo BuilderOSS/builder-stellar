@@ -17,8 +17,9 @@ const nextConfig = {
   // it is set; left unset, the guard stayed a runtime check and the module shipped (BUG-002).
   env: { NEXT_PUBLIC_E2E_WALLET: process.env.NEXT_PUBLIC_E2E_WALLET === '1' ? '1' : '0' },
   typedRoutes: true,
-  // Shared Warm Ink fonts run through the Next font loader (packages/design-tokens).
-  transpilePackages: ['@builder-stellar/design-tokens'],
+  // Shared workspace sources: the Warm Ink fonts run through the Next font loader
+  // (packages/design-tokens), and the glossary is plain TypeScript (packages/glossary).
+  transpilePackages: ['@builder-stellar/design-tokens', '@builder-stellar/glossary'],
   // Share cards read their OFL fonts from disk (src/lib/og/fonts.ts); tracing can't see that path.
   outputFileTracingIncludes: {
     '/opengraph-image': ['./src/assets/fonts/**'],
