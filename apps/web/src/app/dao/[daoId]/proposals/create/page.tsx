@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as GovernorClient, GovernorError } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { BookOpen, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -42,7 +42,7 @@ import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-re
 import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { proposalIdToRouteId } from '@/lib/proposal-id';
+import { simulatedProposalId } from '@/lib/proposal-id';
 import {
   encodeProposalMetadata,
   PROPOSAL_DESCRIPTION_MAX_BYTES,
@@ -72,7 +72,15 @@ const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
-const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
+// A suggested title can hold an address; let it wrap anywhere so it can't widen the page on phones (BUG-W02-7).
+const suggestion = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '2',
+  minW: '0',
+  '& > *': { minW: '0', overflowWrap: 'anywhere' }
+});
 const wideOnly = css({ display: { base: 'none', md: 'block' } });
 const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
 // Below lg the reference rail opens as a sheet. On the review step its trigger sits in the action
@@ -241,7 +249,8 @@ export default function ProposalCreatePage() {
         proposer: session.address
       });
 
-      const proposalId = assembled.result ? proposalIdToRouteId(assembled.result) : '';
+      // A proposal the Governor would refuse (already exists, too few votes) fails here, before signing.
+      const proposalId = simulatedProposalId(assembled.result, GovernorError);
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
