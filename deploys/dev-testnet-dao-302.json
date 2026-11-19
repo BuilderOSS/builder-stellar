@@ -1,0 +1,149 @@
+{
+  "status": "checklist_complete",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+  "nonce": 302,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CDZDTDAKMN3OUJ23WA244JYZZ7WUTEJQRZNMKCVLI7NSNKONKOGAYQGM",
+    "metadata": "CAIMYRHXM37UARRYB5S4EZPLFHVCTJHTBAVRLOBRY3ESA3CSPM5EPA4K",
+    "governor": "CDV3JIGXAEHRCOT2UC5RRNUDH6UQ7EIZJUNLSY27IMM2VE45RBFDMILH",
+    "treasury": "CCUCLGDELQTTFUT5ATTNMUAWFT7XBR4E4UDXQFPJUMNBJYITGXSWFCIX",
+    "auction": null,
+    "marketplace": null,
+    "claims": "CDT2Q5OAH3YGU5YLEXOMATRPWKBBWZSHWS57OMYUK5QZO7RYSXLVBNOJ"
+  },
+  "config": {
+    "$comment": "W05 fixture (fail launch drive). Recreate with: node apps/e2e/scripts/w05-drive-fixtures.mjs fail",
+    "deployer": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+    "nonce": 302,
+    "launchAdmin": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+    "slug": "e2e-w03-drive-fail-302",
+    "token": {
+      "name": "E2E W03 Drive Fail 302",
+      "symbol": "EWDF"
+    },
+    "metadata": {
+      "profile": {
+        "description": "E2E W03 Drive Fail 302: a walkthrough launch drive on testnet.",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://dev.tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://dev.tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "claims": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+        "amount": 1
+      }
+    ],
+    "launch": {
+      "launchAuction": false,
+      "launchMarketplace": false
+    },
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": false,
+      "daoRecovery": false
+    }
+  },
+  "updatedAt": "2026-11-19T05:00:27.734Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "28020696eda0ae2bd5a29430b99c244a919237a03d2eb8445225dc176b012891",
+      "ledger": 5808152
+    },
+    "artworkBatches": [
+      {
+        "txHash": "8e38e46a60ce2a92b479f9f932fce5e767715a30d43e8ffdc6a65a48f6cf6a69",
+        "batch": 1,
+        "items": 14,
+        "ledger": 5808155
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "bd3aa8048025709748749bf8e2faf6572ce896dc4afce446380a5c003cec9a29",
+        "batch": 1,
+        "tokens": 1,
+        "ledger": 5808157
+      }
+    ],
+    "regenerated": []
+  },
+  "deploymentLedger": 5808152
+}

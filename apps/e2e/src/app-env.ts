@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { E2E_WEB_AUTH_IDENTITY, loadIdentity } from './identities.ts';
-import { E2E_APP_PORT, E2E_BASE_URL } from './network.ts';
+import { E2E_APP_PORT, E2E_BASE_URL, E2E_SITE_URL } from './network.ts';
 import { E2E_ROOT } from './run.ts';
 
 /** Build-time flags for the walkthrough build of apps/web (inlined by Next, so they must be set at build). */
@@ -11,7 +11,7 @@ export const E2E_BUILD_ENV = {
   NEXT_PUBLIC_NETWORK: 'testnet',
   NEXT_PUBLIC_E2E_WALLET: '1',
   NEXT_DIST_DIR: '.next-e2e',
-  NEXT_PUBLIC_SITE_URL: E2E_BASE_URL,
+  NEXT_PUBLIC_SITE_URL: E2E_SITE_URL,
   NEXT_PUBLIC_PINATA_UPLOADS_ENABLED: 'false',
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ''
 } as const;
