@@ -107,6 +107,17 @@ describe('one form per setting', () => {
     });
   });
 
+  it('names a known market payment asset by its code, not its contract id (BUG-W11-1)', () => {
+    const market = values.marketplace!;
+    const meta = getActionMeta('set-marketplace-payment-token');
+    expect(meta.currentValue!({ marketplace: { ...market, assetCode: 'XLM' } })).toEqual({
+      draft: { paymentToken: market.paymentAsset },
+      text: 'XLM'
+    });
+    // An asset the app doesn't know keeps its contract id, so it can still be checked.
+    expect(meta.currentValue!({ marketplace: market })?.text).toBe(market.paymentAsset);
+  });
+
   it('encodes a value edited on Manage exactly as the composer does', () => {
     for (const type of settings) {
       const handler = getActionHandler(type);

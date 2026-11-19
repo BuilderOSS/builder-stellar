@@ -22,6 +22,7 @@ import {
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions } from '@/lib/admin-surfaces';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { expiryInputValue } from '@/lib/expiry-time';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
@@ -359,7 +360,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}
-          values={{ marketplace: data?.config ?? undefined }}
+          values={{
+            marketplace: data?.config
+              ? { ...data.config, assetCode: paymentAssetCode(data.network, data.config.paymentAsset) }
+              : undefined
+          }}
           onQueue={(handler, draft, replaces) => {
             try {
               if (!enabled || !data) throw new Error('Connect your wallet and wait for the market to load.');

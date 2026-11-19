@@ -25,7 +25,8 @@ export type SettingValues = {
   governor?: GovernorSettings;
   auction?: AuctionStatus & { assetCode?: string };
   membership?: MembershipState;
-  marketplace?: MarketplaceConfig | null;
+  /** `assetCode` names a known payment asset ("XLM"), so "Now:" never shows a bare contract id. */
+  marketplace?: (MarketplaceConfig & { assetCode?: string }) | null;
 };
 
 /** Where an action sits in the picker. "Elsewhere" actions are prepared on their own page and never picked. */
@@ -284,7 +285,10 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     part: 'Selling',
     currentValue: (values) =>
       values.marketplace
-        ? { draft: { paymentToken: values.marketplace.paymentAsset }, text: values.marketplace.paymentAsset }
+        ? {
+            draft: { paymentToken: values.marketplace.paymentAsset },
+            text: values.marketplace.assetCode ?? values.marketplace.paymentAsset
+          }
         : null,
     keywords: 'market asset'
   },

@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { paymentAssetCode } from '@/lib/assets-config';
 import { artworkAdditionTitle, mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { formatDuration } from '@/lib/duration';
@@ -263,8 +264,15 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   }
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
-  if (action.type === 'open-pool')
-    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${/^\d+$/.test(String(action.expiresAt)) ? new Date(Number(action.expiresAt) * 1000).toISOString() : action.expiresAt}`;
+  if (action.type === 'open-pool') {
+    // The price with its asset and the sales limit too: members vote on all of it (BUG-W11-4).
+    const code = paymentAssetCode('testnet', action.asset) ?? paymentAssetCode('public', action.asset);
+    const price = code ? `${action.price} ${code}` : `${action.price} of asset ${action.asset}`;
+    const closing = /^\d+$/.test(String(action.expiresAt))
+      ? new Date(Number(action.expiresAt) * 1000).toISOString()
+      : action.expiresAt;
+    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${price} each, at most ${action.maxPerBuyer} per wallet and ${action.maxSoldPerPeriod} sold every ${action.periodHours}h, closing ${closing}`;
+  }
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
   if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {

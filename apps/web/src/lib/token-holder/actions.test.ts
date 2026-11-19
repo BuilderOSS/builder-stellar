@@ -105,6 +105,38 @@ describe('holder binding actions', () => {
     expect(result.deploymentId).toBe('dep-a');
     expect(result.daoId).toBe('token-a');
   });
+  it('simulates again until RPC has the ledger of the last confirmed action (BUG-W11-5)', async () => {
+    const envelope = new TransactionBuilder(new Account(owner, '0'), {
+      fee: '100',
+      networkPassphrase: Networks.TESTNET
+    })
+      .setTimeout(180)
+      .build()
+      .toXDR();
+    const at = (latestLedger: number) => ({
+      simulationData: {},
+      simulation: { latestLedger },
+      needsNonInvokerSigningBy: () => [],
+      toXdr: () => envelope
+    });
+    const stale = at(990);
+    mocks.delegate.mockResolvedValueOnce(stale).mockResolvedValueOnce(at(1000));
+    const action = { action: 'delegate' as const, tokenId: '0', destination, afterLedger: '1000' };
+    await prepareHolderAction('dao-a', actor, action, { pauseMs: 0 });
+    expect(mocks.delegate).toHaveBeenCalledTimes(2);
+
+    mocks.delegate.mockReset();
+    mocks.delegate.mockResolvedValue(stale);
+    await expect(prepareHolderAction('dao-a', actor, action, { attempts: 3, pauseMs: 0 })).rejects.toThrow(
+      'hasn’t caught up'
+    );
+    expect(mocks.delegate).toHaveBeenCalledTimes(3);
+    // Without afterLedger, a simulation is taken as it is.
+    mocks.delegate.mockClear();
+    await prepareHolderAction('dao-a', actor, { action: 'delegate', tokenId: '0', destination }, { pauseMs: 0 });
+    expect(mocks.delegate).toHaveBeenCalledTimes(1);
+    expect(holderActionSchema.parse(action)).toEqual(action);
+  });
   it('stops before assembly when ownership changed', async () => {
     mocks.owner.mockResolvedValue({ simulationData: {}, result: destination });
     await expect(
