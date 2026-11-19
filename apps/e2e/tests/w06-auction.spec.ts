@@ -260,7 +260,7 @@ test.describe.serial('W06 auction', { tag: '@chain' }, () => {
     await expect(page.getByText('Live', { exact: true })).toBeVisible();
     await expect(page.getByText('Starting at')).toBeVisible();
 
-    // Past auctions lists the settled token and its winner.
+    // Past auctions lists the settled token and its winner, without a reload (BUG-W06-4).
     const history = await waitForIndexed<HistoryBody>(
       page.request,
       {
