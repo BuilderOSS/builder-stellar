@@ -357,6 +357,14 @@ indexer; W14's take about 3. Before they start, `resetPoolsTribe` and `resetMemb
 time are closed and swept (anyone may), a listing left open is cancelled, the treasury is topped up
 to at least 10 XLM, and `e2e-member-a`'s W14 tokens, delegation and approvals are restored.
 
+To rotate only these two specs at tablet and mobile, skip the project dependencies: a dependency
+project runs every spec in `tests/`, whatever files the command names, so other timelines' chain
+specs would sign with the w11 wallets.
+
+```bash
+E2E_ROTATION=1 pnpm --dir apps/e2e exec playwright test tests/w11-pools-treasury-purchase.spec.ts tests/w14-members.spec.ts --project=tablet-dark-chain --project=mobile-dark-chain --no-deps --workers=1
+```
+
 ### The W11 and W14 fixtures
 
 Three tribes on the dev Manager, deployed and launched by `e2e-w11-founder`:
