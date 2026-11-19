@@ -97,7 +97,7 @@ export async function prepareHolderAction(
     if (!after || simulatedAt === null || simulatedAt >= after) return prepared;
     if (attempt >= attempts)
       throw new HolderError(
-        'The network hasn’t caught up with your last transaction yet. Wait a few seconds, then review again.',
+        'The network doesn’t show your last transaction yet. Wait a few seconds, then review again.',
         409
       );
     await new Promise((resolve) => setTimeout(resolve, pauseMs));

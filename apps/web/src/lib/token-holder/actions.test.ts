@@ -128,7 +128,7 @@ describe('holder binding actions', () => {
     mocks.delegate.mockReset();
     mocks.delegate.mockResolvedValue(stale);
     await expect(prepareHolderAction('dao-a', actor, action, { attempts: 3, pauseMs: 0 })).rejects.toThrow(
-      'hasn’t caught up'
+      'doesn’t show your last transaction yet'
     );
     expect(mocks.delegate).toHaveBeenCalledTimes(3);
     // Without afterLedger, a simulation is taken as it is.
