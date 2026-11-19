@@ -1,3 +1,6 @@
+/** Shown when the market's permission to hold a token is missing or has run out (before or during List). */
+export const APPROVAL_EXPIRED = 'Your permission expired. Allow the market again.';
+
 export function marketplaceErrorMessage(error: unknown) {
   const text = error instanceof Error ? error.message : String(error);
   const messages: Record<string, string> = {
@@ -8,15 +11,20 @@ export function marketplaceErrorMessage(error: unknown) {
     '7706': 'This listing has expired. It can no longer be purchased.',
     '7707': 'This listing has not expired yet.',
     '7708': 'Only the original seller can cancel this listing.',
-    '7709': 'The marketplace fee is out of range (at most 25%).',
+    '7709': 'The resale fee is out of range (at most 25%).',
     '7710':
       'This listing price and fee exceed the contract arithmetic limit. The seller can cancel the listing and choose a smaller price.',
     '7712':
       'The marketplace payment asset changed since you reviewed it. Refresh, review the new asset and list again.',
     '7713': 'The marketplace is paused. Purchases and new listings are unavailable.',
-    '7714': 'The marketplace fee increased since you reviewed it. Refresh, review the new fee and list again.',
+    '7714': 'The resale fee increased since you reviewed it. Refresh, review the new fee and list again.',
     '7715': 'The price is now higher than the price you reviewed. Refresh the listing and review the new price.',
-    '7001': 'The marketplace has not launched yet.'
+    '7001': 'The marketplace has not launched yet.',
+    '7216': 'Memberships in this tribe are locked, so tokens cannot be listed for sale.',
+    // The token's transfer_from, which List calls to move the token into the market's care.
+    '200': 'This token no longer exists. Refresh your tokens.',
+    '201': 'You no longer hold this token. Refresh your tokens.',
+    '202': APPROVAL_EXPIRED
   };
   for (const [code, message] of Object.entries(messages)) {
     if (new RegExp(`(?:Error\\(Contract, #|contract error[: ]+|error #)${code}\\b`, 'i').test(text)) return message;

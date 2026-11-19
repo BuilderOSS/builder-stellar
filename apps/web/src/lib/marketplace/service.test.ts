@@ -186,6 +186,17 @@ describe('read-only marketplace services and DTO isolation', () => {
     expect(db.marketplaceSecondaryListing.findMany).not.toHaveBeenCalled();
     expect(() => JSON.stringify(response)).not.toThrow();
   });
+  it("Yours: a seller's own resales only, never pools", async () => {
+    const seller = `G${'S'.repeat(55)}`;
+    await marketplaceOffers(new URLSearchParams(`kind=secondary&status=open&seller=${seller}`), {
+      ...(await marketplaceDao('dao-a')),
+      marketplaceContract: 'market-dao-a'
+    });
+    expect(db.marketplacePool.findMany).not.toHaveBeenCalled();
+    expect(db.marketplaceSecondaryListing.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ seller, status: 'open' })
+    );
+  });
   it.each(['deployment', 'dao', 'module'])(
     'fails closed if a global row leaks across %s identity',
     async (identity) => {

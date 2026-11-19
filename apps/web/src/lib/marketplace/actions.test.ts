@@ -30,7 +30,13 @@ const mocks = vi.hoisted(() => ({
     secondaryListingCreatedEventFilter: vi.fn(),
     parseEvent: vi.fn()
   },
-  token: { owner_of: vi.fn(), approve: vi.fn(), transfers_locked: vi.fn() },
+  token: {
+    owner_of: vi.fn(),
+    approve: vi.fn(),
+    transfers_locked: vi.fn(),
+    get_approved: vi.fn(),
+    is_approved_for_all: vi.fn()
+  },
   launch: vi.fn(),
   creation: vi.fn(),
   readiness: vi.fn(),
@@ -66,12 +72,22 @@ vi.mock('@builder-stellar/token-bindings', () => ({
     owner_of = mocks.token.owner_of;
     approve = mocks.token.approve;
     transfers_locked = mocks.token.transfers_locked;
+    get_approved = mocks.token.get_approved;
+    is_approved_for_all = mocks.token.is_approved_for_all;
   }
 }));
 
 import { getTreasuryAssets } from '@/lib/assets-config';
 
-import { marketplaceActionSchema, marketplaceTransactionXdr, prepareMarketplaceAction } from './actions';
+import {
+  APPROVAL_LEDGERS,
+  marketplaceActionSchema,
+  marketplaceApproval,
+  marketplaceMayMove,
+  marketplaceTransactionXdr,
+  prepareMarketplaceAction
+} from './actions';
+import { APPROVAL_EXPIRED } from './errors';
 import {
   contractActionFixture,
   creationHistory,
@@ -164,6 +180,8 @@ beforeEach(() => {
   mocks.client.pool_purchases.mockResolvedValue({ result: 0 });
   mocks.token.owner_of.mockResolvedValue({ result: buyer });
   mocks.token.transfers_locked.mockResolvedValue({ result: false });
+  mocks.token.get_approved.mockResolvedValue({ result: PURCHASE_MARKET });
+  mocks.token.is_approved_for_all.mockResolvedValue({ result: false });
   mocks.horizonAccount.mockResolvedValue(new Account(buyer, '1'));
   for (const fn of [
     mocks.token.approve,
@@ -335,29 +353,89 @@ describe('authenticated marketplace preparation lifecycle', () => {
       { timeoutInSeconds: 180 }
     );
     expect(mocks.client.buy_from_pool).not.toHaveBeenCalled();
-    expect(result.summary).toContain('250 bps');
+    expect(result.summary).toContain('2.5% resale fee');
+    expect(result.summary).not.toMatch(/bps|escrow/i);
     expect(mocks.readiness).toHaveBeenCalledWith(buyer, 'testnet', usdc);
   });
-  it('approve then escrow are independent calls with actor identity and exact amounts', async () => {
-    const action: MarketplaceAction = {
-      action: 'approve',
+  it('approve then list are independent calls with actor identity and exact amounts', async () => {
+    const approve = await prepareMarketplaceAction('dao-a', actor, { action: 'approve', tokenId: '7' });
+    // About 1 hour of ledgers, not 10 minutes.
+    expect(APPROVAL_LEDGERS).toBe(720);
+    expect(mocks.token.approve).toHaveBeenCalledWith(
+      { owner: buyer, spender: PURCHASE_MARKET, token_id: 7, expiration_ledger: 1720 },
+      { timeoutInSeconds: 180 }
+    );
+    expect(approve.summary).toContain('about 1 hour');
+    expect(approve.summary).not.toMatch(/ledger|escrow/i);
+    expect(mocks.client.list).not.toHaveBeenCalled();
+    const list = await prepareMarketplaceAction('dao-a', actor, {
+      action: 'list',
       tokenId: '7',
       price: '1.0000001',
       expiresAt: expiry.toString(),
       paymentAsset: xlm,
       feeBps: 500
-    };
-    await prepareMarketplaceAction('dao-a', actor, action);
-    expect(mocks.token.approve).toHaveBeenCalledWith(
-      { owner: buyer, spender: PURCHASE_MARKET, token_id: 7, expiration_ledger: 1120 },
-      { timeoutInSeconds: 180 }
-    );
-    expect(mocks.client.list).not.toHaveBeenCalled();
-    await prepareMarketplaceAction('dao-a', actor, { ...action, action: 'list' });
+    });
     expect(mocks.client.list).toHaveBeenCalledWith(
       { token_id: 7, seller: buyer, price: 10000001n, expires_at: expiry, max_fee_bps: 500, payment_asset: xlm },
       { timeoutInSeconds: 180 }
     );
+    expect(list.summary).toContain('5% resale fee');
+    expect(list.summary).not.toMatch(/bps|escrow|ledger|\d{4}-\d{2}-\d{2}T/i);
+  });
+  it('the Allow step checks only the token, not the price, end or fee', async () => {
+    const config = (await mocks.client.get_config()).result;
+    mocks.client.get_config.mockResolvedValue({ result: { ...config, default_secondary_fee_bps: 900 } });
+    await prepareMarketplaceAction('dao-a', actor, { action: 'approve', tokenId: '7' });
+    expect(mocks.token.approve).toHaveBeenCalled();
+    expect(mocks.readiness).toHaveBeenCalledTimes(1); // only the network-fee check
+    expect(
+      marketplaceActionSchema.safeParse({ action: 'approve', tokenId: '7', price: '1', expiresAt: '1' }).success
+    ).toBe(false);
+    mocks.token.owner_of.mockResolvedValue({ result: seller });
+    await expect(prepareMarketplaceAction('dao-a', actor, { action: 'approve', tokenId: '7' })).rejects.toThrow(
+      'no longer own'
+    );
+  });
+  it('List says the permission expired, instead of failing in simulation, when the market has none', async () => {
+    mocks.token.get_approved.mockResolvedValue({ result: undefined });
+    const action: MarketplaceAction = {
+      action: 'list',
+      tokenId: '7',
+      price: '1',
+      expiresAt: expiry.toString(),
+      paymentAsset: xlm,
+      feeBps: 500
+    };
+    await expect(prepareMarketplaceAction('dao-a', actor, action)).rejects.toThrow(APPROVAL_EXPIRED);
+    expect(mocks.client.list).not.toHaveBeenCalled();
+    // Another spender's permission doesn't count; an all-token permission to the market does.
+    mocks.token.get_approved.mockResolvedValue({ result: seller });
+    await expect(prepareMarketplaceAction('dao-a', actor, action)).rejects.toThrow(APPROVAL_EXPIRED);
+    mocks.token.is_approved_for_all.mockResolvedValue({ result: true });
+    await prepareMarketplaceAction('dao-a', actor, action);
+    expect(mocks.client.list).toHaveBeenCalled();
+  });
+  it('reads the live permission for the approval check', async () => {
+    const token = { get_approved: mocks.token.get_approved, is_approved_for_all: mocks.token.is_approved_for_all };
+    expect(await marketplaceMayMove(token as never, buyer, PURCHASE_MARKET, 7)).toBe(true);
+    mocks.token.get_approved.mockResolvedValue({ result: undefined });
+    expect(await marketplaceMayMove(token as never, buyer, PURCHASE_MARKET, 7)).toBe(false);
+    mocks.dao.mockResolvedValue({
+      daoId: 'dao-a',
+      marketplaceContract: PURCHASE_MARKET,
+      tokenContract: PURCHASE_TOKEN
+    });
+    expect(await marketplaceApproval('dao-a', actor, '7')).toEqual({
+      deploymentId: 'deployment-a',
+      daoId: 'dao-a',
+      address: buyer,
+      tokenId: '7',
+      approved: false
+    });
+    expect(mocks.token.is_approved_for_all).toHaveBeenCalledWith({ owner: buyer, operator: PURCHASE_MARKET });
+    await expect(marketplaceApproval('dao-a', actor, 'x')).rejects.toThrow('Invalid token');
+    await expect(marketplaceApproval('dao-a', { ...actor, network: 'public' }, '7')).rejects.toThrow('network');
   });
   it('rejects stale owner and changed fee before approval or escrow', async () => {
     const action: MarketplaceAction = {
@@ -381,7 +459,8 @@ describe('authenticated marketplace preparation lifecycle', () => {
       { owner: buyer, spender: PURCHASE_MARKET, token_id: 7, expiration_ledger: 0 },
       { timeoutInSeconds: 180 }
     );
-    expect(result.summary).toContain('immediately');
+    expect(result.summary).toContain('starting now');
+    expect(result.summary).not.toMatch(/ledger/i);
     expect(mocks.client.list).not.toHaveBeenCalled();
   });
   it('rejects USDC sale proceeds that cannot fit the seller trustline', async () => {
@@ -515,7 +594,7 @@ describe('authenticated marketplace preparation lifecycle', () => {
       eventId: 'cycle-one'
     });
     expect(mocks.client.expire).toHaveBeenCalledWith({ token_id: 7 }, { timeoutInSeconds: 180 });
-    expect(result.summary).toContain('original seller, not the caller');
+    expect(result.summary).toContain('returns the token to its seller');
   });
   it('blocks insufficient asset funds, trustline authorization and exact native fee shortfalls', async () => {
     for (const patch of [

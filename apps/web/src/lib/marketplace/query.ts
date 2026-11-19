@@ -67,7 +67,10 @@ export function parseMarketplaceQuery(params: URLSearchParams) {
     throw new MarketplaceError('Invalid marketplace filter.', 400);
   const search = (params.get('search') ?? '').trim();
   if (search.length > 120) throw new MarketplaceError('Search is too long.', 400);
-  return { page: Number(rawPage), kind, status, capability, search, take: 24 };
+  // A seller's own resales ("Yours"): a public account id, so it is safe in a query.
+  const seller = params.get('seller') ?? '';
+  if (seller && !/^G[A-Z2-7]{55}$/.test(seller)) throw new MarketplaceError('Invalid seller.', 400);
+  return { page: Number(rawPage), kind, status, capability, search, seller, take: 24 };
 }
 
 export function matchesSnapshot(
