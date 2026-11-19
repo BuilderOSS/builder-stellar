@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { defaultConfiguration } from '@/stores/create-dao-store';
 
-import { applyVotingPace, MEMBERSHIP_TYPES, membershipTypeOf, votingPaceOf, votingPaces } from './create-dao-presets';
+import {
+  applyVotingPace,
+  MEMBERSHIP_TYPES,
+  membershipTypeOf,
+  votingPaceOf,
+  votingPaceOfSettings,
+  votingPaces
+} from './create-dao-presets';
 import { sectionSchemas } from './create-dao-schema';
 
 describe('membership types', () => {
@@ -38,6 +45,16 @@ describe('voting paces', () => {
     const { governance } = defaultConfiguration('testnet');
     expect(votingPaceOf(governance, 'testnet')?.id).toBe('balanced');
     expect(votingPaceOf({ ...governance, quorumBps: 1234 }, 'testnet')).toBeNull();
+  });
+
+  it('names the pace of chain-read settings, which carry no queue delay (BUG-W03-2)', () => {
+    const [superFast, fast] = votingPaces('testnet');
+    const { queueDelay, ...read } = superFast.governance;
+    expect(votingPaceOfSettings(read, 'testnet')?.id).toBe('super-fast');
+    expect(votingPaceOfSettings({ ...read, queueDelay }, 'testnet')?.id).toBe('super-fast');
+    expect(votingPaceOfSettings({ ...read, queueDelay: queueDelay + 60 }, 'testnet')).toBeNull();
+    expect(votingPaceOfSettings({ ...fast.governance, queueDelay: null }, 'testnet')?.id).toBe('fast');
+    expect(votingPaceOfSettings({ ...read, quorumBps: 1234 }, 'testnet')).toBeNull();
   });
 
   it('Super fast speeds up auctions; leaving it restores them only when untouched', () => {

@@ -74,3 +74,58 @@ None.
 - **Fix:** `lib/wallet-connect-modal.ts` clears the kit's cached wallet list before opening the modal,
   so the loading state stays up until the kit listens.
 - **Regression test:** `lib/wallet-connect-modal.test.ts`; W01's retry case picks the wallet at once.
+
+### BUG-W03-1 · Walkthrough tribes pointed their image and renderer at localhost
+- **Flow:** W03, Create (identity). Every viewport and theme. Harness defect, in `apps/e2e`.
+- **Severity:** P1 (Create blocked in the walkthrough build; on chain it would have broken the tribe's
+  art on dev.tribes.build).
+- **Steps:** build with `pnpm --dir apps/e2e build:app`, open `/create`, fill in Identity, press
+  Continue.
+- **Expected:** the default tribe image and renderer base are on the dev deployment that serves the
+  tribe, and Identity passes.
+- **Actual:** "Use an https:// or ipfs:// image address" under the image; the defaults were
+  `http://localhost:<port>/images/dao-logo.png` and `http://localhost:<port>/api/render`.
+- **Root cause:** the walkthrough build set `NEXT_PUBLIC_SITE_URL` to the local server. The app
+  derives the default image and renderer base from it, and both are written on chain at create.
+- **Fix:** `apps/e2e/scripts/build-app.mjs` and `src/app-env.ts` name the dev site
+  (`https://dev.tribes.build`, or `E2E_SITE_URL`); the suite still browses the local server.
+- **Regression test:** W03's Create cases (they fail at Identity without it).
+
+### BUG-W03-2 · Setup never names the voting pace
+- **Flow:** W03 and W04, the setup page's "Voting rules" row. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** create a tribe with the Super fast pace, open Set up and launch.
+- **Expected:** "Super fast: votes open after 5 minutes, run 10 minutes".
+- **Actual:** "votes open after 5 minutes, run 10 minutes" for every pace.
+- **Root cause:** `components/launch/launch-setup.tsx` read the Governor over RPC, which has no getter
+  for the queue delay, then compared the pace with a queue delay of 0, which no pace has.
+- **Fix:** `votingPaceOfSettings` in `lib/create-dao-presets.ts` compares the queue delay only when
+  it is known.
+- **Regression test:** `lib/create-dao-presets.test.ts` and `components/launch/launch-setup.test.tsx`;
+  W03 asserts the row.
+
+### BUG-W03-3 · Setup's auction price has no unit
+- **Flow:** W03, the setup page's "Auctions" row. Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** create an auction tribe, open Set up and launch.
+- **Expected:** "5 minutes each · starts at 1 XLM" (DESIGN.md: amounts carry their unit).
+- **Actual:** "5 minutes each · starts at 1".
+- **Root cause:** `launch-setup.tsx` formatted the reserve price without the payment asset.
+- **Fix:** the row adds the asset code from the auction's payment token (or the pending tribe's).
+- **Regression test:** `components/launch/launch-setup.test.tsx`; W03 asserts the row.
+
+### BUG-W03-4 · Artwork folder uploads ignored the deployment's upload switch
+- **Flow:** W04, Artwork. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a build with `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED=false`, choose an artwork folder and
+  press Upload.
+- **Expected:** the page says uploads are off before anyone presses Upload, and the server refuses
+  directory uploads like every other upload.
+- **Actual:** the button was enabled and failed after the click with a service error; with a Pinata
+  key configured, `/api/pinata/generate-jwt` and `/api/pinata/pin-cid` would have uploaded anyway.
+- **Root cause:** only `/api/uploads/*` checked the switch; the directory routes and the upload
+  buttons didn't.
+- **Fix:** `lib/uploads-enabled.ts` is the one check. Both directory routes answer 404
+  `FEATURE_DISABLED` while uploads are off, and the folder and tribe image upload buttons are disabled
+  with "Uploads are off on this deployment." A folder can still be checked in the browser.
+- **Regression test:** `lib/uploads-enabled.test.ts`; W04 asserts the disabled button and its note.

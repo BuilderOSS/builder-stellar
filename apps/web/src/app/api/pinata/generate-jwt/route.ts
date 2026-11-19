@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { AuthenticationError, getPinataService, PinataError } from '@/lib/pinata-service';
+import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
+import { uploadsEnabled } from '@/lib/uploads-enabled';
 
 /**
  * Simple in-memory rate limiter for JWT generation
@@ -49,6 +51,9 @@ function checkRateLimit(key: string, maxPerMinute: number = 20): { allowed: bool
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    // The deployment's upload switch covers directory uploads too.
+    if (!uploadsEnabled()) return uploadsDisabledResponse();
+
     // Check authentication
     const session = await requireAuthenticatedSession();
 
