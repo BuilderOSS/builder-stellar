@@ -61,7 +61,8 @@ const components: MDXComponents = {
   code: (props) => <code className={proseCode} {...props} />,
   pre: (props) => <pre className={prosePre} {...props} />,
   table: (props) => (
-    <div className={proseTableWrap}>
+    // Focusable so keyboard users can scroll a wide table (axe scrollable-region-focusable).
+    <div className={proseTableWrap} role="region" aria-label="Table" tabIndex={0}>
       <table className={proseTable} {...props} />
     </div>
   ),

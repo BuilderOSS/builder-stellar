@@ -32,7 +32,10 @@ export const proseCode = css({
   bg: 'hover',
   px: '1',
   py: '0.5',
-  borderRadius: 'sm'
+  borderRadius: 'sm',
+  // Inside a link the code keeps the link colour on the page background: on the `hover`
+  // fill, `signal` misses AA in the dark theme.
+  'a > &': { bg: 'transparent', px: '0' }
 });
 export const prosePre = css({
   fontFamily: 'mono',
@@ -53,7 +56,9 @@ export const proseTableWrap = css({
   mb: '6',
   maxW: '100%',
   borderRadius: 'control',
-  boxShadow: 'inset 0 0 0 1px token(colors.rule)'
+  boxShadow: 'inset 0 0 0 1px token(colors.rule)',
+  outline: 'none',
+  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
 });
 export const proseTable = css({
   width: '100%',
