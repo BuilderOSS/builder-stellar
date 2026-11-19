@@ -3,7 +3,7 @@
 import { Dialog } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { sva } from 'styled-system/css';
 
 import { IconButton } from './button';
@@ -137,8 +137,13 @@ export function Sheet({
   trigger?: ReactNode;
 }) {
   const classes = sheet({ footerLayout });
+  // Explicit ids keep the sheet named and described once its lazily mounted content renders (BUG-W02-3).
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
   return (
     <Dialog.Root
+      ids={{ title: titleId, description: descriptionId }}
       open={open}
       onOpenChange={onOpenChange ? (details) => onOpenChange(details.open) : undefined}
       lazyMount
@@ -148,7 +153,11 @@ export function Sheet({
       <Portal>
         <Dialog.Backdrop className={classes.backdrop} />
         <Dialog.Positioner className={classes.positioner}>
-          <Dialog.Content className={classes.content}>
+          <Dialog.Content
+            className={classes.content}
+            aria-labelledby={titleId}
+            aria-describedby={description ? descriptionId : undefined}
+          >
             <span className={classes.grabber} aria-hidden="true" />
             <div className={classes.header}>
               <div>

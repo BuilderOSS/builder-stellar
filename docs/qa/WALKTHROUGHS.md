@@ -288,6 +288,51 @@ wrong code. That also means dev.tribes.build is behind `dev`: upgrade the dev de
 pnpm --dir apps/e2e preflight --require-manager
 ```
 
+## W02, W13 and W17: discover, treasury and renewal
+
+Run them on the `w02` timeline, in their own worktree:
+
+```bash
+E2E_TIMELINE=w02 E2E_APP_PORT=4352 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json pnpm --dir apps/e2e build:app
+```
+
+```bash
+E2E_TIMELINE=w02 E2E_APP_PORT=4352 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json pnpm --dir apps/e2e test:e2e tests/w02-discover.spec.ts tests/w13-treasury.spec.ts tests/w17-renewal.spec.ts
+```
+
+| Spec | `@matrix` (every viewport and theme) | `@chain` (desktop dark) |
+|---|---|---|
+| `w02-discover` | Discover lists, searches by name, symbol and contract ID, explains empty searches, opens a tribe by slug and id, a 404 for an unknown one, and the share cards | none (read only) |
+| `w13-treasury` | Balances signed out, a contribution checked then cancelled, a payout into the draft dock and the composer | e2e-member-a adds 10 XLM; e2e-founder proposes a 1 XLM payout from the dock, it reaches the read model and opens, and the same proposal again is refused before signing |
+| `w17-renewal` | The Storage renewal tab signed out, a 90-day price quoted, and the read-only platform page | e2e-member-b (not a member) renews the tribe for 90 days; every part reads Healthy |
+
+The platform page's actions (renewing shared storage, pausing new tribes, the registry) need the
+Manager admin key, so only its read-only view is walked. W13 proposes but doesn't vote: voting,
+queueing and executing are W07. W02 also reads **E2E Market**, W10's tribe, by its slug and never
+signs against it.
+
+### The W02 fixture
+
+**E2E Discover** (`e2e-w02`, tribe id `CD42UFRCNKKZESSEX3CGVX5E4GPONTEIC4JMZYJTTSGDZR26MBK6DZIW`) is a
+governance-only tribe on the dev Manager: no auction or marketplace, 300s governance steps, quorum
+10%, threshold 1. e2e-w02-founder holds two tokens and e2e-w02-member-a one. The config is
+`configs/e2e-walk-w02-dao.json` (nonce 2), the artifact `deploys/dev-testnet-dao-2.json`, and
+`apps/e2e/src/w02-fixture.ts` reads both.
+
+To recreate it (after a dev reset, or for another Manager), run the preflight once so the `w02` keys
+exist, put `stellar keys address e2e-w02-founder` in the config's `deployer`, `launchAdmin` and first
+founder, and `stellar keys address e2e-w02-member-a` in the second, then:
+
+```bash
+for phase in create_dao admin_checklist launch_dao; do
+  DEPLOY_IDENTITY=e2e-w02-founder node scripts/deploy-dao.mjs $phase configs/e2e-walk-w02-dao.json configs/testnet-dev-manager.json
+done
+```
+
+Commit the config and the artifact. The treasury starts empty: W13's `@chain` case funds it, and its
+`@matrix` cases top it up from e2e-w02-operator with a direct transfer when it holds less than 1 XLM,
+because the payout form checks amounts against a verified balance.
+
 ## Run W10 (marketplace)
 
 W10 walks the marketplace on chain: a member lists a token from the token page with the guided List
