@@ -40,6 +40,11 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
+/** "XLM" for a known asset; undefined for one we can't name, so its contract id shows instead. */
+function knownAssetCode(network: Parameters<typeof marketplaceAssetLabel>[0], id: string) {
+  const label = marketplaceAssetLabel(network, id);
+  return label === 'Unknown asset' ? undefined : label;
+}
 const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
@@ -359,7 +364,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}
-          values={{ marketplace: data?.config ?? undefined }}
+          values={{
+            marketplace: data?.config
+              ? { ...data.config, assetCode: knownAssetCode(data.network, data.config.paymentAsset) }
+              : undefined
+          }}
           onQueue={(handler, draft, replaces) => {
             try {
               if (!enabled || !data) throw new Error('Connect your wallet and wait for the market to load.');

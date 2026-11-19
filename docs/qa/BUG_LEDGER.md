@@ -74,3 +74,82 @@ None.
 - **Fix:** `lib/wallet-connect-modal.ts` clears the kit's cached wallet list before opening the modal,
   so the loading state stays up until the kit listens.
 - **Regression test:** `lib/wallet-connect-modal.test.ts`; W01's retry case picks the wallet at once.
+
+### BUG-W09-1 · "Change the market payment asset" shows a contract id as its current value
+- **Flow:** W09 (composer picker and Manage → Market), every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a launched tribe with a market, open New proposal → Add an action, or Manage → Market.
+- **Expected:** `Now: XLM`, as the starting price reads `Now: 1 XLM`.
+- **Actual:** `Now: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`.
+- **Root cause:** the catalog's `currentValue` for `set-marketplace-payment-token` printed the
+  market's `paymentAsset` (a SAC contract id); the auction setting already carried an `assetCode`.
+- **Fix:** `useSettingValues` and Manage → Market pass the asset's code with the market config
+  (`apps/web/src/lib/proposal-actions/use-setting-values.ts`,
+  `apps/web/src/components/marketplace/admin-marketplace.tsx`); the catalog shows it, and the contract
+  id only for an asset it can't name (`apps/web/src/lib/proposal-actions/catalog.ts`).
+- **Regression test:** `catalog.test.ts`, "names a known market asset by its code"; W09 picks
+  `Change the market payment asset Now: XLM`.
+
+### BUG-W09-2 · Manage overview doesn't say Market and Artwork need a vote after launch
+- **Flow:** W15 (Manage overview), every viewport and theme.
+- **Severity:** P2 (authority copy).
+- **Steps:** open Manage on a launched tribe.
+- **Expected:** every section whose changes go to a vote reads "Needs a vote".
+- **Actual:** Market ("Listings, fees and pausing") and Artwork had no chip, as if anyone could change
+  them, though launch hands the Marketplace and Metadata admin to the Treasury like the rest.
+- **Root cause:** the overview's per-section access map listed profile, token, governance, owner and
+  auction only.
+- **Fix:** the map moved to `apps/web/src/lib/manage-access.ts` (`manageSectionAccess`) with
+  `artwork` and `marketplace` added; `apps/web/src/app/dao/[daoId]/admin/page.tsx` uses it.
+- **Regression test:** `apps/web/src/lib/manage-access.test.ts`; W15's authority-copy check.
+
+### BUG-W09-3 · "Recover a membership" stays disabled with DAO recovery turned on in the same draft
+- **Flow:** W09 (composer), every viewport and theme.
+- **Severity:** P1 (`dao-transfer` could not be proposed together with `set-dao-recovery`).
+- **Steps:** New proposal → Add an action → DAO recovery (on) → Add to proposal → Add an action.
+- **Expected:** "Recover a membership" is offered: its own reason says "Turn it on first, in this
+  proposal or an earlier one". Likewise "Reopen the market" after "Pause the market" in the draft.
+- **Actual:** it stayed disabled with "DAO recovery is off…", and "Reopen the market" with "The market
+  is already open.", because availability read only the live settings.
+- **Root cause:** `actionAvailability` was given the tribe's live values, never the draft's effect.
+- **Fix:** `valuesAfterDraft` (`apps/web/src/lib/proposal-actions/catalog.ts`) applies the draft's
+  switches and pauses in order; the picker uses it for availability and for a switch's starting value
+  (on, then off), while "Now:" still shows the live value
+  (`apps/web/src/lib/proposal-actions/components/action-picker-sheet.tsx`).
+- **Regression test:** `catalog.test.ts`, "counts what the draft already does"; W09's members and
+  market proposals.
+
+### BUG-W09-4 · Recovery on, recover, recovery off can't be submitted
+- **Flow:** W09 (composer review), every viewport and theme.
+- **Severity:** P1 (the documented way to recover a lost key, with recovery off again afterwards,
+  was blocked).
+- **Steps:** New proposal → DAO recovery (on) → Recover a membership → DAO recovery (off) → review.
+- **Expected:** it submits: each switch call changes the value it finds when it runs.
+- **Actual:** "Turn DAO recovery off" showed "This is off already, and setting it again would fail
+  the proposal." and the error "Another action in this draft changes the same resource to a different
+  value.", which blocks submitting.
+- **Root cause:** the unchanged-switch rule compared against the live setting, not the value the
+  draft's earlier steps leave; the clash rule treated any two values for one switch as a conflict.
+- **Fix:** `switchValueBefore` reads the switch at its place in the draft; a switch turned back with
+  steps between is a plan, not a clash (on then off back to back still is)
+  (`apps/web/src/lib/proposal-action-identity.ts`).
+- **Regression test:** `proposal-action-identity.test.ts`, "reads a switch at its place in the
+  draft"; W09's members proposal.
+
+### BUG-W09-5 · Add a module and Remove a module add nothing to the proposal
+- **Flow:** W09 (Manage → Membership), every viewport and theme.
+- **Severity:** P1 (`create-module`, `register-module` and `unregister-module` could not be proposed).
+- **Steps:** Manage → Membership → Add a module → Invite lists → "Add 2 actions to your proposal"
+  (or a module's options → Remove from tribe… → "Add 1 action to your proposal").
+- **Expected:** the "Add this to your proposal?" review (the steps are high-risk), then the steps in
+  the draft.
+- **Actual:** the sheet closed and nothing was added: no review, no toast, an empty draft. The
+  review dialog opened for a moment and closed itself.
+- **Root cause:** the sheet closed first and proposed one animation frame later; the sheet's focus
+  restore, after its exit animation, landed outside the newly opened review dialog, which dismissed
+  it as a cancel.
+- **Fix:** both sheets propose while still open; the review opens over the sheet, and the sheet closes
+  when the steps are added (`onAdded`), or at once when no review is needed. A refusal now shows in
+  the sheet (`apps/web/src/components/admin/modules/add-module-sheet.tsx`,
+  `remove-module-sheet.tsx`, `modules-card.tsx`).
+- **Regression test:** W09's modules proposal (round 1) and cleanup proposal (round 2).

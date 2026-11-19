@@ -73,7 +73,6 @@ export function AddModuleSheet({
   present,
   registered,
   propose,
-  onMessage,
   onChanged
 }: {
   open: boolean;
@@ -85,9 +84,8 @@ export function AddModuleSheet({
   live: boolean;
   present: ReadonlySet<ModuleKind>;
   registered: number;
-  propose: (request: ActionRequest) => ProposeResult;
+  propose: (request: ActionRequest, options?: { onAdded?: () => void }) => ProposeResult;
   /** A problem to show beside the card, when the change could not be added. */
-  onMessage: (text: string) => void;
   onChanged: () => void;
 }) {
   const assets = useMemo(() => creationAssets(config.name), [config.name]);
@@ -251,12 +249,12 @@ export function AddModuleSheet({
         title,
         note: `${steps.map((entry) => entry.title).join('. ')}.`
       });
-      handleOpenChange(false);
-      // A review dialog may follow, so let this sheet finish closing first.
-      requestAnimationFrame(() => {
-        const result = propose(request);
-        if (result.outcome === 'invalid') onMessage(result.message);
-      });
+      // BUG-W09-5: the review dialog opens over this sheet, which closes once the steps are added. Closing
+      // it first let its focus restore land after the dialog opened and dismiss it, adding nothing.
+      const result = propose(request, { onAdded: () => handleOpenChange(false) });
+      if (result.outcome === 'added') handleOpenChange(false);
+      else if (result.outcome === 'invalid') setSubmitError(result.message);
+      else if (result.outcome === 'no-wallet') setSubmitError('Connect your wallet to add this to a proposal.');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Check the values.');
     }

@@ -12,6 +12,7 @@ import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { daoAdminRoute } from '@/lib/dao-routes';
+import { type ManageAccess, manageSectionAccess } from '@/lib/manage-access';
 import { manageGroups } from '@/lib/manage-sections';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -29,16 +30,12 @@ const accessCard = css({
 const accessTitle = css({ textStyle: 'heading', m: '0' });
 const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 
-type Access = 'direct' | 'vote' | 'read' | 'open';
-
-function AccessChip({ access }: { access: Access }) {
+function AccessChip({ access }: { access: ManageAccess }) {
   if (access === 'direct') return <Chip tone="yours">You can change this</Chip>;
   if (access === 'vote') return <Chip tone="live">Needs a vote</Chip>;
   if (access === 'read') return <Chip>Read only</Chip>;
   return null;
 }
-
-const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : vote ? 'vote' : 'read');
 
 export default function AdminPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
@@ -68,13 +65,15 @@ export default function AdminPage() {
   );
 
   // Who can change each section; anything not listed is open to read and act on.
-  const accessFor: Partial<Record<string, Access>> = {
-    profile: access(isAdmin, canProposeAdminActions),
-    token: access(hasMintAccess, canProposeMint),
-    governance: access(hasGovernanceAccess, canProposeGovernance),
-    owner: access(isAdmin, canProposeAdminActions),
-    auction: access(isAdmin, canProposeAuction)
-  };
+  const accessFor = manageSectionAccess({
+    isAdmin,
+    hasMintAccess,
+    hasGovernanceAccess,
+    canProposeAdminActions,
+    canProposeMint,
+    canProposeGovernance,
+    canProposeAuction
+  });
   const sections = manageGroups({
     auction: Boolean(config.auctionContractId),
     marketplace: Boolean(config.marketplaceContractId),
