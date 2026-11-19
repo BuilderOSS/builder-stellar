@@ -12,4 +12,13 @@ describe('marketplace error messages', () => {
     expect(marketplaceErrorMessage(new Error('Error(Contract, #7202)'))).not.toBe(APPROVAL_EXPIRED);
     expect(marketplaceErrorMessage(new Error('Error(Contract, #7709)'))).toContain('resale fee');
   });
+  it('has a plain message for every marketplace contract error (7701-7727)', () => {
+    for (let code = 7701; code <= 7727; code++) {
+      const raw = `HostError: Error(Contract, #${code})`;
+      expect(marketplaceErrorMessage(new Error(raw)), `#${code}`).not.toBe(raw);
+    }
+    expect(marketplaceErrorMessage(new Error('Error(Contract, #7722)'))).toBe(
+      'This pool has sold as many tokens as it can for now. Try again when its next sales period starts.'
+    );
+  });
 });

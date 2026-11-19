@@ -78,6 +78,15 @@ describe('the sell form', () => {
     expect(html).toContain('Connect wallet');
   });
 
+  it('shows the end presets as unavailable while the form is (BUG-007)', () => {
+    state.auth = 'unauthenticated';
+    const html = renderToStaticMarkup(<SellForm data={data} />);
+    expect(html.match(/<input[^>]*type="radio"[^>]*>/g)?.every((input) => input.includes('disabled'))).toBe(true);
+    state.auth = 'authenticated';
+    const enabled = renderToStaticMarkup(<SellForm data={data} />);
+    expect(enabled.match(/<input[^>]*type="radio"[^>]*>/g)?.some((input) => input.includes('disabled'))).toBe(false);
+  });
+
   it('shows the network warning before the form on the wrong network', () => {
     state.networkIssue = 'Switch your wallet to Testnet.';
     const html = renderToStaticMarkup(<SellForm data={data} />);
