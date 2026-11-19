@@ -1,0 +1,4 @@
+{
+  "$comment": "W04 @matrix state tour. pendingTribe: an auction tribe a W03 chain run created and nobody set up (no artwork, no founders), so its setup page stays in the 'nothing done' state. Any W03 auction tribe works; replace the id if this one is ever set up.",
+  "pendingTribe": "CBGCPE73T65HM5UMWAT46RP64T5P6OA7OCK2VPNKJGDAJEMMADNLD6XR"
+}

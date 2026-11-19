@@ -173,6 +173,76 @@ pnpm --dir apps/e2e typecheck
 pnpm --dir apps/web exec vitest run src/lib/e2e-wallet scripts
 ```
 
+## Run W03 to W05 (tribes)
+
+| Flow | Spec | Kind | What it signs |
+|---|---|---|---|
+| W03 Create a tribe | `tests/w03-create-tribe.spec.ts` | `@matrix` form cases, `@chain` deploys | Two `create_dao`: an auction tribe and a fixed-price tribe with claim lists |
+| W04 Setup and launch | `tests/w04-setup-launch.spec.ts` | `@chain` | Two tribes through artwork, founders and launch; one takes the other's link first |
+| W05 Launch drive | `tests/w05-launch-drive.spec.ts` | `@chain` | Claims with a proof file, `launch_when_ready`, a refund, `release_slug` |
+
+Every tribe they make is named `E2E W03 …` with a slug starting `e2e-w03`, plus a run tag, because a
+launched link is claimed for good. The tribes' default image and renderer point at dev.tribes.build
+(BUG-W03-1), so they render there like any other tribe.
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts tests/w04-setup-launch.spec.ts --project=desktop-dark-chain
+```
+
+The `@matrix` form cases need no wallet funds and run at all six projects:
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 E2E_SKIP_PREFLIGHT=1 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts --grep @matrix
+```
+
+To overlap a matrix run with a chain run, start the walkthrough server once and leave it up; both runs
+reuse it (Playwright's own server stops when its run ends):
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e serve:app
+```
+
+Not covered: uploading artwork or a tribe image (uploads are off in the walkthrough build, so W04 checks
+a folder in the browser, sees the upload refused, and uses the starter collection); the contracts step
+and the token-admin and payment-asset blockers (they need a withdrawn release or a changed module,
+which only the platform operator or a vote can make).
+
+### W05 fixtures
+
+Opening a launch drive in the app publishes its claim list to IPFS, which the walkthrough build can't
+do. A script opens the drives instead, through the same Manager calls:
+
+```bash
+E2E_TIMELINE=w03 node apps/e2e/scripts/w05-drive-fixtures.mjs both
+```
+
+For each of `ready` and `fail` it writes `configs/e2e-walk-<slug>-dao.json`, runs
+`scripts/deploy-dao.mjs create_dao` and `admin_checklist` as `e2e-w03-founder` (artifact
+`deploys/dev-testnet-dao-<nonce>.json`, nonces from 301 up), then `manager.open_assurance` with a list
+of member-a and member-b (one token each at 1 XLM, two people needed). The ready drive closes in a
+day; the fail drive after `E2E_FAIL_WINDOW_S` (600s by default). The ids, deadlines and the members'
+proofs go to `apps/e2e/fixtures/w05-drives.json`; members claim with those proofs, because the list
+file itself is not on IPFS.
+
+A drive is one-shot: run the script again (`ready`, `fail` or `both`) before each W05 run. Run the
+fail drive's script just before the spec, since the spec claims first and then waits out the deadline.
+For a full run of W03 to W05 in one go, give the fail drive time for W03 and W04 to finish first
+(about 15 minutes):
+
+```bash
+E2E_TIMELINE=w03 E2E_FAIL_WINDOW_S=1500 node apps/e2e/scripts/w05-drive-fixtures.mjs both
+```
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts tests/w04-setup-launch.spec.ts tests/w05-launch-drive.spec.ts
+```
+
+Leave `--reporter` off: it replaces the config's reporters, so the run writes no `summary.json`,
+`results.json` or HTML report.
+
+`fixtures/w04-states.json` names a tribe a W03 run created and nobody set up; W04's `@matrix` tour
+reads its "nothing done yet" setup page. Any W03 auction tribe can replace it.
+
 ## Running walkthroughs in parallel
 
 Chain flows in one run go one at a time (the `*-chain` projects have one worker), because two
@@ -376,6 +446,163 @@ DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs admin_checklist configs/
 ```bash
 DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
 ```
+
+## W07 and W08: proposals
+
+W07 (proposal lifecycle) and W08 (proposal edge cases) share one timeline in
+`apps/e2e/tests/w07-w08-proposals.spec.ts` (`@chain`), so the 300s voting delay, voting period and
+safety delay are waited out once for every proposal. In order:
+
+| Case | What happens |
+|---|---|
+| W08 cancel | The founder proposes; member A sees no Cancel; the founder cancels before voting opens |
+| W07 propose | The founder composes three actions (2 XLM to member A, 1 XLM to member B, flip members-only delegation) and proposes |
+| W08 propose | Three one-action proposals for the defeated, quorum and expiry cases, a few seconds apart |
+| W07 vote | Founder For (3), member A Against (2), member B Abstain (2), each in their own browser, at the same time |
+| W08 vote | Defeated: A For, B Abstain, founder Against. Quorum: founder For only. Expiry: founder and A For |
+| W07 queue | Member B queues it once the vote passes (anyone can) |
+| W08 defeated, quorum, expired | Each closed proposal's outcome, tally lines and the actions it no longer offers |
+| W07 execute | After the safety delay the founder executes; the treasury pays out 3 XLM, both members receive theirs, the rule flips, the receipt lists three calls |
+
+The whole timeline takes about 20 minutes. `apps/e2e/tests/w08-proposal-states.spec.ts` (`@matrix`)
+covers what signs no transaction at every viewport and theme: a member under the proposal threshold
+is told why they can't propose, the composer with three actions up to the signing step, and a tour of
+each proposal state the chain run leaves on the tribe (run the chain spec first).
+
+```bash
+E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=desktop-dark-chain
+```
+
+```bash
+E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
+```
+
+For the weekly rotation, run each extra viewport on its own with `--no-deps`. Without it, a
+rotation project pulls in its dependency project's whole test set, every other walkthrough's chain
+specs included, and those would sign with this timeline's wallets:
+
+```bash
+E2E_ROTATION=1 E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=tablet-dark-chain --no-deps
+```
+
+Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
+
+The run's proposal ids are kept in `apps/e2e/.state/<timeline>-proposals.json` (gitignored). A
+failed case doesn't stop the others, and `E2E_RESUME=1` picks up the last run's proposals instead of
+proposing again, skipping the steps that already happened.
+
+**Expired** can't be reached in one run: the Governor expires a passed proposal 14 days after its
+vote ends (`PROPOSAL_EXPIRATION_PERIOD`). Each run leaves one passed "W08 expiry" proposal unqueued
+and checks that its deadline is 14 days out; every later run checks that the probes from 14 or more
+days before now read as Expired, with no Queue or Execute. The annotation on that case says which.
+
+**Unconfirmed transactions.** When a confirmation takes longer than the app's 60-second wait, the
+proposal page and the composer show "Waiting for confirmation…". The helpers handle it when it
+happens (Check again until it confirms) and annotate the test `unconfirmed-recovery`; it is never
+forced.
+
+### The W07 and W08 proposals fixture
+
+"E2E Proposals" (slug `e2e-w07`) on the dev Manager, from `configs/e2e-walk-w07-dao.json`, artifact
+`deploys/dev-testnet-dao-7.json` (`E2E_PROPOSALS_DAO_ARTIFACT` overrides it). No auction or market.
+Founders: `e2e-w07-founder` 3, `e2e-w07-member-a` 2, `e2e-w07-member-b` 2. Voting delay, voting period
+and safety delay 300s; quorum 50% (4 For or Abstain votes, so the founder alone misses it); proposal
+threshold 3 (only the founder can propose). The treasury holds XLM for W07's payments; the spec tops
+it up from the founder when it falls under 20 XLM.
+
+To recreate it (after the preflight has created `e2e-w07-*`), put the three addresses in the config's
+`deployer`, `launchAdmin` and `founders`, then:
+
+```bash
+for phase in create_dao admin_checklist launch_dao; do
+  DEPLOY_IDENTITY=e2e-w07-founder node scripts/deploy-dao.mjs $phase configs/e2e-walk-w07-dao.json configs/testnet-dev-manager.json
+done
+```
+
+```bash
+stellar contract invoke --id CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --source-account e2e-w07-founder --network testnet -- transfer \
+  --from e2e-w07-founder --to <treasury from the artifact> --amount 1000000000
+```
+
+A new tribe needs a new `nonce` and `slug` in the config (701, `e2e-w07-2`, ...).
+
+## Run W06 (auction) and W12 (claims)
+
+Both run on the `w06` timeline, on port 4356, and share its wallets, so run them one after the other
+(the `*-chain` project does that) and never beside another `w06` run:
+
+```bash
+E2E_TIMELINE=w06 E2E_APP_PORT=4356 pnpm --dir apps/e2e build:app
+```
+
+```bash
+E2E_TIMELINE=w06 E2E_APP_PORT=4356 pnpm --dir apps/e2e test:e2e tests/w06-auction.spec.ts tests/w12-claims.spec.ts
+```
+
+**W06** (`tests/w06-auction.spec.ts`, about 10 minutes): member A bids the reserve (a bid under the
+minimum is refused before the wallet opens), member B outbids A with a comment and A's bid comes
+straight back in B's transaction (checked to the stroop on Horizon), A sees no refund to claim, then
+after the end the founder settles: B owns the token, the Treasury holds B's bid and the next auction
+starts at the reserve. If an earlier run left an auction that ended or has bids, the first case waits
+for its end and settles it, so the walk can start at any time. `@matrix` checks the page signed out,
+and signed in with a bid under the minimum, at every viewport and theme.
+
+**W12** (`tests/w12-claims.spec.ts`, about 8 minutes): the launch admin pastes rows (a bad row is
+caught first), publishes and opens a free list (two signatures: let the claims module mint, then
+open the list); a wallet that isn't on the list is refused before it signs; the listed member claims
+with the proof file; and a member who paid 1 XLM into a launch drive that failed takes it back.
+`@matrix` checks the member view signed out and the launch admin's form, both list types, at every
+viewport and theme.
+
+Not driven through the app, and why:
+
+- **IPFS.** The walkthrough build has no Pinata key, so W12 answers the upload in the browser with the
+  file's own CID (`page.route`); nothing is pinned. The server then can't fetch the list, so cards
+  show "Claim list unavailable" and members claim with the proof file, the app's own fallback.
+- **Opening the drive.** The drive form only offers whole days (1 to 90), and a refund needs the
+  deadline to pass. `src/drive-fixture.ts` opens it with `manager.open_assurance` and a 3-minute
+  deadline; claiming, the failed state and Take back go through the app.
+- **A deferred auction refund** ("Refund waiting", Claim refund). The Auction credits a refund for
+  later only when the push fails. With native XLM a push to a merged account recreates it (tried on
+  testnet: the refund arrived as a new account with 1 XLM), so it can't be forced with a 1 XLM
+  reserve. It needs a bid below the 1 XLM minimum balance or a non-native asset whose trustline is
+  removed; the contract tests cover it (`contracts/auction/src/test.rs`, `mod refunds`).
+
+### Fixture tribes
+
+Created once by `e2e-w06-founder` (`stellar keys address e2e-w06-founder` after the preflight) on the
+dev Manager. The configs and deploy artifacts are committed.
+
+| Tribe | Slug | Config | Artifact | Tribe id (token) |
+|---|---|---|---|---|
+| E2E Auction: launched, 300s auction, 1 XLM reserve, 10% raise, 60s buffer | `e2e-w06` | `configs/e2e-walk-e2e-w06-dao.json` | `deploys/dev-testnet-dao-6.json` | `CCE5QRB4IUVKDZEBREZUXWVTO2SNBZZ3POK4XZICZ7KHMGEMYXRBSBGN` |
+| E2E Claims: in Setup, claims module, native XLM | `e2e-w06-2` | `configs/e2e-walk-e2e-w06-2-dao.json` | `deploys/dev-testnet-dao-601.json` | `CC7ISZKEYU73QBMZFAJGGMYE4QKHRHE2DWYJE3ERVBLSWVUPOIWC6Z5M` |
+
+To recreate them (after a dev Manager redeploy, say), put the founder's address in each config's
+`deployer`, `launchAdmin` and founders (and the operator's for E2E Auction), delete the old artifact,
+then:
+
+```bash
+export DEPLOY_IDENTITY=e2e-w06-founder
+for phase in create_dao admin_checklist launch_dao; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-e2e-w06-dao.json configs/testnet-dev-manager.json
+done
+for phase in create_dao admin_checklist; do
+  node scripts/deploy-dao.mjs $phase configs/e2e-walk-e2e-w06-2-dao.json configs/testnet-dev-manager.json
+done
+```
+
+E2E Claims is never launched: in Setup the launch admin opens lists directly. Each W12 run adds one
+free list to it.
+
+The refund case makes a new Setup tribe per run ("E2E Drive", slug `e2e-drive-<unix time>`), because
+a tribe gets one drive for life. Its artifacts land in the gitignored
+`deploys/e2e-w06-drive-testnet-*.json` through a relabelled copy of the dev Manager artifact, as
+`scripts/e2e-membership.mjs` does. These tribes stay in Setup with a failed drive.
 
 ## When something fails
 

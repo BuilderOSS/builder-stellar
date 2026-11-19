@@ -1,0 +1,57 @@
+{
+  "$comment": "Fixture tribe for walkthrough W12 (claims), on the dev Manager. Created by e2e-w06-founder with scripts/deploy-dao.mjs create_dao and admin_checklist only: it stays in Setup, so the launch admin opens free claim lists directly (one per run). Founders: e2e-w06-founder x2. Claims are priced in native XLM (SAC).",
+  "deployer": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "nonce": 601,
+  "launchAdmin": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+  "slug": "e2e-w06-2",
+  "token": {
+    "name": "E2E Claims",
+    "symbol": "E2EC"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for claim lists (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "claims": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GAESELQO4BGWRQ3CIH4JGAT22O7G2U52EQ5E227W3OVGUTHRZ7TL3SEA",
+      "amount": 2
+    }
+  ],
+  "launch": {}
+}

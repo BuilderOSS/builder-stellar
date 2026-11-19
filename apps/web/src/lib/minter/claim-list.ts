@@ -7,24 +7,43 @@ import type { ClaimListState } from './types';
 /** A published list is at most this large (the claim-list upload policy). */
 const MAX_LIST_BYTES = 12 * 1024 * 1024;
 
+/** Shown to members when no gateway returns the file (an HTTP status or a timeout means nothing to them). */
+export const CLAIM_LIST_UNREACHABLE = "The published list couldn't be loaded from IPFS.";
+const TOO_LARGE = 'The claim list is too large.';
+
+/** The whole fetch, across every gateway: a member waits at most this long for a list's state. */
+const FETCH_BUDGET_MS = 15_000;
+
+async function fetchFrom(url: string, signal: AbortSignal): Promise<unknown> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(CLAIM_LIST_UNREACHABLE);
+  const length = Number(response.headers.get('content-length') ?? '0');
+  if (length > MAX_LIST_BYTES) throw new Error(TOO_LARGE);
+  const text = await response.text();
+  if (text.length > MAX_LIST_BYTES) throw new Error(TOO_LARGE);
+  return JSON.parse(text);
+}
+
+/**
+ * Ask every gateway at once and take the first JSON answer. Trying them one after another with a
+ * timeout each kept a member on "Checking what you can claim…" for up to a minute and a half when
+ * a list wasn't reachable (BUG-W06-2). A status code, a timeout or a body that isn't JSON from one
+ * gateway is never the member's reason (BUG-W06-1).
+ */
 async function fetchJson(uri: string): Promise<unknown> {
   const urls = getFetchableUrls(uri);
   if (!urls?.length || !uri.startsWith('ipfs://')) throw new Error('The claim list address is not an ipfs:// link.');
-  let last: unknown;
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      if (!response.ok) throw new Error(`${response.status}`);
-      const length = Number(response.headers.get('content-length') ?? '0');
-      if (length > MAX_LIST_BYTES) throw new Error('The claim list is too large.');
-      const text = await response.text();
-      if (text.length > MAX_LIST_BYTES) throw new Error('The claim list is too large.');
-      return JSON.parse(text);
-    } catch (error) {
-      last = error;
-    }
+  const done = new AbortController();
+  const signal = AbortSignal.any([done.signal, AbortSignal.timeout(FETCH_BUDGET_MS)]);
+  try {
+    return await Promise.any(urls.map((url) => fetchFrom(url, signal)));
+  } catch (error) {
+    const reasons = error instanceof AggregateError ? error.errors : [];
+    const tooLarge = reasons.some((reason) => reason instanceof Error && reason.message === TOO_LARGE);
+    throw new Error(tooLarge ? TOO_LARGE : CLAIM_LIST_UNREACHABLE);
+  } finally {
+    done.abort();
   }
-  throw last instanceof Error ? last : new Error('The claim list could not be fetched.');
 }
 
 /** How long a failed fetch or verification is remembered before the file is tried again. */

@@ -2,7 +2,7 @@
 
 import { Popover as ArkPopover } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 
 import { Button } from './button';
@@ -37,6 +37,11 @@ export function ConfirmAction({
   busy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Ark names the content only when it sees the title mounted; inside a lazily mounted portal it
+  // doesn't, and the dialog had no accessible name (BUG-W07-1). Link them explicitly.
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
   return (
     <ArkPopover.Root
       open={open}
@@ -48,9 +53,19 @@ export function ConfirmAction({
       <ArkPopover.Trigger asChild>{trigger}</ArkPopover.Trigger>
       <Portal>
         <ArkPopover.Positioner>
-          <ArkPopover.Content className={cx(floatingPanel, panel)}>
-            <ArkPopover.Title className={titleClass}>{title}</ArkPopover.Title>
-            {description ? <ArkPopover.Description className={bodyClass}>{description}</ArkPopover.Description> : null}
+          <ArkPopover.Content
+            className={cx(floatingPanel, panel)}
+            aria-labelledby={titleId}
+            aria-describedby={description ? descriptionId : undefined}
+          >
+            <ArkPopover.Title id={titleId} className={titleClass}>
+              {title}
+            </ArkPopover.Title>
+            {description ? (
+              <ArkPopover.Description id={descriptionId} className={bodyClass}>
+                {description}
+              </ArkPopover.Description>
+            ) : null}
             <div className={actions}>
               <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
                 {cancelLabel}

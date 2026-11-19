@@ -158,6 +158,61 @@ None.
   `remove-module-sheet.tsx`, `modules-card.tsx`).
 - **Regression test:** W09's modules proposal (round 1) and cleanup proposal (round 2).
 
+### BUG-W03-1 · Walkthrough tribes pointed their image and renderer at localhost
+- **Flow:** W03, Create (identity). Every viewport and theme. Harness defect, in `apps/e2e`.
+- **Severity:** P1 (Create blocked in the walkthrough build; on chain it would have broken the tribe's
+  art on dev.tribes.build).
+- **Steps:** build with `pnpm --dir apps/e2e build:app`, open `/create`, fill in Identity, press
+  Continue.
+- **Expected:** the default tribe image and renderer base are on the dev deployment that serves the
+  tribe, and Identity passes.
+- **Actual:** "Use an https:// or ipfs:// image address" under the image; the defaults were
+  `http://localhost:<port>/images/dao-logo.png` and `http://localhost:<port>/api/render`.
+- **Root cause:** the walkthrough build set `NEXT_PUBLIC_SITE_URL` to the local server. The app
+  derives the default image and renderer base from it, and both are written on chain at create.
+- **Fix:** `apps/e2e/scripts/build-app.mjs` and `src/app-env.ts` name the dev site
+  (`https://dev.tribes.build`, or `E2E_SITE_URL`); the suite still browses the local server.
+- **Regression test:** W03's Create cases (they fail at Identity without it).
+
+### BUG-W03-2 · Setup never names the voting pace
+- **Flow:** W03 and W04, the setup page's "Voting rules" row. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** create a tribe with the Super fast pace, open Set up and launch.
+- **Expected:** "Super fast: votes open after 5 minutes, run 10 minutes".
+- **Actual:** "votes open after 5 minutes, run 10 minutes" for every pace.
+- **Root cause:** `components/launch/launch-setup.tsx` read the Governor over RPC, which has no getter
+  for the queue delay, then compared the pace with a queue delay of 0, which no pace has.
+- **Fix:** `votingPaceOfSettings` in `lib/create-dao-presets.ts` compares the queue delay only when
+  it is known.
+- **Regression test:** `lib/create-dao-presets.test.ts` and `components/launch/launch-setup.test.tsx`;
+  W03 asserts the row.
+
+### BUG-W03-3 · Setup's auction price has no unit
+- **Flow:** W03, the setup page's "Auctions" row. Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** create an auction tribe, open Set up and launch.
+- **Expected:** "5 minutes each · starts at 1 XLM" (DESIGN.md: amounts carry their unit).
+- **Actual:** "5 minutes each · starts at 1".
+- **Root cause:** `launch-setup.tsx` formatted the reserve price without the payment asset.
+- **Fix:** the row adds the asset code from the auction's payment token (or the pending tribe's).
+- **Regression test:** `components/launch/launch-setup.test.tsx`; W03 asserts the row.
+
+### BUG-W03-4 · Artwork folder uploads ignored the deployment's upload switch
+- **Flow:** W04, Artwork. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a build with `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED=false`, choose an artwork folder and
+  press Upload.
+- **Expected:** the page says uploads are off before anyone presses Upload, and the server refuses
+  directory uploads like every other upload.
+- **Actual:** the button was enabled and failed after the click with a service error; with a Pinata
+  key configured, `/api/pinata/generate-jwt` and `/api/pinata/pin-cid` would have uploaded anyway.
+- **Root cause:** only `/api/uploads/*` checked the switch; the directory routes and the upload
+  buttons didn't.
+- **Fix:** `lib/uploads-enabled.ts` is the one check. Both directory routes answer 404
+  `FEATURE_DISABLED` while uploads are off, and the folder and tribe image upload buttons are disabled
+  with "Uploads are off on this deployment." A folder can still be checked in the browser.
+- **Regression test:** `lib/uploads-enabled.test.ts`; W04 asserts the disabled button and its note.
+
 ### BUG-W02-1 · An unknown tribe link shows "Something went wrong" instead of Page not found
 - **Flow:** W02, opening `/dao/<slug>` for a slug no tribe has. All viewports and themes.
 - **Severity:** P2.
@@ -377,3 +432,106 @@ None.
   they stay mounted, with their state, when no rows are left; a public card reports its cancel or
   return only when its review closes.
 - **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
+
+### BUG-W07-1 · The inline confirmation has no accessible name
+- **Flow:** W08, cancel by the proposer (proposal page, Cancel proposal). Every viewport and theme;
+  every `ConfirmAction` (artwork, platform factory, proposal cancel).
+- **Severity:** P3 (screen readers announce an unnamed "dialog" before a destructive action).
+- **Steps:** as the proposer of a pending proposal, press Cancel proposal.
+- **Expected:** a dialog named "Cancel this proposal?", described by its consequence.
+- **Actual:** `role="dialog"` with no `aria-labelledby` or `aria-describedby`.
+- **Root cause:** Ark's popover links the content to its title only when it has seen the title
+  mounted. `ConfirmAction` mounts the content lazily inside a portal, so Ark never links them.
+- **Fix:** `components/ui/confirm-action.tsx` gives the title and description ids (`useId`) and sets
+  `aria-labelledby` and `aria-describedby` on the content itself.
+- **Regression test:** W08's cancel case finds the confirmation by role and name
+  (`getByRole('dialog', { name: 'Cancel this proposal?' })`). Vitest runs in node with no DOM, so the
+  open popover can't be rendered at unit level.
+
+### BUG-W07-2 · On a phone, a suggested proposal title widens the composer past the screen
+- **Flow:** W07, composer with a payment action. Mobile (375px), both themes.
+- **Severity:** P2 (the page zooms out; the action sheet then opens off to one side and its button
+  is covered).
+- **Steps:** on a phone, start a proposal, add "Pay someone" to a G… address, then add another action.
+- **Expected:** the page stays 375px wide; "Suggested from the actions: Send 1 XLM to G…" wraps.
+- **Actual:** the layout viewport grows to about 468px to fit the 56-character address; the next
+  "Set up the action" sheet opens shifted left and "Add to proposal" can't be pressed.
+- **Root cause:** `FieldHelperText` (and field errors) wrapped long words with the global
+  `overflow-wrap: break-word`, which breaks a word only after it has set the min-content width, so the
+  grid column grew to the address.
+- **Fix:** `components/ui/field.tsx` sets `overflow-wrap: anywhere` on helper and error text.
+- **Regression test:** `expectNoHorizontalScroll` (`apps/e2e/src/fixtures.ts`) now also fails when
+  the layout viewport is wider than the screen, which a mobile browser does instead of scrolling;
+  W07's composer case checks it after three actions at every viewport.
+
+### BUG-W07-3 · At tablet width the floating Reference button covers Submit proposal
+- **Flow:** W07, composer review step. Tablet (768×1024), both themes.
+- **Severity:** P1 at tablet width (the proposal can't be submitted without scrolling the button away,
+  and at the page's end it can't be).
+- **Steps:** on a tablet, write a proposal and press Next: review.
+- **Expected:** Back and Submit proposal are both pressable.
+- **Actual:** the fixed "Reference" button sat over the right end of the action row, on Submit
+  proposal.
+- **Root cause:** the review step's Reference trigger was `position: fixed` at the bottom right,
+  offset by the tab bar's height. Between md and lg there is no tab bar, so it landed on the page's own
+  action row.
+- **Fix:** `app/dao/[daoId]/proposals/create/page.tsx` puts the trigger in the review step's action
+  row, next to Submit proposal, hidden from lg where the rail is always shown.
+- **Regression test:** W07's composer case (`w08-proposal-states.spec.ts`, every viewport) presses
+  Submit proposal on the review step; Playwright refuses a click on a covered button.
+
+### BUG-W06-1 · An unreachable claim list shows members a gateway status code
+- **Flow:** W12, claim from a list whose published file no gateway returns. All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open a claim list whose `tree_uri` isn't pinned (or while IPFS gateways are down), then
+  open Claims.
+- **Expected:** "Claim list unavailable" says in words that the published list couldn't be loaded,
+  then points to the proof file.
+- **Actual:** "Claim list unavailable · 530 You can still claim with a proof file from the
+  organizer." The reason was the last gateway's HTTP status (or a raw timeout message).
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` threw `${response.status}`
+  for a failed gateway and rethrew the last gateway's error as the member-facing reason.
+- **Fix:** every fetch failure (status, timeout, network error, a body that isn't JSON) moves on to
+  the next gateway; when none answers, the reason is "The published list couldn't be loaded from
+  IPFS." A too-large file keeps its own reason.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts`; W12 asserts the card's text.
+
+### BUG-W06-2 · An unreachable claim list holds the Claims page for up to a minute and a half
+- **Flow:** W12, the Claims page of a tribe with a list whose file no gateway returns (found at mobile,
+  where the page was still loading when the check ran). All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open Claims for a tribe with such a list, signed out or in.
+- **Expected:** the lists show within seconds, marked "Claim list unavailable", with the proof file
+  fallback.
+- **Actual:** "Checking what you can claim…" for up to 105 seconds, every minute (the failure is
+  remembered for 60s). The proof file fallback only shows once the lists load, so it was out of reach too.
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` tried the seven gateways one
+  after another with a 15s timeout each.
+- **Fix:** ask every gateway at once, take the first JSON answer and abort the rest, all within one
+  15s budget.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts` (one budget, every gateway asked
+  at once); W12's signed-out @matrix check waits one budget, not more.
+
+### BUG-W06-3 · Past claims says "1 tokens"
+- **Flow:** W12, Past claims after a one-token claim. All viewports and themes.
+- **Severity:** P3.
+- **Expected:** "1 token from Claim list 2".
+- **Actual:** "1 tokens from Claim list 2".
+- **Root cause:** the row in `apps/web/src/components/minter/claims.tsx` always used the plural.
+- **Fix:** the singular for one token.
+- **Regression test:** `apps/web/src/components/minter/claims.test.tsx` ("Past claims"); W12 asserts the row.
+
+### BUG-W06-4 · A settled auction doesn't reach Past auctions until a reload
+- **Flow:** W06, settle from the Auction page. Desktop dark (chain run); the hook is the same at every
+  viewport.
+- **Severity:** P3.
+- **Steps:** after the end, press Settle and start the next auction, then stay on the page.
+- **Expected:** the settled token and its winner appear under Past auctions.
+- **Actual:** the next auction shows (it polls every 15s) but Past auctions stays at the earlier
+  token until the page is reloaded. It refetched once, right after confirmation, which is usually
+  before the indexer has the settlement.
+- **Root cause:** `useAuctionHistory` in `apps/web/src/lib/auction-history/hooks.ts` had no refresh;
+  the page only remounts it after its own transactions.
+- **Fix:** the first page refetches every 30s, like the current auction does.
+- **Regression test:** `apps/web/src/lib/auction-history/hooks.test.ts`; W06 waits for the token under
+  Past auctions without a reload.
