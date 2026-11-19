@@ -12,6 +12,7 @@ import {
   resolveSellStep,
   sellHref,
   sellSequence,
+  sellStopNote,
   sellVoteWarning,
   unsettledChanges,
   withPendingChanges
@@ -143,5 +144,17 @@ describe('the vote warning', () => {
   it('uses no em dashes', () => {
     for (const warning of [sellVoteWarning(base), sellVoteWarning({ ...base, tokenCount: 1n })])
       expect(`${warning?.title}${warning?.description}`).not.toContain('—');
+  });
+});
+
+describe('stopping a guided sequence', () => {
+  it('says what stays in place, never that it resumes', () => {
+    expect(sellStopNote([])).toBe('');
+    expect(sellStopNote(['approve'])).toContain('takes one signature');
+    expect(sellStopNote(['cancel'])).toContain('stays cancelled');
+    expect(sellStopNote(['cancel', 'approve'])).toContain('not for sale');
+    expect(sellStopNote(['approve', 'list'])).toBe('');
+    for (const kinds of [['approve'], ['cancel']] as const)
+      expect(sellStopNote([...kinds])).not.toMatch(/continue later|—/);
   });
 });

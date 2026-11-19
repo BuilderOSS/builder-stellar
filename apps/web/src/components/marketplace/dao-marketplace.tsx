@@ -98,6 +98,8 @@ export function DaoMarketplaceView({
   );
   const [page, setPage] = useState(0);
   const [selling, setSelling] = useState(sellLink.open && canSell);
+  // The token the form opens with: from a Sell link, or one whose Change price stopped after Cancel.
+  const [sellToken, setSellToken] = useState({ id: sellLink.tokenId, focus: sellLink.open });
   const waiting = pending.length > 0;
   const query = new URLSearchParams({ kind, status, page: String(page) }).toString();
   const { data, error, isLoading, mutate } = useDaoMarketplace(daoId, query, true, waiting);
@@ -244,9 +246,10 @@ export function DaoMarketplaceView({
 
             {selling && canSell ? (
               <SellForm
+                key={sellToken.id}
                 data={data}
-                initialTokenId={sellLink.tokenId}
-                focusOnOpen={sellLink.open}
+                initialTokenId={sellToken.id}
+                focusOnOpen={sellToken.focus}
                 hiddenTokenIds={listedTokenIds(pending)}
                 onListed={(terms, hash) => onListed(data, terms, hash)}
                 onFinished={() => setSelling(false)}
@@ -260,6 +263,14 @@ export function DaoMarketplaceView({
                 purchasesEnabled={purchasesEnabled}
                 onCancelled={onCancelled}
                 onListed={(terms, hash) => onListed(data, terms, hash)}
+                onRelist={
+                  canSell
+                    ? (tokenId) => {
+                        setSellToken({ id: tokenId, focus: true });
+                        setSelling(true);
+                      }
+                    : undefined
+                }
               />
             ) : null}
             {selected.error ? <Callout variant="error" title={selected.error.message} /> : null}

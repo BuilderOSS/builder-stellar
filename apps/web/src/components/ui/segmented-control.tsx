@@ -47,6 +47,7 @@ const segmented = sva({
       cursor: 'pointer',
       whiteSpace: 'nowrap',
       _checked: { color: 'ink' },
+      _disabled: { opacity: '0.5', cursor: 'not-allowed' },
       _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '1px' },
       '& svg': { width: '4', height: '4' },
       // Touch targets are 44px (sizes.touch, DESIGN.md).
@@ -88,6 +89,7 @@ export function SegmentedControl({
   value,
   onValueChange,
   fill = false,
+  disabled = false,
   id
 }: {
   label: string;
@@ -96,6 +98,8 @@ export function SegmentedControl({
   onValueChange: (value: string) => void;
   /** Stretch across the container in equal columns (e.g. tabs in a side panel). */
   fill?: boolean;
+  /** Shown as unavailable; its options can't be chosen. */
+  disabled?: boolean;
   /** Stable id for server-rendered pages, so Ark's generated ids hydrate identically. */
   id?: string;
 }) {
@@ -107,6 +111,7 @@ export function SegmentedControl({
       id={id ?? fallbackId}
       className={classes.root}
       value={value}
+      disabled={disabled}
       onValueChange={(details) => {
         if (details.value) onValueChange(details.value);
       }}
