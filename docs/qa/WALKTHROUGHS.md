@@ -230,10 +230,13 @@ tribes on the dev Manager, all made by `e2e-w09-founder` with `scripts/deploy-da
 | `e2e-w09-2` | E2E Manage | `configs/e2e-walk-w09-2-dao.json` | `deploys/dev-testnet-dao-901.json` | Launched; the same shape |
 | `e2e-w09-3` | E2E Setup | `configs/e2e-walk-w09-3-dao.json` | `deploys/dev-testnet-dao-902.json` | Set up, never launched (Setup copy) |
 
-The founder holds 6 of the 8 founder votes, so one wallet passes a proposal at the 10% quorum; all
-governance timings are the 300s minimums. W09 changes the first tribe's slug on every run
-(`e2e-w09` ↔ `e2e-w09-b`), so the specs open tribes by id. Switches go on and off inside one
-proposal and other values alternate between two, so every run starts from settings it can change.
+The founder holds 6 of the 8 founder votes and member A 2; at the 10% quorum either passes a
+proposal alone, and all governance timings are the 300s minimums. W09 proposes as the founder and
+W15 as member A, so the two can run at the same time (two `playwright test` invocations on the same
+port share one server). W09 changes the first tribe's slug on every run (`e2e-w09` ↔ `e2e-w09-b`), so
+the specs open tribes by id. Round 1 turns the membership switches on and the market to USDC, round 2
+undoes whatever round 1 left on, and other values alternate between two, so every run starts from
+settings it can change.
 
 Recreate them (after the preflight made the `e2e-w09-*` keys; put the founder's address,
 `stellar keys address e2e-w09-founder`, in `deployer`, `launchAdmin` and the first founder):
@@ -265,8 +268,9 @@ E2E_TIMELINE=w09 E2E_APP_PORT=4359 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
 ```
 
 - Round 1 of W09 makes seven proposals and drives them through one shared timeline (about 20
-  minutes); round 2 closes the pool and removes the claims module round 1 added (about 20 more).
-  W15 makes five proposals from the Manage pages and drives them together.
+  minutes); round 2 closes the pool, turns the switches off, puts the market back on XLM and removes
+  the claims module round 1 added (about 20 more). W15 makes five proposals from the Manage pages
+  and drives them together (about 18 minutes).
 - Proposal ids are kept in `apps/e2e/.state/w09-w09.json` and `w09-w15.json`. After a failure,
   `E2E_RESUME=1` picks the run up where it stopped instead of proposing again.
 - `E2E_COMPOSE_ONLY=1` composes and reviews every proposal without submitting: a quick check of the
