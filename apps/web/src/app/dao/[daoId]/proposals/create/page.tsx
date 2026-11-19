@@ -288,7 +288,7 @@ export default function ProposalCreatePage() {
           />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Say why, add the actions, then sign. Actions you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
+            meta="Explain the reason, add the actions, then sign. Actions you add from Manage, Treasury or Claims are added here too. Drafts are saved on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -337,7 +337,7 @@ export default function ProposalCreatePage() {
                         required
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
-                        placeholder={suggestedTitle || 'Fund the winter tool library'}
+                        placeholder={suggestedTitle || 'Fund a shared tool library'}
                       />
                       {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
                         <div className={suggestion}>

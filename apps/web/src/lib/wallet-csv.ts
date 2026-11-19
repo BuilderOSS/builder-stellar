@@ -80,7 +80,10 @@ export function parseWalletCsv(text: string, limits?: WalletListLimits): ParsedW
       continue;
     }
     if (SAMPLE_WALLET_ADDRESSES.has(address)) {
-      problems.push({ line, message: 'This is an example wallet from the sample file. Put a real one here.' });
+      problems.push({
+        line,
+        message: 'This is the example wallet from the sample file. Replace it with a real wallet address.'
+      });
       continue;
     }
     if (!/^\d+$/.test(amount) || BigInt(amount) === 0n) {

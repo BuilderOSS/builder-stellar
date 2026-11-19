@@ -30,7 +30,7 @@ export function showAddedToast(notice: AddedNotice, review?: () => void) {
     description: `${actionCountText(notice.next)} waiting for a vote. Nothing is signed until you submit it.`,
     duration: UNDO_DURATION,
     action: review ? { label: 'Review proposal', onClick: review } : undefined,
-    meta: { undo: undoTo(notice.address, notice.daoId, notice.previous, 'Action taken back out') }
+    meta: { undo: undoTo(notice.address, notice.daoId, notice.previous, 'Action removed') }
   });
 }
 

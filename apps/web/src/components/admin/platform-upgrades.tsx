@@ -68,7 +68,7 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
   return (
     <Section
       title="Platform contracts"
-      description="Shared by every tribe. Tribe Builder can only upgrade them after a notice. The contracts this tribe runs, its claims module included, change only by its own vote."
+      description="Shared by every tribe. Tribe Builder can upgrade them only after a notice period. The contracts this tribe runs, its claims module included, change only by its own vote."
     >
       <div className={rows}>{data.manager ? <Row state={data.manager} latestLedger={data.latestLedger} /> : null}</div>
       {data.errors.length ? (

@@ -35,7 +35,7 @@ export function ListingComments({ listing }: { listing: MarketplaceListing }) {
         comments={comments.data?.items ?? []}
         loadError={Boolean(comments.error)}
         viewer={session.address}
-        emptyText="Notes about this token show up here, across all its listings."
+        emptyText="Comments about this token appear here, across all its listings."
         composer={
           comments.data
             ? {

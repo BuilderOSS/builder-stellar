@@ -80,7 +80,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
       )
         throw new Error('Prepared funding terms do not match this wallet and network.');
       setPrepared(result);
-      setMessage('Looks good. Review the exact transfer below. Nothing is signed yet.');
+      setMessage('Checks passed. Review the exact transfer below. Nothing is signed yet.');
     } catch (error) {
       setMessage(
         error instanceof Error && error.name !== 'ZodError'

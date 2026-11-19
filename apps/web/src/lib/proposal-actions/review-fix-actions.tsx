@@ -120,7 +120,7 @@ export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
   validate: (data, context) =>
     data.module && data.module in moduleAddressKeys && context.config[moduleAddressKeys[data.module]]
       ? valid()
-      : invalid('Choose a DAO module.'),
+      : invalid('Choose one of the tribe’s modules.'),
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'migrate-dao-module',
@@ -130,7 +130,7 @@ export const migrateModuleHandler: ActionHandler<MigrateModuleDraft> = {
   }),
   deserialize: (action) => ({ module: action.module || '' }),
   buildCallVector: (data, context) => {
-    if (!data.module) throw new Error('Choose a DAO module.');
+    if (!data.module) throw new Error('Choose one of the tribe’s modules.');
     return { target: context.config[moduleAddressKeys[data.module]], function: 'migrate', args: [] };
   }
 };

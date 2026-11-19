@@ -52,7 +52,7 @@ export function ReleaseSlug({ disabled = false }: { disabled?: boolean }) {
   const [freed, setFreed] = useState(false);
   const lock = useRef(false);
 
-  if (freed) return <Text color="ink.muted">The link is free again. The page catches up in a moment.</Text>;
+  if (freed) return <Text color="ink.muted">The link is free again. The page will update shortly.</Text>;
   if (!driveLinkReleasable(config, now)) return null;
 
   const address = session.authStatus === 'authenticated' ? session.address : null;
@@ -81,8 +81,8 @@ export function ReleaseSlug({ disabled = false }: { disabled?: boolean }) {
   return (
     <div className={css({ display: 'grid', gap: '2', justifyItems: 'start' })}>
       <Text color="ink.muted">
-        This tribe never launched, but it still holds the link it reserved. Anyone can free it for someone else to use.
-        It costs only the network fee.
+        This tribe never launched, but it still holds the link it reserved. Anyone can free it so another tribe can use
+        it. It costs only the network fee.
       </Text>
       <Button variant="secondary" disabled={disabled || !canSign} loading={busy} onClick={() => void release()}>
         {LABEL}

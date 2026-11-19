@@ -89,7 +89,7 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
   if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
   if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
   if (readiness.slugTaken && readiness.pending)
-    issues.push(`Another tribe launched first with /dao/${readiness.pending.slug}. Pick another link below.`);
+    issues.push(`Another tribe launched first with /dao/${readiness.pending.slug}. Choose a different link below.`);
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets set at creation in every module before launch.');
   return issues;

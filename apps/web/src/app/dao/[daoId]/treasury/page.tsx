@@ -11,10 +11,11 @@ export default function TreasuryPage() {
   return (
     <PageSection
       title="Treasury"
-      description="Money the tribe holds together. It only moves when members vote."
+      description="Funds the tribe holds together. They move only when a proposal passes."
       daoNote={
         <>
-          An onchain DAO <GlossaryTerm term="treasury">treasury</GlossaryTerm>: every coin in and out is on the record.
+          An onchain DAO <GlossaryTerm term="treasury">treasury</GlossaryTerm>: every payment in and out is recorded
+          onchain.
         </>
       }
     >

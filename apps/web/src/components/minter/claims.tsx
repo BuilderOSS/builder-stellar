@@ -125,7 +125,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       if (listPhase(list) !== 'open') throw new Error('This list is not taking claims.');
       if (!verifyClaimProof(address, entry.amount, entry.proof, list.root))
         throw new Error(
-          'This proof doesn’t match your account, amount or the list. Ask whoever runs the claim for a new one.'
+          'This proof doesn’t match your account, amount or the list. Ask the person who manages the list for a new one.'
         );
       const mintNow = claimCount(list, entry);
       if (mintNow < 1) throw new Error('Nothing is left to claim on this list.');
@@ -153,7 +153,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertClaimEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared, list });
-      setMessage('Looks good. Nothing is signed or sent yet.');
+      setMessage('Checks passed. Nothing is signed or sent yet.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "We couldn't prepare your claim.");
     } finally {
@@ -230,7 +230,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       setMessage('Submitted. Waiting for confirmation…');
       await waitForConfirmation(txHash, config.rpcUrl);
       setHash('');
-      setMessage('Claim confirmed. Your claim history can take a moment to catch up.');
+      setMessage('Claim confirmed. Your claim history can take a moment to update.');
       await refreshAll();
     } catch (error) {
       setReview(null);
@@ -535,7 +535,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                 })}
               </ul>
             ) : (
-              <p>No claims yet. A claim you just made can take a moment to show up.</p>
+              <p>No claims yet. A recent claim can take a moment to appear.</p>
             )}
             <Pagination
               label="Past claim pages"

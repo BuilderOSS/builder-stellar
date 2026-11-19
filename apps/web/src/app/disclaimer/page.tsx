@@ -14,9 +14,9 @@ export default function DisclaimerPage() {
       summary={[
         'Nothing here is financial, legal or tax advice.',
         'Tribe Builder is experimental, non-custodial software, and transactions can’t be undone.',
-        'Tribes run themselves. We don’t vet or endorse them.',
+        'Each tribe is run by its own members. We don’t vet or endorse them.',
         'A membership token is for belonging and voting, not an investment.',
-        'Look before you sign, and only put in what you can afford to lose.'
+        'Check every transaction before you sign, and only use funds you can afford to lose.'
       ]}
     >
       <section>
@@ -40,8 +40,8 @@ export default function DisclaimerPage() {
         <h2>3. Smart contract and network risk</h2>
         <p>
           Contracts can have bugs or be used in ways nobody expected, and we don&apos;t claim they&apos;re audited. The
-          Stellar network, RPC servers, the indexer and wallets can be slow, down or wrong, and the interface may show
-          out-of-date data. The contracts are the source of truth.
+          Stellar network, RPC servers, the indexer and wallets can be slow, unavailable or wrong, and the interface may
+          show out-of-date data. The contracts are the source of truth.
         </p>
       </section>
 
@@ -89,7 +89,7 @@ export default function DisclaimerPage() {
       <section>
         <h2>9. Storage rent and expiry</h2>
         <p>
-          Stellar keeps contract data for a paid stretch of time. If a tribe&apos;s storage isn&apos;t renewed, parts of
+          Stellar keeps contract data for a paid period of time. If a tribe&apos;s storage isn&apos;t renewed, parts of
           it stop working until they&apos;re restored. Anyone can pay to renew it, but nobody is obliged to.
         </p>
       </section>
@@ -98,15 +98,15 @@ export default function DisclaimerPage() {
         <h2>10. No uptime promise</h2>
         <p>
           The interface may be slow, unavailable or changed at any time. Your tribes and tokens live on Stellar, not
-          here, and stay there whether or not the interface is up.
+          here, and stay there whether or not the interface is available.
         </p>
       </section>
 
       <section>
-        <h2>11. Look before you sign</h2>
+        <h2>11. Check before you sign</h2>
         <p>
           Take your time. Read the proposal, check the tribe, and make sure you understand what your wallet asks you to
-          approve. Only put in what you can afford to lose. If something looks off, ask on{' '}
+          approve. Only use funds you can afford to lose. If something looks wrong, ask on{' '}
           <DiscordLink>Discord</DiscordLink> before you sign.
         </p>
       </section>

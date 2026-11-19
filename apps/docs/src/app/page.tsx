@@ -51,11 +51,11 @@ const stripText = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 export default function HomePage() {
   return (
     <main id="content" tabIndex={-1} className={main} data-pagefind-body>
-      <h1 className={title}>Pull up a chair</h1>
+      <h1 className={title}>Tribe Builder documentation</h1>
       <p className={lead}>
-        Everything you need to start a tribe or join one, in plain words, with the app’s own screens.
+        Guides and reference for joining, starting, and running a tribe, with screenshots from the app.
       </p>
-      <p className={daoLine}>A tribe is a DAO on Stellar: a shared treasury, onchain votes and NFT membership.</p>
+      <p className={daoLine}>A tribe is a DAO on Stellar: a shared treasury, onchain votes, and NFT membership.</p>
 
       <ul className={paths} aria-label="Where to begin">
         {PATHS.map((path, index) => (
@@ -98,10 +98,10 @@ export default function HomePage() {
 
       <section aria-labelledby="one-tribe" className={strip}>
         <h2 id="one-tribe" className={sectionTitle}>
-          Follow one tribe from first meeting to first decision
+          Follow one tribe from creation to its first decision
         </h2>
         <p className={stripText}>
-          Every guide follows the same tribe, so each screen picks up where the last one left off.
+          Every guide uses the same example tribe, so each screenshot continues from the one before.
         </p>
         <Shot id="home/showcase" alt="The showcase tribe’s home page, with its first proposal open for votes" />
       </section>

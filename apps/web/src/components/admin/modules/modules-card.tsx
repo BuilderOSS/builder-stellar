@@ -127,7 +127,8 @@ export function ModulesCard({
             <Stack gap="1">
               <Heading size="heading">Modules</Heading>
               <HelpTip label="Modules">
-                Add-ons that let your tribe auction, sell or hand out memberships. Each mints only up to its allowance.
+                Modules let your tribe auction, sell or give out memberships. Each module mints only up to its
+                allowance.
               </HelpTip>
             </Stack>
             <Button variant="secondary" size="sm" disabled={!editable} onClick={() => setAdding(true)}>
@@ -229,7 +230,7 @@ export function ModulesCard({
 
           {frozen ? (
             <FieldHelperText>
-              Modules are locked in for the launch drive. After launch, changes go through proposals.
+              Modules are fixed during the launch drive. After launch, changes go through proposals.
             </FieldHelperText>
           ) : null}
           {message ? <Callout variant="info" title={message} /> : null}

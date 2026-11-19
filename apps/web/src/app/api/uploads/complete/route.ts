@@ -79,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       console.warn(`[/api/uploads/complete] Authorization not found for upload ${completion.uploadId}`);
       return NextResponse.json(
         {
-          error: 'Upload authorization not found. Your upload session may have expired. Please try again.',
+          error: 'This upload was not found or has expired. Upload the file again.',
           code: 'AUTHORIZATION_NOT_FOUND'
         },
         { status: 404 }
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       console.warn(`[/api/uploads/complete] Authorization expired for upload ${completion.uploadId}`);
       return NextResponse.json(
         {
-          error: 'Upload authorization has expired. Your session lasted too long. Please try uploading again.',
+          error: 'This upload has expired. Upload the file again.',
           code: 'AUTHORIZATION_EXPIRED'
         },
         { status: 410 }

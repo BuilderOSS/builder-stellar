@@ -13,8 +13,10 @@ const list = css({ listStyle: 'none', m: '0', p: '0', my: '8', display: 'grid' }
 export default function NotFound() {
   return (
     <main id="content" tabIndex={-1} className={main} data-pagefind-ignore="all">
-      <h1 className={title}>Nobody’s sitting here</h1>
-      <p className={lead}>This page has moved or never existed.</p>
+      <h1 className={title}>Page not found</h1>
+      <p className={lead}>
+        This page may have moved, or it does not exist. Choose a starting point or search the docs.
+      </p>
       <ul className={list} aria-label="Where to begin">
         {PATHS.map((path) => (
           <ListRow

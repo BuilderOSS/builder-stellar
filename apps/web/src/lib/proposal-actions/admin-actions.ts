@@ -327,12 +327,12 @@ function treasuryAssetResult(context: FormContext, asset: string): ValidationRes
 }
 
 const PAYMENT_TOKEN_LOCKED =
-  'The auction has taken a bid, which fixes its payment asset for good. A vote cannot change it now.';
+  'The auction has already taken a bid, so its payment asset can no longer change, even by a vote.';
 
 export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
   type: 'set-auction-payment-token',
   label: 'Change the auction payment asset',
-  description: 'Change the asset bids are paid in, while auctions are paused. The first bid fixes it for good.',
+  description: 'Change the asset bids are paid in, while auctions are paused. It cannot change after the first bid.',
   group: 'Selling',
   FormComponent: AdminPaymentTokenForm,
   getDefaultValues: () => ({ paymentToken: '' }),

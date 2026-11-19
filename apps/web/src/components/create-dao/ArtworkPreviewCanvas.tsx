@@ -22,7 +22,7 @@ export function ArtworkPreviewCanvas({
         ref={canvas}
         width={400}
         height={400}
-        aria-label="Randomized layered artwork preview"
+        aria-label="Random layered artwork preview"
         className={styles.canvas}
       />
       <p className={styles.muted} role="status">

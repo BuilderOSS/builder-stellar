@@ -105,8 +105,8 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
           Build a tribe.
         </h1>
         <p className={heroBody}>
-          Gather your people, pool what you put in, and decide together. A DAO on Stellar: shared treasury, onchain
-          votes, NFT membership. Fees cost a fraction of a cent.
+          Bring your community together, share a treasury, and make decisions as members. A DAO on Stellar: shared
+          treasury, onchain votes, NFT membership.
         </p>
         <div className={heroActions}>
           <ButtonLink href="/create" size="lg">
@@ -129,7 +129,7 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
 
       {featured.length ? (
         <Section
-          title="Happening now"
+          title="Explore tribes"
           action={
             <ButtonLink href="/discover" variant="secondary" size="sm">
               See all
@@ -148,14 +148,14 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
       <Section title="How it works">
         <ol className={steps}>
           <li className={step}>
-            <p className={stepTitle}>Gather your people</p>
+            <p className={stepTitle}>Start or join a tribe</p>
             <p className={stepBody}>
               Build a tribe with a name, art and a link to share, or join one that already exists. Each member holds a
               token, and each token is one vote.
             </p>
           </li>
           <li className={step}>
-            <p className={stepTitle}>Pool a treasury</p>
+            <p className={stepTitle}>Fund a shared treasury</p>
             <p className={stepBody}>
               People join through an auction, a sale or a claim list, and what they pay goes to the tribe&apos;s
               treasury. Anyone can add more.
@@ -164,16 +164,16 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
           <li className={step}>
             <p className={stepTitle}>Decide together</p>
             <p className={stepBody}>
-              Members put ideas to a vote. The treasury only moves when a vote passes, and everyone can see where it
-              went.
+              Members vote on proposals. The treasury moves only when a proposal passes, and anyone can see where the
+              funds went.
             </p>
           </li>
         </ol>
       </Section>
 
       <Section
-        title="Under the hood"
-        description="For people who know DAOs: what a tribe runs on."
+        title="How it's built"
+        description="Technical details for people familiar with DAOs."
         action={
           <ButtonLink href={SOURCE_URL} variant="ghost" size="sm" external>
             Source on GitHub
@@ -196,15 +196,19 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
           </li>
           <li className={hoodItem}>
             <p className={hoodTitle}>An onchain treasury</p>
-            <p className={hoodBody}>Funds sit in the tribe&apos;s own contract and move only by a passed vote.</p>
+            <p className={hoodBody}>
+              Funds are held in the tribe&apos;s own contract and move only when a proposal passes.
+            </p>
           </li>
           <li className={hoodItem}>
             <p className={hoodTitle}>Anyone can execute a ready proposal</p>
             <p className={hoodBody}>Once a vote passes and its safety delay ends, any wallet can run the proposal.</p>
           </li>
           <li className={hoodItem}>
-            <p className={hoodTitle}>Fees a fraction of a cent</p>
-            <p className={hoodBody}>Stellar network fees for voting, bidding and proposing.</p>
+            <p className={hoodTitle}>Small network fees</p>
+            <p className={hoodBody}>
+              Voting, bidding and proposing each cost a small Stellar network fee, paid in XLM.
+            </p>
           </li>
         </ul>
       </Section>
@@ -257,11 +261,14 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
     <div className={page}>
       <header className={css({ display: 'grid', gap: '2', pt: { base: '2', md: '4' } })}>
         <h1 className={greeting}>Welcome back</h1>
-        <p className={heroBody}>Here&apos;s what&apos;s happening in your tribes.</p>
+        <p className={heroBody}>Recent updates from your tribes.</p>
       </header>
 
       {setup.length ? (
-        <Section title="Finish setting up" description="Only you can see these: your wallet is their launch admin.">
+        <Section
+          title="Finish setting up"
+          description="Only you can see these, because your wallet is their launch admin."
+        >
           <div className={communityGrid}>
             {setup.map((community) => (
               <CommunityCard key={community.id} community={community} />
@@ -304,7 +311,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
 
       {suggestions.length ? (
         <Section
-          title={upForGrabs ? 'Up for grabs' : 'Discover more'}
+          title={upForGrabs ? 'Open to join' : 'Discover more'}
           description={
             backIn.length
               ? "Auctions and tokens for sale in your tribes first, then what's open elsewhere."

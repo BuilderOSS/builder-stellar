@@ -30,14 +30,14 @@ function historyCopy(state: ProposalState | undefined, count: number, opensAt: s
       title: 'Votes so far',
       description: count ? voted : undefined,
       emptyTitle: 'No votes yet',
-      emptyBody: 'Votes show up here as members cast them.'
+      emptyBody: 'Votes appear here as members cast them.'
     };
   if (state === ProposalState.Canceled)
     return {
       title: 'How members voted',
       description: count ? voted : undefined,
       emptyTitle: 'No votes',
-      emptyBody: 'It was canceled before anyone voted.'
+      emptyBody: 'It was cancelled before anyone voted.'
     };
   return {
     title: 'How members voted',

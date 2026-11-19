@@ -115,7 +115,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
     : null;
   const governanceSummary = governance.data
     ? `${pace ? `${pace.title}: ` : ''}votes open after ${formatDuration(governance.data.votingDelay, { style: 'long' })}, run ${formatDuration(governance.data.votingPeriod, { style: 'long' })}`
-    : 'Pace chosen when you created it.';
+    : 'Voting timing chosen when you created it.';
 
   return (
     <div className={page}>
@@ -202,7 +202,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
             <LaunchStepRow
               status="todo"
               title="Contract upgrades"
-              detail={`${optionalUpdates.length === 1 ? '1 upgrade is' : `${optionalUpdates.length} upgrades are`} available. Easiest to apply before launch, while you can sign directly.`}
+              detail={`${optionalUpdates.length === 1 ? '1 upgrade is' : `${optionalUpdates.length} upgrades are`} available. Before launch, you can apply them directly; after launch, upgrades require DAO governance.`}
               action={
                 <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
                   Review

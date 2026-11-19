@@ -1,7 +1,8 @@
 import type { ThemePreference } from '@builder-stellar/design-tokens/theme';
 
 export const DOCS_NAME = 'Tribe Builder Docs';
-export const DOCS_DESCRIPTION = 'How to start, join and run a tribe on Tribe Builder: guides, ideas and reference.';
+export const DOCS_DESCRIPTION =
+  'How to start, join, and run a tribe on Tribe Builder: guides, concepts, and reference.';
 /** NEXT_PUBLIC_DOCS_URL overrides it per deployment (previews). */
 export const DOCS_URL = new URL(process.env.NEXT_PUBLIC_DOCS_URL?.trim() || 'https://docs.tribes.build');
 export const APP_URL = 'https://tribes.build';

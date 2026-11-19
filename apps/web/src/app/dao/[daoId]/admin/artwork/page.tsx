@@ -202,7 +202,7 @@ export default function ArtworkAdminPage() {
           {artwork.data && wired && !direct && !canPropose ? (
             <Callout
               variant="info"
-              title="You can look, but not change the artwork"
+              title="You can view the artwork but not change it"
               description={
                 token.data?.live
                   ? 'After launch, artwork changes go through a proposal. Connect a wallet to start one.'

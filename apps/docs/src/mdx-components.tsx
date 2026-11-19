@@ -35,8 +35,8 @@ function Link({ href = '', children, ...props }: ComponentProps<'a'>) {
 function Placeholder() {
   return (
     <Callout
-      title="This page is coming"
-      description="It’s part of the docs plan. Each guide will follow the app screen by screen, with screenshots in your theme."
+      title="This page is not written yet"
+      description="It is planned. Each guide will follow the app screen by screen, with screenshots in your theme."
     />
   );
 }

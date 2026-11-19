@@ -34,7 +34,7 @@ describe('OpenPoolForm', () => {
     ]);
     expect(html).not.toContain('EURC');
     expect(html).not.toContain('contract address');
-    expect(html).toContain('the only assets the market takes, so a pool priced in anything else could never sell');
+    expect(html).toContain('the only assets the market takes, so a pool priced in any other asset cannot sell');
   });
 
   it('points the asset picker at its hint, or at its error once invalid', () => {

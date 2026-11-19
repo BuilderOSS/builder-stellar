@@ -18,6 +18,7 @@ import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-comp
 import { DaoSwitcher } from './dao-switcher';
 import { NavRail, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
+import { ThemeMenu } from './theme-menu';
 import { WalletButton } from './wallet-button';
 import { YouSheet } from './you-sheet';
 
@@ -92,7 +93,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
     <ShellFrame
       rail={<NavRail label={`${name} sections`} items={rail} footerItems={railFooter} activeKey={active} />}
       topStart={<DaoSwitcher current={{ id: daoId, name, image: daoConfig.image, seed: daoConfig.tokenContractId }} />}
-      topEnd={<WalletButton onOpenYou={() => setYouOpen(true)} />}
+      topEnd={
+        <>
+          <ThemeMenu />
+          <WalletButton onOpenYou={() => setYouOpen(true)} />
+        </>
+      }
       tabBar={
         <TabBar
           label={`${name} sections`}

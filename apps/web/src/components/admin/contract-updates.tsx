@@ -177,7 +177,7 @@ export function ContractUpdates() {
                   ? pending
                     ? 'During setup you apply upgrades yourself. Each one is a signature.'
                     : 'Upgrades go to a vote like any other change.'
-                  : 'New contract releases show up here when they are approved for your tribe.'}
+                  : 'New contract releases appear here when they are approved for your tribe.'}
               </p>
             </div>
 

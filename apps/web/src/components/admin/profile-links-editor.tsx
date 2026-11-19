@@ -100,7 +100,7 @@ export function ProfileLinksEditor({
           onClick={() => onChange([...links, { label: '', url: '' }])}
         >
           <Plus aria-hidden="true" />
-          {links.length >= MAX_PROFILE_LINKS ? `${MAX_PROFILE_LINKS} links is the most` : 'Add a link'}
+          {links.length >= MAX_PROFILE_LINKS ? `Maximum of ${MAX_PROFILE_LINKS} links` : 'Add a link'}
         </Button>
       </div>
     </div>

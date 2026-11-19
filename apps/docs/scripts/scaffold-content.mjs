@@ -12,7 +12,7 @@ const slugs = [
 const placeholder = '<Placeholder />\n';
 const templates = {
   guides: `${placeholder}
-## At the table
+## Overview
 
 What you want to do, in one or two plain sentences.
 
@@ -43,14 +43,14 @@ The idea, for someone new to DAOs.
 
 ## The DAO term
 
-The same idea, for people who know Nouns.
+The same idea, for people who already know DAOs.
 
 ## Related
 `,
   default: `${placeholder}
 ## Coming soon
 
-This page is part of the docs plan.
+This page is planned and not written yet.
 `
 };
 

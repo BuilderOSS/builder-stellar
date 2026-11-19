@@ -65,7 +65,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
 
   if (!count) {
     // On the overview the section heading names the draft and explains it; elsewhere an empty draft hides.
-    return overview ? <p className={empty}>Nothing waiting for a vote.</p> : null;
+    return overview ? <p className={empty}>No actions are waiting for a vote.</p> : null;
   }
 
   const lastText = last
@@ -83,7 +83,7 @@ export function DraftDock({ daoId, overview = false }: { daoId: string; overview
             {count === 1 ? 'action' : 'actions'} waiting for a vote
             {overview ? null : (
               <HelpTip label="Proposal draft">
-                These actions go up for a vote together. Add a title and why, then submit.
+                These actions go up for a vote together. Add a title and a reason, then submit.
               </HelpTip>
             )}
           </p>

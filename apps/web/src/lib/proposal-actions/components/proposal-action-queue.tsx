@@ -179,9 +179,9 @@ export function ProposalActionQueue({
     if (entry.bundleId || entry.actions.some(isHighRiskProposalAction)) {
       setConfirm({
         title: entry.bundleId ? 'Remove all of its steps?' : 'Remove this action?',
-        message: `“${itemSentence(entry)}” comes out of the proposal${
+        message: `“${itemSentence(entry)}” is removed from the proposal${
           entry.actions.length > 1 ? `, all ${entry.actions.length} steps together` : ''
-        }. You can undo it from the notice.`,
+        }. You can undo this from the notification.`,
         onConfirm: () => {
           remove(entry);
           setConfirm(null);

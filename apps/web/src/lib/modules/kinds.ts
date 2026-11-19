@@ -55,7 +55,7 @@ export const MODULE_COPY: Record<
 > = {
   auction: {
     title: 'Daily auction',
-    goal: 'A new membership goes to the highest bidder, over and over.',
+    goal: 'Each auction sells one new membership to the highest bidder. The next auction starts when one ends.',
     term: 'Auction module · one token per auction, paid to the treasury',
     noun: 'the auction',
     rowLabel: 'Auction'
@@ -69,7 +69,7 @@ export const MODULE_COPY: Record<
   },
   claims: {
     title: 'Invite lists',
-    goal: 'Hand out memberships to a list of wallets, free or for a price.',
+    goal: 'Give memberships to a list of wallets, free or at a price.',
     term: 'Claims module · lists published for anyone to check',
     noun: 'the claims module',
     rowLabel: 'Claims'

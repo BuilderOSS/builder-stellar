@@ -268,14 +268,16 @@ export function MembershipSettings() {
           {frozen ? (
             <Callout
               variant="info"
-              title="Locked in for the launch drive"
+              title="Fixed during the launch drive"
               description="The tribe belongs to its treasury until it launches. After launch, changes go through proposals."
             />
           ) : !canAct ? (
             <Callout
               variant="warning"
               title={
-                data.live ? 'Connect a wallet to draft proposals' : 'Connect the launch admin wallet to change these'
+                data.live
+                  ? 'Connect a wallet to draft proposals.'
+                  : 'Connect the launch admin wallet to change these settings.'
               }
             />
           ) : null}

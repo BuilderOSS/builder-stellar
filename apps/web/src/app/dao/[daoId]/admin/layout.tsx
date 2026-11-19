@@ -40,7 +40,7 @@ export default function ManageLayout({ children }: { children: ReactNode }) {
           // Every Manage page during setup says where it fits and leads back to the checklist.
           <Callout
             variant="info"
-            title="You're setting up"
+            title="This tribe is in setup"
             description="Changes here apply right away until launch. The launch checklist shows what's required."
           >
             <div>

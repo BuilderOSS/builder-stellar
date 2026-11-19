@@ -47,7 +47,7 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
     [
       'Votes counted by',
       voteSource
-        ? `${sourceName ?? 'An approved vote source'} (${voteSource.slice(0, 4)}…${voteSource.slice(-4)}). Fixed for good once created.`
+        ? `${sourceName ?? 'An approved vote source'} (${voteSource.slice(0, 4)}…${voteSource.slice(-4)}). Cannot be changed after creation.`
         : "The tribe's token: one membership, one vote."
     ],
     ['Voting pace', votingPaceOf(governance)?.title ?? 'Custom'],
@@ -102,8 +102,8 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
         ))}
       </dl>
       <p className={styles.muted}>
-        Creating sets your tribe up in Setup, not live yet. There you add artwork and mint founder tokens. Launching is
-        a separate step you sign when you&apos;re ready.
+        Creating your tribe puts it in Setup. It is not live yet. In Setup you add artwork and mint founder tokens.
+        Launching is a separate step that you sign when you are ready.
       </p>
       <Disclosure
         title="Advanced: metadata links"

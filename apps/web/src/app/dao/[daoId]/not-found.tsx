@@ -3,7 +3,7 @@ import { ButtonLink, EmptyState } from '@/components/ui';
 export default function NotFound() {
   return (
     <EmptyState
-      title="We couldn't find that"
+      title="Page not found"
       action={
         <ButtonLink href="/discover" variant="secondary">
           Find a tribe

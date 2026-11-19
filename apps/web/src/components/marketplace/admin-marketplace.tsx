@@ -85,7 +85,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const share =
     votingSupply.data === undefined ? null : largestBuyerShare(votingSupply.data, pool.size, pool.maxPerBuyer);
   const shareText = share
-    ? `The largest vote share one wallet could buy is ${share.percent}%: ${share.bought} ${share.bought === 1 ? 'token' : 'tokens'}, if nobody else buys (${votingSupply.data} votes today).`
+    ? `The largest vote share one wallet could buy is ${share.percent}%: ${share.bought} ${share.bought === 1 ? 'token' : 'tokens'}, if no one else buys (${votingSupply.data} votes now).`
     : '';
   const picked = pools.find((listing) => listing.id === poolId.trim());
   const pickedClosed = picked?.status === 'closed';
@@ -198,7 +198,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             <EditingActionNotice editing={editing.editing} bundle={editing.bundle} onCancel={editing.done} />
             <p>
               A pool sells new tokens at a fixed price. Anyone can stock it once it opens; buyers take one token at a
-              time, within the per-wallet and per-period limits. Choose a closing time that leaves room for the vote.
+              time, within the per-wallet and per-period limits. Choose a closing time that allows time for the vote.
             </p>
             {data?.config?.paused ? (
               <p className={styles.notice}>
@@ -228,7 +228,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="pool-per-buyer">Most one wallet can buy</FieldLabel>
+                <FieldLabel htmlFor="pool-per-buyer">Maximum per wallet</FieldLabel>
                 <Input
                   id="pool-per-buyer"
                   inputMode="numeric"
@@ -237,7 +237,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="pool-rate">Most sales per period</FieldLabel>
+                <FieldLabel htmlFor="pool-rate">Maximum sales per period</FieldLabel>
                 <Input
                   id="pool-rate"
                   inputMode="numeric"
@@ -326,7 +326,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               </div>
             ) : null}
             <p className={styles.muted}>
-              Closing stops sales now and hands back the tokens it never minted. Sweeping a closed pool moves its unsold
+              Closing stops sales now and returns the tokens it never minted. Sweeping a closed pool moves its unsold
               tokens to the treasury.
             </p>
             {pendingPools.map((action) => (

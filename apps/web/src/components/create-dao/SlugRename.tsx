@@ -72,8 +72,8 @@ export function SlugRename({
   return (
     <Callout variant="warning" title={`Another tribe took /dao/${currentSlug}`}>
       <p>
-        It launched first with this link, so your launch would fail. Pick another link, then launch. It becomes yours
-        when you launch.
+        It launched first with this link, so your launch would fail. Choose a different link, then launch. The new link
+        is reserved for your tribe when it launches.
       </p>
       <Field>
         <FieldLabel htmlFor="rename-slug">New link</FieldLabel>

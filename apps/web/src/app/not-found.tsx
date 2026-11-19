@@ -12,10 +12,8 @@ export default function NotFound() {
   return (
     <section className={wrap}>
       <BrandMark size={48} />
-      <h1 className={title}>Lost your noggles?</h1>
-      <p className={body}>
-        This page doesn&apos;t exist, or the link is out of date. Your tribes are right where you left them.
-      </p>
+      <h1 className={title}>Page not found</h1>
+      <p className={body}>This page doesn&apos;t exist, or the link is out of date. Your tribes are not affected.</p>
       <div className={actions}>
         <ButtonLink href="/">Go home</ButtonLink>
         <ButtonLink href="/discover" variant="secondary">

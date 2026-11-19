@@ -230,7 +230,7 @@ The work:
 
 ### 5.3 Page template
 Every guide uses the same sections:
-1. **At the table.** One or two plain sentences about the human goal.
+1. **Overview.** One or two plain sentences about the goal.
 2. **Before you start.** Role, wallet, and what you need, for example "a member with at least 1 vote".
 3. **Steps.** Numbered. Each step has one themed screenshot. A mobile variant appears where the layout differs.
 4. **What happens on chain.** Folded: contracts called, fees, waits, and who can see it, and when.

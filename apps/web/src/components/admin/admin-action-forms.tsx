@@ -282,7 +282,7 @@ export function OpenPoolForm({
         onChange={(asset) => set({ asset })}
         disabled={disabled}
         error={fields?.asset}
-        consequence="so a pool priced in anything else could never sell."
+        consequence="so a pool priced in any other asset cannot sell."
       />
       <FieldLabel htmlFor="pool-size">Tokens in the pool</FieldLabel>
       <Input
@@ -293,7 +293,7 @@ export function OpenPoolForm({
         disabled={disabled}
       />
       <ErrorText message={fields?.size} />
-      <FieldLabel htmlFor="pool-per-buyer">Most one wallet can buy</FieldLabel>
+      <FieldLabel htmlFor="pool-per-buyer">Maximum per wallet</FieldLabel>
       <Input
         id="pool-per-buyer"
         value={value.maxPerBuyer}
@@ -302,7 +302,7 @@ export function OpenPoolForm({
         disabled={disabled}
       />
       <ErrorText message={fields?.maxPerBuyer} />
-      <FieldLabel htmlFor="pool-rate">Most sales per period</FieldLabel>
+      <FieldLabel htmlFor="pool-rate">Maximum sales per period</FieldLabel>
       <Input
         id="pool-rate"
         value={value.maxSoldPerPeriod}
@@ -336,7 +336,7 @@ export function OpenPoolForm({
       <Callout
         variant="warning"
         title="Each token sold adds a vote"
-        description="A pool larger than today's voting supply could let buyers outvote the members who approve it. Keep pools small and the per-wallet limit low. Manage → Market shows the largest share one wallet could buy."
+        description="A pool larger than the current voting supply could let buyers outvote the members who approve it. Keep pools small and the per-wallet limit low. Manage → Market shows the largest share one wallet could buy."
       />
     </Stack>
   );

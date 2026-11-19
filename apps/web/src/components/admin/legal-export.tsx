@@ -89,7 +89,7 @@ const ENTITY_OPTIONS = [
     label: 'For-profit',
     description: 'May distribute profits. Pays the Marshall Islands gross revenue tax.'
   },
-  { value: 'undecided', label: 'Not decided yet', description: 'Talk it through with the registrar first.' }
+  { value: 'undecided', label: 'Not decided yet', description: 'Discuss this with the registrar first.' }
 ];
 
 const NON_PROFIT_OPTIONS = Object.entries(NON_PROFIT_PURPOSE_LABELS).map(([value, label]) => ({ value, label }));
@@ -232,7 +232,7 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
             {draft.entityType === 'non-profit' ? (
               <div className={field}>
                 <ChoiceGroup
-                  label="What kind of good works?"
+                  label="What is the non-profit purpose?"
                   options={NON_PROFIT_OPTIONS}
                   value={draft.nonProfitPurpose}
                   onValueChange={(value) => set({ nonProfitPurpose: value as NonProfitPurpose })}

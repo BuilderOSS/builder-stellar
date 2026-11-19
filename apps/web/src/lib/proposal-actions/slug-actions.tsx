@@ -10,7 +10,7 @@ export type DaoSlugDraft = { slug: string };
 
 /** What members are told about the old link; shared by the preview and the profile caption. */
 export const SLUG_CHANGE_WARNING =
-  'The old link is freed right away. It keeps leading here only until another tribe takes it, which can happen at any time.';
+  'The old link is freed immediately. It keeps leading here only until another tribe takes it, which can happen at any time.';
 
 function validateDaoSlug(data: DaoSlugDraft, context?: Pick<FormContext, 'config'>): ValidationResult {
   const slug = data.slug.trim();

@@ -172,7 +172,7 @@ export function HolderControls({
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertHolderEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared });
-      setMessage('Looks good. Review the details below. Nothing is signed yet.');
+      setMessage('Checks passed. Review the details below. Nothing is signed yet.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to prepare this action.');
     } finally {
@@ -371,7 +371,7 @@ export function HolderControls({
             <FieldHelperText>
               {endsAround
                 ? `Ends around ${endsAround}. `
-                : 'A number, not a date: the network moves on by one about every 5 seconds. '}
+                : 'A ledger number, not a date. It increases by one about every 5 seconds. '}
               {locked
                 ? 'Until then, a proposal members pass can move this token, unless you revoke it first.'
                 : 'The spender can move your token until then or until you revoke it.'}
@@ -474,7 +474,7 @@ export function HolderControls({
             </Button>
           ) : (
             <p className={muted}>
-              Don’t send it again while it’s confirming. Check the transaction, or refresh after it lands.
+              Don’t send it again while it’s confirming. Check the transaction, or refresh after it is confirmed.
             </p>
           )}
         </div>
