@@ -1,0 +1,44 @@
+{
+  "id": "manage/profile/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815739,
+  "capturedAt": "2026-11-19T15:32:16.980Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Name field",
+      "box": {
+        "desktop": {
+          "x": 0.4694,
+          "y": 0.2851,
+          "w": 0.2917,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.4732,
+          "w": 0.808,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

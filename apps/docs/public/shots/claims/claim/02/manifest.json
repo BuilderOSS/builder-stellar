@@ -1,0 +1,62 @@
+{
+  "id": "claims/claim/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815912,
+  "capturedAt": "2026-11-19T15:46:44.343Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "your allocation on the list",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.4831,
+          "w": 0.6889,
+          "h": 0.025
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4949,
+          "w": 0.8293,
+          "h": 0.0277
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Claim 5 tokens button",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.5214,
+          "w": 0.0935,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.5374,
+          "w": 0.3589,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

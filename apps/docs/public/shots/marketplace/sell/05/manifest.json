@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/sell/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815849,
+  "capturedAt": "2026-11-19T15:41:28.254Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Check button",
+      "box": {
+        "desktop": {
+          "x": 0.5962,
+          "y": 0.6225,
+          "w": 0.0538,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.1067,
+          "y": 0.6292,
+          "w": 0.7867,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

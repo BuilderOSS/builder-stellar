@@ -11,6 +11,7 @@
     "docs:dev": "pnpm --dir apps/docs dev",
     "docs:build": "pnpm --dir apps/docs build",
     "docs:check": "pnpm --dir apps/docs check:site",
+    "docs:capture": "bash apps/e2e/scripts/capture-story.sh",
     "contracts:build": "stellar contract build",
     "contracts:bindings": "node scripts/generate-bindings.mjs",
     "contracts:clean": "cargo clean",

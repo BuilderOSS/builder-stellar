@@ -1,0 +1,44 @@
+{
+  "id": "proposals/actions/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815534,
+  "capturedAt": "2026-11-19T15:15:14.131Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Find an action search box",
+      "box": {
+        "desktop": {
+          "x": 0.7222,
+          "y": 0.1026,
+          "w": 0.2639,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0533,
+          "y": 0.2376,
+          "w": 0.8933,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

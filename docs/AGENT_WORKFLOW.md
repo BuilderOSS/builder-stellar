@@ -61,6 +61,7 @@ Run the relevant checks before handing work to another agent:
 | Indexer | `pnpm indexer:test`, then pipeline generation or validation when affected |
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
 | Docs site | `pnpm --dir apps/docs lint`, `typecheck` and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
+| Docs screenshots | `pnpm --dir apps/e2e build:capture`, then the capture story on testnet (`docs/qa/SHOWCASE_TRIBE.md`, "Capturing") |
 | Database | Forward migration, rollback, permission, and query-plan evidence |
 
 Checks are requirements, not a claim of a passing run. Current CI runs Cargo

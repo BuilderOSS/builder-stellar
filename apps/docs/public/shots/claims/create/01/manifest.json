@@ -1,0 +1,44 @@
+{
+  "id": "claims/create/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815886,
+  "capturedAt": "2026-11-19T15:44:31.666Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Free list option",
+      "box": {
+        "desktop": {
+          "x": 0.3763,
+          "y": 0.6179,
+          "w": 0.0007,
+          "h": 0.0011
+        },
+        "mobile": {
+          "x": 0.1969,
+          "y": 0.6864,
+          "w": 0.0027,
+          "h": 0.0012
+        }
+      }
+    }
+  ]
+}

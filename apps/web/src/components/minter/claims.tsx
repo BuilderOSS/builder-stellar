@@ -521,7 +521,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           <p role="status">Loading past claims…</p>
         ) : history.data ? (
           <>
-            <p>{history.data.total} claims so far.</p>
+            <p>
+              {history.data.total} {history.data.total === 1 ? 'claim' : 'claims'} so far.
+            </p>
             {history.data.items.length ? (
               <ul className={styles.history}>
                 {history.data.items.map((item) => {
@@ -641,7 +643,7 @@ function ClaimListCard({
         entry ? (
           <>
             <p>
-              {entry.amount} tokens for you · {list.claimed ?? 0} claimed
+              {entry.amount} {String(entry.amount) === '1' ? 'token' : 'tokens'} for you · {list.claimed ?? 0} claimed
               {remainingAllocation(list) === 0n ? ' · all claimed' : ''}
             </p>
             {phase === 'open' && next > 0 ? (

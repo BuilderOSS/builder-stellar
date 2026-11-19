@@ -98,12 +98,13 @@ export default function HomePage() {
 
       <section aria-labelledby="one-tribe" className={strip}>
         <h2 id="one-tribe" className={sectionTitle}>
-          Follow one tribe from creation to its first decision
+          Follow one tribe from creation to its latest proposal
         </h2>
         <p className={stripText}>
-          Every guide uses the same example tribe, so each screenshot continues from the one before.
+          Every guide uses the same example tribe, Lamplight, a circle of lantern makers on testnet. Each screenshot
+          continues from the one before.
         </p>
-        <Shot id="home/showcase" alt="The showcase tribe’s home page, with its first proposal open for votes" />
+        <Shot id="home/showcase" alt="Lamplight’s home page, with its latest proposal open for votes" />
       </section>
     </main>
   );

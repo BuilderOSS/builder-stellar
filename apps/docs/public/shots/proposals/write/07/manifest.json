@@ -1,0 +1,44 @@
+{
+  "id": "proposals/write/07",
+  "appCommit": "bccf91b",
+  "ledger": 5815539,
+  "capturedAt": "2026-11-19T15:15:39.247Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Submit proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.5487,
+          "y": 0.5222,
+          "w": 0.1013,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.1067,
+          "y": 0.5065,
+          "w": 0.7867,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/buy/04",
+  "appCommit": "bccf91b",
+  "ledger": 5815894,
+  "capturedAt": "2026-11-19T15:45:14.270Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Done button",
+      "box": {
+        "desktop": {
+          "x": 0.6015,
+          "y": 0.5922,
+          "w": 0.0485,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.1067,
+          "y": 0.6133,
+          "w": 0.7867,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

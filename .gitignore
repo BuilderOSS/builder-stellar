@@ -9,6 +9,7 @@ node_modules
 .pnpm-store/
 .next
 .next-e2e
+.next-capture
 apps/web/.env*.local
 apps/web/styled-system
 apps/web/tsconfig.tsbuildinfo

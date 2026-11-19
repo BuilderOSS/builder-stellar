@@ -1,0 +1,44 @@
+{
+  "id": "members/delegate/03",
+  "appCommit": "bccf91b",
+  "ledger": 5816803,
+  "capturedAt": "2026-11-19T17:00:59.783Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Delegate address field",
+      "box": {
+        "desktop": {
+          "x": 0.55,
+          "y": 0.6435,
+          "w": 0.3222,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.4869,
+          "w": 0.808,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

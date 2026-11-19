@@ -1,0 +1,44 @@
+{
+  "id": "create/review-and-deploy/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815392,
+  "capturedAt": "2026-11-19T15:03:25.310Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Renderer base URL field",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.7113,
+          "w": 0.4944,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4828,
+          "w": 0.8293,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

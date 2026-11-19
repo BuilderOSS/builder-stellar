@@ -1,0 +1,44 @@
+{
+  "id": "proposals/write/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815537,
+  "capturedAt": "2026-11-19T15:15:29.616Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Title field",
+      "box": {
+        "desktop": {
+          "x": 0.1639,
+          "y": 0.3632,
+          "w": 0.4361,
+          "h": 0.0494
+        },
+        "mobile": {
+          "x": 0.0427,
+          "y": 0.4256,
+          "w": 0.9147,
+          "h": 0.0548
+        }
+      }
+    }
+  ]
+}

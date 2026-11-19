@@ -1,0 +1,44 @@
+{
+  "id": "members/delegate/01",
+  "appCommit": "bccf91b",
+  "ledger": 5816802,
+  "capturedAt": "2026-11-19T17:00:54.291Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Delegate votes button",
+      "box": {
+        "desktop": {
+          "x": 0.175,
+          "y": 0.475,
+          "w": 0.0949,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4728,
+          "w": 0.3644,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

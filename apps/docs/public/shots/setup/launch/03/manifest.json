@@ -1,0 +1,62 @@
+{
+  "id": "setup/launch/03",
+  "appCommit": "bccf91b",
+  "ledger": 5815492,
+  "capturedAt": "2026-11-19T15:11:45.474Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Start auctions switch",
+      "box": {
+        "desktop": {
+          "x": 0.1771,
+          "y": 0.447,
+          "w": 0.0007,
+          "h": 0.0011
+        },
+        "mobile": {
+          "x": 0.0933,
+          "y": 0.086,
+          "w": 0.0027,
+          "h": 0.0012
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Launch button",
+      "box": {
+        "desktop": {
+          "x": 0.5526,
+          "y": 0.8575,
+          "w": 0.1251,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.4235,
+          "y": 0.7243,
+          "w": 0.4805,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

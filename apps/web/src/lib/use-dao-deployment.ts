@@ -226,7 +226,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           await broadcastCreationEnvelope(server, saved, config.networkPassphrase, deployer, (changes) =>
             save({ ...record!, ...changes })
           );
-          tx.submitted('Saved DAO creation envelope accepted', saved.hash!);
+          tx.submitted('Creating your tribe', saved.hash!);
           await confirmCreationTransaction(saved.hash!, config.rpcUrl);
           return finish(record!);
         }
@@ -268,7 +268,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         save({ ...record!, ...changes })
       );
       patch({ currentStep: 'confirming' });
-      tx.submitted('DAO creation envelope accepted', signed.hash);
+      tx.submitted('Creating your tribe', signed.hash);
       await confirmCreationTransaction(signed.hash, config.rpcUrl);
       return finish(record!);
     } catch (error) {
@@ -364,7 +364,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
             );
           await requirePending();
           await broadcastCreationEnvelope(server, record, config.networkPassphrase, deployer, save);
-          tx.submitted('Saved launch envelope accepted', record.hash!);
+          tx.submitted('Launching your tribe', record.hash!);
           await confirmCreationTransaction(record.hash!, config.rpcUrl);
           save({ status: 'confirmed' });
           tx.success('DAO launched', record.hash!);
@@ -392,7 +392,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       const signed = await signPrepared(assembled);
       save({ ...signed, status: 'signed' });
       await broadcastCreationEnvelope(server, record, config.networkPassphrase, deployer, save);
-      tx.submitted('DAO launch envelope accepted', signed.hash);
+      tx.submitted('Launching your tribe', signed.hash);
       await confirmCreationTransaction(signed.hash, config.rpcUrl);
       save({ status: 'confirmed' });
       tx.success('DAO launched', signed.hash);

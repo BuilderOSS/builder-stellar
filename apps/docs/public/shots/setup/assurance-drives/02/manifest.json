@@ -1,0 +1,62 @@
+{
+  "id": "setup/assurance-drives/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815694,
+  "capturedAt": "2026-11-19T15:28:33.958Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the loaded CSV file",
+      "box": {
+        "desktop": {
+          "x": 0.3778,
+          "y": 0.2922,
+          "w": 0.3593,
+          "h": 0.025
+        },
+        "mobile": {
+          "x": 0.2027,
+          "y": 0.2421,
+          "w": 0.2036,
+          "h": 0.0277
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the preview of the wallets",
+      "box": {
+        "desktop": {
+          "x": 0.3472,
+          "y": 0.4461,
+          "w": 0.5222,
+          "h": 0.1073
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4404,
+          "w": 0.8293,
+          "h": 0.1189
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "voted": {
+    "workshop": true,
+    "auction": true,
+    "mint": true,
+    "fee": true,
+    "rules": true,
+    "profile": true,
+    "pool": true,
+    "purchase": true
+  },
+  "executed": {
+    "workshop": true,
+    "auction": true,
+    "mint": true,
+    "fee": true,
+    "rules": true,
+    "profile": true,
+    "pool": true,
+    "purchase": true
+  },
+  "shots": {
+    "passed": true,
+    "queued": true,
+    "ready": true
+  }
+}

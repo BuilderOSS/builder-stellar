@@ -1,0 +1,44 @@
+{
+  "id": "claims/create/06",
+  "appCommit": "bccf91b",
+  "ledger": 5815891,
+  "capturedAt": "2026-11-19T15:45:00.346Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Open label on the new list",
+      "box": {
+        "desktop": {
+          "x": 0.4225,
+          "y": 0.4163,
+          "w": 0.0347,
+          "h": 0.0267
+        },
+        "mobile": {
+          "x": 0.3744,
+          "y": 0.3939,
+          "w": 0.1332,
+          "h": 0.0296
+        }
+      }
+    }
+  ]
+}

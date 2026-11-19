@@ -1,0 +1,44 @@
+{
+  "id": "manage/governance/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815722,
+  "capturedAt": "2026-11-19T15:30:54.349Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Review proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.7841,
+          "y": 0.1111,
+          "w": 0.0909,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.2315,
+          "w": 0.3492,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

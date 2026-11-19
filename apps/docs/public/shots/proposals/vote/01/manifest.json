@@ -1,0 +1,24 @@
+{
+  "id": "proposals/vote/01",
+  "appCommit": "bccf91b",
+  "ledger": 5815602,
+  "capturedAt": "2026-11-19T15:20:55.875Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  }
+}
