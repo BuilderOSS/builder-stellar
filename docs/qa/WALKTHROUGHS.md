@@ -377,7 +377,7 @@ Three tribes on the dev Manager, deployed and launched by `e2e-w11-founder`:
 
 - **E2E Pools**: a market in native XLM with a 2.5% resale fee. `e2e-founder` holds tokens 0-9 and
   passes proposals alone (quorum 10%); `e2e-member-a` holds 10-19 and sells one to the Treasury per
-  run, so after about ten runs recreate the tribe (or give `e2e-member-a` more tokens by proposal).
+  run, and buys one from that run's pool, which a later run lists once 10-19 are gone.
   The treasury holds testnet XLM for the purchases.
 - **E2E Members**: every membership switch off. `e2e-founder` holds 0-1, `e2e-member-a` 2-3,
   `e2e-member-b` 4.

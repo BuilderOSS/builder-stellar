@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 
 import { signedTransactions, signInAs } from '../src/connect.ts';
 import { expect, expectNoHorizontalScroll, requireVerifiedManager, test } from '../src/fixtures.ts';
+import { E2E_BASE_URL } from '../src/network.ts';
 import { waitForIndexed, waitForUi, waitForVisible } from '../src/waits.ts';
 import {
   listAsSeller,
@@ -169,13 +170,22 @@ test.describe.serial('W11 pools and Treasury purchases', { tag: '@chain' }, () =
   let allowanceBefore = 0;
   let sellerBefore = 0n;
 
-  test.beforeAll(async ({ identities }) => {
+  test.beforeAll(async ({ identities, playwright }) => {
     requireVerifiedManager();
     test.setTimeout(10 * 60_000);
     ids = Object.fromEntries(Object.values(identities).map(({ name, address }) => [name, address]));
     const changed = resetPoolsTribe(ids);
     if (changed.length) console.info(`W11 fixture reset: ${changed.join('; ')}`);
-    listedToken = sellerToken(ids);
+    const request = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
+    const inventory = await request
+      .get(`${api}/tokens?owner=${ids[SELLER]}&limit=100`)
+      .then(async (response) => ((await response.json()) as { items?: { tokenId: number }[] }).items ?? [])
+      .catch(() => []);
+    await request.dispose();
+    listedToken = sellerToken(
+      ids,
+      inventory.map((token) => token.tokenId)
+    );
     await listAsSeller(ids, listedToken, LISTING_PRICE);
     expect(listingOf(tribe, listedToken)).toMatchObject({
       seller: ids[SELLER],

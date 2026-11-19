@@ -199,13 +199,17 @@ export function resetPoolsTribe(ids: Record<string, string>, nowS = Math.floor(D
   return changed;
 }
 
-/** A token e2e-member-a holds on "E2E Pools" (one is listed, and bought by the Treasury, per run). */
-export function sellerToken(ids: Record<string, string>) {
-  const tokenId = TOKENS.pools.memberA.find((id) => ownerOf(POOLS_TRIBE, id) === ids['e2e-member-a']);
+/**
+ * A token e2e-member-a holds on "E2E Pools", to list for the Treasury purchase. Each run sells one to
+ * the Treasury and buys one from the pool, so after its ten founder tokens it lists the tokens it
+ * bought: `held` is its indexed inventory (the app's /tokens?owner=), checked live before use.
+ */
+export function sellerToken(ids: Record<string, string>, held: number[] = []) {
+  const seller = ids['e2e-member-a'];
+  const candidates = [...TOKENS.pools.memberA, ...held.filter((id) => !TOKENS.pools.memberA.includes(id))];
+  const tokenId = candidates.find((id) => ownerOf(POOLS_TRIBE, id) === seller);
   if (tokenId === undefined)
-    throw new Error(
-      'e2e-member-a has no token left on E2E Pools: each run sells one to the Treasury. Recreate the fixture (WALKTHROUGHS.md).'
-    );
+    throw new Error('e2e-member-a holds no token on E2E Pools. Recreate the fixture (WALKTHROUGHS.md).');
   return tokenId;
 }
 
