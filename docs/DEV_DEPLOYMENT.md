@@ -12,8 +12,8 @@ Manager and is not touched by anything here.
 | Database | Neon `stellar-builder-testnet`, branch `production` | same project, branch `dev` |
 | Goldsky secret | `BUILDER_POSTGRES_SECRET` | `BUILDER_DEV_POSTGRES_SECRET` |
 | Pipeline | `builder-stellar-testnet` | `builder-stellar-testnet-dev` (`packages/goldsky/dev.env`) |
-| Vercel | production deployment of `main` | the `dev` branch, domain dev.tribes.build |
-| Docs | docs.tribes.build: its own Vercel project, `apps/docs` | (one docs site) |
+| Vercel project | `builder-stellar-web` (production branch `main`) | `builder-stellar-dev` (production branch `dev`) |
+| Docs | `builder-stellar-docs` (production branch `dev`), docs.tribes.build, one site for both | |
 
 Both run on Stellar testnet. The Manager admin for both is `testnet-admin`
 (`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`).
@@ -71,36 +71,41 @@ The generated `pipelines/builder-stellar-dev-events.yaml` indexes only the dev M
 deployment ledger, into `BUILDER_DEV_POSTGRES_SECRET`. A replay after a dev database reset:
 stop and `goldsky turbo delete builder-stellar-testnet-dev`, reset as in step 2, then apply again.
 
-## 4. Vercel: dev.tribes.build
+## 4. Vercel: dev.tribes.build (`builder-stellar-dev`)
 
-In the existing tribes.build project:
+A project of its own in the `nouns-builder` team, so dev.tribes.build is a **production**
+domain and public. A branch domain on `builder-stellar-web` would sit behind Vercel's Standard
+Protection (team login), and lifting that would make every PR preview public too.
 
-1. Domains: add `dev.tribes.build`, assigned to the git branch `dev`.
-2. Environment variables scoped to **Preview, branch `dev`**:
+- Root directory `apps/web`, framework Next.js, production branch `dev` (set in the dashboard:
+  Settings, Environments, Production, Branch Tracking; the API can't change it).
+- Ignored Build Step `[ "$VERCEL_GIT_COMMIT_REF" = "dev" ] && exit 1 || exit 0`: it builds
+  `dev` only, so PR branches don't build twice (they already preview on `builder-stellar-web`).
+- Domain `dev.tribes.build` (moved from `builder-stellar-web`).
+- Environment variables (Production and Preview):
 
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_NETWORK` | `testnet` |
 | `MANAGER_DEPLOYMENT_FILE` | `deploys/dev-testnet-manager.json` |
-| `APP_DATABASE_URL` | dev branch `app_server`, pooled host, `sslmode=require` |
+| `APP_DATABASE_URL` | dev branch `app_server`, pooled host, `sslmode=require` (sensitive) |
 | `NEXT_PUBLIC_SITE_URL`, `APP_URL` | `https://dev.tribes.build` |
 | `STELLAR_HOME_DOMAIN`, `STELLAR_WEB_AUTH_DOMAIN` | `dev.tribes.build` |
-| `STELLAR_WEB_AUTH_SECRET` | a funded testnet key of its own (`stellar keys generate dev-web-auth`) |
-| `IRON_PASSWORD` | a new 32+ character secret |
+| `STELLAR_WEB_AUTH_SECRET` | the funded testnet key `dev-web-auth` (`GCN2L6VK…TZ2VN`), sensitive |
+| `IRON_PASSWORD` | its own 64-character secret (sensitive) |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
-| `GOLDSKY_API_TOKEN`, `PINATA_JWT`, `NEXT_PUBLIC_PINATA_*`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | as production |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
+| `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | `false` until `PINATA_JWT` is added (production's is sensitive, so it can't be copied) |
 
-3. Production gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` (see above).
+`builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
+Production (see above).
 
-## 5. Vercel: docs.tribes.build
+## 5. Vercel: docs.tribes.build (`builder-stellar-docs`)
 
-A second Vercel project for the static docs site:
-
-- Root directory `apps/docs`, production branch `dev` (while `main` is frozen).
-- Install `pnpm install --frozen-lockfile` (run from the repository root, as Vercel does for a
-  pnpm workspace), build `pnpm build` (codegen, `next build`, Pagefind), output `out`.
-- Domain `docs.tribes.build`. No environment variables are needed;
-  `NEXT_PUBLIC_DOCS_URL` only overrides the canonical origin for previews.
+- Root directory `apps/docs`, framework Other, build `pnpm build` (codegen, `next build`,
+  Pagefind), output `out`, production branch `dev`, the same dev-only Ignored Build Step.
+- Domain `docs.tribes.build`. No environment variables; `NEXT_PUBLIC_DOCS_URL` only overrides
+  the canonical origin.
 
 ## Verify
 
