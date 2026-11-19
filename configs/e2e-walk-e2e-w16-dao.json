@@ -1,0 +1,53 @@
+{
+  "$comment": "Fixture tribe for walkthrough W16 (contract upgrades), on the dev Manager. Deployed and launched by e2e-w16-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, W16). The founder holds every token, so the founder alone passes proposals. Core contracts only: W16 upgrades the Metadata module.",
+  "deployer": "GAUZHWHZC7A35DZF6TLYTK4E3OAEBQ6T7YE7YCPMZVF3Y6Z7BNTLQUFZ",
+  "nonce": 16,
+  "launchAdmin": "GAUZHWHZC7A35DZF6TLYTK4E3OAEBQ6T7YE7YCPMZVF3Y6Z7BNTLQUFZ",
+  "slug": "e2e-w16",
+  "token": {
+    "name": "E2E Upgrades",
+    "symbol": "E2EU"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for contract upgrades (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GAUZHWHZC7A35DZF6TLYTK4E3OAEBQ6T7YE7YCPMZVF3Y6Z7BNTLQUFZ",
+      "amount": 2
+    }
+  ]
+}
