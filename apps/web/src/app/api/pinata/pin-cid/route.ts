@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { getPinataService, PinataError } from '@/lib/pinata-service';
+import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
+import { uploadsEnabled } from '@/lib/uploads-enabled';
 
 /**
  * Request validation schema
@@ -41,6 +43,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: Record<string, unknown> = {};
 
   try {
+    // The deployment's upload switch covers directory uploads too.
+    if (!uploadsEnabled()) return uploadsDisabledResponse();
+
     // Check authentication
     await requireAuthenticatedSession();
 

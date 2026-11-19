@@ -25,7 +25,7 @@ export type SettingValues = {
   governor?: GovernorSettings;
   auction?: AuctionStatus & { assetCode?: string };
   membership?: MembershipState;
-  /** `assetCode` names a known payment asset ("XLM"), so "Now:" never shows a bare contract id. */
+  /** The market's config, with its payment asset's code ("XLM") when it is a known asset. */
   marketplace?: (MarketplaceConfig & { assetCode?: string }) | null;
 };
 
@@ -287,6 +287,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
       values.marketplace
         ? {
             draft: { paymentToken: values.marketplace.paymentAsset },
+            // BUG-W09-1: the asset's code, never its raw contract id, when the asset is a known one.
             text: values.marketplace.assetCode ?? values.marketplace.paymentAsset
           }
         : null,
@@ -412,6 +413,38 @@ export function actionAvailability(
   if (type === 'unpause-marketplace' && values.marketplace && !values.marketplace.paused)
     return { available: false, reason: 'The market is already open.' };
   return { available: true };
+}
+
+/** The draft fields `valuesAfterDraft` reads: a queued action's type and, for a switch, its value. */
+type DraftStep = { type: ProposalActionType; enabled?: unknown };
+
+const SWITCHES: Partial<Record<ProposalActionType, keyof MembershipState['settings']>> = {
+  'set-transfers-locked': 'transfersLocked',
+  'set-members-only-delegation': 'membersOnlyDelegation',
+  'set-dao-recovery': 'daoRecovery'
+};
+
+/**
+ * The tribe's settings as they will be when the draft's actions have run, in order, for deciding what
+ * can be added next (BUG-W09-3). "Turn DAO recovery on" earlier in the draft makes "Recover a
+ * membership" available, and "Pause auctions" makes "Resume auctions" available, as the copy says ("in
+ * this proposal or an earlier one"). The live values stay what the picker shows as "Now:".
+ */
+export function valuesAfterDraft(values: SettingValues, draft: readonly DraftStep[]): SettingValues {
+  let next = values;
+  for (const step of draft) {
+    const key = SWITCHES[step.type];
+    if (key && next.membership && typeof step.enabled === 'boolean')
+      next = {
+        ...next,
+        membership: { ...next.membership, settings: { ...next.membership.settings, [key]: step.enabled } }
+      };
+    if ((step.type === 'pause-auction' || step.type === 'unpause-auction') && next.auction)
+      next = { ...next, auction: { ...next.auction, paused: step.type === 'pause-auction' } };
+    if ((step.type === 'pause-marketplace' || step.type === 'unpause-marketplace') && next.marketplace)
+      next = { ...next, marketplace: { ...next.marketplace, paused: step.type === 'pause-marketplace' } };
+  }
+  return next;
 }
 
 /** Every pickable action, in its picker section and tribe part. */

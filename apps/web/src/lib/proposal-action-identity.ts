@@ -244,6 +244,19 @@ const isTreasuryCall = (action: ProposalQueuedAction) =>
   ((action.type === 'upgrade-dao-module' || action.type === 'migrate-dao-module') && action.module === 'treasury');
 
 /** The membership switches and the indexed setting each one changes. */
+/** A membership switch's value just before the next step: the last earlier step that set it, else live. */
+function switchValueBefore(
+  type: ProposalQueuedAction['type'],
+  existing: ProposalQueuedAction[],
+  state?: ProposalDraftState
+): boolean | undefined {
+  for (let index = existing.length - 1; index >= 0; index -= 1)
+    if (existing[index].type === type && typeof existing[index].enabled === 'boolean')
+      return existing[index].enabled as boolean;
+  const setting = SWITCH_SETTINGS[type];
+  return setting ? state?.tokenSettings?.[setting] : undefined;
+}
+
 const SWITCH_SETTINGS: Partial<
   Record<ProposalQueuedAction['type'], keyof NonNullable<ProposalDraftState['tokenSettings']>>
 > = {
@@ -345,9 +358,14 @@ function prerequisiteFindings(
       );
   }
 
-  // A membership switch set to the value it already has reverts (SettingUnchanged, 7217).
+  // A membership switch set to the value it already has reverts (SettingUnchanged, 7217). "Already"
+  // means at this point in the draft: an earlier step may have changed it (BUG-W09-4).
   const setting = SWITCH_SETTINGS[action.type];
-  if (setting && typeof action.enabled === 'boolean' && state?.tokenSettings?.[setting] === action.enabled)
+  if (
+    setting &&
+    typeof action.enabled === 'boolean' &&
+    switchValueBefore(action.type, existing, state) === action.enabled
+  )
     order(
       'warning',
       action.enabled
@@ -471,6 +489,16 @@ export function analyzeProposalAction(
     }
 
     if (candidateIdentity.resourceKey !== identity.resourceKey) return;
+    // A switch turned on for the steps between and off again (recovery on, recover, recovery off) is
+    // a plan, not a clash. Back to back, the pair does nothing, so that still is one (BUG-W09-4).
+    if (
+      SWITCH_SETTINGS[action.type] &&
+      candidate.type === action.type &&
+      candidate.enabled !== action.enabled &&
+      index < existing.length - 1 &&
+      !existing.slice(index + 1).some((later) => later.type === action.type)
+    )
+      return;
     findings.push({
       severity: 'error',
       kind: 'conflict',

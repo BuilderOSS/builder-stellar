@@ -75,6 +75,144 @@ None.
   so the loading state stays up until the kit listens.
 - **Regression test:** `lib/wallet-connect-modal.test.ts`; W01's retry case picks the wallet at once.
 
+### BUG-W09-1 · "Change the market payment asset" shows a contract id as its current value
+- **Flow:** W09 (composer picker and Manage → Market), every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a launched tribe with a market, open New proposal → Add an action, or Manage → Market.
+- **Expected:** `Now: XLM`, as the starting price reads `Now: 1 XLM`.
+- **Actual:** `Now: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`.
+- **Root cause:** the catalog's `currentValue` for `set-marketplace-payment-token` printed the
+  market's `paymentAsset` (a SAC contract id); the auction setting already carried an `assetCode`.
+- **Fix:** `useSettingValues` and Manage → Market pass the asset's code with the market config
+  (`apps/web/src/lib/proposal-actions/use-setting-values.ts`,
+  `apps/web/src/components/marketplace/admin-marketplace.tsx`); the catalog shows it, and the contract
+  id only for an asset it can't name (`apps/web/src/lib/proposal-actions/catalog.ts`).
+  The draft's and proposal page's summary had the same fault ("Change the market payment asset to
+  CBIELTK…"): `getProposalActionSummary` now names a known asset by its code (`knownAssetCode` in
+  `apps/web/src/lib/assets-config.ts`, used by `apps/web/src/lib/proposal-call.ts`).
+- **Regression test:** `catalog.test.ts`, "names a known market asset by its code";
+  `proposal-call.test.ts`, "payment asset summaries"; W09 picks
+  `Change the market payment asset Now: XLM`.
+
+### BUG-W09-2 · Manage overview doesn't say Market and Artwork need a vote after launch
+- **Flow:** W15 (Manage overview), every viewport and theme.
+- **Severity:** P2 (authority copy).
+- **Steps:** open Manage on a launched tribe.
+- **Expected:** every section whose changes go to a vote reads "Needs a vote".
+- **Actual:** Market ("Listings, fees and pausing") and Artwork had no chip, as if anyone could change
+  them, though launch hands the Marketplace and Metadata admin to the Treasury like the rest.
+- **Root cause:** the overview's per-section access map listed profile, token, governance, owner and
+  auction only.
+- **Fix:** the map moved to `apps/web/src/lib/manage-access.ts` (`manageSectionAccess`) with
+  `artwork` and `marketplace` added; `apps/web/src/app/dao/[daoId]/admin/page.tsx` uses it.
+- **Regression test:** `apps/web/src/lib/manage-access.test.ts`; W15's authority-copy check.
+
+### BUG-W09-3 · "Recover a membership" stays disabled with DAO recovery turned on in the same draft
+- **Flow:** W09 (composer), every viewport and theme.
+- **Severity:** P1 (`dao-transfer` could not be proposed together with `set-dao-recovery`).
+- **Steps:** New proposal → Add an action → DAO recovery (on) → Add to proposal → Add an action.
+- **Expected:** "Recover a membership" is offered: its own reason says "Turn it on first, in this
+  proposal or an earlier one". Likewise "Reopen the market" after "Pause the market" in the draft.
+- **Actual:** it stayed disabled with "DAO recovery is off…", and "Reopen the market" with "The market
+  is already open.", because availability read only the live settings.
+- **Root cause:** `actionAvailability` was given the tribe's live values, never the draft's effect.
+- **Fix:** `valuesAfterDraft` (`apps/web/src/lib/proposal-actions/catalog.ts`) applies the draft's
+  switches and pauses in order; the picker uses it for availability and for a switch's starting value
+  (on, then off), while "Now:" still shows the live value
+  (`apps/web/src/lib/proposal-actions/components/action-picker-sheet.tsx`).
+- **Regression test:** `catalog.test.ts`, "counts what the draft already does"; W09's members and
+  market proposals.
+
+### BUG-W09-4 · Recovery on, recover, recovery off can't be submitted
+- **Flow:** W09 (composer review), every viewport and theme.
+- **Severity:** P1 (the documented way to recover a lost key, with recovery off again afterwards,
+  was blocked).
+- **Steps:** New proposal → DAO recovery (on) → Recover a membership → DAO recovery (off) → review.
+- **Expected:** it submits: each switch call changes the value it finds when it runs.
+- **Actual:** "Turn DAO recovery off" showed "This is off already, and setting it again would fail
+  the proposal." and the error "Another action in this draft changes the same resource to a different
+  value.", which blocks submitting.
+- **Root cause:** the unchanged-switch rule compared against the live setting, not the value the
+  draft's earlier steps leave; the clash rule treated any two values for one switch as a conflict.
+- **Fix:** `switchValueBefore` reads the switch at its place in the draft; a switch turned back with
+  steps between is a plan, not a clash (on then off back to back still is)
+  (`apps/web/src/lib/proposal-action-identity.ts`).
+- **Regression test:** `proposal-action-identity.test.ts`, "reads a switch at its place in the
+  draft"; W09's members proposal.
+
+### BUG-W09-5 · Add a module and Remove a module add nothing to the proposal
+- **Flow:** W09 (Manage → Membership), every viewport and theme.
+- **Severity:** P1 (`create-module`, `register-module` and `unregister-module` could not be proposed).
+- **Steps:** Manage → Membership → Add a module → Invite lists → "Add 2 actions to your proposal"
+  (or a module's options → Remove from tribe… → "Add 1 action to your proposal").
+- **Expected:** the "Add this to your proposal?" review (the steps are high-risk), then the steps in
+  the draft.
+- **Actual:** the sheet closed and nothing was added: no review, no toast, an empty draft. The
+  review dialog opened for a moment and closed itself.
+- **Root cause:** the sheet closed first and proposed one animation frame later; the sheet's focus
+  restore, after its exit animation, landed outside the newly opened review dialog, which dismissed
+  it as a cancel.
+- **Fix:** both sheets propose while still open; the review opens over the sheet, and the sheet closes
+  when the steps are added (`onAdded`), or at once when no review is needed. A refusal now shows in
+  the sheet (`apps/web/src/components/admin/modules/add-module-sheet.tsx`,
+  `remove-module-sheet.tsx`, `modules-card.tsx`).
+- **Regression test:** W09's modules proposal (round 1) and cleanup proposal (round 2).
+
+### BUG-W03-1 · Walkthrough tribes pointed their image and renderer at localhost
+- **Flow:** W03, Create (identity). Every viewport and theme. Harness defect, in `apps/e2e`.
+- **Severity:** P1 (Create blocked in the walkthrough build; on chain it would have broken the tribe's
+  art on dev.tribes.build).
+- **Steps:** build with `pnpm --dir apps/e2e build:app`, open `/create`, fill in Identity, press
+  Continue.
+- **Expected:** the default tribe image and renderer base are on the dev deployment that serves the
+  tribe, and Identity passes.
+- **Actual:** "Use an https:// or ipfs:// image address" under the image; the defaults were
+  `http://localhost:<port>/images/dao-logo.png` and `http://localhost:<port>/api/render`.
+- **Root cause:** the walkthrough build set `NEXT_PUBLIC_SITE_URL` to the local server. The app
+  derives the default image and renderer base from it, and both are written on chain at create.
+- **Fix:** `apps/e2e/scripts/build-app.mjs` and `src/app-env.ts` name the dev site
+  (`https://dev.tribes.build`, or `E2E_SITE_URL`); the suite still browses the local server.
+- **Regression test:** W03's Create cases (they fail at Identity without it).
+
+### BUG-W03-2 · Setup never names the voting pace
+- **Flow:** W03 and W04, the setup page's "Voting rules" row. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** create a tribe with the Super fast pace, open Set up and launch.
+- **Expected:** "Super fast: votes open after 5 minutes, run 10 minutes".
+- **Actual:** "votes open after 5 minutes, run 10 minutes" for every pace.
+- **Root cause:** `components/launch/launch-setup.tsx` read the Governor over RPC, which has no getter
+  for the queue delay, then compared the pace with a queue delay of 0, which no pace has.
+- **Fix:** `votingPaceOfSettings` in `lib/create-dao-presets.ts` compares the queue delay only when
+  it is known.
+- **Regression test:** `lib/create-dao-presets.test.ts` and `components/launch/launch-setup.test.tsx`;
+  W03 asserts the row.
+
+### BUG-W03-3 · Setup's auction price has no unit
+- **Flow:** W03, the setup page's "Auctions" row. Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** create an auction tribe, open Set up and launch.
+- **Expected:** "5 minutes each · starts at 1 XLM" (DESIGN.md: amounts carry their unit).
+- **Actual:** "5 minutes each · starts at 1".
+- **Root cause:** `launch-setup.tsx` formatted the reserve price without the payment asset.
+- **Fix:** the row adds the asset code from the auction's payment token (or the pending tribe's).
+- **Regression test:** `components/launch/launch-setup.test.tsx`; W03 asserts the row.
+
+### BUG-W03-4 · Artwork folder uploads ignored the deployment's upload switch
+- **Flow:** W04, Artwork. Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** on a build with `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED=false`, choose an artwork folder and
+  press Upload.
+- **Expected:** the page says uploads are off before anyone presses Upload, and the server refuses
+  directory uploads like every other upload.
+- **Actual:** the button was enabled and failed after the click with a service error; with a Pinata
+  key configured, `/api/pinata/generate-jwt` and `/api/pinata/pin-cid` would have uploaded anyway.
+- **Root cause:** only `/api/uploads/*` checked the switch; the directory routes and the upload
+  buttons didn't.
+- **Fix:** `lib/uploads-enabled.ts` is the one check. Both directory routes answer 404
+  `FEATURE_DISABLED` while uploads are off, and the folder and tribe image upload buttons are disabled
+  with "Uploads are off on this deployment." A folder can still be checked in the browser.
+- **Regression test:** `lib/uploads-enabled.test.ts`; W04 asserts the disabled button and its note.
+
 ### BUG-W02-1 · An unknown tribe link shows "Something went wrong" instead of Page not found
 - **Flow:** W02, opening `/dao/<slug>` for a slug no tribe has. All viewports and themes.
 - **Severity:** P2.
@@ -303,13 +441,11 @@ None.
 - **Expected:** "Now: XLM".
 - **Actual:** "Now: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC", while the select under
   it said XLM.
-- **Root cause:** the catalog's `currentValue` for `set-marketplace-payment-token` printed
-  `paymentAsset` as is; unlike the auction's settings, the market's carried no asset code.
-- **Fix:** `SettingValues.marketplace` carries `assetCode` (from `paymentAssetCode`), filled by
-  Market settings and the composer's `useSettingValues`; the text uses it and keeps the contract id
-  only for an asset the app doesn't know.
-- **Regression test:** `lib/proposal-actions/catalog.test.ts` ("names a known market payment
-  asset…"); W11's Market settings @matrix case.
+- **Root cause and fix:** the same defect as BUG-W09-1, found by W11 and W09 in parallel. It is fixed
+  once, by BUG-W09-1's change (`knownAssetCode` and the `assetCode` on the market's setting values);
+  W11 carries no code of its own for it.
+- **Regression test:** BUG-W09-1's tests in `lib/proposal-actions/catalog.test.ts` and
+  `lib/proposal-call.test.ts`; W11's Market settings @matrix case ("Now: XLM").
 
 ### BUG-W11-2 · A holder action's review widened the token page past the screen
 - **Flow:** W14, a token page's "Your token" form, Review. Desktop (the right column), and any
@@ -394,3 +530,106 @@ None.
   contract)").
 - **Regression test:** `lib/member-directory/system-holders.test.ts`; W11's Treasury purchase case
   checks the "Held by" region.
+
+### BUG-W07-1 · The inline confirmation has no accessible name
+- **Flow:** W08, cancel by the proposer (proposal page, Cancel proposal). Every viewport and theme;
+  every `ConfirmAction` (artwork, platform factory, proposal cancel).
+- **Severity:** P3 (screen readers announce an unnamed "dialog" before a destructive action).
+- **Steps:** as the proposer of a pending proposal, press Cancel proposal.
+- **Expected:** a dialog named "Cancel this proposal?", described by its consequence.
+- **Actual:** `role="dialog"` with no `aria-labelledby` or `aria-describedby`.
+- **Root cause:** Ark's popover links the content to its title only when it has seen the title
+  mounted. `ConfirmAction` mounts the content lazily inside a portal, so Ark never links them.
+- **Fix:** `components/ui/confirm-action.tsx` gives the title and description ids (`useId`) and sets
+  `aria-labelledby` and `aria-describedby` on the content itself.
+- **Regression test:** W08's cancel case finds the confirmation by role and name
+  (`getByRole('dialog', { name: 'Cancel this proposal?' })`). Vitest runs in node with no DOM, so the
+  open popover can't be rendered at unit level.
+
+### BUG-W07-2 · On a phone, a suggested proposal title widens the composer past the screen
+- **Flow:** W07, composer with a payment action. Mobile (375px), both themes.
+- **Severity:** P2 (the page zooms out; the action sheet then opens off to one side and its button
+  is covered).
+- **Steps:** on a phone, start a proposal, add "Pay someone" to a G… address, then add another action.
+- **Expected:** the page stays 375px wide; "Suggested from the actions: Send 1 XLM to G…" wraps.
+- **Actual:** the layout viewport grows to about 468px to fit the 56-character address; the next
+  "Set up the action" sheet opens shifted left and "Add to proposal" can't be pressed.
+- **Root cause:** `FieldHelperText` (and field errors) wrapped long words with the global
+  `overflow-wrap: break-word`, which breaks a word only after it has set the min-content width, so the
+  grid column grew to the address.
+- **Fix:** `components/ui/field.tsx` sets `overflow-wrap: anywhere` on helper and error text.
+- **Regression test:** `expectNoHorizontalScroll` (`apps/e2e/src/fixtures.ts`) now also fails when
+  the layout viewport is wider than the screen, which a mobile browser does instead of scrolling;
+  W07's composer case checks it after three actions at every viewport.
+
+### BUG-W07-3 · At tablet width the floating Reference button covers Submit proposal
+- **Flow:** W07, composer review step. Tablet (768×1024), both themes.
+- **Severity:** P1 at tablet width (the proposal can't be submitted without scrolling the button away,
+  and at the page's end it can't be).
+- **Steps:** on a tablet, write a proposal and press Next: review.
+- **Expected:** Back and Submit proposal are both pressable.
+- **Actual:** the fixed "Reference" button sat over the right end of the action row, on Submit
+  proposal.
+- **Root cause:** the review step's Reference trigger was `position: fixed` at the bottom right,
+  offset by the tab bar's height. Between md and lg there is no tab bar, so it landed on the page's own
+  action row.
+- **Fix:** `app/dao/[daoId]/proposals/create/page.tsx` puts the trigger in the review step's action
+  row, next to Submit proposal, hidden from lg where the rail is always shown.
+- **Regression test:** W07's composer case (`w08-proposal-states.spec.ts`, every viewport) presses
+  Submit proposal on the review step; Playwright refuses a click on a covered button.
+
+### BUG-W06-1 · An unreachable claim list shows members a gateway status code
+- **Flow:** W12, claim from a list whose published file no gateway returns. All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open a claim list whose `tree_uri` isn't pinned (or while IPFS gateways are down), then
+  open Claims.
+- **Expected:** "Claim list unavailable" says in words that the published list couldn't be loaded,
+  then points to the proof file.
+- **Actual:** "Claim list unavailable · 530 You can still claim with a proof file from the
+  organizer." The reason was the last gateway's HTTP status (or a raw timeout message).
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` threw `${response.status}`
+  for a failed gateway and rethrew the last gateway's error as the member-facing reason.
+- **Fix:** every fetch failure (status, timeout, network error, a body that isn't JSON) moves on to
+  the next gateway; when none answers, the reason is "The published list couldn't be loaded from
+  IPFS." A too-large file keeps its own reason.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts`; W12 asserts the card's text.
+
+### BUG-W06-2 · An unreachable claim list holds the Claims page for up to a minute and a half
+- **Flow:** W12, the Claims page of a tribe with a list whose file no gateway returns (found at mobile,
+  where the page was still loading when the check ran). All viewports and themes.
+- **Severity:** P2.
+- **Steps:** open Claims for a tribe with such a list, signed out or in.
+- **Expected:** the lists show within seconds, marked "Claim list unavailable", with the proof file
+  fallback.
+- **Actual:** "Checking what you can claim…" for up to 105 seconds, every minute (the failure is
+  remembered for 60s). The proof file fallback only shows once the lists load, so it was out of reach too.
+- **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` tried the seven gateways one
+  after another with a 15s timeout each.
+- **Fix:** ask every gateway at once, take the first JSON answer and abort the rest, all within one
+  15s budget.
+- **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts` (one budget, every gateway asked
+  at once); W12's signed-out @matrix check waits one budget, not more.
+
+### BUG-W06-3 · Past claims says "1 tokens"
+- **Flow:** W12, Past claims after a one-token claim. All viewports and themes.
+- **Severity:** P3.
+- **Expected:** "1 token from Claim list 2".
+- **Actual:** "1 tokens from Claim list 2".
+- **Root cause:** the row in `apps/web/src/components/minter/claims.tsx` always used the plural.
+- **Fix:** the singular for one token.
+- **Regression test:** `apps/web/src/components/minter/claims.test.tsx` ("Past claims"); W12 asserts the row.
+
+### BUG-W06-4 · A settled auction doesn't reach Past auctions until a reload
+- **Flow:** W06, settle from the Auction page. Desktop dark (chain run); the hook is the same at every
+  viewport.
+- **Severity:** P3.
+- **Steps:** after the end, press Settle and start the next auction, then stay on the page.
+- **Expected:** the settled token and its winner appear under Past auctions.
+- **Actual:** the next auction shows (it polls every 15s) but Past auctions stays at the earlier
+  token until the page is reloaded. It refetched once, right after confirmation, which is usually
+  before the indexer has the settlement.
+- **Root cause:** `useAuctionHistory` in `apps/web/src/lib/auction-history/hooks.ts` had no refresh;
+  the page only remounts it after its own transactions.
+- **Fix:** the first page refetches every 30s, like the current auction does.
+- **Regression test:** `apps/web/src/lib/auction-history/hooks.test.ts`; W06 waits for the token under
+  Past auctions without a reload.

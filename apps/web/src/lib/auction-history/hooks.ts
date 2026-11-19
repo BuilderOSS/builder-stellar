@@ -49,9 +49,15 @@ export async function fetchAuctionHistory(config: DaoNetworkConfig, daoId: strin
   return result;
 }
 
+/** How often the first page of Past auctions refetches, so a settlement shows without a reload. */
+export const AUCTION_HISTORY_REFRESH_MS = 30_000;
+
 export function useAuctionHistory(config: DaoNetworkConfig, daoId: string, page: number) {
-  return useSWR(config.auctionContractId ? auctionQueryKey(config, daoId, 'history', page) : null, () =>
-    fetchAuctionHistory(config, daoId, page)
+  return useSWR(
+    config.auctionContractId ? auctionQueryKey(config, daoId, 'history', page) : null,
+    () => fetchAuctionHistory(config, daoId, page),
+    // A settlement is indexed a little after it confirms (BUG-W06-4): keep the newest page current.
+    { refreshInterval: page === 0 ? AUCTION_HISTORY_REFRESH_MS : 0 }
   );
 }
 

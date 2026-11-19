@@ -10,7 +10,8 @@ import {
   isPickable,
   pickerEntries,
   settingForm,
-  type SettingValues
+  type SettingValues,
+  valuesAfterDraft
 } from './catalog';
 import { config } from './test-fixtures';
 
@@ -86,6 +87,31 @@ describe('action catalog', () => {
     expect(actionAvailability('unpause-auction', config, values)).toMatchObject({ available: false });
     expect(actionAvailability('pause-auction', config, values)).toEqual({ available: true });
   });
+
+  it('counts what the draft already does before the action is added (BUG-W09-3)', () => {
+    const recoveryOn = valuesAfterDraft(values, [{ type: 'set-dao-recovery', enabled: true }]);
+    expect(actionAvailability('dao-transfer', config, recoveryOn)).toEqual({ available: true });
+    const pausedFirst = valuesAfterDraft(values, [{ type: 'pause-auction' }, { type: 'pause-marketplace' }]);
+    expect(actionAvailability('unpause-auction', config, pausedFirst)).toEqual({ available: true });
+    expect(actionAvailability('unpause-marketplace', config, pausedFirst)).toEqual({ available: true });
+    expect(actionAvailability('pause-auction', config, pausedFirst)).toMatchObject({ available: false });
+    // On, then off again: the last step wins, and the live values are left alone.
+    const onThenOff = valuesAfterDraft(values, [
+      { type: 'set-dao-recovery', enabled: true },
+      { type: 'set-dao-recovery', enabled: false }
+    ]);
+    expect(actionAvailability('dao-transfer', config, onThenOff)).toMatchObject({ available: false });
+    expect(values.membership?.settings.daoRecovery).toBe(false);
+    expect(valuesAfterDraft(values, [])).toBe(values);
+  });
+
+  it('names a known market asset by its code, not its contract id (BUG-W09-1)', () => {
+    const market = { ...values.marketplace!, assetCode: 'XLM' };
+    expect(getActionMeta('set-marketplace-payment-token').currentValue!({ marketplace: market })?.text).toBe('XLM');
+    expect(getActionMeta('set-marketplace-payment-token').currentValue!(values)?.text).toBe(
+      values.marketplace!.paymentAsset
+    );
+  });
 });
 
 describe('one form per setting', () => {
@@ -105,17 +131,6 @@ describe('one form per setting', () => {
       draft: { enabled: true },
       text: 'Off'
     });
-  });
-
-  it('names a known market payment asset by its code, not its contract id (BUG-W11-1)', () => {
-    const market = values.marketplace!;
-    const meta = getActionMeta('set-marketplace-payment-token');
-    expect(meta.currentValue!({ marketplace: { ...market, assetCode: 'XLM' } })).toEqual({
-      draft: { paymentToken: market.paymentAsset },
-      text: 'XLM'
-    });
-    // An asset the app doesn't know keeps its contract id, so it can still be checked.
-    expect(meta.currentValue!({ marketplace: market })?.text).toBe(market.paymentAsset);
   });
 
   it('encodes a value edited on Manage exactly as the composer does', () => {

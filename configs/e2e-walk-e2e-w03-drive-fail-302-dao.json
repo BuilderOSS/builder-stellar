@@ -1,0 +1,96 @@
+{
+  "$comment": "W05 fixture (fail launch drive). Recreate with: node apps/e2e/scripts/w05-drive-fixtures.mjs fail",
+  "deployer": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+  "nonce": 302,
+  "launchAdmin": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+  "slug": "e2e-w03-drive-fail-302",
+  "token": {
+    "name": "E2E W03 Drive Fail 302",
+    "symbol": "EWDF"
+  },
+  "metadata": {
+    "profile": {
+      "description": "E2E W03 Drive Fail 302: a walkthrough launch drive on testnet.",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://dev.tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://dev.tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        },
+        {
+          "name": "1-bodies",
+          "items": [
+            "body-rust",
+            "body-blue-sky",
+            "body-darkbrown"
+          ]
+        },
+        {
+          "name": "2-accessories",
+          "items": [
+            "accessory-txt-cc2",
+            "accessory-txt-ico",
+            "accessory-flash"
+          ]
+        },
+        {
+          "name": "3-heads",
+          "items": [
+            "head-hotdog",
+            "head-ufo",
+            "head-goldcoin"
+          ]
+        },
+        {
+          "name": "4-glasses",
+          "items": [
+            "glasses-square-teal",
+            "glasses-square-guava",
+            "glasses-square-black-rgb"
+          ]
+        }
+      ]
+    }
+  },
+  "claims": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GB4HN4R3PWUOPWDILUDQ3G7SU7AZKCO2UFK3UB3ARLF7UXPBZS6QLHUH",
+      "amount": 1
+    }
+  ],
+  "launch": {
+    "launchAuction": false,
+    "launchMarketplace": false
+  },
+  "tokenSettings": {
+    "transfersLocked": false,
+    "membersOnlyDelegation": false,
+    "daoRecovery": false
+  }
+}

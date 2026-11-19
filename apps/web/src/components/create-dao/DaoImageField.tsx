@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui';
+import { UPLOADS_OFF_NOTE, uploadsEnabled } from '@/lib/uploads-enabled';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -94,7 +95,7 @@ export function DaoImageField() {
             size="sm"
             type="button"
             variant="secondary"
-            disabled={busy || !address || auth !== 'authenticated'}
+            disabled={busy || !address || auth !== 'authenticated' || !uploadsEnabled()}
             onClick={() => void upload()}
           >
             {busy ? 'Uploading…' : 'Upload image'}
@@ -108,7 +109,11 @@ export function DaoImageField() {
           >
             Use saved image
           </Button>
-          {!address || auth !== 'authenticated' ? <p className={styles.muted}>Connect and sign in to upload.</p> : null}
+          {!uploadsEnabled() ? (
+            <p className={styles.muted}>{UPLOADS_OFF_NOTE} Use the saved image.</p>
+          ) : !address || auth !== 'authenticated' ? (
+            <p className={styles.muted}>Connect and sign in to upload.</p>
+          ) : null}
         </>
       ) : null}
       {error ? (

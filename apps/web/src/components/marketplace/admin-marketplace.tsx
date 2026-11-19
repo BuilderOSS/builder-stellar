@@ -22,7 +22,6 @@ import {
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions } from '@/lib/admin-surfaces';
-import { paymentAssetCode } from '@/lib/assets-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { expiryInputValue } from '@/lib/expiry-time';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
@@ -41,6 +40,11 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
+/** "XLM" for a known asset; undefined for one we can't name, so its contract id shows instead. */
+function knownAssetCode(network: Parameters<typeof marketplaceAssetLabel>[0], id: string) {
+  const label = marketplaceAssetLabel(network, id);
+  return label === 'Unknown asset' ? undefined : label;
+}
 const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
@@ -362,7 +366,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
           enabled={enabled}
           values={{
             marketplace: data?.config
-              ? { ...data.config, assetCode: paymentAssetCode(data.network, data.config.paymentAsset) }
+              ? { ...data.config, assetCode: knownAssetCode(data.network, data.config.paymentAsset) }
               : undefined
           }}
           onQueue={(handler, draft, replaces) => {

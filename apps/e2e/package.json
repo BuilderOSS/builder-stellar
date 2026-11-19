@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:app": "node scripts/build-app.mjs",
+    "serve:app": "node --experimental-strip-types --no-warnings scripts/serve-app.ts",
     "preflight": "node --experimental-strip-types --no-warnings src/preflight-cli.ts",
     "smoke": "playwright test --grep @smoke",
     "test:e2e": "playwright test",

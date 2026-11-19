@@ -272,6 +272,22 @@ describe('prerequisites and order the contracts enforce', () => {
     expect(orders(analyzeProposalAction(recovery, []))).toEqual([]);
   });
 
+  it('reads a switch at its place in the draft: on, recover, then off is a plan (BUG-W09-4)', () => {
+    const on = action({ id: 'on', type: 'set-dao-recovery', enabled: true });
+    const recover = action({ id: 'd', type: 'dao-transfer', tokenId: '1', to: 'GNEW' });
+    const off = action({ id: 'off', type: 'set-dao-recovery', enabled: false });
+    // Off is live, but the draft turned it on two steps earlier: neither "off already" nor a clash.
+    expect(analyzeProposalAction(off, [on, recover], state).filter((f) => f.severity === 'error')).toEqual([]);
+    expect(orders(analyzeProposalAction(off, [on, recover], state))).toEqual([]);
+    expect(analyzeProposalDraft([on, recover, off], state).filter((f) => f.severity === 'error')).toEqual([]);
+    // Back to back, on then off does nothing: still a clash.
+    expect(analyzeProposalAction(off, [on], state).some((f) => f.kind === 'conflict')).toBe(true);
+    // Off twice after on is still "off already" for the second.
+    expect(orders(analyzeProposalAction({ ...off, id: 'off2' }, [on, recover, off], state))[0]?.message).toContain(
+      'off already'
+    );
+  });
+
   it('warns when pausing paused auctions or resuming running ones, from the current state', () => {
     const pause = action({ id: 'p', type: 'pause-auction' });
     const resume = action({ id: 'u', type: 'unpause-auction' });

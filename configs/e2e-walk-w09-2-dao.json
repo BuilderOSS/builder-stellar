@@ -1,0 +1,71 @@
+{
+  "$comment": "Fixture tribe for walkthrough W15 (Manage after launch), on the dev Manager. Same shape as configs/e2e-walk-w09-dao.json: deployed and launched by e2e-w09-founder (x6, passes a proposal alone), e2e-w09-member-a x2; auction and marketplace in native XLM. Each W15 run changes its profile, token name, voting rules, auction and market settings by proposal.",
+  "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "nonce": 901,
+  "launchAdmin": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "slug": "e2e-w09-2",
+  "token": {
+    "name": "E2E Manage",
+    "symbol": "E2EG"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for Manage after launch (W15, testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "10000000",
+    "timeBuffer": 60,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+      "amount": 6
+    },
+    {
+      "address": "GCCPSUJCCJPBIRZCCTWZGMSUWEOMUSXLBYT25HGER3KIQHWNVTVY4CFI",
+      "amount": 2
+    }
+  ],
+  "launch": {
+    "launchAuction": true,
+    "launchMarketplace": true
+  }
+}

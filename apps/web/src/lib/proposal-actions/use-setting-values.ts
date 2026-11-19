@@ -31,10 +31,11 @@ export function useSettingValues(): { values: SettingValues; loading: boolean } 
         ? { ...auction.data, assetCode: paymentAssetCode(config.name, auction.data.config.payment_token) }
         : undefined,
       membership: membership.data,
-      marketplace:
-        config.marketplaceContractId && market.data?.config
+      marketplace: !config.marketplaceContractId
+        ? undefined
+        : market.data?.config
           ? { ...market.data.config, assetCode: paymentAssetCode(config.name, market.data.config.paymentAsset) }
-          : undefined
+          : market.data?.config
     }),
     [governor.data, auction.data, membership.data, market.data, config.name, config.marketplaceContractId]
   );
