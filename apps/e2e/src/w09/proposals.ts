@@ -315,7 +315,10 @@ export async function driveToExecuted(
   after: Record<string, string[]> = {}
 ) {
   await page.goto(tribe.path('proposals'));
-  await signInAs(page, wallet, identity);
+  // A test that just proposed is signed in already.
+  const you = page.getByRole('button', { name: /^You, connected as/ });
+  await expect(you.or(page.getByRole('button', { name: 'Connect wallet' }).first())).toBeVisible();
+  if (!(await you.isVisible())) await signInAs(page, wallet, identity);
   const left = new Set(keys);
   while (left.size) {
     let acted = false;
