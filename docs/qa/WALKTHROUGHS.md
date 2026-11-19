@@ -288,6 +288,160 @@ wrong code. That also means dev.tribes.build is behind `dev`: upgrade the dev de
 pnpm --dir apps/e2e preflight --require-manager
 ```
 
+## W16: contract upgrades
+
+W16 (`apps/e2e/tests/w16-upgrades.spec.ts`) upgrades a live tribe's module by proposal on the dev
+Manager. It needs a release the Manager has approved, and only the platform admin
+(`testnet-admin`, the dev Manager's admin) can register and approve one. Walkthroughs never sign with
+that key: the admin runs the three steps below by hand.
+
+| Piece | Value |
+|---|---|
+| Fixture tribe | `e2e-w16` ("E2E Upgrades"), token `CDZAHLZEVT7UIFVYUG7QZRCSU5I55F47AD4L2ACIJUQHJF4ELDT54NKE`, artifact `deploys/dev-testnet-dao-16.json` |
+| Module | Metadata (`CBSPRAKJ2OPRKLLDTRTKY62PD6DDLWE26TAZ5B6DYD2WOQEGNGNRCQVA`), the app's "Artwork and profile" |
+| From | 0.4.0 `a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da`, storage version 1 |
+| To (test-only) | 0.4.1 `d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29`, storage version 2 |
+
+### The candidate
+
+The 0.4.1 candidate is this checkout's Metadata with a test-only cargo feature,
+`e2e-upgrade-candidate`, which sets `STORAGE_VERSION` to 2 (no data rewrite: the two layouts are the
+same) and adds a contract-meta marker (`stellar contract info meta` shows `e2e_upgrade_candidate`). The
+storage version bump is the only change members could observe, and it is there on purpose: the
+release then needs `migrate()`, so W16 covers the upgrade and the migration in one proposal. It lives
+on the local throwaway branch `test-only/w16-metadata-0.4.1-candidate` and as
+[`w16-metadata-candidate.patch`](w16-metadata-candidate.patch); it is never merged. Rebuild it on a
+throwaway worktree of the commit the dev Manager runs (the build is reproducible):
+
+```bash
+git worktree add -b test-only/w16-candidate ../w16-candidate HEAD
+```
+
+```bash
+cd ../w16-candidate && git apply docs/qa/w16-metadata-candidate.patch
+```
+
+```bash
+SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk stellar contract build --package metadata --features e2e-upgrade-candidate
+```
+
+The build prints `Wasm Hash: d243d792…4d78e29`. Any funded account can upload code; W16's operator
+did (transaction `33df77ec…198825b`, code TTL extended to ledger 6,326,328, about 30 days):
+
+```bash
+stellar contract upload --wasm target/wasm32v1-none/release/metadata.wasm --source-account e2e-w16-operator --network testnet
+```
+
+```bash
+stellar contract extend --wasm-hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29 --ledgers-to-extend 518400 --source-account e2e-w16-operator --network testnet
+```
+
+### The fixture tribe
+
+Core contracts only, the founder holds both tokens (so the founder alone passes proposals), 300s
+voting delay, voting period and queue delay. `DEPLOY_IDENTITY` must be set: without it the script
+signs with `testnet-admin`.
+
+```bash
+E2E_TIMELINE=w16 E2E_APP_PORT=4366 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json pnpm --dir apps/e2e preflight
+```
+
+```bash
+for phase in create_dao admin_checklist launch_dao; do DEPLOY_IDENTITY=e2e-w16-founder node scripts/deploy-dao.mjs $phase configs/e2e-walk-e2e-w16-dao.json configs/testnet-dev-manager.json; done
+```
+
+The fixture is single-use: once its proposal has run, Metadata is on 0.4.1 and the chain test stops
+with "already on the candidate". For another run, copy the config with the next nonce and slug
+(`e2e-w16b`, nonce 17) and update `W16` in `apps/e2e/src/upgrades.ts`.
+
+### Platform admin steps (the admin approves each one)
+
+Run in this order, from the repository root, as the dev Manager's admin. Each is one transaction,
+about 0.1 to 0.15 testnet XLM in fees (step 1 simulates at 0.133 XLM). Records are write-once.
+
+```bash
+MGR=CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY
+```
+
+1. Register the candidate as Metadata 0.4.1. Adds a registry record and nothing else: no tribe sees it
+   or can use it yet.
+
+   ```bash
+   stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- register_implementation --name Metadata --version 0.4.1 --wasm_hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+   ```
+
+2. Approve the path 0.4.0 → 0.4.1. From now on **every** dev tribe running Metadata `a378c228…` (every
+   tribe made since the dev Manager was deployed) *may* take the upgrade by its own vote; none is forced.
+   An approval can't be deleted, only made useless by revoking the target (undo step 2).
+
+   ```bash
+   stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- approve_upgrade --from_hash a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da --to_hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+   ```
+
+3. Announce 0.4.1 as Metadata's latest. The app only offers an upgrade (Manage → Contract upgrades, the
+   notice on the Manage overview and, for members, on the tribe home) for the latest release, so W16's
+   notice checks need this. It shows "Artwork and profile 0.4.0 → 0.4.1" on **every** dev tribe on
+   `a378c228…`, including other walkthrough tribes; run W16 when no other walkthrough checks those
+   screens, and undo it afterwards. It does **not** change what new tribes get: `create_dao` deploys
+   `current_implementations`, which stays on 0.4.0 (do not run `set_current_implementations`).
+
+   ```bash
+   stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- set_latest_implementation --name Metadata --wasm_hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+   ```
+
+Module upgrades don't wait for the Manager's `upgradeDelayLedgers` (720 ledgers on dev): that notice
+gates `upgrade_manager` only. W16 can start as soon as step 3 lands. Check (read-only, any key):
+
+```bash
+stellar contract invoke --id $MGR --network testnet --source-account e2e-w16-operator --send no -- is_upgrade_approved --from_hash a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da --to_hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+```
+
+```bash
+stellar contract invoke --id $MGR --network testnet --source-account e2e-w16-operator --send no -- latest_pointer --name Metadata
+```
+
+### Run W16
+
+About 20 to 25 minutes: voting delay, voting period and queue delay of 300s each.
+
+```bash
+E2E_TIMELINE=w16 E2E_APP_PORT=4366 pnpm --dir apps/e2e build:app
+```
+
+```bash
+E2E_TIMELINE=w16 E2E_APP_PORT=4366 pnpm --dir apps/e2e test:e2e tests/w16-upgrades.spec.ts
+```
+
+The `@matrix` test reads the registry and the module first and checks the screens for that state
+(before the admin steps: up to date on 0.4.0; after: the notice and "1 upgrade available"; after the
+proposal: up to date on 0.4.1, storage version 2). The `@chain` test fails at once, naming the missing
+step, until all three admin steps have run. It then adds the upgrade (confirming the high-risk prompt)
+and the storage migration to one proposal, submits it, votes For, queues, executes, and checks
+`version()`, `wasm_hash()` and `storage_version()` on chain, the app's Contract upgrades page, and the
+`Upgraded` and `Migrated` events in the activity feed. A run that stops after submitting resumes the
+tribe's open proposal on the next run (voting, queueing or executing it) instead of opening a second
+one.
+
+### Undo afterwards (optional, the admin approves each)
+
+1. Stop offering 0.4.1 to every other tribe: point Metadata's latest back at 0.4.0. Other tribes are
+   back to "up to date". `e2e-w16`, already on 0.4.1, shows "Newer release not approved", which is
+   true and harmless.
+
+   ```bash
+   stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- set_latest_implementation --name Metadata --wasm_hash a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da
+   ```
+
+2. Only if no tribe should ever take 0.4.1 again: revoke it. **Irreversible** (no un-revoke). It closes
+   the approved path for every tribe; `e2e-w16` keeps running 0.4.1 and the app shows it as
+   "Version withdrawn".
+
+   ```bash
+   stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- revoke_implementation --wasm_hash d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+   ```
+
+The registry record and the approval stay either way: records are write-once.
+
 ## The W09 and W15 fixtures
 
 W09 (one proposal per action group, `tests/w09-proposal-actions.spec.ts`) and W15 (Manage after

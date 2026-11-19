@@ -1,0 +1,82 @@
+From 2cf5bfc513b7e645f79e74517c2cec662fbfd92b Mon Sep 17 00:00:00 2001
+From: Dan OneTree <dan13ram@gmail.com>
+Date: Thu, 19 Nov 2026 10:11:00 +0530
+Subject: [PATCH] test-only(w16): Metadata 0.4.1 upgrade candidate, never merge
+
+Cargo feature e2e-upgrade-candidate (off by default) sets the Metadata
+STORAGE_VERSION to 2 with no data rewrite and adds a contract-meta marker,
+so the WASM hash changes and an upgrade proposal must run migrate().
+Build: stellar contract build --package metadata --features e2e-upgrade-candidate
+Hash: d243d7922b1a7e4d26c9e835b39175689978edc9df6fd484503dccb1b4d78e29
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ contracts/metadata/Cargo.toml     | 4 ++++
+ contracts/metadata/src/lib.rs     | 7 +++++++
+ contracts/metadata/src/storage.rs | 5 +++++
+ releases/contracts.json           | 2 +-
+ 4 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/contracts/metadata/Cargo.toml b/contracts/metadata/Cargo.toml
+index 74111b7..107feff 100644
+--- a/contracts/metadata/Cargo.toml
++++ b/contracts/metadata/Cargo.toml
+@@ -19,3 +19,7 @@ token = { path = "../token", features = ["testutils"] }
+ 
+ [features]
+ testutils = ["soroban-sdk/testutils"]
++# TEST-ONLY (walkthrough W16, docs/qa/WALKTHROUGHS.md). Builds the throwaway Metadata 0.4.1
++# upgrade candidate: storage version 2 with no data rewrite, plus a contract-meta marker. This
++# branch is never merged; product builds never enable it.
++e2e-upgrade-candidate = []
+diff --git a/contracts/metadata/src/lib.rs b/contracts/metadata/src/lib.rs
+index 49893fe..75971eb 100644
+--- a/contracts/metadata/src/lib.rs
++++ b/contracts/metadata/src/lib.rs
+@@ -32,6 +32,13 @@
+ 
+ #![no_std]
+ 
++// TEST-ONLY (walkthrough W16): marks the throwaway upgrade candidate in its contract meta.
++#[cfg(feature = "e2e-upgrade-candidate")]
++soroban_sdk::contractmeta!(
++    key = "e2e_upgrade_candidate",
++    val = "W16 test-only Metadata 0.4.1 candidate; not a product release"
++);
++
+ mod contract;
+ mod error;
+ mod events;
+diff --git a/contracts/metadata/src/storage.rs b/contracts/metadata/src/storage.rs
+index 11d2625..bd294f3 100644
+--- a/contracts/metadata/src/storage.rs
++++ b/contracts/metadata/src/storage.rs
+@@ -3,7 +3,12 @@ use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, String, Vec};
+ use crate::error::Error;
+ 
+ /// Storage-layout version of this code (see `common::upgrade`).
++#[cfg(not(feature = "e2e-upgrade-candidate"))]
+ pub const STORAGE_VERSION: u32 = 1;
++/// TEST-ONLY (walkthrough W16): the throwaway 0.4.1 candidate expects layout 2, so its upgrade
++/// proposal must run `migrate()`. Nothing is rewritten: layouts 1 and 2 are identical.
++#[cfg(feature = "e2e-upgrade-candidate")]
++pub const STORAGE_VERSION: u32 = 2;
+ // Still 1: the compact layout ships before any network runs the paged one
+ // (pre-mainnet, fresh redeploy), so there is nothing to migrate.
+ 
+diff --git a/releases/contracts.json b/releases/contracts.json
+index 7f7ebe5..ab93165 100644
+--- a/releases/contracts.json
++++ b/releases/contracts.json
+@@ -1,7 +1,7 @@
+ {
+   "manager": "0.4.0",
+   "token": "0.4.0",
+-  "metadata": "0.4.0",
++  "metadata": "0.4.1",
+   "auction": "0.4.0",
+   "governor": "0.4.0",
+   "treasury": "0.4.0",
+-- 
+2.56.0
+
