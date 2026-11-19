@@ -50,7 +50,8 @@ export function YourListings({
   config,
   purchasesEnabled,
   onCancelled,
-  onListed
+  onListed,
+  onRelist
 }: {
   listings: MarketplaceListing[];
   network: NetworkName;
@@ -58,6 +59,8 @@ export function YourListings({
   purchasesEnabled: boolean;
   onCancelled: (listing: MarketplaceListing, hash: string) => void;
   onListed: (terms: ListTerms, hash: string) => void;
+  /** Change price stopped after its Cancel: offer to list the token again, preselected. */
+  onRelist?: (tokenId: string) => void;
 }) {
   const [action, setAction] = useState<{ listing: MarketplaceListing; action: MarketplaceAction } | null>(null);
   const [changing, setChanging] = useState<MarketplaceListing | null>(null);
@@ -165,7 +168,11 @@ export function YourListings({
             if (step.kind === 'cancel') onCancelled(sequence.listing, hash);
             if (step.kind === 'list' && step.action.action === 'list') onListed(step.action, hash);
           }}
-          onClose={() => setSequence(null)}
+          onClose={(confirmed) => {
+            const tokenId = sequence.listing.tokenId ?? sequence.listing.id;
+            setSequence(null);
+            if (confirmed.includes('cancel') && !confirmed.includes('list')) onRelist?.(tokenId);
+          }}
         />
       ) : null}
     </Section>

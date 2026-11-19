@@ -30,7 +30,7 @@ import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/m
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { largestBuyerShare } from '@/lib/marketplace/pool-share';
 import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
-import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
+import { ACTION_CATALOG, actionAvailability, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
@@ -156,11 +156,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <div>
           <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="ghost" size="sm">
             <ChevronLeft aria-hidden="true" />
-            Tribe market
+            Market
           </ButtonLink>
         </div>
         <section className={styles.hero}>
-          <h1>Manage the marketplace</h1>
+          <h1>Market settings</h1>
           <p>
             Once the tribe has launched, members change the market by vote. Each button here adds an action to your
             proposal draft. Nothing is signed on this page.
@@ -202,8 +202,8 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             </p>
             {data?.config?.paused ? (
               <p className={styles.notice}>
-                The marketplace is paused. Add a resume-marketplace action before this one in the same proposal, or wait
-                until a resume proposal executes.
+                The market is paused. Add a Reopen the market action before this one in the same proposal, or wait until
+                a proposal that reopens the market runs.
               </p>
             ) : null}
             <div className={styles.formGrid}>
@@ -400,7 +400,10 @@ function MarketplaceSettings({
   onQueue: (handler: ActionHandler, draft: unknown, replaces?: string[]) => void;
 }) {
   const { daoConfig, routeId } = useDaoContext();
-  const handlers = marketplaceSettingHandlers(daoConfig);
+  // Pause and Reopen show only the one that applies to the market's live state, as in the composer.
+  const handlers = marketplaceSettingHandlers(daoConfig).filter(
+    (handler) => actionAvailability(handler.type, daoConfig, values).available
+  );
   return (
     <section className={styles.panel}>
       <div className={styles.stack}>
