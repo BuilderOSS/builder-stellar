@@ -250,6 +250,8 @@ E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
   pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
 ```
 
+Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
+
 The run's proposal ids are kept in `apps/e2e/.state/<timeline>-proposals.json` (gitignored). A
 failed case doesn't stop the others, and `E2E_RESUME=1` picks up the last run's proposals instead of
 proposing again, skipping the steps that already happened.
