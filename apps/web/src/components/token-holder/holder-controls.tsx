@@ -21,11 +21,14 @@ const form = css({ display: 'grid', gap: '4' });
 /** About 120 days of ledgers: a proposal's longest timeline is 104 days, under the 180-day approval cap. */
 const VOTE_APPROVAL_LEDGERS = 120 * 17_280;
 const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
+const header = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { formatStroops } from '@/lib/auction-values';
 import { estimateDate } from '@/lib/chain-reads/renewal';
+import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
 import { withArchivedRestore } from '@/lib/restore-archived-client';
@@ -52,6 +55,8 @@ export function HolderControls({
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
+  // Selling goes through the tribe's market: hidden when it has none, it is off, or tokens are locked.
+  const canSell = canSellOnMarket(config);
   // Delegation is offered only for a token-weighted tribe: through another source (or while the
   // source can't be read) delegating a token may move no votes.
   const delegation = useVoteSource(config).voteSource?.isToken === true;
@@ -267,10 +272,15 @@ export function HolderControls({
 
   return (
     <section className={card} aria-labelledby="holder-controls-title">
-      <div>
+      <div className={header}>
         <h2 id="holder-controls-title" className={title}>
           Your token
         </h2>
+        {canSell ? (
+          <ButtonLink href={sellHref(routeId, tokenId)} variant="secondary" size="sm">
+            Sell
+          </ButtonLink>
+        ) : null}
       </div>
       {!allowed ? (
         <p className={muted} role="status">
@@ -375,6 +385,9 @@ export function HolderControls({
               {locked
                 ? 'Until then, a proposal members pass can move this token, unless you revoke it first.'
                 : 'The spender can move your token until then or until you revoke it.'}
+              {canSell
+                ? ' Want to sell this token on the tribe’s market? Use Sell instead: it asks for the right permission for you.'
+                : ''}
             </FieldHelperText>
             <div>
               {locked ? (

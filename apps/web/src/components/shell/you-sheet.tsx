@@ -13,7 +13,9 @@ import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
 import { useIsPlatformAdmin } from '@/lib/platform/registry';
 import { DISCORD_URL } from '@/lib/site';
 import { formatVotes } from '@/lib/vote-source';
@@ -134,6 +136,11 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
           >
             {customVoteSource ? 'View your tokens' : 'View your tokens and delegation'}
           </NextLink>
+          {canSellOnMarket(config) ? (
+            <NextLink href={sellHref(routeId)} className={css({ textStyle: 'label', color: 'signal' })}>
+              Sell a token
+            </NextLink>
+          ) : null}
         </>
       ) : (
         <Text size="sm">You don&apos;t hold a token here yet. Win an auction or buy one on the market to vote.</Text>

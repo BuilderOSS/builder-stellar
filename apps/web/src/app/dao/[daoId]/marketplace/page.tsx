@@ -17,6 +17,7 @@ export default async function DaoMarketplacePage({
       initialStatus={typeof query.status === 'string' ? query.status : 'open'}
       selectedId={typeof query.listing === 'string' ? query.listing : ''}
       selectedEventId={typeof query.eventId === 'string' ? query.eventId : ''}
+      initialSell={typeof query.sell === 'string' ? query.sell : ''}
     />
   );
 }
