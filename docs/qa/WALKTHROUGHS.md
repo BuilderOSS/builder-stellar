@@ -350,6 +350,15 @@ E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
   pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
 ```
 
+For the weekly rotation, run each extra viewport on its own with `--no-deps`. Without it, a
+rotation project pulls in its dependency project's whole test set, every other walkthrough's chain
+specs included, and those would sign with this timeline's wallets:
+
+```bash
+E2E_ROTATION=1 E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=tablet-dark-chain --no-deps
+```
+
 Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
 
 The run's proposal ids are kept in `apps/e2e/.state/<timeline>-proposals.json` (gitignored). A
