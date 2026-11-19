@@ -14,8 +14,10 @@ import { runDir, runId } from './src/run.ts';
  *   - `@chain` specs run in their own `*-chain` projects, at desktop (dark, the hero theme);
  *     E2E_ROTATION=1 (the weekly run) adds mobile and tablet.
  *
- * Chain projects run one test at a time (`workers: 1`), and each rotation project waits for the
- * previous one (`dependencies`). The signer's per-account lock and `IdentityClaims` live in one
+ * Chain projects run one test at a time (`workers: 1`). A rotation run (E2E_ROTATION=1) runs the
+ * whole suite on one worker, so the desktop, tablet and mobile chain projects never sign at the
+ * same time. There are no project `dependencies`: Playwright runs a dependency project's whole
+ * suite even when files are named, which pulled other walkthroughs' chain tests into a run. The signer's per-account lock and `IdentityClaims` live in one
  * worker's memory, so serialising chain flows is what keeps two of them from signing from one
  * account at once (`tx_bad_seq`).
  */
@@ -37,12 +39,11 @@ const matrixProjects: Project[] = (Object.keys(VIEWPORTS) as Size[]).flatMap((si
 );
 
 const chainSizes: Size[] = rotation ? ['desktop', 'tablet', 'mobile'] : ['desktop'];
-const chainProjects: Project[] = chainSizes.map((size, index) => ({
+const chainProjects: Project[] = chainSizes.map((size) => ({
   name: `${size}-dark-chain`,
   grep: /@chain/,
   workers: 1,
   fullyParallel: false,
-  dependencies: index === 0 ? [] : [`${chainSizes[index - 1]}-dark-chain`],
   use: { ...VIEWPORTS[size], browserName: 'chromium' as const, colorScheme: 'dark' as const, theme: 'dark' as const }
 }));
 
@@ -61,7 +62,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 3,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : rotation ? 1 : 3,
   globalSetup: './src/global-setup.ts',
   reporter: [
     ['list'],
