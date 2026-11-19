@@ -1,13 +1,13 @@
 {
   "ready": {
-    "daoId": "CCMLOJDXS5BIQTRPJN2V2FLKJNKLTQ5KWB5TWCYUBJC3O6T4NZKWLKSB",
-    "name": "E2E W03 Drive Ready 303",
-    "slug": "e2e-w03-drive-ready-303",
-    "nonce": 303,
-    "config": "configs/e2e-walk-e2e-w03-drive-ready-303-dao.json",
-    "artifact": "deploys/dev-testnet-dao-303.json",
+    "daoId": "CDZ3FQC2F344I7SZSEE57U3AOVS44TZSJV26P6BT24VE4SUV6KAQGVJL",
+    "name": "E2E W03 Drive Ready 305",
+    "slug": "e2e-w03-drive-ready-305",
+    "nonce": 305,
+    "config": "configs/e2e-walk-e2e-w03-drive-ready-305-dao.json",
+    "artifact": "deploys/dev-testnet-dao-305.json",
     "root": "49b8440b39595260c648554335c652943a4a4f8747ebaca8f17b51beac233639",
-    "deadline": 1795151420,
+    "deadline": 1795153063,
     "priceStroops": "10000000",
     "threshold": 2,
     "proofs": {
@@ -28,14 +28,14 @@
     }
   },
   "fail": {
-    "daoId": "CC6KNP47OFEFJJYPBEW6YJFK6QTDK6NHALVGWT4MQOYLKD5VN6YB76OL",
-    "name": "E2E W03 Drive Fail 304",
-    "slug": "e2e-w03-drive-fail-304",
-    "nonce": 304,
-    "config": "configs/e2e-walk-e2e-w03-drive-fail-304-dao.json",
-    "artifact": "deploys/dev-testnet-dao-304.json",
+    "daoId": "CAZSWT7T6GEA6HPSUEICAMOSICOQKCKJRJAXK6SFUR5T7LMKLTG3F6DG",
+    "name": "E2E W03 Drive Fail 306",
+    "slug": "e2e-w03-drive-fail-306",
+    "nonce": 306,
+    "config": "configs/e2e-walk-e2e-w03-drive-fail-306-dao.json",
+    "artifact": "deploys/dev-testnet-dao-306.json",
     "root": "49b8440b39595260c648554335c652943a4a4f8747ebaca8f17b51beac233639",
-    "deadline": 1795066558,
+    "deadline": 1795068207,
     "priceStroops": "10000000",
     "threshold": 2,
     "proofs": {
