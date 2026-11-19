@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Asset, Horizon, Keypair, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
 
-import { E2E_IDENTITIES, E2E_WEB_AUTH_IDENTITY, type Identity, loadIdentity } from './identities.ts';
+import { E2E_IDENTITIES, E2E_WEB_AUTH_IDENTITY, type Identity, loadIdentity, timelineKeyName } from './identities.ts';
 import { FRIENDBOT_URL, TESTNET_PASSPHRASE } from './network.ts';
 
 export const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
@@ -19,7 +19,8 @@ export const E2E_MANAGER_ARTIFACT = resolve(
 );
 
 /** Identities the preflight funds: the four wallets and the app server's SEP-53/SEP-10 signing key. */
-export const FUNDED_IDENTITIES = [...E2E_IDENTITIES, E2E_WEB_AUTH_IDENTITY];
+/** With E2E_TIMELINE set, the wallets are that timeline's own keys (created on first use). */
+export const FUNDED_IDENTITIES = [...E2E_IDENTITIES.map((role) => timelineKeyName(role)), E2E_WEB_AUTH_IDENTITY];
 
 /** Top up when an identity falls below this many XLM (a tribe deploy costs well under 100). */
 export const MIN_BALANCE_XLM = 1_000;

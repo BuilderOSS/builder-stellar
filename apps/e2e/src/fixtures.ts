@@ -1,7 +1,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 
 import { E2E_SIGN_BINDING } from '../../web/src/lib/e2e-wallet/protocol.ts';
-import { E2E_IDENTITIES, type Identity, loadIdentity } from './identities.ts';
+import { E2E_IDENTITIES, type Identity, loadIdentity, timelineKeyName } from './identities.ts';
 import { TESTNET_RPC_URL } from './network.ts';
 import { E2ESigner, rpcAccountSequence } from './wallet/signer.ts';
 
@@ -37,7 +37,10 @@ export const test = base.extend<Options & Fixtures>({
   skipWalletIntro: [true, { option: true }],
 
   identities: async ({}, use) => {
-    cachedIdentities ??= Object.fromEntries(E2E_IDENTITIES.map((name) => [name, loadIdentity(name)]));
+    // Keyed by role (e2e-founder, ...); with E2E_TIMELINE the key behind each role is the timeline's own.
+    cachedIdentities ??= Object.fromEntries(
+      E2E_IDENTITIES.map((role) => [role, { ...loadIdentity(timelineKeyName(role)), name: role }])
+    );
     await use(cachedIdentities);
   },
 
