@@ -227,7 +227,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
       : `Open the market ${action.address}`;
   if (action.type === 'regenerate-token-traits') return `Seed traits for token #${action.tokenId}`;
   if (action.type === 'treasury-authorize')
-    return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
+    return `Authorise the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
   if (action.type === 'treasury-buy-listing')
     return `The treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
   if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
