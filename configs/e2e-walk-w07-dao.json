@@ -1,0 +1,62 @@
+{
+  "$comment": "Fixture tribe for walkthroughs W07 (proposal lifecycle) and W08 (proposal edge cases), on the dev Manager. Deployed and launched by e2e-w07-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W07 and W08 proposals fixture\"). Founders: e2e-w07-founder x3, e2e-w07-member-a x2, e2e-w07-member-b x2 (7 votes). Quorum 50% = 4 For or Abstain votes, so the founder alone (3) misses it and For 3 + Abstain 2 reaches it. Proposal threshold 3: only the founder can propose, member-a (2 votes) is under it. Governance timings are the contract minimums (300s). No auction or marketplace.",
+  "deployer": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+  "nonce": 7,
+  "launchAdmin": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+  "slug": "e2e-w07",
+  "token": {
+    "name": "E2E Proposals",
+    "symbol": "E2EP"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for proposals (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 5000,
+    "proposalThreshold": 3
+  },
+  "founders": [
+    {
+      "address": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+      "amount": 3
+    },
+    {
+      "address": "GBYS4GLC2OSJKB3RPR66MAIEJ2SODOGCHST6VUYY2I2US4Y3ADY5S5PA",
+      "amount": 2
+    },
+    {
+      "address": "GCTD4SL5IY35E3M4YI5K23IEWU4X7QRHH5PXJYA2CXJVJSX37H3EYSJE",
+      "amount": 2
+    }
+  ],
+  "launch": {}
+}

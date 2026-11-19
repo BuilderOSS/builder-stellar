@@ -75,14 +75,10 @@ const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: 
 const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
 const wideOnly = css({ display: { base: 'none', md: 'block' } });
 const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
-const referenceTrigger = css({
-  display: { base: 'inline-flex', lg: 'none' },
-  position: 'fixed',
-  zIndex: 'bar',
-  right: '4',
-  bottom: 'calc(token(sizes.tabbar) + env(safe-area-inset-bottom) + 16px)',
-  boxShadow: 'float'
-});
+// Below lg the reference rail opens as a sheet. On the review step its trigger sits in the action
+// row: a floating one covered Submit proposal at tablet width (BUG-W07-3).
+const reviewEnd = css({ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '2' });
+const referenceInline = css({ lg: { display: 'none' } });
 
 export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
@@ -557,18 +553,30 @@ export default function ProposalCreatePage() {
                       <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
                         Back
                       </Button>
-                      <Button
-                        onClick={handleOpenConfirmDialog}
-                        disabled={
-                          proposalCreationLocked ||
-                          hasBlockingDraftFindings ||
-                          Boolean(actionCountError) ||
-                          !metadataValidation.valid
-                        }
-                        loading={transactionBusy}
-                      >
-                        {transactionBusy ? 'Submitting' : 'Submit proposal'}
-                      </Button>
+                      <div className={reviewEnd}>
+                        <Button
+                          variant="secondary"
+                          className={referenceInline}
+                          onClick={() => setContextRailOpen(true)}
+                          ref={contextTriggerRef}
+                          aria-haspopup="dialog"
+                        >
+                          <BookOpen aria-hidden="true" />
+                          Reference
+                        </Button>
+                        <Button
+                          onClick={handleOpenConfirmDialog}
+                          disabled={
+                            proposalCreationLocked ||
+                            hasBlockingDraftFindings ||
+                            Boolean(actionCountError) ||
+                            !metadataValidation.valid
+                          }
+                          loading={transactionBusy}
+                        >
+                          {transactionBusy ? 'Submitting' : 'Submit proposal'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -584,18 +592,6 @@ export default function ProposalCreatePage() {
           mobileTriggerRef={contextTriggerRef}
         />
       </div>
-      {step === 1 ? null : (
-        <Button
-          variant="secondary"
-          className={referenceTrigger}
-          onClick={() => setContextRailOpen(true)}
-          ref={contextTriggerRef}
-          aria-haspopup="dialog"
-        >
-          <BookOpen aria-hidden="true" />
-          Reference
-        </Button>
-      )}
 
       <ProposalActionConfirmDialog
         open={confirmDialogOpen}

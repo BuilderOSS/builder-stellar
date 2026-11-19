@@ -6,8 +6,16 @@ import { field } from 'styled-system/recipes';
 export const Field = styled('div', field);
 
 const labelClass = css({ display: 'block', textStyle: 'label', color: 'ink' });
-const helperClass = css({ textStyle: 'caption', color: 'ink.muted', margin: '0' });
-const errorClass = css({ textStyle: 'caption', color: 'danger', margin: '0', fontWeight: '600' });
+// Help and errors often quote an address or a URL: `anywhere` lets one break, so a long one can't
+// widen the form past a phone's screen (BUG-W07-2). `break-word` breaks it but keeps the width.
+const helperClass = css({ textStyle: 'caption', color: 'ink.muted', margin: '0', overflowWrap: 'anywhere' });
+const errorClass = css({
+  textStyle: 'caption',
+  color: 'danger',
+  margin: '0',
+  fontWeight: '600',
+  overflowWrap: 'anywhere'
+});
 
 export function FieldLabel({ className, ...props }: ComponentProps<'label'>) {
   return <label {...props} className={cx(labelClass, className)} />;

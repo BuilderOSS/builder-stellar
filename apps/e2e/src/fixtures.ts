@@ -92,8 +92,15 @@ export async function appliedTheme(page: Page) {
 
 /** No horizontal page scroll (§3.5). */
 export async function expectNoHorizontalScroll(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const { overflow, layoutWidth } = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    layoutWidth: window.innerWidth
+  }));
   expect(overflow, 'page scrolls horizontally').toBeLessThanOrEqual(0);
+  // A mobile browser widens its layout viewport to fit content that overflows, so innerWidth grows
+  // and the check above passes while the page is zoomed out (BUG-W07-2).
+  const viewport = page.viewportSize();
+  if (viewport) expect(layoutWidth, 'layout viewport widened past the screen').toBeLessThanOrEqual(viewport.width);
 }
 
 /**

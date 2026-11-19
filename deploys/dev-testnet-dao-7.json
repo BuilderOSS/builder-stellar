@@ -1,0 +1,119 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+  "nonce": 7,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CARHCYAGVLZDJMK4VS2RH7OBH6RALQRF247ZUJHXVECX343TKNNBMLWO",
+    "metadata": "CAZSW7TFLIIQ3Q626KC3PI3QFFINSJYRJJ653USU7LAX2DRSFZZHWMYN",
+    "governor": "CBC6CICHFLY74JJYV6FF7UN62JLHXA7BTRMBSAIOWBLLOLEULJZV3OWM",
+    "treasury": "CCX47FXJDASGTVIXZVUMB7F4TWKR6DWCQFZQHJLRJXLB72SI6DNRMG23",
+    "auction": null,
+    "marketplace": null,
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthroughs W07 (proposal lifecycle) and W08 (proposal edge cases), on the dev Manager. Deployed and launched by e2e-w07-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W07 and W08 proposals fixture\"). Founders: e2e-w07-founder x3, e2e-w07-member-a x2, e2e-w07-member-b x2 (7 votes). Quorum 50% = 4 For or Abstain votes, so the founder alone (3) misses it and For 3 + Abstain 2 reaches it. Proposal threshold 3: only the founder can propose, member-a (2 votes) is under it. Governance timings are the contract minimums (300s). No auction or marketplace.",
+    "deployer": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+    "nonce": 7,
+    "launchAdmin": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+    "slug": "e2e-w07",
+    "token": {
+      "name": "E2E Proposals",
+      "symbol": "E2EP"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for proposals (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 5000,
+      "proposalThreshold": 3
+    },
+    "founders": [
+      {
+        "address": "GDORW2VPQ3SOIU3GSMMHRUGE76DUUNA5QILVM7PQYDYZC357XIF2W6NP",
+        "amount": 3
+      },
+      {
+        "address": "GBYS4GLC2OSJKB3RPR66MAIEJ2SODOGCHST6VUYY2I2US4Y3ADY5S5PA",
+        "amount": 2
+      },
+      {
+        "address": "GCTD4SL5IY35E3M4YI5K23IEWU4X7QRHH5PXJYA2CXJVJSX37H3EYSJE",
+        "amount": 2
+      }
+    ],
+    "launch": {}
+  },
+  "updatedAt": "2026-11-19T04:37:21.212Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "6a27ec9a86373237fecf7fe03782410e67f835b40cd857a9808d0b5c5e461078",
+      "ledger": 5807872
+    },
+    "artworkBatches": [
+      {
+        "txHash": "330b30af5509bdcd2d50accdde771b9f5d78499b619d13c9891c7aa7fa673cce",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807875
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "da05956d94050c52e2c70222fda4d0e36c7bbe630bd1ab7426c501828b05ea60",
+        "batch": 1,
+        "tokens": 7,
+        "ledger": 5807877
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "5eac47a4db2724c2011a9f00b152466a125beb9e1ce1ab67603d92f9d91cca60",
+      "ledger": 5807880
+    }
+  },
+  "deploymentLedger": 5807872
+}
