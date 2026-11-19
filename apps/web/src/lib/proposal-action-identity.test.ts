@@ -29,6 +29,17 @@ describe('proposal action identity', () => {
     expect(first.key).toBe(second.key);
   });
 
+  it('names what a treasury payout does when it flags it as high risk (BUG-W02-2)', () => {
+    const findings = analyzeProposalAction(
+      action({ id: 'pay', type: 'transfer-sac-token', recipient: 'GABC', amount: '1', assetCode: 'XLM' }),
+      []
+    );
+    const highRisk = findings.find((finding) => finding.kind === 'high-risk');
+    expect(highRisk?.message).toBe(
+      'Sends funds out of the treasury. Check the recipient and the amount: once the proposal runs, the payment cannot be undone.'
+    );
+  });
+
   it('finds exact duplicates', () => {
     const existing = action({ value: '10' });
     const findings = analyzeProposalAction(action({ id: 'new', value: '10' }), [existing]);

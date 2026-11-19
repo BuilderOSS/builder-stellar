@@ -158,6 +158,9 @@ const side = css({
 const main = css({ display: 'grid', gap: '8', minW: '0', lg: { gridArea: 'main' } });
 const summaryCard = css({ p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 
+/** How often a just-submitted proposal is looked for while the indexer catches up. */
+const INDEX_POLL_MS = 3000;
+
 export default function ProposalDetailPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
@@ -201,6 +204,13 @@ export default function ProposalDetailPage() {
     () => false
   );
   const waitingForIndex = !detail && recentlySubmitted && (!error || error.status === 404);
+  // SWR stops its refresh interval once a fetch has failed, and a proposal the indexer hasn't seen yet
+  // is a 404, so poll by hand until it appears (BUG-W02-4: "Loading your proposal" never went away).
+  useEffect(() => {
+    if (!waitingForIndex) return;
+    const timer = setInterval(() => void mutate(), INDEX_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waitingForIndex, mutate]);
   const receipt =
     (executionResult?.key === receiptKey ? executionResult.receipt : null) ?? detail?.executionReceipt ?? null;
   const receiptError = executionResult?.key === receiptKey ? executionResult.error : '';

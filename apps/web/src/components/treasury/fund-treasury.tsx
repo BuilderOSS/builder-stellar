@@ -22,7 +22,15 @@ import { assertTreasuryIdentity, fundingSchema } from '@/lib/treasury-service/va
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-const buttons = css({ display: 'flex', gap: '2' });
+// The main button fills the row and Cancel takes its own width beside it. A flex row let the full-width
+// button push Cancel out of the card and the page sideways on phones and tablets (BUG-W02-5).
+const buttons = css({
+  display: 'grid',
+  gridAutoFlow: 'column',
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  gridAutoColumns: 'auto',
+  gap: '2'
+});
 
 export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onConfirmed: () => void }) {
   const session = useAuthSessionStore();
