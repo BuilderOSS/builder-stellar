@@ -16,11 +16,13 @@ export function parseMarketplaceAmount(input: string, allowZero = false): bigint
   return value;
 }
 
+/** An exact amount as the app shows it: no trailing zeros ("4.875", "6"), still never rounded. */
 export function formatMarketplaceAmount(value: string | bigint): string {
   const amount = BigInt(value);
   const sign = amount < 0n ? '-' : '';
   const abs = amount < 0n ? -amount : amount;
-  return `${sign}${abs / SCALE}.${(abs % SCALE).toString().padStart(7, '0')}`;
+  const fraction = (abs % SCALE).toString().padStart(7, '0').replace(/0+$/, '');
+  return `${sign}${abs / SCALE}${fraction ? `.${fraction}` : ''}`;
 }
 
 export function marketplaceFee(price: string, feeBps: number): bigint {

@@ -113,6 +113,20 @@ export function resolveSellStep(
   return { index, skipped: false, expired: false };
 }
 
+/**
+ * What stopping a guided sequence leaves in place, given the steps already confirmed: a cancelled
+ * listing stays cancelled (the token is back with the member, not listed), and a permission stays
+ * live for about an hour. Empty when stopping changes nothing or the token is listed.
+ */
+export function sellStopNote(confirmed: SellStepKind[]): string {
+  if (confirmed.includes('list')) return '';
+  if (confirmed.includes('cancel'))
+    return 'If you stop here, your listing stays cancelled and the token stays in your wallet, not for sale. You can list it again with Sell a token you own.';
+  if (confirmed.includes('approve'))
+    return "If you stop here, nothing is listed. The market's permission lasts about 1 hour: press List for sale again in that time and it takes one signature.";
+  return '';
+}
+
 /** Whether a step needs the live permission read before it is prepared. */
 export function needsApprovalRead(item: SellStep | undefined) {
   return item?.kind === 'approve' || item?.kind === 'list';

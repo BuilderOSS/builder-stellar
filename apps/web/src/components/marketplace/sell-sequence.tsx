@@ -6,7 +6,13 @@ import { css } from 'styled-system/css';
 import { Button, Callout, Dialog, ProgressSteps } from '@/components/ui';
 import { APPROVAL_EXPIRED } from '@/lib/marketplace/errors';
 import { fetchMarketplaceApproval } from '@/lib/marketplace/hooks';
-import { needsApprovalRead, resolveSellStep, type SellStep } from '@/lib/marketplace/sell';
+import {
+  needsApprovalRead,
+  resolveSellStep,
+  type SellStep,
+  type SellStepKind,
+  sellStopNote
+} from '@/lib/marketplace/sell';
 
 import { reviewMuted, TransactionDetails } from './trade-review';
 import { useMarketplaceSigner } from './use-marketplace-signer';
@@ -38,13 +44,16 @@ export function SellSequence({
   intro?: string;
   steps: SellStep[];
   onStepConfirmed?: (step: SellStep, hash: string) => void;
-  onClose: () => void;
+  /** Closed, with the kinds of step confirmed so far (a stop after Cancel leaves the token unlisted). */
+  onClose: (confirmed: SellStepKind[]) => void;
 }) {
   const signer = useMarketplaceSigner(daoId);
   const { session, network, allowed, prepared, busy, message, hash, confirmed } = signer;
   const [index, setIndex] = useState(0);
   const [skipped, setSkipped] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
+  const [confirmedKinds, setConfirmedKinds] = useState<SellStepKind[]>([]);
+  const close = () => onClose(confirmedKinds);
   const current = steps[index];
   const tokenId = current ? stepToken(current) : '';
 
@@ -90,6 +99,7 @@ export function SellSequence({
     if (!current) return;
     const confirmedHash = await signer.sign(current.action);
     if (!confirmedHash) return;
+    setConfirmedKinds((kinds) => [...kinds, current.kind]);
     onStepConfirmed?.(current, confirmedHash);
     if (index + 1 < steps.length) {
       setIndex(index + 1);
@@ -101,23 +111,26 @@ export function SellSequence({
   }
 
   const done = finished && confirmed;
+  const stopNote = done || hash ? '' : sellStopNote(confirmedKinds);
   return (
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !busy) onClose();
+        if (!open && !busy) close();
       }}
-      closeOnInteractOutside={!busy}
+      // A guided sequence keeps its place: an outside press or focus never closes it (BUG-010). It
+      // also opens straight from the Change price dialog, whose closing returns focus outside it.
+      closeOnInteractOutside={false}
       title={title}
       description={network.label}
       footer={
         done ? (
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={close}>
             Done
           </Button>
         ) : (
           <>
-            <Button variant="ghost" disabled={busy} onClick={onClose}>
+            <Button variant="ghost" disabled={busy} onClick={close}>
               {index > 0 ? 'Stop here' : 'Close'}
             </Button>
             <Button
@@ -158,11 +171,7 @@ export function SellSequence({
           {done ? 'All steps are confirmed. The market can take a few seconds to show the change.' : message}
         </p>
       )}
-      {index > 0 && !done && !prepared && !hash ? (
-        <p className={reviewMuted}>
-          The steps you confirmed stay done if you stop here. You can continue later from the Market page.
-        </p>
-      ) : null}
+      {stopNote ? <p className={reviewMuted}>{stopNote}</p> : null}
       <TransactionDetails prepared={prepared} hash={hash} network={network} />
     </Dialog>
   );
