@@ -1,25 +1,66 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+A proposal that passes doesn't run by itself. Someone queues it, which starts the [safety delay](/reference/glossary#safety-delay). When the delay ends, someone executes it, and its actions run. Any wallet can do both steps. This guide shows how.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- The proposal must show **Passed** to be queued, or **Queued** with the safety delay over to be executed.
+- Connect any wallet on the tribe's network. You don't need to be a member or the proposer. Testnet is the live network today.
+- Your wallet pays the network fee in XLM for each step. Queueing or executing gives you no other authority.
+- Both steps have deadlines. A passed proposal must be queued within 14 days of voting closing. A queued proposal must be executed within 14 days of the safety delay ending. After that it expires.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the passed proposal.** Choose **Proposals** in the tribe's navigation and open a proposal labelled **Passed**. The side panel says "The vote passed" and "Next, anyone can queue it."
+
+   <Shot id="proposals/queue-and-execute/01" alt="A proposal page labelled Passed, with The vote passed in the side panel" />
+
+2. **Queue it.** Choose **Queue for execution**. Your wallet opens to show the transaction. Review it, then sign. The page reports **Proposal queued** once the network confirms it.
+
+   <Shot id="proposals/queue-and-execute/02" alt="The Queue for execution button with the note that anyone can do it" />
+
+3. **Wait for the safety delay.** The label changes to **Queued**. The side panel shows **Safety delay**, with "Can run in" and a countdown, and the time it will be ready. Members can use this time to review what will happen. The button reads **Waiting for the safety delay** until then.
+
+   <Shot id="proposals/queue-and-execute/03" alt="The side panel showing the safety delay countdown and the disabled Waiting for the safety delay button" />
+
+4. **Execute it.** When the delay ends, the panel says "Ready to execute". Choose **Execute now**. Your wallet opens to show the transaction. Review it, then sign. The page reports **Proposal executed** once the network confirms it.
+
+   <Shot id="proposals/queue-and-execute/04" alt="The side panel showing Ready to execute and the Execute now button" />
+
+5. **Check the result.** The label changes to **Executed**. An **Executed** section shows the transaction and each call that ran, with its contract. If it doesn't appear at once, the page says "The receipt will show here once it's indexed."
+
+   <Shot id="proposals/queue-and-execute/05" alt="A proposal page labelled Executed, with the Executed section listing each action's result" />
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Queueing calls `queue` on the tribe's Governor contract. The Governor checks that the proposal passed, then sets its execution time to now plus the tribe's safety delay (the queue delay, a timelock). The safety delay is set in **Manage → Voting rules**, and the value at the moment of queueing is the one used.
+
+  Executing calls `execute` on the tribe's Treasury contract, not the Governor. The Treasury asks the Governor to confirm that the proposal is queued and ready, then makes each call in order, as itself. If any call fails, the whole transaction is reverted. Nothing runs, and the proposal stays queued, so it can be executed again until it expires.
+
+  A passed proposal that is never queued expires 14 days after voting closes. A queued proposal that is never executed expires 14 days after its execution time. An expired proposal can't be queued or executed. Its actions would need a new proposal.
+
+  Before either step, the app checks the proposal's current state on chain and rebuilds its actions to confirm they match the proposal that members voted on.
+
+  The wallet that submits each step pays the Stellar network fee in XLM. Tribe Builder takes no fee. Both steps, and every payment or change the actions make, are public on chain once confirmed.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **The buttons are disabled with "Live chain state is unavailable".** The app couldn't read the proposal from the network. Wait a moment, then choose **Refresh**.
+- **"Indexed arguments do not reproduce this proposal ID" or "Untyped Val argument; submission is disabled."** The app couldn't rebuild the proposal's actions exactly, so it won't submit them. Nothing was signed. The second message can appear on proposals that include a Treasury purchase. See [Troubleshooting](/reference/troubleshooting/).
+- **"This proposal changed since you opened it. Refresh and try again."** Someone else may have queued or executed it first. Refresh the page.
+- **"The safety delay isn't over yet."** Wait until the countdown ends.
+- **Execution failed.** One of the actions couldn't run, for example because the Treasury doesn't hold enough funds or a setting is already at that value. The proposal stays queued. Fix the cause if you can, for example by adding funds, then execute again before it expires. Otherwise a new proposal is needed.
+- **"Queue deadline passed" or "Execution window closed".** The proposal is about to show **Expired**. It can no longer run.
+- **The transaction was signed but the page shows an error.** Check the transaction in the notification before you try again. If it was confirmed, the page updates shortly.
+
+For an error code, see [Error messages](/reference/error-messages/).
 
 ## Related
+
+- [Vote](/guides/proposals/vote/)
+- [Choose actions](/guides/proposals/actions/)
+- [Manage: governance](/guides/manage/governance/)
+- [Proposals](/concepts/proposals/)
+- [The Treasury](/concepts/treasury/)

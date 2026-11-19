@@ -1,5 +1,251 @@
-<Placeholder />
+When a transaction fails, the app shows a plain message followed by a code, for example "The bid is below the minimum next bid. (code 7407)". This page lists every code, grouped by the contract that raises it, with what to do next.
 
-## Coming soon
+Most failures are caught before you sign. The app simulates each transaction first, so a failure usually means nothing was signed or submitted, and nothing changed on chain.
 
-This page is planned and not written yet.
+## How codes work
+
+Each Tribe Builder contract owns its own block of 100 codes, so a code alone tells you which contract raised it, even when one contract calls another.
+
+| Codes | Contract |
+|---|---|
+| 1000 to 1099 | Pause switch (a shared library used by the auction and the market) |
+| 5000 to 5099 | Voting (the shared governor library) |
+| 7001 to 7099 | Shared checks used by every Tribe Builder contract |
+| 7101 to 7199 | Manager, the platform contract that creates and launches tribes |
+| 7201 to 7299 | Token, the membership tokens |
+| 7301 to 7399 | Metadata, the artwork and tribe profile |
+| 7401 to 7499 | Auction |
+| 7501 to 7599 | Governor, Tribe Builder's own proposal rules |
+| 7601 to 7699 | Treasury |
+| 7701 to 7799 | Marketplace |
+| 7801 to 7899 | Claims, the claim lists |
+
+A code that is missing from these tables is retired or unused. Codes are never reused for a different meaning.
+
+<Callout
+  title="A proposal that fails as it runs"
+  description="If any action in a proposal fails, the whole proposal reverts and nothing changes. It stays queued, and anyone can try to execute it again until it expires."
+/>
+
+## Proposals and voting
+
+These come from the shared governor library and from Tribe Builder's Governor.
+
+| Code | What it means | What to do |
+|---|---|---|
+| 5000 | The proposal can't be found. | Check the link. A proposal on another tribe or network has a different id. |
+| 5001 | A proposal with exactly the same actions and description already exists. | Change the description or the actions, or vote on the existing proposal. |
+| 5002 | You don't have enough votes to make a proposal. Votes are counted at the ledger before you propose. | Ask a member to delegate votes to you, or ask someone with enough votes to propose. See [Delegate your votes](/guides/members/delegate). |
+| 5005 | Voting isn't open. The voting delay hasn't ended, or the voting period is over. | Wait for voting to open, or check the proposal's status. |
+| 5006 | The proposal didn't pass, so it can't be queued. This also appears if it's already queued. | Check the proposal's status. |
+| 5007 | The proposal isn't queued, or it expired. | Queue it first. A passed proposal expires 14 days after voting ends if no one queues it. See [Queue and execute](/guides/proposals/queue-and-execute). |
+| 5008 | The proposal has already run. | Nothing to do. |
+| 5009 | The proposal can't be cancelled. Only the person who made it can cancel, and only before voting ends. | See [Cancel a proposal](/guides/proposals/cancel). |
+| 5016 | You've already voted on this proposal. | Each wallet votes once. Your vote can't be changed. |
+| 5021 | The proposal description is too long. | Keep the description to 4,096 bytes or fewer. |
+| 7501 | The safety delay is shorter than 5 minutes. | Choose at least 5 minutes. |
+| 7502 | The votes needed to propose is below 1, or above the number of votes that exist. | Choose a number from 1 to the current voting supply. |
+| 7503 | Quorum is outside 0.01% to 100%. | Choose a quorum in that range. |
+| 7504 | The wait before voting opens is shorter than 5 minutes. | Choose at least 5 minutes. |
+| 7505 | Voting stays open for less than 5 minutes. | Choose at least 5 minutes. |
+| 7507 | Proposals run through the Treasury, not the Governor. | Use Execute on the proposal page, which calls the Treasury. |
+| 7508 | A proposal has more than 20 actions. | Split it into two proposals. |
+| 7509 | The wait before voting opens is longer than 30 days. | Choose 30 days or less. |
+| 7510 | Voting stays open for longer than 30 days. | Choose 30 days or less. |
+| 7511 | The safety delay is longer than 30 days. | Choose 30 days or less. |
+| 7512 | You had no votes when this proposal was made, so you can't vote on it. | Votes delegated to you after a proposal is made count only on later proposals. See [Votes and delegation](/concepts/votes-and-delegation). |
+| 7513 | The proposal is queued, but its safety delay hasn't ended. | Wait until the time shown on the proposal, then execute. |
+| 7514 | A comment or vote reason is empty. | Write a comment, or vote without one. |
+| 7515 | A comment or vote reason is longer than 8,192 bytes. | Shorten it. |
+
+## Auctions
+
+| Code | What it means | What to do |
+|---|---|---|
+| 1000 | Auctions are paused. | Bidding opens again when the tribe votes to resume auctions. |
+| 1001 | Auctions aren't paused. Auction settings can only change while auctions are paused. | Add "Pause auctions" before the setting change in the same proposal. See [Auction settings](/guides/auctions/settings). |
+| 7401 | The token id doesn't match the current auction. | Refresh the page. A new auction may have started. |
+| 7402 | The auction has ended. | Settle it to start the next one. See [Settle an auction](/guides/auctions/settle). |
+| 7403 | The auction hasn't started. | Wait for it to start. |
+| 7404 | The auction is still running, so it can't be settled yet. | Wait for the countdown to end. |
+| 7405 | The auction is already settled. | Refresh the page to see the next auction. |
+| 7406 | The bid is below the starting price. | Bid at least the starting price shown. |
+| 7407 | The bid is below the minimum next bid. | Bid at least the amount shown. Each bid must beat the last by the tribe's minimum bid increase. |
+| 7408 | An auction setting is out of range, or the payment asset can no longer change. | See [Limits and timings](/reference/limits-and-timings). The payment asset is fixed after the first bid. |
+| 7409 | Auctions haven't started because the tribe hasn't launched. | Wait for the tribe to launch. |
+| 7412 | The bid amount, or the starting price, is not valid. | The starting price must be at least 1,000 stroops (0.0001 XLM). |
+| 7416 | You have no refund waiting. | Nothing to do. Refunds usually return to your wallet as soon as you're outbid. See [Auction refunds](/guides/auctions/refunds). |
+| 7417 | The extra time a late bid adds is outside 1 second to 1 day. | Choose a value in that range. |
+| 7418 | A bid comment is longer than 1,024 bytes. | Shorten it. |
+
+## Market
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7702 | The price is not valid. | Enter a price above zero. |
+| 7703 | The listing or pool end time is not valid. | Choose a time in the future. |
+| 7704 | This token is already listed. | Cancel the existing listing first. See [Cancel a listing](/guides/marketplace/cancel). |
+| 7705 | The listing can't be found. It may have sold or been cancelled. | Refresh the market. |
+| 7706 | The listing has expired. | Choose another listing. The seller can list it again. |
+| 7707 | The listing is still active, so it can't be cleared. | Wait until it expires. |
+| 7708 | Only the seller can do this. | Connect the wallet that listed the token. |
+| 7709 | The resale fee is above 25%. | Choose a fee from 0% to 25%. |
+| 7712 | The market's payment asset changed since you opened the listing. | Review the new terms and try again. |
+| 7713 | The market is paused. | Sales open again when the tribe votes to reopen the market. |
+| 7714 | The resale fee went up after you reviewed it. | Review the new fee and try again. |
+| 7715 | The price is higher than the most you agreed to pay. | Review the current price and try again. |
+| 7716 | A listing comment is empty. | Write a comment, or list without one. |
+| 7717 | A listing comment is longer than 1,024 bytes. | Shorten it. |
+| 7718 | The market has no mint allowance for this pool. | In the proposal, raise the market's mint allowance before "Open a quick-buy pool". See [Marketplace pools](/guides/marketplace/pools). |
+| 7719 | The pool can't be found. | Refresh the market. |
+| 7720 | The pool is closed or has ended. | Choose another pool. |
+| 7721 | You've bought the most this pool allows for each wallet. | Nothing to do. |
+| 7722 | The pool has sold its limit for this period. | Try again when the period resets. |
+| 7723 | That token is no longer in the pool. | Pick another token. |
+| 7724 | Too many pools are open (the limit is 8). | Close and sweep a pool first. |
+| 7725 | The pool is still open, so it can't be swept. | Close it first, in an earlier action. |
+| 7726 | A pool setting is zero. | Pool size, the limit per wallet, the sales rate and the period must all be above zero. |
+| 7727 | The pool is already fully stocked. | Nothing to do. |
+
+## Claims
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7801 | The amount is zero. | Claim at least one token. A list must hold at least one. |
+| 7803 | One claim can mint at most 43 tokens. | Claim the rest in another transaction. |
+| 7807 | You've already claimed your whole allocation on this list. | Nothing to do. |
+| 7808 | The proof doesn't match your address, amount and the list. | Check that the connected wallet is the one on the list. |
+| 7809 | The price overflows. | Check the amount and the price. |
+| 7810 | The tribe hasn't launched yet. | Wait for the launch, unless the list is an assurance drive. |
+| 7812 | The claim list address must be an `ipfs://` link of 256 characters or fewer. | Upload the list again from Manage. |
+| 7815 | This claim list doesn't exist. | Check the link. |
+| 7816 | This claim list has expired. | Nothing to do. |
+| 7817 | Everything on this list has been claimed. | Nothing to do. |
+| 7818 | The list price is above the price you agreed to. | Review the price and try again. |
+| 7819 | The assurance drive failed, so it only gives refunds now. | Take your payment back. See [Claim refunds](/guides/claims/refund). |
+| 7820 | This list is not an assurance drive. | Nothing to do. |
+| 7821 | An assurance drive can only open before launch. | Use an ordinary claim list. |
+| 7822 | The tribe already has its assurance drive. | A tribe can run one drive. |
+| 7823 | Refunds open only once the assurance drive has failed. | Wait for the drive's deadline. |
+| 7824 | You have nothing in escrow on this list. | Nothing to do. |
+| 7825 | The assurance settings are not valid. | The number of members must be at least 1. The deadline must be after now and before the list expires. |
+| 7826 | A claim list opened before launch needs the artwork first. | Add the artwork. See [Set up: artwork](/guides/setup/artwork). |
+| 7827 | A list opened before launch must use the claims payment asset chosen at creation. | Choose that asset. |
+| 7828 | The price is negative. | Enter zero or more. |
+| 7829 | The list's end time is not in the future. | Choose a later time. |
+
+## Membership tokens
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7201 | This module is not allowed to mint. Before launch, only the claims module may mint. | After launch, register the module and give it a mint allowance by proposal. |
+| 7202 | A token input is not valid, for example lists of different lengths or an amount of zero. | Check the recipients and amounts. |
+| 7205 | Too many tokens for one transaction. | Mint at most 43 tokens to one recipient, or 18 recipients with one token each. |
+| 7207 | The name contains quotes, backslashes or control characters. | Remove them. |
+| 7209 | That address is not one of this tribe's modules. | Register the module first, in the same proposal or an earlier one. |
+| 7210 | Only a deployed contract can be a module. | Check the address. |
+| 7211 | The module kind is not valid. | Use auction, marketplace, claims, circle, or `custom_` followed by a name. |
+| 7212 | Another module already has this kind. | Remove that module first, or choose another kind. |
+| 7213 | This module is already registered. | Nothing to do. |
+| 7214 | The tribe already has 16 modules, the most allowed. | Remove a module first. |
+| 7215 | The module has used its whole mint allowance. | Raise its allowance by proposal. |
+| 7216 | Memberships are locked. Tokens move only by sale, by being given to the tribe, or by a vote. | See [Manage: token](/guides/manage/token). |
+| 7217 | The setting already has this value. | Remove the action from the proposal. |
+| 7218 | DAO recovery is off. | Turn it on earlier in the same proposal, then recover the membership. |
+| 7219 | This module is not a transfer agent. | Make it one by proposal first. |
+| 7220 | A recovery can't move a token that a module holds, for example a token in an auction or a pool. | Choose a token held by a member. |
+| 7221 | Votes can only be delegated to members of this tribe. | Choose a delegate who holds a membership. |
+
+## Artwork and profile
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7303 | At least one artwork layer and one item are needed. | Add a layer with at least one item. |
+| 7304 | An artwork layer has no items. | Add items to it, or remove it. |
+| 7305 | More than 16 artwork layers. | Use 16 or fewer. |
+| 7306 | The selected artwork layer is not valid. | Choose a layer that exists. |
+| 7307 | No artwork layers have been added. | Add the artwork first. |
+| 7308 | More than 30 items in one transaction. | The app splits uploads into batches of 30. Try the upload again. |
+| 7309 | A page of more than 50 items was requested. | Refresh the page. |
+| 7310 | That token has not been minted. | Check the token number. |
+| 7311 | This token already has artwork. | Nothing to do. |
+| 7312 | Text is longer than 256 characters. | Shorten it. |
+| 7313 | An artwork or layer name contains quotes, backslashes or control characters, or is longer than 64 characters. | Rename the file or the layer. |
+| 7314 | More than 64 image folders in the collection. | Combine folders. |
+| 7315 | This artwork layer is full. | Use another layer. |
+| 7316 | The tribe profile is empty, or larger than 4,096 bytes. | Shorten the description or the links. |
+| 7317 | The profile changed after you prepared this update. | Review the current profile and propose again. |
+| 7318 | The token's details are too long to build on chain. A name or other text is over its limit. | Shorten the tribe's name or artwork names. |
+| 7319 | This token has no artwork yet. | The tribe can add its traits with "Seed traits for a token". |
+
+## Creating and launching a tribe
+
+These come from the Manager.
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7111 | Creating and launching tribes is paused on this platform. | Try again later. |
+| 7112 | The auction starting price is too low. | Use at least 1,000 stroops (0.0001 XLM). |
+| 7113 | Quorum is outside 0.01% to 100%. | Choose a quorum in that range. |
+| 7114 | The auction duration is outside 5 minutes to 30 days. | Choose a duration in that range. |
+| 7115 | The extra time a late bid adds is outside 1 second to 1 day. | Choose a value in that range. |
+| 7116 | A text field is longer than 256 characters. | Shorten it. |
+| 7117 | A required text field is empty. | Fill it in. |
+| 7118 | A voting time is outside 5 minutes to 30 days. | The wait before voting, the voting period and the safety delay must each be in that range. |
+| 7119 | The votes needed to propose is below 1. | Choose at least 1. |
+| 7120 | No one holds a voting token yet. | Mint founder tokens to members, not to the Treasury, before launch. See [Set up: founders](/guides/setup/founders). |
+| 7121 | A contract runs a version that was withdrawn or never registered. | Upgrade it on the setup page before launch. |
+| 7122 | The link is not valid. | Use 4 to 63 lowercase letters, numbers or single hyphens, not at the start or end. |
+| 7123 | Another tribe has this link. | Choose another. See [Set up: your link](/guides/setup/slug). |
+| 7125 | The resale fee is above 25%. | Choose 25% or less. |
+| 7126 | The launch admin no longer controls the token. | Check that the tribe hasn't already launched. |
+| 7127 | The tribe can't be found, or it isn't waiting to launch. | Refresh the page. |
+| 7128 | No launched tribe uses this link. | Check the link. |
+| 7129 | This is already the tribe's link. | Nothing to do. |
+| 7132 | A module's payment asset changed after the tribe was created. | Change it back to the asset chosen at creation before launch. |
+| 7133 | Each kind of module can be created only once. | Remove the duplicate. |
+| 7134 | A module was added after this was prepared. | Review and try again. |
+| 7135 | This tribe has no claims module. | Add one from Manage → Membership. |
+| 7136 | This tribe already ran an assurance drive. | A tribe can run one drive. |
+| 7137 | The assurance deadline is more than 90 days away. | Choose a deadline within 90 days. |
+| 7138 | The tribe is in an assurance drive, so its link is reserved and can't change. | Wait for the drive to end. See [Assurance drives](/guides/setup/assurance-drives). |
+| 7139 | This tribe has no assurance drive. | Nothing to do. |
+| 7140 | The assurance drive hasn't reached its number of members yet. | Wait for more people to commit. |
+| 7141 | The assurance drive passed its deadline without launching. It ends in refunds. | Members can take their payments back. |
+| 7142 | The assurance drive hasn't failed. | Nothing to do. |
+| 7143 | A transfer agent must be a module the tribe is created with. | Choose one of the tribe's modules. |
+| 7144 | That vote source is not approved by the platform, or its approval was withdrawn. | Choose an approved vote source. See [Vote sources](/concepts/vote-sources). |
+| 7145 | That contract doesn't answer as a vote source. | Check the address. |
+
+## Upgrades and storage
+
+| Code | What it means | What to do |
+|---|---|---|
+| 7001 | The tribe hasn't launched yet. | Finish setup and launch. See [Launch your tribe](/guides/setup/launch). |
+| 7002 | This module has already launched. | Nothing to do. |
+| 7005 | The contract's running version doesn't match the one the upgrade expects. | Refresh and prepare the upgrade again. |
+| 7006 | The platform has not approved this upgrade. | Choose an upgrade listed in Manage → Contract upgrades. |
+| 7012 | The contract's storage is already up to date. | Nothing to do. |
+| 7103 | The version can't be found, or it was withdrawn. | Choose another release. |
+| 7105 | This upgrade path is not allowed. | Upgrade to a release the platform lists for your current version. |
+| 7130 | The Manager's own upgrade was approved too recently. Its upgrade notice hasn't passed. | Wait for the notice to pass. See [Upgrades](/concepts/upgrades). |
+| 7131 | The Manager can only upgrade to its announced latest release. | Use the latest release. |
+| 7602 | A proposal may only call upgrade or migrate on the Treasury itself. | Remove the other Treasury action. |
+| 7603 | A Treasury upgrade or migration action has invalid arguments. | Prepare it again from Manage → Contract upgrades. |
+| 7604 | The proposal's targets, functions and arguments don't line up. | Prepare the proposal again in the app. |
+| 7605 | An authorise action is malformed or too large, or it isn't directly followed by the action it approves. | Prepare treasury purchases from the market page, not by hand. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
+
+## Codes you should not normally see
+
+These mean that a contract is wired up incorrectly, or that a transaction was built by hand. The app does not build transactions that cause them. If you see one, note the code and the transaction hash, and report it to the Tribe Builder team.
+
+| Code | Meaning |
+|---|---|
+| 7003, 7004, 7008, 7009, 7010, 7011, 7013 | A required contract setting (Manager, running version, admin, Treasury, Governor or storage version) is missing. |
+| 7007 | The release can't be found. |
+| 7101, 7102, 7104, 7106, 7107, 7109, 7124 | Platform registry checks: a release name, version or hash is wrong, already withdrawn or already registered, or the platform admin is missing. |
+| 7203, 7302, 7414, 7506, 7601, 7711, 7830 | The Treasury given doesn't match the one the contract was created with. |
+| 7208 | The token has no metadata contract. |
+| 7301, 7413, 7701 | The contract was never set up. |
+| 7410 | The caller is not allowed to do this. |
+| 7411, 7710 | A calculation overflowed. |

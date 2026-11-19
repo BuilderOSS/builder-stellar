@@ -99,6 +99,8 @@ Protection (team login), and lifting that would make every PR preview public too
 
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
+Its Ignored Build Step `[ "$VERCEL_GIT_COMMIT_REF" = "dev" ] && exit 0 || exit 1` skips `dev`,
+which `builder-stellar-dev` builds; `main` and PR previews still build there.
 
 ## 5. Vercel: docs.tribes.build (`builder-stellar-docs`)
 

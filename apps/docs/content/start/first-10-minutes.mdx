@@ -1,5 +1,133 @@
-<Placeholder />
+## Overview
 
-## Coming soon
+This page takes you from no wallet to your first vote in a tribe. You will set up a Stellar wallet, connect it to Tribe Builder, look around a tribe, become a member, and vote on a proposal.
 
-This page is planned and not written yet.
+Tribe Builder runs on the Stellar test network (testnet) today. Everything on this page uses free test XLM.
+
+## Before you start
+
+- A computer with a desktop browser, or a phone with a wallet app that supports WalletConnect.
+- About 10 minutes. Auctions and votes run on the tribe's own schedule, so some steps may need you to come back later.
+- No crypto experience. Each step says what happens.
+
+## Steps
+
+### 1. Get a Stellar wallet
+
+A wallet is an app that holds your Stellar account. It is how you hold a membership, bid, and vote. Tribe Builder never holds your funds and can't move them without your approval.
+
+In a browser, you can use Freighter, xBull, LOBSTR, Albedo, Hana, or another Stellar wallet. On a phone, use a wallet that supports WalletConnect, such as Freighter Mobile, when the app offers it.
+
+Install a wallet and follow its steps to create an account. Write down your recovery phrase and keep it private. Anyone with the phrase can control the account.
+
+<Shot id="start/first-10-minutes/01" alt="The Before you connect sheet, listing the wallets that work with Tribe Builder" />
+
+### 2. Set the wallet to Testnet and add test XLM
+
+In your wallet's settings, choose the Stellar test network. It is often called Testnet.
+
+Your account needs some XLM to exist on Stellar and to pay network fees. On testnet, you can get free test XLM from Friendbot, Stellar's testnet funding service. Many wallets offer it when they are set to Testnet.
+
+<Shot id="start/first-10-minutes/02" alt="A wallet set to Testnet with a test XLM balance" />
+
+### 3. Connect to Tribe Builder
+
+Open [tribes.build](https://tribes.build) and select **Connect** in the top bar. The first time, a sheet called **Before you connect** explains wallets and signing. Select **Connect wallet**, then choose your wallet.
+
+Your wallet asks you to sign a short message to sign in. Signing in is free and moves nothing.
+
+When you are connected, the top bar shows your avatar and a short form of your address. Select it to open the **You** sheet, which shows your balance and the network you are on.
+
+If your wallet is on a different network, a notice says **Switch your wallet to Testnet**. You can keep browsing, but transactions are paused until the networks match.
+
+<Shot id="start/first-10-minutes/03" alt="The top bar after connecting, with the avatar and short address" />
+
+### 4. Find a tribe
+
+Select **Find a tribe** on the home page, or go to **Discover**. Discover lists tribes that have launched. Search by name, or open a tribe from a link someone shared with you.
+
+<Shot id="start/first-10-minutes/04" alt="The Discover page with a grid of tribes" />
+
+### 5. Look around
+
+Each tribe has the same main pages:
+
+- **Home** shows what is happening now: a live auction, or proposals with voting open.
+- **Proposals** lists what members have proposed and how each vote is going.
+- **Auction** or **Market** is where people join, if the tribe uses them.
+- **Treasury** shows the tribe's funds and every payment in and out.
+- **Members** lists who holds tokens and how many votes each person has.
+- **Claims** appears if the tribe has claim lists.
+
+You can read every page without a wallet. You need a wallet to bid, buy, or vote.
+
+<Shot id="start/first-10-minutes/05" alt="A tribe's home page with a live auction and the main navigation" />
+
+### 6. Become a member
+
+There are three ways to get a membership token. Which ones you see depends on the tribe.
+
+**Bid in an auction.** Open **Auction**. Enter an amount in **Your bid**, or select **Bid the minimum**. You can add a one-line comment, which is stored with your bid and can't be edited later. Select the button that names your bid, such as **Place 200 XLM bid**, and approve the transaction in your wallet. Your full bid is held until someone outbids you, then it comes back to you. When the auction ends, the highest bidder wins the token. See [Bid in an auction](/guides/auctions/bid).
+
+**Buy on the market.** Open **Market** and choose a token that is for sale. Select **Buy for**, followed by the price. Review the details, then select **Sign and send**. Nothing is signed until you do. See [Buy a token](/guides/marketplace/buy).
+
+**Claim from a list.** If the tribe has put your address on a claim list, open **Claims** and claim your token. See [Claim](/guides/claims/claim).
+
+When you hold a token, the **You** sheet shows **Member** next to the tribe's name, with your tokens and voting power.
+
+<Shot id="start/first-10-minutes/06" alt="The Auction page with a bid amount entered and the Place bid button" />
+
+### 7. Vote on a proposal
+
+Open **Proposals** and choose a proposal with **Voting open**. Read what it proposes and the actions it will run.
+
+The page shows how many votes you have on this proposal. Choose **For**, **Against**, or **Abstain**. You can add a reason in **Why? (optional)**. Members see your reason next to your vote. Then select the button that names your vote, such as **Cast 1 vote For**, and approve it in your wallet.
+
+You can vote once on each proposal, and you can't change the vote later.
+
+<Callout
+  title="New members may not have votes on current proposals"
+  description="Votes are counted from a fixed point immediately before each proposal was created. A token you received after that point gives you votes on later proposals, not on this one."
+/>
+
+See [Vote](/guides/proposals/vote) and [Votes and delegation](/concepts/votes-and-delegation).
+
+<Shot id="start/first-10-minutes/07" alt="A proposal with the For choice selected and the Cast 1 vote For button" />
+
+### 8. Choose a delegate (optional)
+
+If you would like someone else to vote for you, open the **You** sheet, select **View your tokens and delegation**, then select **Delegate votes**. Your tokens stay in your wallet. Only the votes move, and you can take them back at any time. See [Delegate your votes](/guides/members/delegate).
+
+<Shot id="start/first-10-minutes/08" alt="The Delegate votes form on a token page" />
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+
+- **Signing in** is a signed message, not a transaction. It costs nothing.
+- **Bidding** calls the tribe's auction contract. Your bid moves from your wallet to the auction. If someone outbids you, the auction returns it. If that return fails, the amount waits for you on the Auction page under **Claim refund**.
+- **Buying** calls the tribe's market contract. The token moves to your wallet and the payment goes to the treasury or, for a resale, to the seller, less any resale fee the tribe has set.
+- **Voting** calls the tribe's governor contract. Your vote and reason are public.
+- **Delegating** calls the tribe's membership token contract.
+- Each transaction has a small network fee, paid in XLM. Your wallet shows it before you approve.
+- Stellar confirms a transaction within a few seconds. The app's lists can take a short time longer to show it.
+
+</Disclosure>
+
+## If something goes wrong
+
+- **The wallet does not open.** Check that the wallet extension is installed and unlocked, then select **Connect** again.
+- **A notice says to switch networks.** Set your wallet to Testnet. Transactions are paused until it matches.
+- **The bid is refused.** Your bid must be at least the amount shown under **Your bid**. Bids can have up to 7 decimal places.
+- **You have 0 votes on a proposal.** You may have received your token after the proposal was created, or delegated your votes to someone else.
+- **Your bid or vote is not in the list yet.** New activity can take a moment to appear. Check the transaction link in the notice.
+
+For more, see [Troubleshooting](/reference/troubleshooting) and [Error messages](/reference/error-messages).
+
+## Related
+
+- [Wallets and Stellar basics](/concepts/wallets-and-stellar)
+- [Membership tokens](/concepts/membership-tokens)
+- [Votes and delegation](/concepts/votes-and-delegation)
+- [Bid in an auction](/guides/auctions/bid)
+- [Vote](/guides/proposals/vote)

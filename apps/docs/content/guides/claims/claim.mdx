@@ -1,25 +1,67 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+If a tribe has set aside tokens for your wallet on a claim list, you can claim them yourself from the Claims page. Some lists are free. Others charge a price per token. You also pay a small network fee in XLM.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Connect and sign in with the wallet that is on the list, on the tribe's network.
+- If the list has a price, hold enough of its payment asset for the tokens you claim, plus XLM for the network fee.
+- Use a standard Stellar account. Smart-account signing isn't supported for claims.
+- If the tribe's list can't be loaded, ask the person who manages it for a proof file. It is a small file with your amount.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the Claims page.** Choose **Claims** in the tribe's navigation. The page is titled **Claim your tokens** and shows a card for each list, with its price, how many tokens have been claimed, and when it closes. Each card is labelled **Open**, **Closed**, **All claimed** or **Failed**.
+
+   <Shot id="claims/claim/01" alt="The Claim your tokens page with an open claim list card" />
+
+2. **Find your allocation.** On a list that includes you, the card shows how many tokens are for you and how many you have claimed, for example "5 tokens for you · 0 claimed". On a list that doesn't, it says "You're not on this list."
+
+   <Shot id="claims/claim/02" alt="A claim list card showing 5 tokens for you, 0 claimed, and a Claim 5 tokens button" />
+
+3. **Choose the claim button.** It names the number of tokens, for example **Claim 5 tokens**. The app checks the list and your proof, then prepares the transaction. "Checks passed. Nothing is signed or sent yet." means it is ready for review.
+
+   <Shot id="claims/claim/03" alt="The message Checks passed. Nothing is signed or sent yet. under the claim list" />
+
+4. **Review the claim.** The review says how many tokens you will receive, what you pay (or that the tokens are free), where the payment goes, and the network fee.
+
+   <Shot id="claims/claim/04" alt="The claim review with the token count, the price, the destination of the payment and the network fee" />
+
+5. **Sign and claim.** Choose **Sign and claim**, then sign in your wallet. The page reports when it is submitted, then "Claim confirmed". The tokens are now in your wallet, and the claim appears under **Past claims**.
+
+   <Shot id="claims/claim/05" alt="The Claims page after a confirmed claim, with the claim listed under Past claims" />
+
+### Large allocations
+
+One claim mints at most 43 tokens. If your allocation is larger, the review says so. Claim again for the rest. Each claim is a separate transaction with its own network fee.
+
+### Claim with a proof file
+
+If a list shows **Claim list unavailable**, you can still claim with a proof file from the organiser. Open **Have a proof file instead?**, then choose **Choose a proof file** or paste it under **Or paste it**. Choose **Check proof**. The app finds the open list your proof matches, then continues from step 4. A proof file can be at most 8 KB.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  A claim calls `claim` on the tribe's ClaimMinter. You sign it, and it carries your full allocation, the number of tokens to mint now, your merkle proof and the highest price you accept. The contract checks the proof against the list's root, then charges the price for each token and mints the tokens to you through the Token contract.
+
+  Before you sign, the app checks the proof against the list in your browser, prepares the transaction on the server, and checks that the transaction matches your account, the list, the price and the count. Just before signing, it reads the list again. If anything changed, it stops and nothing is signed.
+
+  Payments go to the tribe's [Treasury](/reference/glossary#treasury). On a launch drive before launch, they are held by the claims module instead, and move to the Treasury when the tribe launches.
+
+  A new token's vote goes to your own wallet, unless you have already delegated your votes. You pay the Stellar network fee in XLM. Claims are public on chain. **Past claims** reads from an index and can take a moment to update.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"This proof doesn't match your account, amount or the list."** The connected wallet may not be the one on the list, or the list was replaced. Check the wallet, or ask the person who manages the list for a new proof.
+- **"This list is not taking claims."** The list has closed, every token has been claimed, or a launch drive has failed. See [Claim refunds](/guides/claims/refund/).
+- **"The list or your claims changed. Refresh and try again."** Something changed between the review and your signature. Nothing was signed. Refresh and claim again.
+- **"Switch your wallet to this tribe's network."** Change the network in your wallet, then refresh.
+- **The claim was submitted, but the page is still waiting.** Don't claim again while it confirms. Check the transaction hash shown on the page before you retry.
 
 ## Related
+
+- [Make a claim list](/guides/claims/create/)
+- [Claim refunds](/guides/claims/refund/)
+- [Assurance drives](/guides/setup/assurance-drives/)
+- [Membership tokens](/concepts/membership-tokens/)

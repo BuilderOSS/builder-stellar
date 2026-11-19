@@ -1,25 +1,81 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Actions are what a proposal does if it passes: send funds, add members, or change a setting. This guide shows how to add actions to a proposal, put them in order, and change them before you submit.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Connect your wallet on the tribe's network. Testnet is the live network today.
+- Start a proposal from **Proposals → New proposal**, or from any Manage page that has an **Add to proposal** button. See [Write a proposal](/guides/proposals/write/).
+- A proposal can hold up to 20 actions. They run in order, all together, only if the vote passes.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the action picker.** On the Write step, under **In this proposal**, choose **Add an action**. The **Add an action** panel opens. Nothing is signed until you submit the proposal.
+
+   <Shot id="proposals/actions/01" alt="The Add an action panel with the Find an action search box and the Choose what to do tiles" />
+
+2. **Choose what to do.** The tiles at the top cover the most common requests:
+
+   - **Pay someone**: send XLM or another asset from the [Treasury](/reference/glossary#treasury) to a wallet.
+   - **Add members**: mint membership tokens to one or more wallets.
+   - **Give a treasury token**: send a membership token the Treasury holds to someone.
+   - **Recover a membership**: move a member's token to a new wallet by vote. This needs DAO recovery to be on.
+   - **Buy a listing**: the Treasury buys a token from the market. This one is prepared in **Manage → Market**, so the tile opens that page.
+
+   You can also type in **Find an action**, for example "pay" or "quorum".
+
+   <Shot id="proposals/actions/02" alt="The Choose what to do tiles, with Pay someone selected" />
+
+3. **Or change a setting.** Below the tiles, settings are grouped by the part of the tribe they belong to, for example **Change a setting · Rules**. Each row shows the setting's current value, such as "Now: 3 days". Less common actions are under **Advanced**. If an action can't be used in this tribe, the row says why, and may link to the page that fixes it.
+
+   <Shot id="proposals/actions/03" alt="The Change a setting groups, with the current value shown on each row" />
+
+4. **Fill in the action.** The panel shows the action's form. Enter the values and choose **Add to proposal**, or **Discard** to go back. The action appears as a numbered row under **In this proposal**, written as a sentence.
+
+   <Shot id="proposals/actions/04" alt="The form for Send treasury funds with a recipient and an amount" />
+
+5. **Put the actions in order.** Actions run from the first to the last. Use the up and down buttons on a row, or drag it, to change the order. Put an action before any action that depends on it. For example, turn DAO recovery on before an action that recovers a membership.
+
+   <Shot id="proposals/actions/05" alt="Three numbered actions with the move up and move down buttons on each row" />
+
+6. **Edit or remove an action.** Choose **Edit** on a row to change it, then **Save in proposal**. Choose **Remove** to take it out. A notice offers **Undo** for a few seconds after you remove one. A row with several steps, or a high-risk action, asks you to confirm first. Actions made on another page, such as a Manage page, show that page on a label, and **Edit** takes you back to it.
+
+   <Shot id="proposals/actions/06" alt="An action row with its source label, and the Edit and Remove buttons" />
+
+### Actions from other pages
+
+Some actions are prepared on their own page, because they need more than one form. Examples are the tribe profile and link, artwork, claim lists, quick-buy pools, adding or removing a module, and contract upgrades. Open the page from **Manage**, make the change, and choose **Add to proposal**. A notice says **Added to your proposal**, with **Review proposal** and **Undo**.
+
+Some changes need several steps that only work together. For example, changing an auction setting while auctions are running needs a pause first and a resume last. These arrive as one row, such as "Change the auction: 3 steps". Choose the steps count on the row to see each step. Removing the row removes all of its steps.
+
+### Repeats and clashes
+
+If an action is already in your proposal, or changes the same thing as another action, the app asks before adding it. **Replace the action already in your proposal?** offers **Replace it**. If some of the actions are new, **Add the new ones** adds only those. High-risk actions are also shown for review before they are added.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Adding actions changes only your local draft. Nothing is sent to the network until you submit the proposal.
+
+  When the proposal passes and is executed, the tribe's Treasury makes each call in order, as itself. If any call fails, the whole execution is reverted. No action runs, and the proposal stays queued, so it can be executed again once the problem is fixed, until it expires.
+
+  The app checks each action against the tribe's current state while you draft. It can't know every change that happens before the proposal runs. For example, if a new link is taken by another tribe first, a proposal that changes the link fails when it runs. That's why a link change goes in its own proposal.
+
+  Every action and its values are public on chain once the proposal is submitted. The full list of actions, with the contract call each one becomes, is in [Proposal actions](/reference/proposal-actions/).
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **The action row is greyed out.** The tribe can't run it yet, for example "This tribe has no auction yet." or "Auctions are already paused." Follow the link on the row if there is one.
+- **Add an action is disabled.** The proposal already has 20 actions, or you are editing an action. Finish or cancel the edit first.
+- **A row shows a warning.** The action repeats, clashes with another action, or is in the wrong order. Read the message on the row, then move, replace or remove the action.
+- **"Check the order of actions" on Review.** The proposal can still be submitted, but it would fail when it runs. Go back and reorder the actions.
+- **A notice says the new module's address no longer matches.** Remove the module action and add it again from **Manage → Membership**.
 
 ## Related
+
+- [Write a proposal](/guides/proposals/write/)
+- [Queue and execute](/guides/proposals/queue-and-execute/)
+- [Proposal actions](/reference/proposal-actions/)
+- [Treasury purchases](/guides/marketplace/treasury-purchases/)
+- [The Treasury](/concepts/treasury/)

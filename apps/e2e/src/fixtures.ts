@@ -101,8 +101,8 @@ export function requireVerifiedManager() {
   const status = process.env.E2E_MANAGER_STATUS;
   if (status !== 'verified') {
     throw new Error(
-      `Chain flows need the e2e Manager verified by the preflight (status: ${status ?? 'preflight skipped'}). ` +
-        'See docs/qa/WALKTHROUGHS.md, "The e2e Manager".'
+      `Chain flows need the dev Manager verified by the preflight (status: ${status ?? 'preflight skipped'}). ` +
+        'See docs/qa/WALKTHROUGHS.md, "The dev Manager".'
     );
   }
 }

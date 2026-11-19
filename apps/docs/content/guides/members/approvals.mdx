@@ -1,25 +1,65 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+An approval lets another account or contract move one of your tokens for you, until a time you choose. You keep the token until they move it. You can cancel an approval at any time before it is used.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Connect and sign in with the wallet that holds the token, on the tribe's network.
+- Have the spender's Stellar address ready. A spender is the account or contract you allow to move the token. It starts with G or C.
+- In a tribe with locked memberships, the only spender you can approve is the tribe's Treasury.
+- Keep a small amount of XLM for the network fee.
+
+You don't need this page to sell on the tribe's market. The sell form asks for its own approval. See [Sell a token](/guides/marketplace/sell/).
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the token.** From your profile on the Members page, choose the token. Find the **Your token** card.
+
+   <Shot id="members/approvals/01" alt="A token page you hold, with the Your token card" />
+
+2. **Choose Approve.** Under **What do you want to do?**, choose **Approve** ("Let an app move this token"). In a tribe with locked memberships, choose **Approve the tribe** ("Let a vote move this token") instead.
+
+   <Shot id="members/approvals/02" alt="The Your token card with Approve selected" />
+
+3. **Enter the spender.** Type the address in **Spender address**. For **Approve the tribe**, the address is fixed to the **Tribe Treasury**.
+
+   <Shot id="members/approvals/03" alt="A spender address entered in the Spender address field" />
+
+4. **Set when the approval ends.** **Approval ends at network position** takes a ledger number, not a date. The network adds one about every 5 seconds. **Use a short approval (about 10 minutes)** fills in a value for you. For **Approve the tribe**, **Last long enough for a vote (about 120 days)** is filled in automatically. The field then shows the approximate end date.
+
+   <Shot id="members/approvals/04" alt="The approval end field filled in, with the approximate end date below it" />
+
+5. **Review, then sign and send.** Choose **Review** to see the summary. It names the spender, the token and the end, and says ownership doesn't change. Choose **Sign and send**, then sign in your wallet.
+
+   <Shot id="members/approvals/05" alt="The approval review with the summary and the Sign and send button" />
+
+### Cancel an approval
+
+Choose **Cancel token approval** ("Remove permission to transfer this token"), then **Review** and **Sign and send**. It removes the token's approval at once. The page can't show the current spender, so you can cancel without knowing it.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  **Approve** calls `approve` on the tribe's Token contract, with you as owner, the spender, the token and the expiration ledger. Each token has one single-token approval at a time, so a new approval replaces the old one. It is cleared when the token moves, and it ends at the expiration ledger.
+
+  **Cancel token approval** calls `approve` again with an expiration of 0, which removes the single-token approval. It doesn't change collection-wide operator approvals (`approve_for_all`), which this page doesn't create.
+
+  In a tribe with locked memberships, the Token refuses an approval to any spender except the Treasury (`TransfersLocked`). The approval to the Treasury lasts about 120 days. That covers the longest possible proposal timeline, which is 104 days: up to 30 days each for the voting delay, voting period and safety delay, plus 14 days to run.
+
+  You pay the Stellar network fee in XLM. Approvals are public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"The approval must end in the future."** The ledger number has passed. Use the button to fill in a new end, then review again.
+- **"Choose a different spender."** You entered your own address.
+- **"Memberships in this tribe are locked. You can only approve the tribe Treasury."** Use **Approve the tribe**.
+- **"We couldn't read the network's current position."** Try the button again, or enter a ledger number yourself.
+- **The approval ended before the vote finished.** Approve the tribe again. A proposal can only move the token while the approval is in force.
 
 ## Related
+
+- [Transfer a token](/guides/members/transfer/)
+- [Sell a token](/guides/marketplace/sell/)
+- [Queue and execute](/guides/proposals/queue-and-execute/)
+- [Membership tokens](/concepts/membership-tokens/)

@@ -1,5 +1,5 @@
 // pnpm --dir apps/e2e preflight [--skip-build] [--require-manager]
-// Funds the walkthrough identities and checks the e2e Manager's contracts against this checkout.
+// Funds the walkthrough identities and checks the dev Manager's contracts against this checkout.
 import { preflight } from './preflight.ts';
 
 const args = new Set(process.argv.slice(2));

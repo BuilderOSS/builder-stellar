@@ -1,25 +1,64 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+**Review and create** is the last section of **Build a tribe**. It shows every choice in plain words. When you select **Create tribe** and sign once, the tribe's contracts are created on the network in Setup. The tribe is not live yet: you add artwork and founder tokens, then launch it as a separate step.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Complete the Identity, Membership, and Voting sections. See [Create a tribe: identity](/guides/create/identity).
+- Connect your Stellar wallet and sign in. Your wallet must be on the same network as the page, which today is testnet.
+- Your wallet needs some XLM to pay the network fee. On testnet, this is test XLM with no value. See [Wallets and Stellar basics](/concepts/wallets-and-stellar).
+- If you uploaded your own image, the upload must be finished. A local preview can't be used.
+
+<Callout title="The wallet that creates the tribe becomes its launch admin" description="Only that wallet can set up and launch the tribe. Use the wallet you plan to keep using for setup." />
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Read the summary from top to bottom. It lists **Name**, **About**, **Membership**, **Who can hold one**, **Votes counted by**, **Voting pace**, **Auctions**, **Market**, **Claim lists**, **Voting**, **Safety delay**, **Rules**, **Launch admin**, and **Image**. To change something, go back to its section on the same page and edit it.
+
+   <Shot id="create/review-and-deploy/01" alt="The Review and create section with the summary of every choice" />
+
+2. Leave **Advanced: metadata links** as it is, unless you run your own image service. Its **Renderer base URL** is the address that draws each token's image from its traits. By default this is Tribe Builder's own renderer.
+
+   <Shot id="create/review-and-deploy/02" alt="Advanced: metadata links open, showing the Renderer base URL field" />
+
+3. Select **Create tribe**. If you are not ready, **Save for later** keeps the draft in **Drafts**, and **Discard draft** deletes it from this browser after you confirm.
+
+   <Shot id="create/review-and-deploy/03" alt="The Create tribe button with Save for later and Discard draft beside it" />
+
+4. Approve the transaction in your wallet. The page shows "Approve it in your wallet", then "Confirming on the network…" while it waits.
+
+   <Shot id="create/review-and-deploy/04" alt="The Creating your tribe panel showing Confirming on the network" />
+
+5. When the page shows "Created. Next, set it up", the tribe exists on the network. The page then waits for the tribe to appear in the directory and opens the tribe's page. If it takes longer, select **Continue to setup**.
+
+   <Shot id="create/review-and-deploy/05" alt="The Created. Next, set it up panel with the Continue to setup button" />
+
+Your tribe is now in Setup. On its page you see "You are the launch admin" and a **Continue setup** button that opens the launch checklist. Next, add your artwork. See [Set up: artwork](/guides/setup/artwork).
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  **Create tribe** sends one transaction to the Tribe Builder factory contract (the Manager). In that transaction the Manager deploys the four core contracts: the membership token, the artwork and profile contract (Metadata), the governor (proposals and votes), and the [treasury](/reference/glossary#treasury). It also deploys each module your membership choice needs: an auction, a market, a claims contract, or a combination. It registers each module on the token and applies your membership rules and voting rules.
+
+  The addresses are worked out in advance from your wallet and a random number saved with the draft (a nonce). If you have to try again, the app reuses the same settings and addresses, so the tribe is not created twice. You can see the transaction, your wallet, the nonce, and each contract address under **Technical details**.
+
+  Your wallet becomes the admin of every contract. That is what [launch admin](/reference/glossary#launch-admin) means: until launch, you change settings directly with your own signature. Your link is recorded as a request only. It is claimed at launch.
+
+  You pay the Stellar network fee for the transaction, which includes rent for the new contracts' storage. Your wallet shows the fee before you sign. The time to confirm depends on the network. Appearing in the directory is a separate step that can take a little longer. Once created, the tribe and its settings are public on the network.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **Create tribe is not available.** Read the line under the button. It says what is missing: connect your wallet, switch your wallet to the right network, or upload your image in Identity first.
+- **"One field needs attention. We took you to it."** A field changed since you checked it. Fix the field the page moved you to, then select **Create tribe** again.
+- **You closed the wallet window, or the transaction failed.** The panel says "That attempt didn't go through". Select **Try again**. It checks the network first and reuses the same settings.
+- **Your wallet signed, but the network's reply is unknown.** Select **Check the transaction**. If the signed transaction is still valid, **Send the same signed transaction again** sends the exact same bytes. Neither one signs anything new.
+- **"Your tribe is created, but the directory hasn't updated yet."** The tribe exists. Don't create it a second time. Wait a moment and select **Continue to setup**, or open it later from **Drafts**.
+- **"Connect the wallet you created this with to continue."** Recovery needs the same wallet that signed. Connect it and sign in.
 
 ## Related
+
+- [Set up: artwork](/guides/setup/artwork)
+- [Setup versus launched](/concepts/setup-and-launch)
+- [Launch your tribe](/guides/setup/launch)
+- [Troubleshooting](/reference/troubleshooting)
