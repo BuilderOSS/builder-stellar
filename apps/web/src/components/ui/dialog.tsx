@@ -2,7 +2,7 @@
 
 import { Dialog as ArkDialog } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { sva } from 'styled-system/css';
 
 const dialog = sva({
@@ -114,8 +114,15 @@ export function Dialog({
   instant?: boolean;
 }) {
   const classes = dialog({ instant });
+  // Name and describe the dialog by explicit ids. Zag drops aria-labelledby when it looks for the title
+  // before a lazily mounted portal has rendered it, which left a dialog opened after mount with no
+  // accessible name (BUG-W02-3).
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
   return (
     <ArkDialog.Root
+      ids={{ title: titleId, description: descriptionId }}
       open={open}
       onOpenChange={(details) => onOpenChange(details.open)}
       role={role}
@@ -128,7 +135,11 @@ export function Dialog({
       <Portal>
         <ArkDialog.Backdrop className={classes.backdrop} />
         <ArkDialog.Positioner className={classes.positioner}>
-          <ArkDialog.Content className={classes.content}>
+          <ArkDialog.Content
+            className={classes.content}
+            aria-labelledby={titleId}
+            aria-describedby={description ? descriptionId : undefined}
+          >
             <div>
               <ArkDialog.Title className={classes.title}>{title}</ArkDialog.Title>
               {description ? (
