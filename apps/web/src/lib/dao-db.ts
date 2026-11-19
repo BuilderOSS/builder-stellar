@@ -141,6 +141,11 @@ const CONTRACT_ID_PATTERN = /^C[A-Z2-7]{55}$/;
  *
  * @throws Error if the value is neither a contract id nor a known slug
  */
+/** True for the error resolveDaoId and getDaoConfigFromDatabase throw when no DAO has that id or slug. */
+export function isDaoNotFound(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('DAO not found:');
+}
+
 export async function resolveDaoId(idOrSlug: string): Promise<string> {
   if (CONTRACT_ID_PATTERN.test(idOrSlug)) return idOrSlug;
   // A claimed slug is unique (claimed at launch, moved only by a vote to change it).

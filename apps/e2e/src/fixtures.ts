@@ -90,9 +90,15 @@ export async function appliedTheme(page: Page) {
   return page.locator('html').getAttribute('data-theme');
 }
 
-/** No horizontal page scroll (§3.5). */
+/**
+ * No horizontal page scroll (§3.5). Measured against the root's client width, not `innerWidth`: with
+ * mobile emulation, content wider than the screen widens the layout viewport itself, so `innerWidth`
+ * grows with it and the overflow never showed.
+ */
 export async function expectNoHorizontalScroll(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
   expect(overflow, 'page scrolls horizontally').toBeLessThanOrEqual(0);
 }
 

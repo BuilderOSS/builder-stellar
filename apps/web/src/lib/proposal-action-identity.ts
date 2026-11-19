@@ -195,6 +195,9 @@ function highRiskMessage(action: ProposalQueuedAction) {
     return 'Locks memberships: members can no longer sell their tokens, only give them back to the tribe or ask for a vote.';
   if (action.type === 'set-dao-recovery' && action.enabled === true)
     return 'Lets a vote move any member’s token without their signature.';
+  // BUG-W02-2: a payout read "can change who controls the tribe, how the treasury works, or token balances".
+  if (action.type === 'transfer-sac-token')
+    return 'Sends funds out of the treasury. Check the recipient and the amount: once the proposal runs, the payment cannot be undone.';
   if (action.type === 'dao-transfer') return 'Moves a member’s token and its votes without the member’s signature.';
   if (action.type === 'create-module' || action.type === 'register-module')
     return 'Adds a contract that can mint memberships within its allowance and hold members’ tokens.';
