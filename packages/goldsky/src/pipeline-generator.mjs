@@ -15,8 +15,8 @@ export const defaultEnvPaths = [join(packageRoot, '.env'), join(packageRoot, '.e
 
 /**
  * GOLDSKY_ENV_FILE (relative to this package) replaces .env/.env.local, so one checkout can generate
- * and deploy a second pipeline: `GOLDSKY_ENV_FILE=e2e.env pnpm generate` for the walkthrough
- * suite's e2e Manager (docs/qa/WALKTHROUGHS.md).
+ * and deploy a second pipeline: `GOLDSKY_ENV_FILE=dev.env pnpm generate` for dev.tribes.build
+ * (docs/DEV_DEPLOYMENT.md).
  */
 export function selectedEnvPaths(env = process.env) {
   const file = env.GOLDSKY_ENV_FILE?.trim();

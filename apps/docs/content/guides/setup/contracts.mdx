@@ -1,25 +1,66 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Your tribe runs on a set of contracts: the membership token, proposals and votes, the treasury, the artwork and profile, and each module you chose. Before launch, you can check which release each contract runs and apply approved upgrades yourself. After launch, upgrades require DAO governance: they go to a vote like any other change.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Your tribe is created and in Setup.
+- Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network. Only the launch admin can apply upgrades during setup.
+- For what an upgrade is and who approves releases, see [Upgrades](/concepts/upgrades).
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Open **Manage** and select **Contract upgrades**. The launch checklist also links here: **Review (optional)** shows a **Contract upgrades** row with **Review** when an upgrade is available.
+
+   <Shot id="setup/contracts/01" alt="The Review (optional) list in the launch checklist with the Contract upgrades row and its Review button" />
+
+2. Read the **Contracts** list. It names each contract your tribe has, with its release number and status:
+   - **Up to date**: it runs the latest approved release.
+   - **Upgrade available**: a newer release is approved for your tribe.
+   - **Newer release not approved**: a newer release exists, but it is not approved for this upgrade.
+   - **Version withdrawn**: the platform withdrew this release.
+
+   <Shot id="setup/contracts/02" alt="The Contracts list showing each contract with its release number and an Up to date status" />
+
+3. If the card above the list says that upgrades are available, read the release notes under each one. They say what the new release changes.
+
+   <Shot id="setup/contracts/03" alt="The upgrades card listing one contract with its old and new release numbers and the release notes" />
+
+4. Select **Apply upgrades now**, which shows the number of upgrades. Approve each one in your wallet: each upgrade is one signature.
+
+   <Shot id="setup/contracts/04" alt="The Apply 2 upgrades now button below the list of available upgrades" />
+
+5. When every contract is current, the card says "Everything is up to date" and "Every contract is on its latest approved release."
+
+   <Shot id="setup/contracts/05" alt="The upgrades card showing Everything is up to date" />
+
+<Callout title="A tribe can't launch on a withdrawn release" description="If a contract runs a withdrawn release, the checklist adds the step Upgrade your contracts and launch stays unavailable. Apply the upgrade first. If no replacement release is approved yet, wait for one." />
+
+To see the address of each contract and the exact code it runs, open **Technical details** below the **Contracts** list. **Advanced: check a specific release** is for checking a release by its code fingerprint (hash).
+
+You can also add a module before launch, such as claim lists if you left them out. Open **Manage**, select **Membership**, and use **Add a module** in **Modules**. Removing a module needs a vote, so it is possible only after launch.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Releases are approved by the Tribe Builder factory contract (the Manager). It keeps a list of approved contract code and of the upgrades allowed from one release to the next. A tribe's contracts can move only to approved code.
+
+  During setup, each upgrade is one transaction from the launch admin to that contract. Each has a Stellar network fee, which your wallet shows before you sign. Changes apply as soon as each transaction confirms.
+
+  At launch, the Manager checks that every contract runs approved code that has not been withdrawn. After launch, each contract's admin is the [treasury](/reference/glossary#treasury). An upgrade then goes into a [proposal](/reference/glossary#proposal), and it runs only if members vote for it. The treasury's own upgrade goes in a separate proposal.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Couldn't check for upgrades"**. The page could not read the contracts. Check your connection and refresh the page.
+- **A contract shows "Couldn't read".** The page could not read that contract's state. Refresh the page. If it stays, the other contracts are still shown correctly.
+- **"Only the launch admin can apply upgrades during setup."** Connect the launch admin wallet and sign in.
+- **An upgrade failed partway.** Upgrades already confirmed stay applied. Refresh the page to see which remain, then apply them again.
+- **"Release … was withdrawn"** with "Wait for a replacement release." No approved replacement exists yet, so the tribe can't launch until one is approved.
 
 ## Related
+
+- [Upgrades](/concepts/upgrades)
+- [Modules](/concepts/modules)
+- [Launch your tribe](/guides/setup/launch)
+- [Contract addresses](/reference/contract-addresses)

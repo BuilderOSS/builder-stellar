@@ -38,7 +38,7 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(dirname "$SCRIPT_DIR")"
-# GOLDSKY_ENV_FILE=e2e.env selects the walkthrough suite's pipeline (docs/qa/WALKTHROUGHS.md)
+# GOLDSKY_ENV_FILE=dev.env selects dev.tribes.build's pipeline (docs/DEV_DEPLOYMENT.md)
 # instead of .env/.env.local, as `pnpm generate` does.
 if [ -n "${GOLDSKY_ENV_FILE:-}" ]; then
   ENV_FILES=("$PACKAGE_DIR/$GOLDSKY_ENV_FILE")

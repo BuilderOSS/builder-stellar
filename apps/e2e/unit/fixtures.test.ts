@@ -9,7 +9,7 @@ describe('requireVerifiedManager', () => {
     else process.env.E2E_MANAGER_STATUS = before;
   });
 
-  it('lets chain flows run only against a verified e2e Manager', () => {
+  it('lets chain flows run only against a verified dev Manager', () => {
     process.env.E2E_MANAGER_STATUS = 'verified';
     expect(() => requireVerifiedManager()).not.toThrow();
     process.env.E2E_MANAGER_STATUS = 'no-manager';

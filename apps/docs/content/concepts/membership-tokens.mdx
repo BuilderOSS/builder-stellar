@@ -1,11 +1,59 @@
-<Placeholder />
-
 ## In plain words
 
-The idea, for someone new to DAOs.
+A membership token is your membership card in a tribe. Holding one makes you a member, and each token is one vote. If you hold 3 tokens, you have 3 votes.
+
+Each token also has its own picture, drawn from the tribe's artwork, and a number, such as #12. The token sits in your wallet, and you can see it on the tribe's **Members** page and on its own token page.
 
 ## The DAO term
 
-The same idea, for people who already know DAOs.
+Each membership is an NFT (non-fungible token) on Stellar, with one vote. "Non-fungible" means each token is unique: token #12 is a different token from #13, with its own art and traits.
+
+The tribe's token contract records who holds each token. It also counts votes, using delegation and checkpoints. A checkpoint is a record of how many votes an address had at a point in time. See [Votes and delegation](/concepts/votes-and-delegation).
+
+## Art and traits
+
+A tribe's artwork is a set of **layers**, such as background, body, and accessory. Each layer has several options, called **traits**. A tribe can have up to 16 layers.
+
+When a token is created, the tribe's metadata contract picks one trait from each layer for that token. The choice is pseudo-random: it depends on the token number and the state of the network at that moment. The combined image is that token's picture. You can see a token's traits under **Traits** on its token page.
+
+The image files are stored on IPFS, a public file network. The token's description, with its name, image link, and traits, is built on chain.
+
+Because traits are picked when a token is created, a tribe must add its artwork before it mints any tokens. See [Set up: artwork](/guides/setup/artwork).
+
+## How tokens are created
+
+New tokens come only from the tribe's own contracts. Tribe Builder creates tokens for nobody.
+
+- **Founder tokens.** The [launch admin](/reference/glossary#launch-admin) mints these during Setup, before launch.
+- **Auction.** The auction creates one new token at a time and sells it to the highest bidder.
+- **Market pools.** The market sells new tokens at a set price from pools that members open by vote. They appear as **New from the tribe**.
+- **Claim lists.** People on a published list can claim a token, for free or at a set price.
+
+Payments for new tokens go to the tribe's [treasury](/reference/glossary#treasury). Members can also resell tokens they hold on the market, where they appear as **Resale from members**, if the tribe allows it.
+
+## Tokens that carry no votes
+
+Some tokens are held by the tribe itself: by its treasury, its auction, or its market. These tokens carry no votes, and they don't count towards the [quorum](/reference/glossary#quorum). So an unsold auction token never raises the number of votes a proposal needs.
+
+When you list a token for sale, the market holds it, so its vote leaves your count until the token comes back to you or someone buys it.
+
+## Membership rules
+
+When a tribe is created, it chooses how memberships can change hands:
+
+- **Open membership.** Members can sell, give, or delegate their tokens freely.
+- **Members-only club.** Memberships change hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example to rescue a lost key.
+
+These are three separate switches under **Advanced settings**, and each can change later by vote. If the tribe locks transfers, you can still give your token back to the tribe, or approve the tribe to move it.
+
+## What a token is not
+
+A membership token is a vote and a record of membership. It is not a share in a company, and it carries no promise of value or return.
 
 ## Related
+
+- [Votes and delegation](/concepts/votes-and-delegation)
+- [Modules](/concepts/modules)
+- [Bid in an auction](/guides/auctions/bid)
+- [Buy a token](/guides/marketplace/buy)
+- [Transfer a token](/guides/members/transfer)

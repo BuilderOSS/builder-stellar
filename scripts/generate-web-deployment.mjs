@@ -12,7 +12,7 @@ const outputPath = resolve(
 );
 
 // MANAGER_DEPLOYMENT_FILE pins one artifact (the walkthrough build, apps/e2e/scripts/build-app.mjs,
-// points it at the e2e Manager); otherwise the newest real deployment wins.
+// points it at the dev Manager, as dev.tribes.build does); otherwise the newest real deployment wins.
 const pinned = process.env.MANAGER_DEPLOYMENT_FILE?.trim();
 const latest = pinned
   ? managerArtifactAt(resolve(repositoryRoot, pinned))

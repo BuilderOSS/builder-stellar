@@ -1,25 +1,70 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Members can decide by vote that the tribe's [Treasury](/reference/glossary#treasury) buys a token a member has listed for sale. You prepare the purchase in **Manage → Market**, and it joins a proposal. If members vote for it and the proposal is executed, the Treasury pays the listing price and receives the token.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- The tribe must have launched. A Treasury purchase requires DAO governance: a proposal that members vote on.
+- Connect and sign in on the tribe's network. Testnet is the live network today. Any connected wallet can add the purchase to a proposal draft. Whether you can submit the proposal is checked when you do. See [Write a proposal](/guides/proposals/write/).
+- Find the token number of the listing. It is in the listing's title on the Market page, for example "Example Tribe #12".
+- Check that the Treasury holds enough of the listing's payment asset, and that the listing ends after the proposal can be executed. A proposal waits for its voting period and the [safety delay](/reference/glossary#safety-delay) before it can run.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open Manage → Market.** Choose **Manage** in the tribe's navigation, then **Market**. You can also choose the **Buy a listing** tile when you choose actions for a proposal, which opens the same page.
+
+   <Shot id="marketplace/treasury-purchases/01" alt="The Manage the marketplace page with the Propose a Treasury purchase section" />
+
+2. **Enter the token.** Under **Propose a Treasury purchase**, enter the token number in **Listed token ID**.
+
+   <Shot id="marketplace/treasury-purchases/02" alt="The Listed token ID field with a token number entered" />
+
+3. **Add the purchase to your proposal.** Choose **Add the purchase to proposal**. The app reads the live listing and checks that it is open and hasn't ended. It then prepares the Treasury's permission for exactly the listing's payments, and asks the Treasury contract to check it. The purchase joins your draft as one item, "Treasury buys listed token #12", with two steps: the authorization, then the purchase at no more than the current price.
+
+   <Shot id="marketplace/treasury-purchases/03" alt="The proposal draft with the Treasury buys listed token item and its two steps" />
+
+4. **Submit the proposal.** Open your draft from **Review proposal**, add a title and a reason, then submit it. Explain why the tribe should buy this token. See [Write a proposal](/guides/proposals/write/).
+
+   <Shot id="marketplace/treasury-purchases/04" alt="The proposal review with the Treasury purchase listed under its actions" />
+
+5. **Vote, queue and execute.** Members vote on the proposal. If it passes, it is queued, and after the safety delay anyone can execute it. See [Vote](/guides/proposals/vote/) and [Queue and execute](/guides/proposals/queue-and-execute/).
+
+   <Shot id="marketplace/treasury-purchases/05" alt="The proposal page for an executed Treasury purchase" />
+
+After execution, the token is held by the Treasury. Tokens the Treasury holds carry no votes. Members can later propose giving it to someone with **Give a treasury token**. See [Choose actions](/guides/proposals/actions/).
+
+<Callout title="The purchase runs only if the listing is unchanged" description="The proposal pays exactly the price and payments it was prepared with. If the seller cancels, the token sells to someone else, or the listing ends before execution, the purchase fails." />
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  The proposal makes two calls, in order, when it is executed.
+
+  First, the Treasury calls its own `authorize` with a list of the exact payments it allows: a transfer of the resale fee to the Treasury, and a transfer of the price minus the fee to the seller, both in the listing's payment asset. A listing with no fee has one transfer. The Treasury allows nothing else.
+
+  Second, the Treasury calls `buy` on the tribe's Marketplace contract as the buyer, with the price as the most it will pay. The Marketplace contract makes the two payments and moves the token to the Treasury. Because the fee goes back to the Treasury, the Treasury's balance falls by the price minus the resale fee.
+
+  If any call fails, for example because the listing was cancelled, has ended, or now has a different price or seller, the whole proposal reverts and nothing moves. The proposal stays queued and can be executed again until it expires. If you add the purchase to a proposal with other actions, a failed purchase stops those actions too, so consider proposing it on its own.
+
+  The wallet that executes the proposal pays the Stellar network fee in XLM. Tribe Builder takes no fee. The proposal, its actions and the purchase are public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **The button is disabled.** Connect and sign in. The purchase can be proposed only once the tribe has launched.
+- **"Enter the listed token id."** Enter the token number only, with digits.
+- **"Token #12 has no open secondary listing."** The token isn't listed now. Check the number on the Market page.
+- **"This listing has expired and cannot be bought."** The listing has ended. The seller can list the token again.
+- **"The Treasury cannot buy its own listing."** The Treasury is the seller of this listing.
+- **"The Treasury rejected this authorization tree."** The Treasury's check of the payments failed. Nothing was added. Reload the page and try again.
+- **The executed proposal failed.** Check that the listing is still open at the same price, and that the Treasury holds enough of the payment asset. The proposal stays queued until it expires, so it can be executed again once the problem is fixed. If the listing changed, propose a new purchase.
+
+For an error code, see [Error messages](/reference/error-messages/).
 
 ## Related
+
+- [Manage: marketplace](/guides/manage/marketplace/)
+- [Choose actions](/guides/proposals/actions/)
+- [Queue and execute](/guides/proposals/queue-and-execute/)
+- [The Treasury](/concepts/treasury/)
+- [Buy a token](/guides/marketplace/buy/)

@@ -32,7 +32,10 @@ export const proseCode = css({
   bg: 'hover',
   px: '1',
   py: '0.5',
-  borderRadius: 'sm'
+  borderRadius: 'sm',
+  // Inside a link the code keeps the link colour on the page background: on the `hover`
+  // fill, `signal` misses AA in the dark theme.
+  'a > &': { bg: 'transparent', px: '0' }
 });
 export const prosePre = css({
   fontFamily: 'mono',
@@ -44,4 +47,35 @@ export const prosePre = css({
   borderRadius: 'card',
   overflowX: 'auto',
   '& code': { bg: 'transparent', p: '0', fontSize: 'inherit' }
+});
+
+// Tables scroll inside their own frame on narrow screens, so the page never scrolls
+// sideways. Rules, not boxes: a strong rule under the header and quiet rules between rows.
+export const proseTableWrap = css({
+  overflowX: 'auto',
+  mb: '6',
+  maxW: '100%',
+  borderRadius: 'control',
+  boxShadow: 'inset 0 0 0 1px token(colors.rule)',
+  outline: 'none',
+  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
+});
+export const proseTable = css({
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: '0.9375rem',
+  lineHeight: '1.5',
+  fontVariantNumeric: 'tabular-nums',
+  '& th, & td': { textAlign: 'left', verticalAlign: 'top', px: '3', py: '2.5' },
+  '& th': {
+    textStyle: 'label',
+    color: 'ink.muted',
+    bg: 'surface',
+    borderBottomWidth: '1px',
+    borderColor: 'rule.strong',
+    whiteSpace: 'nowrap'
+  },
+  '& td': { borderTopWidth: '1px', borderColor: 'rule' },
+  '& tbody tr:first-of-type td': { borderTopWidth: '0' },
+  '& td code': { whiteSpace: 'nowrap' }
 });
