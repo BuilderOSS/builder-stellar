@@ -8,7 +8,7 @@ post-launch configuration/append proposals. AI artwork/image generation is remov
 
 ## Flow
 
-1. Create the pending DAO. Open **Set up artwork** in the launch checklist.
+1. Create the pending DAO. Open **Add artwork** in the launch checklist.
 2. Choose a starter collection or upload a directory. The browser saves the exact artwork plan under network/Manager/wallet/DAO scope.
 3. Review layers and preview. Property order is bottom-to-top composition order; the current preview uses the same property/item selection helpers as rendering.
 4. Sign each `metadata.add_properties` batch. The [batch planner](../apps/web/src/components/create-dao/artwork-configuration.ts) enforces 30 items per call and valid property references.
