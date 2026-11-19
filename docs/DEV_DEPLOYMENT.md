@@ -95,7 +95,7 @@ Protection (team login), and lifting that would make every PR preview public too
 | `IRON_PASSWORD` | its own 64-character secret (sensitive) |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
-| `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | `false` until `PINATA_JWT` is added (production's is sensitive, so it can't be copied) |
+| `PINATA_JWT`, `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`); the JWT was added by hand, since a sensitive value can't be copied |
 
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
