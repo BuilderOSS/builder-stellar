@@ -66,13 +66,66 @@ export function YourListings({
   const [changing, setChanging] = useState<MarketplaceListing | null>(null);
   const [sequence, setSequence] = useState<{ listing: MarketplaceListing; steps: SellStep[] } | null>(null);
   const shown = listings.filter((listing) => listing.kind === 'secondary');
-  if (!shown.length) return null;
   const ended = shown.filter((listing) => listing.status === 'awaiting-expiry' && !isPendingListing(listing));
-  const daoId = shown[0]!.daoId;
+  // A confirmed Cancel hides its row at once; an open review or sequence outlives the row (BUG-012).
+  const daoId = (action?.listing ?? sequence?.listing ?? changing ?? shown[0])?.daoId;
+  if (!daoId) return null;
 
   function trade(listing: MarketplaceListing, type: 'cancel' | 'expire') {
     setAction({ listing, action: { action: type, id: listing.id, kind: 'secondary', eventId: listing.eventId } });
   }
+
+  const dialogs = (
+    <>
+      {action ? (
+        <TradeReview
+          key={JSON.stringify(action.action)}
+          daoId={daoId}
+          action={action.action}
+          onClose={() => setAction(null)}
+          onConfirmed={(hash) => onCancelled(action.listing, hash)}
+        />
+      ) : null}
+      {changing && config ? (
+        <ChangePriceDialog
+          listing={changing}
+          network={network}
+          config={config}
+          onClose={() => setChanging(null)}
+          onContinue={(terms) => {
+            setChanging(null);
+            setSequence({
+              listing: changing,
+              steps: sellSequence(terms, {
+                action: 'cancel',
+                kind: 'secondary',
+                id: changing.id,
+                eventId: changing.eventId
+              })
+            });
+          }}
+        />
+      ) : null}
+      {sequence ? (
+        <SellSequence
+          daoId={daoId}
+          title="Change the price"
+          intro={CHANGE_PRICE_INTRO}
+          steps={sequence.steps}
+          onStepConfirmed={(step, hash) => {
+            if (step.kind === 'cancel') onCancelled(sequence.listing, hash);
+            if (step.kind === 'list' && step.action.action === 'list') onListed(step.action, hash);
+          }}
+          onClose={(confirmed) => {
+            const tokenId = sequence.listing.tokenId ?? sequence.listing.id;
+            setSequence(null);
+            if (confirmed.includes('cancel') && !confirmed.includes('list')) onRelist?.(tokenId);
+          }}
+        />
+      ) : null}
+    </>
+  );
+  if (!shown.length) return dialogs;
 
   return (
     <Section title="Your listings">
@@ -129,52 +182,7 @@ export function YourListings({
           );
         })}
       </div>
-      {action ? (
-        <TradeReview
-          key={JSON.stringify(action.action)}
-          daoId={daoId}
-          action={action.action}
-          onClose={() => setAction(null)}
-          onConfirmed={(hash) => onCancelled(action.listing, hash)}
-        />
-      ) : null}
-      {changing && config ? (
-        <ChangePriceDialog
-          listing={changing}
-          network={network}
-          config={config}
-          onClose={() => setChanging(null)}
-          onContinue={(terms) => {
-            setChanging(null);
-            setSequence({
-              listing: changing,
-              steps: sellSequence(terms, {
-                action: 'cancel',
-                kind: 'secondary',
-                id: changing.id,
-                eventId: changing.eventId
-              })
-            });
-          }}
-        />
-      ) : null}
-      {sequence ? (
-        <SellSequence
-          daoId={daoId}
-          title="Change the price"
-          intro={CHANGE_PRICE_INTRO}
-          steps={sequence.steps}
-          onStepConfirmed={(step, hash) => {
-            if (step.kind === 'cancel') onCancelled(sequence.listing, hash);
-            if (step.kind === 'list' && step.action.action === 'list') onListed(step.action, hash);
-          }}
-          onClose={(confirmed) => {
-            const tokenId = sequence.listing.tokenId ?? sequence.listing.id;
-            setSequence(null);
-            if (confirmed.includes('cancel') && !confirmed.includes('list')) onRelist?.(tokenId);
-          }}
-        />
-      ) : null}
+      {dialogs}
     </Section>
   );
 }

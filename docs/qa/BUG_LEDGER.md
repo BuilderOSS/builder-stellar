@@ -177,3 +177,18 @@ None.
   events from an older server.
 - **Regression test:** `lib/marketplace/purchase-cycle.test.ts` (an event without the field passes,
   one marked `false` fails); W10's buy case.
+
+### BUG-012 · Cancelling your last listing closed the review before it confirmed
+- **Flow:** W10, the seller cancels a listing. Found at desktop dark; every viewport and theme.
+- **Severity:** P2 (the cancel went through, but the member never saw it confirm; a Change price on
+  the only listing lost its sequence after the Cancel step).
+- **Steps:** with one listing, press Cancel listing in Your listings, Check, then Sign and send.
+- **Expected:** "Confirmed", the transaction and Done, then the row is gone.
+- **Actual:** on confirmation the whole dialog vanished with the row.
+- **Root cause:** a confirmed cancel hides its listing at once (the pending change), and
+  `components/marketplace/your-listings.tsx` returned nothing when no rows were left, unmounting the
+  review and the Change price sequence it renders. `ListingCard` likewise hid its own card, with its
+  review inside, on confirmation.
+- **Fix:** Your listings keeps its review, Change price dialog and sequence mounted while one is open,
+  even with no rows left; a public card reports its cancel or return only when its review closes.
+- **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
