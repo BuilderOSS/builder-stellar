@@ -67,6 +67,7 @@ const ERRORS: Record<number, string> = {
   7127: 'DAO not found or not pending launch.',
   7128: 'No launched tribe uses this link.',
   7129: 'This is already your link.',
+  7130: 'The Manager upgrade was approved too recently; its upgrade notice has not passed (UpgradeDelayNotElapsed).',
   7131: 'The Manager can only upgrade to its announced latest implementation (UpgradeNotLatest).',
   7132: "A module's payment asset changed since the DAO was created; change it back before launching (PaymentAssetMismatch).",
   7133: 'Each module kind can be created at most once (InvalidModules).',
@@ -79,13 +80,13 @@ const ERRORS: Record<number, string> = {
   7140: 'The assurance drive has not reached its number of members yet (AssuranceNotMet).',
   7141: 'The assurance drive passed its deadline without launching: it ends in refunds (AssuranceFailed).',
   7142: 'The assurance drive has not failed (AssuranceNotFailed).',
-  7143: 'A transfer agent must be a module this tribe is created with (UnknownAgentKind).', // token
+  7143: 'A transfer agent must be a module this tribe is created with (UnknownAgentKind).',
   7144: 'That vote source is not one the platform has approved, or its approval was withdrawn (VoteSourceNotApproved).',
   7145: 'That contract does not answer as a vote source (InvalidVoteSource).',
   7201: 'This module may not mint (MintAuthorityNotAllowed).',
   7202: 'Invalid token input.',
   7203: 'Treasury mismatch.',
-  7204: 'The treasury is not a minter.',
+  // 7204 and 7206 were retired with the shared Minter (contracts/token/src/error.rs); never reused.
   7205: 'Batch too large for one transaction: mint at most 43 tokens to one recipient, fewer when spread over several (18 recipients with one token each).',
   7207: 'Names may not contain quotes, backslashes or control characters (InvalidName).',
   7208: 'The token has no metadata contract address (MetadataNotSet).',
@@ -137,7 +138,7 @@ const ERRORS: Record<number, string> = {
   7412: 'Invalid bid.',
   7413: 'The auction is not initialised.',
   7414: 'Treasury mismatch.',
-  7415: 'The auction payment token differs from the one set when the tribe was created.',
+  // 7415 (PaymentTokenMismatch) is retired: the Manager checks payment assets at launch (7132).
   7416: 'There is no pending refund for this address.',
   7417: 'Auction time buffer must be between 1 and 86,400 seconds.',
   7418: 'A bid comment can be at most 1,024 bytes (CommentTooLong).',
@@ -215,8 +216,6 @@ const ERRORS: Record<number, string> = {
   7828: 'A price cannot be negative (InvalidPrice).',
   7829: 'A list must expire in the future (InvalidExpiry).',
   7830: 'Treasury mismatch (TreasuryMismatch).',
-  // manager
-  7130: 'The Manager upgrade was approved too recently; its upgrade notice has not passed (UpgradeDelayNotElapsed).',
   // OpenZeppelin (shared library codes)
   1000: 'This contract is paused.',
   1001: 'This contract is not paused.',
@@ -224,10 +223,11 @@ const ERRORS: Record<number, string> = {
   5001: 'This proposal already exists.',
   5002: 'You do not have enough votes to create a proposal.',
   5005: 'Voting is not open for this proposal.',
-  5006: 'This proposal has not succeeded.',
+  // Governor.queue raises it both for a proposal that didn't pass and for one already queued.
+  5006: "This proposal can't be queued: it didn't pass, or it's already queued. Refresh to see where it stands.",
   5007: 'This proposal is not queued (or it expired).',
   5008: 'This proposal has already been executed.',
-  5009: 'This proposal can no longer be cancelled.',
+  5009: 'Only the person who made a proposal can cancel it, and only before voting closes.',
   5016: 'You have already voted on this proposal.',
   5021: 'The proposal description is too long.'
 };
