@@ -6,7 +6,7 @@ the exact commands to set it up, run it, read the results and look after the dev
 
 Today (phase P1) it has the harness and one smoke flow, **W01**: connect a wallet, sign in with
 SEP-53, sign out, refuse a signature, and fall back to SEP-10. Chain flows (W03 onwards) arrive in P2
-and need the dev Manager below.
+and need the dev Manager below. W10 (marketplace) is described in "Run W10" below.
 
 All commands run from the repository root unless a `cd` says otherwise.
 
@@ -216,6 +216,61 @@ wrong code. That also means dev.tribes.build is behind `dev`: upgrade the dev de
 
 ```bash
 pnpm --dir apps/e2e preflight --require-manager
+```
+
+## Run W10 (marketplace)
+
+W10 walks the marketplace on chain: a member lists a token from the token page with the guided List
+for sale (Allow, then List), lists again while the permission is live (Allow skipped, one
+signature), changes a price (cancel, allow, relist), another member comments and buys (the seller
+is paid the price less the 2.5% resale fee, checked on Horizon and in the indexed sale), the seller
+cancels, and a listing with a custom end of two or three minutes ends and comes back with Return my
+token. Restock and pools need a governance proposal and are covered by W11. Its `@matrix` cases check
+the Market and token pages (Sell entry, form defaults and presets, the signed-out Connect state, no
+horizontal scroll) without signing a transaction.
+
+It runs on the dev deployment (dev.tribes.build's Manager, pipeline and database) until the e2e
+Manager exists, so point every step at the dev Manager artifact:
+
+```bash
+export E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json
+```
+
+```bash
+pnpm --dir apps/e2e build:app && pnpm --dir apps/e2e preflight --require-manager
+```
+
+```bash
+pnpm --dir apps/e2e exec playwright test tests/w10-marketplace.spec.ts
+```
+
+The chain cases run in order (one serial group) and take about six minutes at one viewport, most of
+it the listing end and the indexer. `E2E_ROTATION=1` runs them again at tablet and mobile, one
+viewport after another. Run one chain project at a time with `--no-deps`: several chain projects with
+`--no-deps` start together and sign from the same identities at once. Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
+the seller's tokens back: it cancels a listing an earlier run left open and sends back a token the
+buyer bought, signing with the `stellar keys` identities, then waits for the indexer to agree.
+
+### The W10 market fixture
+
+"E2E Market" (slug `e2e-market`) is a marketplace-only tribe on the dev Manager, priced in native XLM
+(its SAC) with a 2.5% resale fee. `e2e-founder` holds tokens 0-2 and `e2e-member-a` (the seller)
+holds 3 and 4; `e2e-member-b` buys. Its config is `configs/e2e-walk-market-dao.json` and its deploy
+artifact `deploys/dev-testnet-dao-1.json` (`E2E_MARKET_DAO_ARTIFACT` picks another one, for example after
+a redeploy). To recreate it, for example on a new Manager, run the three phases as `e2e-founder`
+(bump `nonce` in the config first if that deployer already used it on this Manager; the artifact is
+named `deploys/<label>-testnet-dao-<nonce>.json`):
+
+```bash
+DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs create_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
+```
+
+```bash
+DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs admin_checklist configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
+```
+
+```bash
+DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
 ```
 
 ## W07 and W08: proposals
