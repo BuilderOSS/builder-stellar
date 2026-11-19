@@ -15,12 +15,14 @@ import {
   requestSep10Challenge,
   useAuthSession,
   verifyAuthProof,
-  verifySep10Proof
+  verifySep10Proof,
+  walletErrorMessage
 } from '@/lib/auth/client';
 import { completeSignIn } from '@/lib/auth/complete-sign-in';
 import { restoredSessionAddress } from '@/lib/auth/restore-session';
 import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
+import { openConnectModal } from '@/lib/wallet-connect-modal';
 import { hasSeenWalletIntro, markWalletIntroSeen } from '@/lib/wallet-intro';
 import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -225,7 +227,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
     lastErrorRef.current = '';
     try {
       setAuthStatus('connecting-wallet');
-      const result = await StellarWalletsKit.authModal();
+      const result = await openConnectModal();
       setWalletAddress(result.address);
       if (!isWalletConnectSelected()) {
         const walletNetwork = await StellarWalletsKit.getNetwork();
@@ -290,7 +292,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
       }
       setWalletAddress(null);
       await mutateAuthSession({ authenticated: false, address: null }, false);
-      setAuthStatus('error', error instanceof Error ? error.message : 'Wallet sign-in failed.');
+      setAuthStatus('error', walletErrorMessage(error));
     }
   }, [mutateAuthSession, network, resetAuth, setAuthStatus, setAuthenticatedAddress, updateSession]);
 

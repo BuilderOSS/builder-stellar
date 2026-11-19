@@ -12,14 +12,15 @@
     "predev": "pnpm codegen",
     "dev": "next dev --port 4242",
     "prebuild": "pnpm codegen",
-    "build": "next build",
+    "build": "next build && node scripts/assert-e2e-wallet.mjs",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "panda:codegen": "panda codegen && panda cssgen"
+    "panda:codegen": "panda codegen && panda cssgen",
+    "assert:e2e-wallet": "node scripts/assert-e2e-wallet.mjs"
   },
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
