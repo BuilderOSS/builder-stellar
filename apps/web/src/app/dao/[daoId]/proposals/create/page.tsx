@@ -72,7 +72,15 @@ const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
-const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
+// A suggested title can hold an address; let it wrap anywhere so it can't widen the page on phones (BUG-W02-7).
+const suggestion = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '2',
+  minW: '0',
+  '& > *': { minW: '0', overflowWrap: 'anywhere' }
+});
 const wideOnly = css({ display: { base: 'none', md: 'block' } });
 const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
 const referenceTrigger = css({
