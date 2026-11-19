@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type ModuleState, type RegistryState, W16, w16Phase } from '../src/upgrades.ts';
+import { feedShowsUpgrade, type ModuleState, type RegistryState, W16, w16Phase } from '../src/upgrades.ts';
 
 const onOld: ModuleState = { version: W16.from.version, hash: W16.from.hash, storageVersion: W16.from.storage };
 const ready: RegistryState = {
@@ -41,5 +41,35 @@ describe('w16Phase', () => {
     );
     expect(() => w16Phase({ ...ready, target: { ...ready.target!, revoked: true } }, onOld)).toThrow(/revoked/);
     expect(() => w16Phase(ready, { ...onOld, hash: 'f'.repeat(64) })).toThrow(/neither/);
+  });
+});
+
+describe('feedShowsUpgrade', () => {
+  // As the dev read model returned them after the W16 run (2026-11-19).
+  const upgraded = {
+    event_name: 'upgraded',
+    kind: 'metadata.upgraded',
+    summary: 'Contract upgraded to version 0.4.1 (a378c228 -> d243d792)'
+  };
+  const migrated = {
+    event_name: 'migrated',
+    kind: 'metadata.migrated',
+    summary: 'Storage migrated from version 1 to 2'
+  };
+
+  it('needs both the upgrade to the candidate and the migration', () => {
+    expect(feedShowsUpgrade([migrated, upgraded, { kind: 'metadata.launched' }])).toBe(true);
+    expect(feedShowsUpgrade([upgraded])).toBe(false);
+    expect(feedShowsUpgrade([migrated])).toBe(false);
+  });
+
+  it('ignores another module or another release', () => {
+    expect(feedShowsUpgrade([{ ...upgraded, kind: 'token.upgraded' }, migrated])).toBe(false);
+    expect(
+      feedShowsUpgrade([
+        { ...upgraded, summary: 'Contract upgraded to version 0.4.2 (a378c228 -> 0000aaaa)' },
+        migrated
+      ])
+    ).toBe(false);
   });
 });

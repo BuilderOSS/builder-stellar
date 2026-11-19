@@ -1,8 +1,12 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 
+import { signedTransactions, signInAs, youButton } from '../src/connect.ts';
 import { expect, expectNoHorizontalScroll, requireVerifiedManager, test } from '../src/fixtures.ts';
 import { MIN_GOVERNANCE_STEP_S } from '../src/network.ts';
+import { ProposalState, setAnnotator, settleSend, statusColumn, submitProposal } from '../src/proposals.ts';
 import {
+  type FeedItem,
+  feedShowsUpgrade,
   latestProposal,
   proposal,
   readModule,
@@ -13,6 +17,7 @@ import {
   type W16Phase
 } from '../src/upgrades.ts';
 import { waitForIndexed, waitForLedgerTime, waitForUi, waitForVisible } from '../src/waits.ts';
+import type { E2ESigner } from '../src/wallet/signer.ts';
 
 /**
  * W16 · Contract upgrades (§3.4). The fixture tribe `e2e-w16` runs Metadata 0.4.0; the platform admin
@@ -28,22 +33,12 @@ import { waitForIndexed, waitForLedgerTime, waitForUi, waitForVisible } from '..
 
 const MODULE_LABEL = 'Artwork and profile';
 const ARROW = `${W16.from.version} → ${W16.to.version}`;
+const FOUNDER = 'e2e-founder';
 const tribe = (path = '') => `/dao/${W16.slug}${path}`;
 
 function phase(): W16Phase {
   const addresses = w16Addresses();
   return w16Phase(readRegistry(addresses.manager), readModule(addresses.metadata));
-}
-
-async function connect(page: Page) {
-  const button = page.getByRole('button', { name: 'Connect wallet' }).first();
-  // The top bar says "Check wallet" (disabled) while it restores a session; the kit isn't ready until then.
-  await waitForUi('Connect wallet ready', (timeout) => expect(button).toBeEnabled({ timeout }));
-  await button.click();
-  const option = page.getByText('E2E Wallet', { exact: true });
-  await waitForVisible(option, 'E2E Wallet listed in the wallet modal');
-  await option.click();
-  await waitForVisible(page.getByRole('button', { name: /^You, connected as/ }), 'signed-in top bar');
 }
 
 const updatesCard = (page: Page) => page.locator('section[aria-labelledby="updates-title"]');
@@ -81,15 +76,74 @@ async function expectUpgradesPage(page: Page, state: W16Phase) {
   }
 }
 
+/** The Metadata activity feed shows the upgrade and the migration (read model, so indexer-late on timeout). */
+function waitForFeed(request: APIRequestContext, addresses: { token: string; metadata: string }) {
+  return waitForIndexed<{ items: FeedItem[] }>(
+    request,
+    {
+      label: 'Metadata upgraded and migrated in the activity feed',
+      path: `/api/dao/${addresses.token}/activity-feed?visibility=all&limit=20&contractId=${addresses.metadata}`,
+      predicate: (body) => feedShowsUpgrade(body.items)
+    },
+    { governingS: 60 }
+  );
+}
+
+/**
+ * From the notice to a submitted proposal: Review upgrade, add the upgrade (high-risk, confirmed) and the
+ * storage migration, write it, review it and submit it. Returns the proposal id.
+ */
+async function proposeUpgrade(page: Page, wallet: E2ESigner) {
+  await waitForVisible(page.getByText('A contract upgrade is available'), 'upgrade notice on the tribe home');
+  await page.getByRole('link', { name: 'Review upgrade' }).click();
+  await expectUpgradesPage(page, { phase: 'available' });
+
+  await updatesCard(page).getByRole('button', { name: 'Add 1 upgrade to proposal' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Add this to your proposal?' });
+  await waitForVisible(confirm, 'high-risk confirmation');
+  await expect(confirm.getByText('Replaces this contract’s code.', { exact: false })).toBeVisible();
+  await confirm.getByRole('button', { name: 'Add to proposal' }).click();
+  await waitForVisible(page.getByText('1 action waiting for a vote', { exact: false }).first(), 'upgrade added');
+
+  // The release changes the storage version (1 → 2), so migrate() goes right after the upgrade.
+  await page.getByText('Advanced: check a specific release').click();
+  await metadataCard(page).getByRole('button', { name: 'Add storage migration to proposal' }).click();
+  const again = page.getByRole('dialog', { name: 'Add this to your proposal?' });
+  const added = page.getByText('2 actions waiting for a vote', { exact: false }).first();
+  await waitForUi('migration added or confirmation asked', (timeout) =>
+    expect(again.or(added).first()).toBeVisible({ timeout })
+  );
+  if (await again.isVisible()) await again.getByRole('button', { name: 'Add to proposal' }).click();
+  await waitForVisible(added, 'migration added');
+
+  await page.goto(tribe('/proposals/create'));
+  await waitForVisible(
+    page.getByRole('heading', { name: 'In this proposal (2 actions)' }),
+    'both actions in the draft'
+  );
+  const queue = page.getByRole('list', { name: 'Actions in this proposal' }).getByRole('listitem');
+  await expect(queue).toHaveCount(2);
+  const title = `E2E W16: upgrade artwork and profile to ${W16.to.version}`;
+  await page.getByRole('textbox', { name: 'Title (required)' }).fill(title);
+  await page
+    .getByRole('textbox', { name: 'Why' })
+    .fill(`Walkthrough W16 (testnet). Upgrades Metadata ${ARROW} (a test-only build) and runs its storage migration.`);
+  await page.getByRole('button', { name: 'Next: review' }).filter({ visible: true }).first().click();
+  const preview = page.getByRole('region', { name: 'Proposal preview' });
+  await waitForVisible(preview, 'proposal review');
+  await expect(preview.getByRole('heading', { name: title })).toBeVisible();
+  await expect(preview.getByText('If it passes, these run in order')).toBeVisible();
+  return submitProposal(page, wallet, FOUNDER, 2);
+}
+
 test.describe('W16 upgrade screens', { tag: ['@matrix'] }, () => {
   test('tribe home and Manage show the upgrade state', async ({ page, wallet }) => {
-    // The founder holds every token, so the home notice (members only) shows for this wallet.
-    wallet.use('e2e-founder');
     const state = phase();
     test.info().annotations.push({ type: 'w16-phase', description: JSON.stringify(state) });
 
     await page.goto(tribe());
-    await connect(page);
+    // The founder holds every token, so the home notice (members only) shows for this wallet.
+    await signInAs(page, wallet, FOUNDER);
     const notice = page.getByText('A contract upgrade is available');
     if (state.phase === 'available') {
       await waitForVisible(notice, 'upgrade notice on the tribe home');
@@ -117,6 +171,7 @@ test.describe('W16 upgrade screens', { tag: ['@matrix'] }, () => {
     );
     if (state.phase === 'available') await expect(card.getByText('Transition approved')).toBeVisible();
     await expectNoHorizontalScroll(page);
+    if (state.phase === 'done') await waitForFeed(page.request, w16Addresses());
   });
 });
 
@@ -126,6 +181,7 @@ test.describe('W16 upgrade by proposal', { tag: ['@chain'] }, () => {
 
   test('a member upgrades Metadata to 0.4.1 and migrates it, by proposal', async ({ page, wallet, request }) => {
     requireVerifiedManager();
+    setAnnotator((type, description) => test.info().annotations.push({ type, description }));
     const addresses = w16Addresses();
     const state = phase();
     if (state.phase === 'awaiting-admin') {
@@ -139,96 +195,75 @@ test.describe('W16 upgrade by proposal', { tag: ['@chain'] }, () => {
           'nonce (docs/qa/WALKTHROUGHS.md, "W16") or run only the @matrix checks.'
       );
     }
-    wallet.use('e2e-founder');
-
-    // 1. The notice, then Manage → Contract upgrades.
     await page.goto(tribe());
-    await connect(page);
-    await waitForVisible(page.getByText('A contract upgrade is available'), 'upgrade notice on the tribe home');
-    await page.getByRole('link', { name: 'Review upgrade' }).click();
-    await expectUpgradesPage(page, state);
+    await signInAs(page, wallet, FOUNDER);
 
-    // 2. The upgrade into the draft. It is high-risk, so the app asks first.
-    await updatesCard(page).getByRole('button', { name: 'Add 1 upgrade to proposal' }).click();
-    const confirm = page.getByRole('dialog', { name: 'Add this to your proposal?' });
-    await waitForVisible(confirm, 'high-risk confirmation');
-    await confirm.getByRole('button', { name: 'Add to proposal' }).click();
-    await waitForVisible(page.getByText('Added to your proposal').first(), 'upgrade added');
+    // A run that stopped after submitting resumes its proposal instead of opening a second one.
+    const inFlight = latestProposal(addresses.governor);
+    const resumable = [ProposalState.Pending, ProposalState.Active, ProposalState.Succeeded, ProposalState.Queued];
+    let id: string;
+    if (inFlight && resumable.includes(inFlight.state as (typeof resumable)[number])) {
+      id = inFlight.id;
+      test.info().annotations.push({ type: 'resumed', description: `proposal ${id} (state ${inFlight.state})` });
+    } else {
+      id = await proposeUpgrade(page, wallet);
+    }
+    test.info().annotations.push({ type: 'proposal', description: id });
+    let info = proposal(addresses.governor, id);
+    const open = () => page.goto(tribe(`/proposals/${id}`));
 
-    // 3. The release changes the storage version (1 → 2), so migrate() goes right after it.
-    await page.getByText('Advanced: check a specific release').click();
-    const card = metadataCard(page);
-    await card.getByRole('button', { name: 'Add storage migration to proposal' }).click();
-    const again = page.getByRole('dialog', { name: 'Add this to your proposal?' });
-    if (await again.isVisible().catch(() => false))
-      await again.getByRole('button', { name: 'Add to proposal' }).click();
-    await waitForUi('migration added', (timeout) =>
-      expect(page.getByText('2 actions waiting for a vote', { exact: false }).first()).toBeVisible({ timeout })
-    );
+    // Vote For once voting opens (votingDelay).
+    if (info.state <= ProposalState.Active) {
+      await waitForLedgerTime(info.vote_start + 1, { governingS: MIN_GOVERNANCE_STEP_S, label: 'voting opens' });
+      await open();
+      const column = statusColumn(page);
+      const voted = column.getByText('You voted For');
+      const power = column.getByText('You have 2 votes on this proposal');
+      await waitForUi('vote form or recorded vote', (timeout) => expect(power.or(voted)).toBeVisible({ timeout }), {
+        governingS: 60
+      });
+      if (await power.isVisible()) {
+        await column.getByRole('radio', { name: 'For' }).check({ force: true });
+        const before = signedTransactions(wallet, FOUNDER);
+        await column.getByRole('button', { name: 'Cast 2 votes For' }).click();
+        await settleSend(page, 'Vote cast', 'founder votes For', column);
+        expect(signedTransactions(wallet, FOUNDER) - before).toBe(1);
+      }
+      await waitForVisible(voted, 'vote recorded', { governingS: 180 });
+    }
 
-    // 4. Compose and submit.
-    await page.goto(tribe('/proposals/create'));
-    await waitForVisible(page.getByText('In this proposal (2 actions)'), 'both actions in the draft');
-    await page.locator('#title').fill(`E2E W16: upgrade artwork and profile to ${W16.to.version}`);
-    await page
-      .locator('#description')
-      .fill(
-        `Walkthrough W16 (testnet). Upgrades the Metadata contract ${ARROW} (a test-only build) and runs its storage migration.`
+    // Queue once voting ends (votingPeriod). Anyone can; the founder does.
+    info = proposal(addresses.governor, id);
+    if (info.state < ProposalState.Queued) {
+      await waitForLedgerTime(info.vote_end + 1, { governingS: MIN_GOVERNANCE_STEP_S, label: 'voting ends' });
+      await waitForUi(
+        'the vote passed on chain',
+        (timeout) =>
+          expect.poll(() => proposal(addresses.governor, id).state, { timeout }).toBe(ProposalState.Succeeded),
+        { governingS: 60 }
       );
-    await page.getByRole('button', { name: 'Next: review' }).first().click();
-    await page.getByRole('button', { name: 'Submit proposal' }).click();
-    const submit = page.getByRole('dialog', { name: 'Submit this proposal?' });
-    await waitForVisible(submit, 'submit confirmation');
-    await submit.getByRole('button', { name: 'Submit proposal' }).click();
-    await waitForUi(
-      'proposal page opened',
-      async (timeout) =>
-        expect(async () => {
-          if (/\/proposals\/(?!create)[^/]+$/.test(new URL(page.url()).pathname)) return;
-          const open = page.getByRole('link', { name: 'Open proposal' });
-          if (await open.isVisible()) await open.click();
-          throw new Error(`still on ${page.url()}`);
-        }).toPass({ timeout }),
-      { governingS: 120 }
-    );
-    const proposalUrl = new URL(page.url()).pathname;
-    const created = latestProposal(addresses.governor);
-    test.info().annotations.push({ type: 'proposal', description: `${created.id} ${proposalUrl}` });
+      await open();
+      const queue = statusColumn(page).getByRole('button', { name: 'Queue for execution' });
+      await waitForVisible(queue, 'queue button', { governingS: 60 });
+      await queue.click();
+      await settleSend(page, 'Proposal queued', 'queue', statusColumn(page));
+      await waitForUi(
+        'queued on chain',
+        (timeout) => expect.poll(() => proposal(addresses.governor, id).state, { timeout }).toBe(ProposalState.Queued),
+        { governingS: 60 }
+      );
+    }
 
-    // 5. Vote For once voting opens (votingDelay).
-    await waitForLedgerTime(created.vote_start + 1, {
-      governingS: MIN_GOVERNANCE_STEP_S,
-      label: 'voting opens'
-    });
-    await page.reload();
-    const choices = page.getByRole('radiogroup', { name: 'Your vote' });
-    await waitForVisible(choices, 'vote panel', { governingS: 60 });
-    await choices.getByText('For', { exact: true }).click();
-    await page.getByRole('button', { name: /^Cast \d+ votes? For$/ }).click();
-    await waitForVisible(page.getByText('You voted For'), 'vote recorded', { governingS: 60 });
-
-    // 6. Queue once voting ends (votingPeriod).
-    await waitForLedgerTime(created.vote_end + 1, { governingS: MIN_GOVERNANCE_STEP_S, label: 'voting ends' });
-    await page.reload();
-    const queue = page.getByRole('button', { name: 'Queue for execution' });
-    await waitForVisible(queue, 'queue button', { governingS: 60 });
-    await queue.click();
-    await waitForUi(
-      'proposal queued on chain',
-      async (timeout) =>
-        expect.poll(() => proposal(addresses.governor, created.id).eta, { timeout }).toBeGreaterThan(0),
-      { governingS: 60 }
-    );
-    const { eta } = proposal(addresses.governor, created.id);
-
-    // 7. Execute after the safety delay (queueDelay). The Treasury runs upgrade, then migrate.
-    await waitForLedgerTime(eta + 1, { governingS: MIN_GOVERNANCE_STEP_S, label: 'safety delay over' });
-    await page.reload();
-    const execute = page.getByRole('button', { name: 'Execute now' });
+    // Execute after the safety delay (queueDelay). The Treasury runs upgrade, then migrate.
+    info = proposal(addresses.governor, id);
+    await waitForLedgerTime(info.eta + 1, { governingS: MIN_GOVERNANCE_STEP_S, label: 'safety delay over' });
+    await open();
+    const execute = statusColumn(page).getByRole('button', { name: 'Execute now' });
     await waitForVisible(execute, 'execute button', { governingS: 60 });
     await execute.click();
+    await settleSend(page, 'Proposal executed', 'execute', statusColumn(page));
 
-    // 8. The chain runs the new code, at the new storage version.
+    // The chain runs the new code, at the new storage version.
     await waitForUi(
       'Metadata runs the candidate',
       async (timeout) =>
@@ -237,8 +272,9 @@ test.describe('W16 upgrade by proposal', { tag: ['@chain'] }, () => {
           .toEqual({ version: W16.to.version, hash: W16.to.hash, storageVersion: W16.to.storage }),
       { governingS: 120 }
     );
+    expect(proposal(addresses.governor, id).state).toBe(ProposalState.Executed);
 
-    // 9. And the app says so: up to date, 0.4.1, storage version 2.
+    // And the app says so: up to date, 0.4.1, storage version 2, and no notice.
     await page.goto(tribe('/admin/upgrades'));
     await expectUpgradesPage(page, { phase: 'done' });
     await page.getByText('Advanced: check a specific release').click();
@@ -246,19 +282,10 @@ test.describe('W16 upgrade by proposal', { tag: ['@chain'] }, () => {
       `Current version: ${W16.to.version} · Storage version: ${W16.to.storage}`
     );
     await page.goto(tribe());
+    await waitForVisible(youButton(page), 'still signed in');
     await expect(page.getByText('A contract upgrade is available')).toHaveCount(0);
 
-    // 10. The read model has both events (activity feed).
-    await waitForIndexed<{ items: Array<Record<string, unknown>> }>(
-      request,
-      {
-        label: 'Upgraded and Migrated indexed',
-        path: `/api/dao/${addresses.token}/activity-feed?visibility=all&limit=20&contractId=${addresses.metadata}`,
-        predicate: (body) =>
-          body.items.some((item) => item.event_name === 'Upgraded' && JSON.stringify(item).includes(W16.to.version)) &&
-          body.items.some((item) => item.event_name === 'Migrated')
-      },
-      { governingS: 60 }
-    );
+    // The read model has both events (activity feed).
+    await waitForFeed(request, addresses);
   });
 });

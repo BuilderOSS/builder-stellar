@@ -108,12 +108,12 @@ export function w16Phase(registry: RegistryState, module: ModuleState): W16Phase
   return missing.length ? { phase: 'awaiting-admin', missing } : { phase: 'available' };
 }
 
-export type ProposalInfo = { id: string; vote_start: number; vote_end: number; eta: number; state: unknown };
+export type ProposalInfo = { id: string; vote_start: number; vote_end: number; eta: number; state: number };
 
-/** The governor's newest proposal (the one this run just submitted). */
-export function latestProposal(governor: string): ProposalInfo {
+/** The governor's newest proposal, or null before the first one (the W16 tribe only ever has its own). */
+export function latestProposal(governor: string): ProposalInfo | null {
   const count = Number(view(governor, 'proposal_count'));
-  if (!count) throw new Error('The W16 Governor has no proposals');
+  if (!count) return null;
   const [id] = view(governor, 'proposal_ids', { start: String(count - 1), limit: '1' }) as string[];
   return proposal(governor, id);
 }
@@ -125,6 +125,30 @@ export function proposal(governor: string, id: string): ProposalInfo {
     vote_start: Number(info.vote_start),
     vote_end: Number(info.vote_end),
     eta: Number(info.eta),
-    state: info.state
+    state: Number(info.state)
   };
+}
+
+/** Activity feed rows as `/api/dao/<id>/activity-feed` returns them (only the fields W16 reads). */
+export type FeedItem = { event_name?: unknown; kind?: unknown; summary?: unknown };
+
+/**
+ * Whether the Metadata feed shows the W16 upgrade and its migration. The feed names events in snake
+ * case by the emitting module (`metadata.upgraded`, `metadata.migrated`), not by the contract struct.
+ */
+export function feedShowsUpgrade(items: FeedItem[]) {
+  const text = (value: unknown) => (typeof value === 'string' ? value : '');
+  const upgraded = items.some(
+    (item) =>
+      item.kind === 'metadata.upgraded' &&
+      text(item.summary).includes(
+        `version ${W16.to.version} (${W16.from.hash.slice(0, 8)} -> ${W16.to.hash.slice(0, 8)})`
+      )
+  );
+  const migrated = items.some(
+    (item) =>
+      item.kind === 'metadata.migrated' &&
+      text(item.summary) === `Storage migrated from version ${W16.from.storage} to ${W16.to.storage}`
+  );
+  return upgraded && migrated;
 }

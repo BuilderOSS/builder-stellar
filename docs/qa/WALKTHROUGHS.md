@@ -418,7 +418,9 @@ proposal: up to date on 0.4.1, storage version 2). The `@chain` test fails at on
 step, until all three admin steps have run. It then adds the upgrade (confirming the high-risk prompt)
 and the storage migration to one proposal, submits it, votes For, queues, executes, and checks
 `version()`, `wasm_hash()` and `storage_version()` on chain, the app's Contract upgrades page, and the
-`Upgraded` and `Migrated` events in the activity feed.
+`Upgraded` and `Migrated` events in the activity feed. A run that stops after submitting resumes the
+tribe's open proposal on the next run (voting, queueing or executing it) instead of opening a second
+one.
 
 ### Undo afterwards (optional, the admin approves each)
 
