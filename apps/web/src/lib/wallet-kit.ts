@@ -10,6 +10,11 @@ import { SITE_NAME } from '@/lib/site';
 
 let initialized = false;
 
+/** WalletConnect (phone wallets) is offered only with a project id, and never on a local network. */
+export function walletConnectEnabled(network: NetworkName) {
+  return Boolean(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim()) && network !== 'local';
+}
+
 export function initializeWalletKit(network: NetworkName) {
   if (initialized) return;
 
