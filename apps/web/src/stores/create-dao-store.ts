@@ -267,7 +267,7 @@ const storage = createJSONStorage(() => ({
       window.localStorage.setItem(key, value);
       storageError = '';
     } catch {
-      storageError = 'Could not save this draft. Free browser storage or remove an image before deploying.';
+      storageError = 'Could not save this draft. Clear some browser storage or remove an image before deploying.';
     }
   },
   removeItem: (key: string) => {
@@ -458,7 +458,8 @@ export const useCreateDaoStore = create<Store>()(
             if (typeof window !== 'undefined')
               window.localStorage.setItem(recoveryKey(snapshot), JSON.stringify(snapshot));
           } catch {
-            storageError = 'Could not save the deployment recovery snapshot. Free browser storage before signing.';
+            storageError =
+              'Could not save the deployment recovery snapshot. Clear some browser storage before signing.';
             throw new Error(storageError);
           }
           saveState({ drafts: drafts.map((d) => (d.id === id ? snapshot : d)) });

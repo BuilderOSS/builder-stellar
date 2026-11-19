@@ -82,7 +82,7 @@ export function UpgradeActionDetail({
         {note ? <p className={body}>{note}</p> : null}
         <p className={muted}>
           This moves {moduleLabelInSentence(module)} to a release approved for Tribe Builder. Tokens, votes, the
-          treasury and history carry over unchanged.
+          treasury and history stay as they are.
         </p>
         {technical}
       </div>

@@ -38,7 +38,7 @@ export function ProposalActionConfirmDialog({
       footer={
         <>
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
-            Not yet
+            Cancel
           </Button>
           <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} loading={busy}>
             {confirmLabel}

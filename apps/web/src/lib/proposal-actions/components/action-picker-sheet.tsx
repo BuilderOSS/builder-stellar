@@ -229,7 +229,7 @@ export function ActionPickerSheet({
           {intentEntries.length || shownElsewhere.length ? (
             <section className={group} aria-labelledby="picker-intents">
               <h3 id="picker-intents" className={groupTitle}>
-                Do something
+                Choose what to do
               </h3>
               <div className={intents}>
                 {intentEntries.map((entry) => {
@@ -282,7 +282,7 @@ export function ActionPickerSheet({
           ) : null}
 
           {!intentEntries.length && !shownElsewhere.length && !parts.length && !advanced.length ? (
-            <p className={empty}>No action matches “{query.trim()}”. Try a plainer word, like “pay” or “quorum”.</p>
+            <p className={empty}>No action matches “{query.trim()}”. Try another word, such as “pay” or “quorum”.</p>
           ) : null}
         </div>
       ) : (

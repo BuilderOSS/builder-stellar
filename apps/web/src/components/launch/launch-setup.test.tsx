@@ -127,7 +127,7 @@ describe('LaunchSetup', () => {
     expect(html).toContain('3 tokens minted');
     // Saved launch choices load in an effect, so a static render can't show the button enabled;
     // the hint comes from the same plan that enables it.
-    expect(html).toContain('Ready when you are.');
+    expect(html).toContain('Ready to launch.');
     expect(html).not.toContain('first.');
     expect(html.replace(/<!-- -->/g, '')).toContain(
       'Your link /dao/lantern-club is claimed. Changing it later takes a vote.'

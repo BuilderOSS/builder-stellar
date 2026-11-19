@@ -131,7 +131,7 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
                 <HelpTip label="Votes">
                   {custom
                     ? "This tribe's votes come from its vote source, not from tokens, so delegating a token doesn't move them."
-                    : 'Votes include any delegated to this address and leave out their own if they delegated elsewhere. Delegating never moves a token. The directory can lag the chain a little.'}
+                    : 'Votes include any delegated to this address and leave out their own if they delegated elsewhere. Delegating never moves a token. Recent changes can take a short time to appear here.'}
                 </HelpTip>
               </span>
             </div>

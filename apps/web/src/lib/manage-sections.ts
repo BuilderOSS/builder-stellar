@@ -90,7 +90,7 @@ export const MANAGE_GROUPS: Array<{ title: string; items: ManageSection[] }> = [
       {
         key: 'renewal',
         label: 'Storage renewal',
-        meta: 'When data expires, and renewing it in one go',
+        meta: 'When data expires, and how to renew it',
         section: '/renewal'
       }
     ]

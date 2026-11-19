@@ -199,7 +199,7 @@ export function SearchDialog({ finalFocusEl }: { finalFocusEl: () => HTMLElement
       <SearchInput
         ref={inputRef}
         label="Search the docs"
-        placeholder="Search guides, ideas and reference"
+        placeholder="Search guides, concepts, and reference"
         value={query}
         onValueChange={setQuery}
         onKeyDown={onKeyDown}
@@ -220,7 +220,7 @@ export function SearchDialog({ finalFocusEl }: { finalFocusEl: () => HTMLElement
         </p>
       ) : noMatches ? (
         <div role="status">
-          <p className={message}>No pages match “{term}”. Try the glossary, or one of these:</p>
+          <p className={message}>No pages match “{term}”. Try the glossary, or one of these guides:</p>
           <PopularGuides onNavigate={close} />
           <p className={cx(message, css({ mt: '2' }))}>
             <NextLink href={pageHref('reference/glossary')} className={textLink} onClick={close}>

@@ -496,16 +496,16 @@ export default function ProposalDetailPage() {
   async function cancelProposal() {
     if (!detail || detail.proposer !== session.address) return;
     setBusy(true);
-    tx.start('Canceling proposal');
+    tx.start('Cancelling proposal');
     try {
       const governor = await requireCurrentState([ProposalState.Pending, ProposalState.Active]);
       const payload = await verifiedCallPayload(governor);
       const sent = await (await governor.cancel({ ...payload, operator: session.address })).signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Canceling proposal', hash);
+      tx.submitted('Cancelling proposal', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       await mutate();
-      tx.success('Proposal canceled', hash);
+      tx.success('Proposal cancelled', hash);
     } catch (error) {
       tx.fail(error, 'Cancel failed', 'governor');
     } finally {

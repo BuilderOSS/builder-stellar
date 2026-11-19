@@ -141,7 +141,7 @@ function Pane({ variant, alt, only }: { variant: ShotVariant; alt: string; only:
 /**
  * A real screenshot of the app, in the reader's theme and device (decision 7A), with
  * numbered markers drawn from the capture manifest (decision 3A). Every step must read
- * correctly without it: a shot that hasn't been captured shows "Screenshot coming".
+ * correctly without it: a shot that hasn't been captured shows "Screenshot not available yet".
  *
  * `alt` says what the state shows ("The proposal composer with two actions added"),
  * never "screenshot".
@@ -152,7 +152,7 @@ export function Shot({ id, alt, caption: text }: { id: string; alt: string; capt
     return (
       <figure className={figure} data-shot={id}>
         <div className={frame}>
-          <div className={missing}>Screenshot coming</div>
+          <div className={missing}>Screenshot not available yet</div>
         </div>
         {text ? <figcaption className={caption}>{text}</figcaption> : null}
       </figure>

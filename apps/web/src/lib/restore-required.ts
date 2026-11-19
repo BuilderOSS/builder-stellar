@@ -22,7 +22,7 @@ export type RestorePayload = {
 };
 
 export const RESTORE_MESSAGE =
-  'Some of your on-chain records were archived after a quiet stretch. Restore them first (one extra signature), then continue.';
+  'Some of your onchain records were archived after a period without activity. Restore them first (one extra signature), then continue.';
 
 export class RestoreRequiredError extends Error {
   readonly status = 409;

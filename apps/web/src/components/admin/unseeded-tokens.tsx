@@ -119,7 +119,7 @@ export function UnseededTokens({
             <Text size="sm">One proposal seeds up to {MAX_PROPOSAL_ACTIONS} tokens.</Text>
           </>
         ) : (
-          <Text>The Metadata admin can seed them (governance after launch).</Text>
+          <Text>Before launch, the Metadata admin can seed them. After launch, this requires DAO governance.</Text>
         )}
         {message ? <Callout variant="warning" title={message} /> : null}
       </Stack>

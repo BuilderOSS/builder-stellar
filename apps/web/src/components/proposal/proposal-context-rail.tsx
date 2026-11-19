@@ -213,7 +213,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
             ))}
           </ul>
         ) : (
-          <Text size="sm">No proposals yet. Got an idea for the tribe? Put it to a vote.</Text>
+          <Text size="sm">No proposals yet. A member with enough votes can create the first one.</Text>
         )}
       </DataState>
     </div>

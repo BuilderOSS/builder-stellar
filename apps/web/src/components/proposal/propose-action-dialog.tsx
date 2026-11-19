@@ -63,7 +63,7 @@ export function ProposeActionDialog() {
         if (!open) resolve('cancel');
       }}
       title={conflict ? 'Replace the action already in your proposal?' : 'Add this to your proposal?'}
-      description="It joins your proposal on this browser. Your wallet isn't asked to sign anything yet."
+      description="It is added to your proposal in this browser. Your wallet does not sign anything yet."
       footer={
         pending ? (
           <>

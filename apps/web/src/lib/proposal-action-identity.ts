@@ -192,7 +192,7 @@ function highRiskMessage(action: ProposalQueuedAction) {
   if (action.type === 'upgrade-dao-module')
     return 'Replaces this contract’s code. The contract checks the upgrade is approved when the proposal runs; an unapproved one fails and changes nothing.';
   if (action.type === 'set-transfers-locked' && action.enabled === true)
-    return 'Locks memberships: members can no longer sell their tokens, only give them back to the DAO or ask for a vote.';
+    return 'Locks memberships: members can no longer sell their tokens, only give them back to the tribe or ask for a vote.';
   if (action.type === 'set-dao-recovery' && action.enabled === true)
     return 'Lets a vote move any member’s token without their signature.';
   if (action.type === 'dao-transfer') return 'Moves a member’s token and its votes without the member’s signature.';
@@ -200,7 +200,7 @@ function highRiskMessage(action: ProposalQueuedAction) {
     return 'Adds a contract that can mint memberships within its allowance and hold members’ tokens.';
   if (action.type === 'unregister-module')
     return 'Takes a contract out of the tribe. Memberships it still holds become that contract’s own votes, and nobody can cast them.';
-  return 'This action can change DAO control, treasury behavior, or token balances.';
+  return 'This action can change who controls the tribe, how the treasury works, or token balances.';
 }
 
 const PAUSE_TOGGLES = new Set(['pause-auction', 'unpause-auction', 'pause-marketplace', 'unpause-marketplace']);

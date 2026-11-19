@@ -32,9 +32,9 @@ export const NAV: DocSection[] = [
       {
         slug: 'start/what-is-tribe-builder',
         title: 'What is Tribe Builder',
-        summary: 'Groups that own things together.'
+        summary: 'Software for groups that hold funds and make decisions together.'
       },
-      { slug: 'start/whats-a-tribe', title: 'What’s a tribe', summary: 'A DAO, in plain words.' },
+      { slug: 'start/whats-a-tribe', title: 'What’s a tribe', summary: 'A DAO, explained in plain words.' },
       {
         slug: 'start/first-10-minutes',
         title: 'Your first 10 minutes',
@@ -43,7 +43,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'start/build-your-first-tribe',
         title: 'Build your first tribe',
-        summary: 'A quickstart that links into the guides.'
+        summary: 'A short overview of the steps, with links to each guide.'
       }
     ]
   },
@@ -65,23 +65,27 @@ export const NAV: DocSection[] = [
       {
         slug: 'concepts/membership-tokens',
         title: 'Membership tokens',
-        summary: 'NFTs: one token, one vote, with art and traits.'
+        summary: 'Each membership is an NFT with one vote, art, and traits.'
       },
       {
         slug: 'concepts/votes-and-delegation',
         title: 'Votes and delegation',
-        summary: 'Snapshots, and why your votes count from a point in time.'
+        summary: 'Snapshots, and why voting power is counted at a fixed point in time.'
       },
       {
         slug: 'concepts/proposals',
         title: 'Proposals',
         summary: 'The lifecycle, threshold, quorum, voting period and safety delay.'
       },
-      { slug: 'concepts/treasury', title: 'The Treasury', summary: 'Who can move funds: no one person.' },
+      {
+        slug: 'concepts/treasury',
+        title: 'The Treasury',
+        summary: 'Who can move funds, and why no single person can.'
+      },
       {
         slug: 'concepts/modules',
         title: 'Modules',
-        summary: 'Auction, marketplace and claims, and how modules are added.'
+        summary: 'Auctions, the marketplace, and claims, and how modules are added.'
       },
       {
         slug: 'concepts/setup-and-launch',
@@ -91,7 +95,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'concepts/vote-sources',
         title: 'Vote sources',
-        summary: 'Token-weighted votes, approved adapters, and NQG (coming).'
+        summary: 'Token-weighted votes, approved adapters, and NQG (planned).'
       },
       {
         slug: 'concepts/upgrades',
@@ -115,38 +119,38 @@ export const NAV: DocSection[] = [
     title: 'Guides',
     intro: 'One guide for each thing you can do in the app.',
     pages: [
-      guide('create', 'identity', 'Create a tribe: identity', 'Name, symbol, image and description.'),
-      guide('create', 'membership', 'Create a tribe: membership', 'How people join: auctions, sales or invites.'),
-      guide('create', 'voting', 'Create a tribe: voting rules', 'The pace of decisions, and what can change later.'),
-      guide('create', 'review-and-deploy', 'Create a tribe: review and deploy', 'Check everything, then deploy.'),
+      guide('create', 'identity', 'Create a tribe: identity', 'Name, symbol, image, and description.'),
+      guide('create', 'membership', 'Create a tribe: membership', 'How people join: auctions, sales, or invites.'),
+      guide('create', 'voting', 'Create a tribe: voting rules', 'How long decisions take, and what can change later.'),
+      guide('create', 'review-and-deploy', 'Create a tribe: review and deploy', 'Check every setting, then deploy.'),
       guide('setup', 'artwork', 'Set up: artwork', 'Upload the layers your tokens are drawn from.'),
       guide('setup', 'founders', 'Set up: founders', 'Tokens for the people starting the tribe.'),
-      guide('setup', 'slug', 'Set up: your link', 'Pick the free link people will share.'),
+      guide('setup', 'slug', 'Set up: your link', 'Choose an available link for people to share.'),
       guide('setup', 'contracts', 'Set up: contracts', 'Review the contracts your tribe runs on.'),
-      guide('setup', 'launch', 'Launch your tribe', 'Hand every setting to the tribe.'),
+      guide('setup', 'launch', 'Launch your tribe', 'Pass control of every setting to the tribe.'),
       guide('setup', 'assurance-drives', 'Assurance drives', 'Launch only when enough people commit.'),
-      guide('proposals', 'write', 'Write a proposal', 'Say why, then add the actions.'),
-      guide('proposals', 'actions', 'Choose actions', 'Payments, settings and the other action groups.'),
-      guide('proposals', 'vote', 'Vote', 'For, Against or Abstain, with a reason.'),
+      guide('proposals', 'write', 'Write a proposal', 'Explain the reason, then add the actions.'),
+      guide('proposals', 'actions', 'Choose actions', 'Payments, settings, and the other action groups.'),
+      guide('proposals', 'vote', 'Vote', 'For, Against, or Abstain, with a reason.'),
       guide('proposals', 'queue-and-execute', 'Queue and execute', 'After a vote passes and the safety delay ends.'),
       guide('proposals', 'cancel', 'Cancel a proposal', 'Who can cancel, and when.'),
       guide('auctions', 'bid', 'Bid in an auction', 'Place a bid, and what happens if you’re outbid.'),
       guide('auctions', 'settle', 'Settle an auction', 'End an auction and start the next.'),
-      guide('auctions', 'refunds', 'Auction refunds', 'Getting your XLM back.'),
-      guide('auctions', 'settings', 'Auction settings', 'Reserve price, duration and increments.'),
+      guide('auctions', 'refunds', 'Auction refunds', 'How to get your XLM back.'),
+      guide('auctions', 'settings', 'Auction settings', 'Reserve price, duration, and increments.'),
       guide('marketplace', 'sell', 'Sell a token', 'Approve, then list.'),
       guide('marketplace', 'buy', 'Buy a token', 'Buy a listed membership.'),
-      guide('marketplace', 'cancel', 'Cancel a listing', 'Take a token off the market.'),
-      guide('marketplace', 'pools', 'Marketplace pools', 'Pooled listings and how they restock.'),
+      guide('marketplace', 'cancel', 'Cancel a listing', 'Remove a token from sale.'),
+      guide('marketplace', 'pools', 'Marketplace pools', 'Pooled listings, and how they are refilled.'),
       guide('marketplace', 'treasury-purchases', 'Treasury purchases', 'The tribe buys through a proposal.'),
       guide('claims', 'create', 'Make a claim list', 'Who can claim, and how much.'),
-      guide('claims', 'claim', 'Claim', 'Collect what a list holds for you.'),
+      guide('claims', 'claim', 'Claim', 'Receive what a claim list holds for you.'),
       guide('claims', 'refund', 'Claim refunds', 'What happens to unclaimed funds.'),
       guide('members', 'find', 'Find members', 'The member directory and profiles.'),
-      guide('members', 'delegate', 'Delegate your votes', 'Let someone vote with your tokens.'),
+      guide('members', 'delegate', 'Delegate your votes', 'Let someone else vote with your tokens.'),
       guide('members', 'transfer', 'Transfer a token', 'Send a membership to another wallet.'),
       guide('members', 'approvals', 'Approvals', 'Let a contract or person move a token for you.'),
-      guide('manage', 'profile', 'Manage: profile', 'Name, image, description and links.'),
+      guide('manage', 'profile', 'Manage: profile', 'Name, image, description, and links.'),
       guide('manage', 'token', 'Manage: token', 'Token settings after launch.'),
       guide('manage', 'governance', 'Manage: governance', 'Voting rules, changed by vote.'),
       guide('manage', 'auction', 'Manage: auction', 'Auction settings, changed by vote.'),
@@ -169,15 +173,23 @@ export const NAV: DocSection[] = [
         title: 'Proposal actions',
         summary: 'Every action a proposal can run.'
       },
-      { slug: 'reference/limits-and-timings', title: 'Limits and timings', summary: 'The minimums and maximums.' },
+      {
+        slug: 'reference/limits-and-timings',
+        title: 'Limits and timings',
+        summary: 'Minimum and maximum values, and waiting times.'
+      },
       { slug: 'reference/error-messages', title: 'Error messages', summary: 'What each error means and what to do.' },
       {
         slug: 'reference/contract-addresses',
         title: 'Contract addresses',
         summary: 'The contracts on each network.'
       },
-      { slug: 'reference/faq', title: 'FAQ', summary: 'Questions people ask most.' },
-      { slug: 'reference/troubleshooting', title: 'Troubleshooting', summary: 'When something doesn’t work.' },
+      { slug: 'reference/faq', title: 'FAQ', summary: 'Common questions and answers.' },
+      {
+        slug: 'reference/troubleshooting',
+        title: 'Troubleshooting',
+        summary: 'What to check when something does not work.'
+      },
       { slug: 'reference/changelog', title: 'Changelog', summary: 'What changed, and when.' }
     ]
   }
@@ -209,12 +221,12 @@ export function neighbours(slug: string) {
 export const PATHS = [
   {
     title: 'I’m joining a tribe',
-    meta: 'Connect, bid, vote and delegate',
+    meta: 'Connect, bid, vote, and delegate',
     slug: 'start/first-10-minutes'
   },
   {
     title: 'I’m starting a tribe',
-    meta: 'Create, set up, launch and hold a first vote',
+    meta: 'Create, set up, and launch a tribe, then hold its first vote',
     slug: 'start/build-your-first-tribe'
   }
 ] as const;

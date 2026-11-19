@@ -305,7 +305,7 @@ export function LaunchCard({
             ? 'Connect the launch admin wallet to launch.'
             : recover
               ? 'Checking reads the saved transaction; it never signs a new one.'
-              : plan.launchHint || 'Ready when you are.'}
+              : plan.launchHint || 'Ready to launch.'}
         </p>
         <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
           {recover && choice.signedTxXdr ? (
@@ -338,7 +338,7 @@ export function LaunchCard({
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Not yet
+              Cancel
             </Button>
             <Button
               onClick={() => {

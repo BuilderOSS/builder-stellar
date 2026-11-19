@@ -129,7 +129,7 @@ export function PlatformStorage({
     <Section
       id="storage"
       title="Shared storage"
-      description="Kept alive by Tribe Builder for every tribe. Tribes bump shared code only a few days on their own."
+      description="Tribe Builder renews this storage for every tribe. A tribe's own renewal extends shared code by only a few days."
       action={
         <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void storage.mutate()}>
           <RefreshCw aria-hidden="true" />

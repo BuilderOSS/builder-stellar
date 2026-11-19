@@ -145,7 +145,7 @@ export function TreasuryTokens() {
           </div>
         ))}
       </div>
-      {!session.address ? <Callout variant="info" title="Connect a member wallet to propose a gift." /> : null}
+      {!session.address ? <Callout variant="info" title="Connect a member wallet to propose giving a token." /> : null}
     </Section>
   );
 }

@@ -15,29 +15,31 @@ const lede = css({ textStyle: 'body', color: 'ink.muted', m: '0', mb: '5' });
 const PARTS: Array<{ title: string; plain: string; dao: string }> = [
   {
     title: 'Members',
-    plain: 'Each member holds a token. Hold one and you’re in, with a say in what the tribe does next.',
+    plain: 'Each member holds a token. The token gives you membership and a vote on what the tribe does.',
     dao: 'Each membership is an NFT with one vote.'
   },
   {
     title: 'Treasury',
-    plain: 'The money the tribe holds together. It only moves when a vote passes, and everyone can see where it went.',
+    plain:
+      'The funds the tribe holds together. They move only when a proposal passes, and anyone can see where they went.',
     dao: 'An onchain treasury contract that no single person controls.'
   },
   {
     title: 'Proposals',
-    plain: 'An idea put to a vote: pay someone, open a sale, change a setting. If it passes, it runs as written.',
+    plain:
+      'A request that members vote on, such as a payment, a sale or a settings change. If it passes, it runs as written.',
     dao: 'Governance proposals with onchain actions. Any wallet can execute one that’s ready.'
   },
   {
     title: 'Votes',
-    plain: 'Members vote For, Against or Abstain. You can also let someone you trust vote for you.',
+    plain: 'Members vote For, Against or Abstain. You can also choose another person to vote for you.',
     dao: 'Token-weighted voting with delegation, a quorum and a safety delay.'
   },
   {
     title: 'Joining',
     plain:
       'Win a token in an auction, buy one on the market, or claim one if you’re on a list. You’ll need a Stellar wallet.',
-    dao: 'Fees on Stellar cost a fraction of a cent.'
+    dao: 'Each Stellar transaction has a small network fee, paid in XLM.'
   }
 ];
 
@@ -62,7 +64,8 @@ export function WhatsATribe({ trigger }: { trigger: ReactNode }) {
       }
     >
       <p className={lede}>
-        A tribe is a group of people with a shared treasury who decide together. Under the hood, it’s a DAO on Stellar.
+        A tribe is a group of people with a shared treasury who decide together. In technical terms, it’s a DAO
+        (decentralised autonomous organisation) on Stellar.
       </p>
       <ul className={list}>
         {PARTS.map((part) => (

@@ -73,7 +73,7 @@ describe('change-dao-slug', () => {
     expect(isHighRiskProposalAction(action)).toBe(true);
     expect(getProposalActionLabel(action.type)).toBe('Change the tribe link');
     expect(getProposalActionSummary(action)).toBe(
-      'Change link from /dao/lantern-club to /dao/night-walkers. The old link is freed right away and keeps leading here only until another tribe takes it. If /dao/night-walkers is taken before this runs, the proposal fails.'
+      'Change link from /dao/lantern-club to /dao/night-walkers. The old link is freed immediately and keeps leading here only until another tribe takes it. If /dao/night-walkers is taken before this runs, the proposal fails.'
     );
   });
 

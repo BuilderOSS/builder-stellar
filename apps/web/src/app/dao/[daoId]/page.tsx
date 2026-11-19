@@ -248,7 +248,7 @@ export default function Page() {
             )}
           </Section>
 
-          <Section title="What's happening">
+          <Section title="Activity">
             {activity.error ? (
               <Callout variant="error" title="Activity didn't load" description={activity.error.message} />
             ) : activity.isLoading && !activity.data ? (
@@ -342,7 +342,7 @@ export default function Page() {
           <div>
             <Button variant="secondary" size="sm" onClick={() => void refreshAll()} loading={refreshing}>
               {refreshing ? null : <RefreshCw aria-hidden="true" />}
-              Refresh everything
+              Refresh all data
             </Button>
           </div>
         </Disclosure>

@@ -160,7 +160,7 @@ export function MembershipStep() {
                   value={Number.isFinite(auction.timeBuffer) ? auction.timeBuffer : ''}
                   onChange={(timeBuffer) => store.updateAuction({ timeBuffer })}
                   invalid={Boolean(errors['auction.timeBuffer'])}
-                  helperText="Bids in the last stretch extend the auction by this much, so everyone gets a fair chance."
+                  helperText="A bid placed near the end extends the auction by this amount, so other bidders can respond."
                 />
                 {errors['auction.timeBuffer'] ? <p className={styles.error}>{errors['auction.timeBuffer']}</p> : null}
               </div>

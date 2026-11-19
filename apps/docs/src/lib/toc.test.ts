@@ -6,7 +6,7 @@ describe('extractToc', () => {
   it('lists h2 and h3 with the ids rehype-slug gives them', () => {
     const toc = extractToc(`<Placeholder />
 
-## At the table
+## Overview
 
 ### Who’s at it?
 
@@ -21,7 +21,7 @@ describe('extractToc', () => {
 #### Deep
 `);
     expect(toc).toEqual([
-      { id: 'at-the-table', text: 'At the table', depth: 2 },
+      { id: 'overview', text: 'Overview', depth: 2 },
       { id: 'whos-at-it', text: 'Who’s at it?', depth: 3 },
       { id: 'what-happens-on-chain', text: 'What happens on chain', depth: 2 },
       { id: 'steps', text: 'Steps', depth: 2 },

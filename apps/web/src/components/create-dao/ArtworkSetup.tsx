@@ -166,8 +166,8 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
   return (
     <div className={styles.stack} id="artwork-setup">
       <p className={styles.muted}>
-        Configure artwork before minting founders to seed their attributes. Directory upload, preview, and layer order
-        are local planning until you sign each batch.
+        Set up the artwork before you mint founder tokens, so each token gets its traits. The folder upload, preview and
+        layer order stay in this browser until you sign each batch.
       </p>
       <div className={styles.links}>
         {STARTER_COLLECTIONS.map((collection) => (

@@ -69,7 +69,7 @@ export const createModuleHandler: ActionHandler<CreateModuleDraft> = {
     <Summary
       lines={[
         value.kind ? `Deploy ${MODULE_COPY[value.kind].noun} as module number ${value.moduleNumber}` : 'Nothing chosen',
-        value.address ? `It will live at ${value.address}` : ''
+        value.address ? `Its address will be ${value.address}` : ''
       ].filter(Boolean)}
     />
   ),

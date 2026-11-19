@@ -7,7 +7,7 @@ export default function DraftsPage() {
   return (
     <PageSection
       title="Drafts"
-      description="Proposals and DAOs you started on this browser. They aren't shared or synced; clearing browser data removes them."
+      description="Proposals and tribes you started on this browser. They aren't shared or synced; clearing browser data removes them."
     >
       <DraftsOverview />
     </PageSection>

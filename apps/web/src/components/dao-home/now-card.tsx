@@ -174,7 +174,7 @@ export function NowCard({
   if (auctionError && proposalsError) {
     return (
       <Shell
-        title="We couldn't load what's happening"
+        title="This tribe's activity didn't load"
         text="Proposals and the auction didn't load. Try again in a moment."
       />
     );

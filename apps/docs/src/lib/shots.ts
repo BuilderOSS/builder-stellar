@@ -93,7 +93,7 @@ export function resolveShot(
   return { id, manifest, variants };
 }
 
-/** Null when the shot hasn't been captured yet: the figure then says "Screenshot coming". */
+/** Null when the shot hasn't been captured yet: the figure then says "Screenshot not available yet". */
 export function loadShot(id: string): ResolvedShot | null {
   if (!ID_PATTERN.test(id)) throw new ShotError(`Shot id "${id}" must be lower-case path segments.`);
   const file = path.join(SHOTS_DIR, id, 'manifest.json');

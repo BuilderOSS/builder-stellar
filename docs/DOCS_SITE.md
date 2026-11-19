@@ -68,7 +68,7 @@ apps/web/src/components/ui ──> apps/docs (package export @builder-stellar/we
   code get the docs prose styles. Pages can also use `<Shot>`, `<Callout>`,
   `<Disclosure>`, `<GlossaryList>` and `<Placeholder>`. Internal links that start with `/`
   use Next links; others open in a new tab.
-- **Guides use the page template** (plan §5.3): At the table, Before you start, Steps,
+- **Guides use the page template** (plan §5.3): Overview, Before you start, Steps,
   What happens on chain (in a Disclosure), If something goes wrong, Related.
 - **The table of contents** comes from the page's h2 and h3 headings, read from the MDX
   at build time (`src/lib/toc.ts`) with the same slugger rehype-slug uses for the ids.

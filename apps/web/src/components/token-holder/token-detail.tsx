@@ -134,7 +134,7 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
                     {owner === viewer ? <Chip tone="yours">Yours</Chip> : null}
                   </NextLink>
                   {indexedOwner && indexedOwner !== owner ? (
-                    <p className={muted}>The indexer is still catching up with this ownership change.</p>
+                    <p className={muted}>The indexer has not recorded this ownership change yet.</p>
                   ) : null}
                 </>
               ) : (

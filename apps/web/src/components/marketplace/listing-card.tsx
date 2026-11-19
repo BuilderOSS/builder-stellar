@@ -179,7 +179,7 @@ export function ListingCard({
           ) : null}
           {listing.status === 'open' && needsStock ? (
             <>
-              <p>Nothing is ready to buy yet. Anyone can stock the next tokens; it costs only the network fee.</p>
+              <p>No tokens are ready to buy yet. Anyone can add the next tokens to the pool for the network fee.</p>
               <Button variant="secondary" onClick={restock} disabled={!purchasesEnabled}>
                 Stock this pool
               </Button>
@@ -189,7 +189,7 @@ export function ListingCard({
           {listing.status === 'open' && !needsStock ? (
             <>
               {!['XLM', 'USDC'].includes(asset) ? (
-                <p>You can buy with XLM or USDC here. This listing can still be canceled, or cleared after it ends.</p>
+                <p>You can buy with XLM or USDC here. This listing can still be cancelled, or cleared after it ends.</p>
               ) : null}
               <div className={styles.row}>
                 <Button

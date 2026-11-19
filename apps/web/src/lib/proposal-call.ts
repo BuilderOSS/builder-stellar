@@ -188,7 +188,7 @@ function percentFromBps(value: unknown) {
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
   if (action.type === 'change-dao-slug')
-    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another tribe takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
+    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed immediately and keeps leading here only until another tribe takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
   if (action.type === 'open-claim-list')
@@ -197,7 +197,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.module || action.recipient} by ${action.amount} tokens`;
   if (action.type === 'set-transfers-locked')
     return action.enabled
-      ? 'Lock memberships: tokens move only by sale from the tribe, by giving them back to the DAO or by a DAO vote'
+      ? 'Lock memberships: tokens move only by a sale from the tribe, by being given back to the tribe, or by a vote'
       : 'Unlock memberships: members can transfer and sell their tokens';
   if (action.type === 'set-members-only-delegation')
     return action.enabled ? 'Allow delegating votes to members only' : 'Allow delegating votes to anyone';

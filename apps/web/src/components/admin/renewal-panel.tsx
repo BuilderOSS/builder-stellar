@@ -231,7 +231,7 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
         <Callout
           variant="warning"
           title={`${inventory.uncovered.length} ${inventory.uncovered.length === 1 ? 'module is' : 'modules are'} not covered by one-click renewal`}
-          description="These modules don't list their own records, so only the contracts themselves are renewed here. Ask whoever added them how their records are kept alive."
+          description="These modules don't list their own records, so only the contracts themselves are renewed here. Ask the people who added them how their records are renewed."
         >
           <div className={uncoveredList}>
             {inventory.uncovered.map((module) => (
@@ -280,7 +280,8 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
           ) : null}
           {quote.yearlyFee !== null ? (
             <p className={muted}>
-              At this rate, keeping everything alive costs about {xlm(quote.yearlyFee)} a year, however often you renew.
+              At this rate, keeping everything renewed costs about {xlm(quote.yearlyFee)} a year, however often you
+              renew.
             </p>
           ) : null}
           <Disclosure title="Price by part">

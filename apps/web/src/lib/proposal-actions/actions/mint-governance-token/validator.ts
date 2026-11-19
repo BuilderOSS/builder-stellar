@@ -17,9 +17,9 @@ export function validateMintGovernanceToken(data: MintGovernanceTokenData, _cont
   // Validate amount (must be exactly 1 for single mint)
   const amount = data.amount.trim();
   if (amount.length === 0) {
-    fields.amount = 'Amount is required';
+    fields.amount = 'Enter an amount.';
   } else if (amount !== '1') {
-    fields.amount = 'Amount must be 1 for single mint (use batch mint for multiple)';
+    fields.amount = 'This action mints 1 token. To mint more, use Mint membership tokens.';
   }
 
   const hasErrors = Object.keys(fields).length > 0;
@@ -27,7 +27,7 @@ export function validateMintGovernanceToken(data: MintGovernanceTokenData, _cont
   if (hasErrors) {
     return {
       valid: false,
-      message: 'Please fix the errors below',
+      message: 'Check the fields below.',
       fields
     };
   }

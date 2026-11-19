@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   openGraph: {
     title: SITE_NAME,
-    description: 'Your people. Your rules. Your treasury.',
+    description: 'Build a tribe on Stellar. Members share a treasury and vote on decisions together.',
     siteName: SITE_NAME,
     type: 'website'
   },

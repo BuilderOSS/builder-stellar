@@ -186,9 +186,9 @@ export function RemoveModuleSheet({
               {checklist.map((row) => (
                 <div key={row.id} className={item} role="listitem">
                   {row.tone === 'ok' ? (
-                    <Check className={ok} aria-label="Fine" />
+                    <Check className={ok} aria-label="No issue" />
                   ) : (
-                    <TriangleAlert className={warn} aria-label="Worth a look" />
+                    <TriangleAlert className={warn} aria-label="Warning" />
                   )}
                   <div>
                     <div className={itemTitle}>{row.title}</div>
@@ -218,7 +218,7 @@ export function RemoveModuleSheet({
             <ModuleCheck value={check} />
             {checklist.some((row) => row.tone === 'warn') ? (
               <FieldHelperText>
-                Warnings never block a removal, and the proposal members vote on repeats them.
+                Warnings do not block a removal. The proposal that members vote on lists them again.
               </FieldHelperText>
             ) : null}
           </>

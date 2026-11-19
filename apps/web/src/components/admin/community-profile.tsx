@@ -587,7 +587,8 @@ export function CommunityProfileEditor() {
           ) : null}
           {direct && linkStep ? (
             <p className={planNote}>
-              The new link is yours once you launch. If another tribe launches first with it, pick another.
+              The new link is reserved for your tribe only when it launches. If another tribe launches with it first,
+              choose a different link.
             </p>
           ) : null}
           {preview ? <p className={hint}>Upload the new image to include it.</p> : null}

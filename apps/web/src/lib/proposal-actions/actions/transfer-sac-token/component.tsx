@@ -78,7 +78,9 @@ export function TransferSacTokenForm({
           </FieldHelperText>
         )}
         {balancesError ? (
-          <FieldHelperText>Balance unavailable: {balancesError}. Previous balances may be stale.</FieldHelperText>
+          <FieldHelperText>
+            Balance unavailable: {balancesError}. The balances shown may be out of date.
+          </FieldHelperText>
         ) : null}
       </Stack>
 

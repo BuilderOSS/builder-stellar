@@ -40,12 +40,12 @@ export function useTransactionFeedback(network: DaoNetworkName) {
   function success(message: string, hash: string, description?: string) {
     const payload = {
       title: message,
-      description: description ?? (hash ? 'Transaction confirmed on-chain.' : 'Transaction submitted.'),
+      description: description ?? (hash ? 'Transaction confirmed onchain.' : 'Transaction submitted.'),
       type: 'success' as const,
       duration: hash ? 20000 : 8000,
       action: hash
         ? {
-            label: `View tx ${shortenHash(hash)}`,
+            label: `View transaction ${shortenHash(hash)}`,
             onClick: () => window.open(getExplorerTxUrl(network, hash), '_blank', 'noreferrer')
           }
         : undefined

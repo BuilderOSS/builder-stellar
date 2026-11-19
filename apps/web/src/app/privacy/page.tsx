@@ -17,7 +17,7 @@ export default function PrivacyPage() {
         'What you do onchain, and what you put on IPFS, is public and permanent. We can’t delete it.',
         'Drafts and preferences stay in your browser.',
         <>
-          Ask us anything on <DiscordLink>Discord</DiscordLink>.
+          Contact us on <DiscordLink>Discord</DiscordLink> with any questions.
         </>
       ]}
     >
@@ -138,8 +138,8 @@ export default function PrivacyPage() {
       <section>
         <h2>11. Changes</h2>
         <p>
-          We may update this policy. The date at the top shows the latest version, and we&apos;ll mention big changes in
-          the app or on Discord.
+          We may update this policy. The date at the top shows the latest version, and we&apos;ll announce significant
+          changes in the app or on Discord.
         </p>
       </section>
 

@@ -129,7 +129,7 @@ export function validateDraft(draft: EntityDraft): DraftErrors {
   else if (!LEGAL_NAME_RE.test(legalName)) errors.legalName = 'A Marshall Islands DAO LLC name ends with “DAO LLC”.';
 
   const purpose = draft.purpose.trim();
-  if (purpose.length < MIN_PURPOSE_LENGTH) errors.purpose = 'Say in a sentence or two what the tribe does.';
+  if (purpose.length < MIN_PURPOSE_LENGTH) errors.purpose = 'Describe what the tribe does in one or two sentences.';
   else if (purpose.length > MAX_PURPOSE_LENGTH) errors.purpose = `At most ${MAX_PURPOSE_LENGTH} characters.`;
 
   if (draft.entityType === 'non-profit' && !draft.nonProfitPurpose)

@@ -235,7 +235,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       {state === 'disabled' ? (
         <Callout
           title="This tribe doesn't run auctions"
-          description="Tokens are shared another way, like the market or claims."
+          description="People join another way, such as the market or claims."
         />
       ) : null}
       {state === 'not-launched' ? (
@@ -397,14 +397,14 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 ) : null}
                 <CommentInput
                   id="auction-bid-comment"
-                  label="Say something (optional)"
+                  label="Comment (optional)"
                   value={comment}
                   onChange={setComment}
                   maxBytes={MAX_COMMENT_BYTES}
                   disabled={Boolean(busy)}
                   rows={2}
                   oneLine
-                  helper="One line, shown with your bid for good. It can't be edited."
+                  helper="One line, stored with your bid. It can't be edited later."
                 />
                 <Button
                   block

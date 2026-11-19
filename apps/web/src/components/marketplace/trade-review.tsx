@@ -35,7 +35,7 @@ const ACTION_TITLE: Record<MarketplaceAction['action'], string> = {
   expire: 'Clear an ended listing',
   approve: 'Allow the market to hold your token',
   list: 'List your token',
-  revoke: 'Take back the permission',
+  revoke: 'Remove the permission',
   trustline: 'Add a USDC trustline'
 };
 
@@ -90,7 +90,7 @@ export function TradeReview({
       )
         throw new Error('Transaction identity does not match this session.');
       setPrepared(result);
-      setMessage('Looks good. Review the exact terms and network fee below.');
+      setMessage('Checks passed. Review the exact terms and network fee below.');
     } catch (error) {
       setMessage(marketplaceErrorMessage(error));
     } finally {
@@ -160,7 +160,7 @@ export function TradeReview({
       setConfirmed(true);
       setMessage(
         action.action === 'buy' && action.kind === 'pool'
-          ? 'Confirmed. The token from the pool is yours. The market can take a few seconds to update.'
+          ? 'Confirmed. You now hold the token from the pool. The market can take a few seconds to update.'
           : 'Confirmed. The market can take a few seconds to update.'
       );
       await mutate((key) => Array.isArray(key) && key[0] === 'marketplace' && key[1] === DEPLOYMENT_ID).catch(() => {

@@ -17,7 +17,7 @@ export default function TermsPage() {
         'Each tribe is run by its own members. We don’t vet, endorse or control any tribe.',
         'It’s experimental software, offered as is. Use it only if you’re 18 or older and it’s legal where you live.',
         <>
-          Questions or problems? Find us on <DiscordLink>Discord</DiscordLink>.
+          For questions or problems, contact us on <DiscordLink>Discord</DiscordLink>.
         </>
       ]}
     >
@@ -35,8 +35,8 @@ export default function TermsPage() {
         <h2>2. What Tribe Builder is</h2>
         <p>
           Tribe Builder is a non-custodial web interface to open-source smart contracts on the Stellar network. It helps
-          people build and join tribes: groups with a shared treasury that decide together by vote. Under the hood, each
-          tribe is a DAO with its own token, governor and treasury contracts.
+          people build and join tribes: groups with a shared treasury that decide together by vote. In technical terms,
+          each tribe is a DAO with its own token, governor and treasury contracts.
         </p>
         <p>
           The interface prepares transactions. Your wallet signs them and the network runs them. We never take custody
@@ -60,7 +60,7 @@ export default function TermsPage() {
           <li>follow the laws that apply to you, including on crypto assets, taxes and DAOs.</li>
         </ul>
         <p>
-          If you use the interface for an organization, you confirm you&apos;re allowed to accept these terms for it.
+          If you use the interface for an organisation, you confirm you&apos;re allowed to accept these terms for it.
         </p>
       </section>
 
@@ -98,9 +98,9 @@ export default function TermsPage() {
       <section>
         <h2>7. Fees</h2>
         <p>
-          We don&apos;t charge a platform fee. Every transaction pays a Stellar network fee in XLM, usually a fraction
-          of a cent. A tribe can set its own prices and fees, such as auction reserve prices, sale and claim prices, and
-          a resale fee on its market of up to 25% that goes to the tribe&apos;s treasury. Your wallet shows what
+          We don&apos;t charge a platform fee. Every transaction pays a Stellar network fee in XLM, usually a very small
+          amount. A tribe can set its own prices and fees, such as auction reserve prices, sale and claim prices, and a
+          resale fee on its market of up to 25% that goes to the tribe&apos;s treasury. Your wallet shows what
           you&apos;ll pay before you sign.
         </p>
       </section>
@@ -143,13 +143,13 @@ export default function TermsPage() {
         <ul>
           <li>Smart contracts can have bugs, and a bug can lose funds.</li>
           <li>Onchain transactions are irreversible.</li>
-          <li>Crypto asset prices can swing widely, or fall to nothing.</li>
+          <li>Crypto asset prices can change sharply, or fall to zero.</li>
           <li>Laws and regulations on crypto and DAOs can change and affect what you can do.</li>
           <li>
-            Data on Stellar is kept for a paid stretch of time. If a tribe&apos;s storage isn&apos;t renewed, parts of
-            it stop working until they&apos;re restored. Anyone can pay to renew it.
+            Data on Stellar is kept for a paid period of time. If a tribe&apos;s storage isn&apos;t renewed, parts of it
+            stop working until they&apos;re restored. Anyone can pay to renew it.
           </li>
-          <li>The network, RPC servers, wallets and the interface can be slow, down or wrong.</li>
+          <li>The network, RPC servers, wallets and the interface can be slow, unavailable or wrong.</li>
         </ul>
       </section>
 
@@ -191,11 +191,11 @@ export default function TermsPage() {
       <section>
         <h2>16. Changes and access</h2>
         <p>
-          We may update these terms; the date at the top shows the latest version, and we&apos;ll mention big changes in
-          the app or on Discord. Using the interface after a change means you accept it.
+          We may update these terms; the date at the top shows the latest version, and we&apos;ll announce significant
+          changes in the app or on Discord. Using the interface after a change means you accept it.
         </p>
         <p>
-          We may change, pause or stop the interface, or block access to it, at any time. That doesn&apos;t touch
+          We may change, pause or stop the interface, or block access to it, at any time. That doesn&apos;t affect
           onchain state: your tokens, tribes and treasuries stay on Stellar and keep working through the contracts.
         </p>
       </section>
@@ -205,7 +205,7 @@ export default function TermsPage() {
         <p>
           Tribe Builder is a global online service and hasn&apos;t chosen a governing law yet. Until it does, these
           terms are governed by the laws that apply to you and to us. If something goes wrong, tell us on{' '}
-          <DiscordLink>Discord</DiscordLink> first and we&apos;ll try to sort it out informally.
+          <DiscordLink>Discord</DiscordLink> first and we&apos;ll try to resolve it informally.
         </p>
       </section>
 

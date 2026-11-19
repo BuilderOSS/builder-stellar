@@ -32,7 +32,7 @@ export function LegalPage({ title, summary, children }: { title: string; summary
         <h1 className={heading}>{title}</h1>
         <p className={updated}>Last updated: {LEGAL_UPDATED}</p>
       </header>
-      <Callout title="The short version">
+      <Callout title="Summary">
         <ul className={summaryList}>
           {summary.map((item, index) => (
             <li key={index}>{item}</li>

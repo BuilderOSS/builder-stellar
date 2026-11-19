@@ -17,30 +17,30 @@ export function validateTransferSacToken(data: TransferSacTokenData, context: Fo
 
   // Validate asset selection
   if (!data.assetCode || data.assetCode.trim().length === 0) {
-    fields.assetCode = 'Please select an asset';
+    fields.assetCode = 'Choose an asset.';
   }
 
   // Validate amount
   const amount = data.amount.trim();
   if (amount.length === 0) {
-    fields.amount = 'Amount is required';
+    fields.amount = 'Enter an amount.';
   } else if (!/^-?\d+(\.\d+)?$/.test(amount)) {
-    fields.amount = 'Invalid amount format';
+    fields.amount = 'Enter a number, such as 25 or 25.5.';
   } else {
     const numAmount = decimalToStroops(amount);
     if (numAmount === null) {
       fields.amount = 'Enter an amount with at most seven decimal places.';
     } else if (numAmount <= 0n) {
-      fields.amount = 'Amount must be positive';
+      fields.amount = 'Enter an amount above zero.';
     } else if (numAmount >= 1n << 127n) {
-      fields.amount = 'Amount exceeds the SAC i128 limit';
+      fields.amount = 'This amount is too large.';
     } else {
       // Check balance
       const balance = context.balances?.find((b) => b.assetCode === data.assetCode);
       if (context.balancesError) fields.amount = `Balance unavailable: ${context.balancesError}`;
       const balanceStroops = balance ? decimalToStroops(balance.balance) : null;
       if (balanceStroops !== null && numAmount > balanceStroops) {
-        fields.amount = `Amount exceeds balance of ${balance!.balance} ${data.assetCode}`;
+        fields.amount = `This is more than the treasury holds (${balance!.balance} ${data.assetCode}).`;
       }
     }
   }
@@ -50,7 +50,7 @@ export function validateTransferSacToken(data: TransferSacTokenData, context: Fo
   if (hasErrors) {
     return {
       valid: false,
-      message: 'Please fix the errors below',
+      message: 'Check the fields below.',
       fields
     };
   }

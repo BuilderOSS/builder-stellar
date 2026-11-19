@@ -104,7 +104,7 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
         subline: hasValidTimestamp(detail.vote_end) ? `Voting closed ${formatDateTime(detail.vote_end)}` : 'Closed.'
       };
     case ProposalState.Canceled:
-      return { label: 'Closed', headline: 'Canceled', subline: 'The proposer withdrew this proposal.' };
+      return { label: 'Closed', headline: 'Cancelled', subline: 'The proposer withdrew this proposal.' };
     case ProposalState.Expired:
       return {
         label: 'Closed',

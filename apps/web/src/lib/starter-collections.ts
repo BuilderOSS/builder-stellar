@@ -25,7 +25,7 @@ export const STARTER_COLLECTIONS: StarterCollection[] = [
   {
     id: 'nouns-builder-demo',
     name: `${SITE_NAME} Demo Collection`,
-    description: 'A colorful, whimsical collection inspired by Nouns DAO. Perfect for testing and learning.',
+    description: 'A colourful collection based on Nouns DAO artwork. Useful for testing and learning.',
     baseUri: 'ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/',
     extension: '.png',
     properties: [

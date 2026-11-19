@@ -59,7 +59,7 @@ export function buildAttachPlan<K extends ModuleKind>({
         feeBps: spec.feeBps ?? ''
       },
       title: `Deploy ${noun} from the current release`,
-      detail: 'It will live at',
+      detail: 'Its address will be',
       address: predicted
     },
     {
@@ -85,7 +85,7 @@ export function buildAttachPlan<K extends ModuleKind>({
       title: kind === 'auction' ? 'Start the first auction' : 'Open it',
       detail:
         kind === 'auction'
-          ? 'The first membership goes up for bids right away.'
+          ? 'Bidding on the first membership opens right away.'
           : 'Members can list tokens for resale right away.'
     });
   return steps;

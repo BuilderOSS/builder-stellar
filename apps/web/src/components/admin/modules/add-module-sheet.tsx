@@ -275,8 +275,8 @@ export function AddModuleSheet({
       description={
         choosing
           ? live
-            ? 'Pick what your tribe can do next. Members vote on it first, and nothing changes until it passes.'
-            : 'Pick what your tribe can do next. You are the launch admin, so it is signed straight away.'
+            ? 'Choose what your tribe can do next. Members vote on it first, and nothing changes until the proposal passes.'
+            : 'Choose what your tribe can do next. You are the launch admin, so you sign it now.'
           : undefined
       }
       footer={
@@ -382,9 +382,7 @@ export function AddModuleSheet({
             {steps ? (
               <PlanList steps={steps} label="Steps" />
             ) : reads.error ? (
-              <FieldHelperText tone="error">
-                The chain could not be read just now. Close this and try again.
-              </FieldHelperText>
+              <FieldHelperText tone="error">The network could not be read. Close this and try again.</FieldHelperText>
             ) : (
               <Skeleton className={css({ height: '8rem' })} />
             )}

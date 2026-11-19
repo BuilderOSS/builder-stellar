@@ -59,7 +59,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
         'memberships'
       )} in ${plural(poolsToClean.length, 'pool', 'pools')}`,
       detail:
-        'Left behind, they become the contract’s own votes, and nobody can cast them. They still count toward quorum.',
+        'If they stay with the contract, their votes belong to it and no one can cast them. They still count toward quorum.',
       cleanup: 'pools'
     });
   else if (facts.balance > 0)
@@ -68,7 +68,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
       tone: 'warn',
       title: `Holds ${plural(facts.balance, 'membership', 'memberships')}`,
       detail:
-        'Left behind, they become the contract’s own votes, and nobody can cast them. They still count toward quorum.'
+        'If they stay with the contract, their votes belong to it and no one can cast them. They still count toward quorum.'
     });
 
   if (facts.kind === 'marketplace' && facts.openListings !== null && facts.openListings > 0)
@@ -109,7 +109,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
     id: 'agent',
     tone: 'ok',
     title: facts.transferAgent ? 'Can move memberships' : 'Not a transfer agent',
-    detail: facts.transferAgent ? 'Removing it switches that off for you.' : 'Nothing else to switch off.'
+    detail: facts.transferAgent ? 'Removing it turns this off for you.' : 'Nothing else to turn off.'
   });
   return rows;
 }

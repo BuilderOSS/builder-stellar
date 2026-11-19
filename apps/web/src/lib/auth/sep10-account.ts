@@ -73,7 +73,7 @@ export async function verifySep10AccountProof(proof: {
       }
       return 'unfunded-key';
     }
-    throw new Sep10AccountLookupError('Current Stellar account signers could not be read. Please retry.');
+    throw new Sep10AccountLookupError('Current Stellar account signers could not be read. Try again.');
   }
   const mediumThreshold = account?.thresholds?.med_threshold;
   if (

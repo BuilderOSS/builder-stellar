@@ -30,7 +30,7 @@ export function WalletIntro({
       open={open}
       onOpenChange={onOpenChange}
       title="Before you connect"
-      description="A minute on wallets, if they're new to you."
+      description="A short guide for people who are new to crypto wallets."
       footer={
         onContinue ? (
           <>
@@ -68,12 +68,12 @@ export function WalletIntro({
           <p className={heading}>What signing means</p>
           <p className={body}>
             First you sign a short message to sign in. It&apos;s free and moves nothing. Later, each bid, vote or
-            proposal asks your wallet to approve one transaction, and your wallet shows what it does and its network
-            fee, a fraction of a cent, before you say yes.
+            proposal asks your wallet to approve one transaction, and your wallet shows what it does and its network fee
+            before you approve it.
           </p>
         </li>
         <li className={item}>
-          <p className={heading}>You&apos;ll need a little XLM</p>
+          <p className={heading}>You&apos;ll need some XLM</p>
           <p className={body}>Your account needs some XLM to exist on Stellar and to pay network fees.</p>
         </li>
       </ul>

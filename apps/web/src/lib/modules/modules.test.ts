@@ -124,7 +124,7 @@ describe('attach plans', () => {
       predicted: PREDICTED,
       open: true
     });
-    expect(steps[0]).toMatchObject({ detail: 'It will live at', address: PREDICTED });
+    expect(steps[0]).toMatchObject({ detail: 'Its address will be', address: PREDICTED });
     expect(steps[0]!.values).toMatchObject({ moduleNumber: '3', address: PREDICTED });
     expect(actionCount(steps)).toBe('3 actions');
     expect(actionCount(steps.slice(0, 1))).toBe('1 action');

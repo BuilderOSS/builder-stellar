@@ -16,21 +16,21 @@ export type GlossaryEntry = {
 export const GLOSSARY = {
   treasury: {
     term: 'Treasury',
-    plain: 'The money the tribe holds together. It only moves when a vote passes.',
+    plain: 'The funds the tribe holds together. They move only when a proposal passes.',
     dao: 'An onchain treasury contract. Every payment in and out is public.',
     slug: 'treasury'
   },
   proposal: {
     term: 'Proposal',
     plain:
-      'An idea put to a vote, like paying someone or changing a setting. If it passes, it runs exactly as written.',
+      'A suggestion that members vote on, such as paying someone or changing a setting. If it passes, its actions run exactly as written.',
     dao: 'A governance proposal with onchain actions.',
     slug: 'proposal'
   },
   delegate: {
     term: 'Delegate',
-    plain: 'Someone you let vote with your tokens. You keep the tokens, and you can change your delegate any time.',
-    dao: 'Vote delegation: your voting power moves, your NFTs stay put.',
+    plain: 'Someone you let vote with your tokens. You keep the tokens, and you can change your delegate at any time.',
+    dao: 'Vote delegation: your voting power moves, and your NFTs stay in your wallet.',
     slug: 'delegate'
   },
   quorum: {
@@ -49,7 +49,7 @@ export const GLOSSARY = {
   },
   'safety-delay': {
     term: 'Safety delay',
-    plain: 'The wait between a vote passing and the proposal running, so everyone can see what’s about to happen.',
+    plain: 'The wait between a vote passing and the proposal running, so members can review what will happen.',
     dao: 'The governor’s queue delay, a timelock.',
     slug: 'safety-delay'
   }

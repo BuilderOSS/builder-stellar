@@ -87,7 +87,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
           </p>
         ) : null}
         {inventory.data && !inventory.data.tokenIds.length ? (
-          <p className={styles.muted}>No tokens here. One you just bought can take a few seconds to show up.</p>
+          <p className={styles.muted}>No tokens found. A token you bought recently can take a few seconds to appear.</p>
         ) : null}
         <div className={styles.formGrid}>
           <Field>
@@ -205,7 +205,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
               disabled={auth !== 'authenticated'}
               onClick={() => setAction({ action: 'revoke', tokenId })}
             >
-              Take back an unused permission
+              Remove an unused permission
             </Button>
           </div>
         ) : null}

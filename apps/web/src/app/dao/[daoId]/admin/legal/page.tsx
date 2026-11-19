@@ -9,7 +9,7 @@ export default function LegalExportPage() {
   return (
     <PageSection
       title="Legal entity export"
-      description="Gather what a DAO registrar needs to start forming a legal entity for your tribe."
+      description="Collect the information a DAO registrar needs to start forming a legal entity for your tribe."
     >
       <LegalExport config={config} daoId={daoId} routeId={routeId} />
     </PageSection>

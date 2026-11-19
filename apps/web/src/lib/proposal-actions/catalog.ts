@@ -41,7 +41,7 @@ export type CurrentValue<TData = unknown> = { draft: TData; text: string };
 export type ActionMeta = {
   section: PickerSection;
   part: TribePart;
-  /** "Do something" tiles: what the member wants, in their words. */
+  /** "Choose what to do" tiles: what the member wants, in their words. */
   intent?: string;
   /** The live value, when it can be read. */
   currentValue?: (values: SettingValues) => CurrentValue | null;
@@ -87,7 +87,7 @@ const pausedText = (paused: boolean | undefined) => (paused === undefined ? null
 
 /** Picker metadata for every registered action, keyed by type. Handlers keep their call logic; this says where they go. */
 export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
-  // Do something
+  // Choose what to do
   'transfer-sac-token': {
     section: 'intent',
     part: 'Treasury',
@@ -190,7 +190,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     Form: wholeNumberSettingForm({
       id: 'setting-proposal-threshold',
       label: 'Votes needed to propose',
-      helper: 'How many votes someone needs to make a proposal. At least 1; higher numbers cut down on spam.'
+      helper: 'How many votes someone needs to make a proposal. At least 1. A higher number reduces spam proposals.'
     }),
     keywords: 'threshold propose'
   },
@@ -259,7 +259,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     Form: durationSettingForm({
       id: 'setting-auction-time-buffer',
       label: 'A late bid adds',
-      helper: 'Up to 1 day. Bids near the end extend the auction so everyone gets a fair chance.'
+      helper: 'Up to 1 day. A bid near the end extends the auction, so other bidders have time to respond.'
     }),
     keywords: 'time buffer extension'
   },
