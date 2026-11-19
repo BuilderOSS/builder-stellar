@@ -2,7 +2,7 @@
 
 import type { Route } from 'next';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button, ButtonLink } from '@/components/ui';
 import type { NetworkName } from '@/config/networks';
@@ -39,6 +39,7 @@ export function ListingCard({
   const address = useAuthSessionStore((s) => s.address);
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [action, setAction] = useState<MarketplaceAction | null>(null);
+  const confirmedHash = useRef('');
   const readiness = useMarketplaceReadiness(
     listing.daoId,
     listing.paymentAsset,
@@ -253,9 +254,15 @@ export function ListingCard({
           key={JSON.stringify(action)}
           daoId={listing.daoId}
           action={action}
-          onClose={() => setAction(null)}
+          onClose={() => {
+            setAction(null);
+            // Hidden only once its review closes: hiding the card on confirmation would take the
+            // review, with its confirmation and Done, away with it (BUG-012).
+            if (confirmedHash.current) onCancelled?.(confirmedHash.current);
+            confirmedHash.current = '';
+          }}
           onConfirmed={(hash) => {
-            if (action.action === 'cancel' || action.action === 'expire') onCancelled?.(hash);
+            if (action.action === 'cancel' || action.action === 'expire') confirmedHash.current = hash;
           }}
         />
       ) : null}
