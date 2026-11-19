@@ -1,0 +1,119 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "nonce": 1102,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CCGUL3KV7NMR2T67ZIHHWEW3PM4MARB4C6MOXOKGRSAOAVBGOG4TZC7C",
+    "metadata": "CD4EAI55BB43A76FMI7OIXX5NN4KNYNRAJMAJQVSFLDIZFROL6OMFB65",
+    "governor": "CAMSIYKYC45HIGUGT2SBO2XK2A2CGJRXDOAXKUJFRZNGCPMXOUGFB6Q2",
+    "treasury": "CDPGGST5XHNXNZHUOZEXBFNBIXREL3TBOFXXKWH26KO3CBAMBOQE6X2X",
+    "auction": null,
+    "marketplace": null,
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W14 (members-only delegation), on the dev Manager. Members-only delegation on. Founders: e2e-w11-founder x2, e2e-w11-member-a x1; e2e-w11-member-b holds nothing (not a member).",
+    "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "nonce": 1102,
+    "launchAdmin": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "slug": "e2e-w11-3",
+    "token": {
+      "name": "E2E Members Only",
+      "symbol": "E2EMO"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for members-only delegation (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+        "amount": 2
+      },
+      {
+        "address": "GDJR6TISXBYPUE3J4XGZ2V4K4OJVVWO3G53NRIIJMH6N772ZD4UES33G",
+        "amount": 1
+      }
+    ],
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": true,
+      "daoRecovery": false
+    }
+  },
+  "updatedAt": "2026-11-19T04:38:02.118Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "00811bae57df0f1db77435346b51bc1a8a85f5500bfaf6cc0018ee478fd9a2ff",
+      "ledger": 5807881
+    },
+    "artworkBatches": [
+      {
+        "txHash": "34dfde8a4c705ad268e4231eaf0366abb0670e60460425c10b2a125ff2d886f0",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807884
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "2a78260237025f5f6148f0383df27bc239ba96ec40c3ec40c25227b090bbfe48",
+        "batch": 1,
+        "tokens": 3,
+        "ledger": 5807886
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "cdd18fb5c1b164168de6d2dd49748d5b11a712344e56d7ebc932e83adc9521d6",
+      "ledger": 5807888
+    }
+  },
+  "deploymentLedger": 5807881
+}

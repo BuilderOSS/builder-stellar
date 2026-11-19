@@ -433,6 +433,104 @@ None.
   return only when its review closes.
 - **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
 
+### BUG-W11-1 · Market settings showed the payment asset as a contract id
+- **Flow:** W11, Market settings (`/dao/<tribe>/admin/marketplace`), "Change the market payment
+  asset". Every viewport and theme.
+- **Severity:** P2.
+- **Steps:** open Market settings of a tribe whose market takes XLM.
+- **Expected:** "Now: XLM".
+- **Actual:** "Now: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC", while the select under
+  it said XLM.
+- **Root cause and fix:** the same defect as BUG-W09-1, found by W11 and W09 in parallel. It is fixed
+  once, by BUG-W09-1's change (`knownAssetCode` and the `assetCode` on the market's setting values);
+  W11 carries no code of its own for it.
+- **Regression test:** BUG-W09-1's tests in `lib/proposal-actions/catalog.test.ts` and
+  `lib/proposal-call.test.ts`; W11's Market settings @matrix case ("Now: XLM").
+
+### BUG-W11-2 · A holder action's review widened the token page past the screen
+- **Flow:** W14, a token page's "Your token" form, Review. Desktop (the right column), and any
+  width where the column is narrower than a Stellar address.
+- **Severity:** P3 (the page scrolled sideways by 19px and the four choices were clipped).
+- **Steps:** on a token you hold, choose Send, enter a G-address, press Review.
+- **Expected:** the summary wraps inside the card.
+- **Actual:** "Transfer token #0 to G…" did not wrap; the card grew to the address's width and the
+  page scrolled horizontally.
+- **Root cause:** the panel `card` and `review` grids used an implicit `auto` column, whose minimum
+  is the widest unbreakable word, and `reviewTitle` didn't allow breaking inside a word.
+- **Fix:** `components/ui/panel-styles.ts`: both grids get one `minmax(0, 1fr)` column and
+  `reviewTitle` wraps anywhere.
+- **Regression test:** W14's "token form reaches the review" @matrix case (no horizontal scroll with
+  the review open, at every viewport).
+
+### BUG-W11-3 · "Cancel token approval" said the contract can't show the approval
+- **Flow:** W14, a token page's "Your token" form, Cancel token approval.
+- **Severity:** P2.
+- **Steps:** approve a wallet for one token, then choose Cancel token approval.
+- **Expected:** the form shows who is approved now, or that no one is.
+- **Actual:** "The current spender isn't shown because the contract doesn't expose it." The token
+  has had `get_approved` for some time, so the member couldn't see what they were cancelling, and
+  could pay a fee to cancel nothing.
+- **Root cause:** the copy (and a code comment in `lib/token-holder/actions.ts`) predates
+  `get_approved` in the token bindings.
+- **Fix:** `components/token-holder/holder-controls.tsx` reads `get_approved` for the token when
+  Cancel token approval is chosen: "Approved now" with the address, or "No one is approved to move
+  this token right now" with Review disabled. It reads again after a confirmed action.
+- **Regression test:** W14's approve-then-cancel @chain case asserts "Approved now" before the
+  cancel and `get_approved` is empty after it.
+
+### BUG-W11-4 · A pool proposal's summary left out the asset and the sales limit
+- **Flow:** W11, Market settings, Propose a quick-buy pool: the add-to-proposal check, the composer
+  and the proposal page all use the action summary.
+- **Severity:** P2 (members vote on terms the summary didn't state).
+- **Steps:** propose a pool of 3 tokens at 1 XLM, 1 per wallet, 1 sale every 24h.
+- **Expected:** "Open a quick-buy pool: 3 tokens at 1 XLM each, at most 1 per wallet and 1 sold
+  every 24h, closing …".
+- **Actual:** "Open a quick-buy pool: 3 tokens at 1, at most 1 per wallet, closing …": no asset, and
+  no word of the per-period limit.
+- **Root cause:** `getProposalActionSummary` in `lib/proposal-call.ts` printed only some of the
+  pool's fields.
+- **Fix:** the summary names the asset (its code when known, else its contract id) and the sales
+  limit and period.
+- **Regression test:** `lib/proposal-call.test.ts` ("summarises a pool with its asset and sales
+  limit"); W11's pool proposal case checks the add-to-proposal dialog.
+
+### BUG-W11-5 · A second holder action right after the first failed on chain
+- **Flow:** W14, members-only delegation: delegate to a member, then at once "Vote for myself
+  again". Any two holder actions (send, delegate, approve, cancel approval) in quick succession.
+- **Severity:** P2 (the member pays a network fee for a transaction that can't succeed, and sees
+  "Transaction … failed on-chain").
+- **Steps:** on a token page, delegate to another member and wait for Confirmed; press Do something
+  else, Vote for myself again, Review, Sign and send.
+- **Expected:** the second delegation lands.
+- **Actual:** the transaction failed with "trying to access contract data key outside of the
+  footprint" for the new delegate's `DelegateCheckpoint`.
+- **Root cause:** `/api/dao/<id>/tokens/prepare` simulated the second delegation on the ledger that
+  held the first one (or an earlier one). The votes library writes one checkpoint per account per
+  ledger: simulated in that ledger, the new delegate's checkpoint is updated in place, but the real
+  transaction lands in a later ledger and writes a new checkpoint key the footprint doesn't include.
+- **Fix:** the holder form remembers the ledger of its last confirmed action and sends it as
+  `afterLedger`; `prepareHolderAction` (`lib/token-holder/actions.ts`) simulates again, up to five
+  times two seconds apart, until the simulation's `latestLedger` is past it, then asks the member to
+  wait a few seconds instead of handing over a transaction bound to fail.
+- **Regression test:** `lib/token-holder/actions.test.ts` ("simulates again until RPC has the ledger
+  of the last confirmed action"); W14's members-only @chain case.
+
+### BUG-W11-6 · A token the Treasury holds showed a bare contract address as its holder
+- **Flow:** W11, the token page of a token the Treasury bought (`/dao/<tribe>/token/<id>`), "Held by".
+  Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** after a Treasury purchase executes, open the bought token's page.
+- **Expected:** "Held by" names the Treasury, as the member directory does.
+- **Actual:** "CBW6…HND2" with "Read live from the token contract": nothing said it was the tribe's
+  own Treasury (the walkthrough's first check only passed because the navigation's "Treasury" link
+  matched, which is hidden on phones, so the mobile rotation caught it).
+- **Root cause:** only the member directory mapped the tribe's contracts to names, in a local table.
+- **Fix:** `lib/member-directory/system-holders.ts` (`systemHolderName`) names the Treasury, Auction
+  and Marketplace; the directory and the token page's "Held by" both use it ("Treasury (tribe
+  contract)").
+- **Regression test:** `lib/member-directory/system-holders.test.ts`; W11's Treasury purchase case
+  checks the "Held by" region.
+
 ### BUG-W07-1 · The inline confirmation has no accessible name
 - **Flow:** W08, cancel by the proposer (proposal page, Cancel proposal). Every viewport and theme;
   every `ConfirmAction` (artwork, platform factory, proposal cancel).

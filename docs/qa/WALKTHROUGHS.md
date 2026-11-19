@@ -574,8 +574,8 @@ pnpm --dir apps/e2e exec playwright test tests/w10-marketplace.spec.ts
 
 The chain cases run in order (one serial group) and take about six minutes at one viewport, most of
 it the listing end and the indexer. `E2E_ROTATION=1` runs them again at tablet and mobile, one
-viewport after another. Run one chain project at a time with `--no-deps`: several chain projects with
-`--no-deps` start together and sign from the same identities at once. Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
+viewport after another (a rotation run uses one worker, so the viewports never sign at the same
+time). Before they start, `resetMarketFixture` (`apps/e2e/src/market-fixture.ts`) puts
 the seller's tokens back: it cancels a listing an earlier run left open and sends back a token the
 buyer bought, signing with the `stellar keys` identities, then waits for the indexer to agree.
 
@@ -599,6 +599,97 @@ DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs admin_checklist configs/
 
 ```bash
 DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
+```
+
+## Run W11 (pools and Treasury purchases) and W14 (members)
+
+**W11** walks the marketplace's governance side on chain. From Market settings the founder proposes a
+quick-buy pool (the market's mint allowance and the pool, one item of two actions) and a Treasury
+purchase of a token `e2e-member-a` has listed (an authorisation of the exact payment transfers, then
+the purchase). The founder votes for both, queues both and executes both; the two timelines overlap,
+so the walk waits one voting delay, voting period and queue delay. Then the Treasury holds the token
+and the seller has the price less the 2.5% fee; `e2e-member-b`, who holds no token there, stocks the
+pool; `e2e-member-a` buys from it (the price goes to the treasury); and the pool's one-sale-per-period
+limit refuses `e2e-member-b`'s buy with the reason. The listing is set up with `stellar contract
+invoke` (approve, then `list`), because the Treasury purchase is the flow under test and the member
+sell flow is W10's.
+
+**W14** walks the member directory and the holder's own actions on chain: `e2e-member-a` delegates
+to `e2e-member-b` from its own profile and votes for itself again, sends a token to `e2e-member-b`
+(who sends it back), approves `e2e-member-b` for one token and cancels the approval; on a tribe with
+members-only delegation, delegating to a wallet that holds no token is refused before anything is
+signed, and delegating to a member works.
+
+Both run in the w11 timeline (their own wallets, port 4361):
+
+```bash
+export E2E_TIMELINE=w11 E2E_APP_PORT=4361 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json
+```
+
+```bash
+pnpm --dir apps/e2e build:app && pnpm --dir apps/e2e preflight --require-manager
+```
+
+```bash
+pnpm --dir apps/e2e exec playwright test tests/w11-pools-treasury-purchase.spec.ts tests/w14-members.spec.ts
+```
+
+W11's chain cases take about 20 minutes, most of it the three 300-second governance steps and the
+indexer; W14's take about 3. Before they start, `resetPoolsTribe` and `resetMemberTribes`
+(`apps/e2e/src/w11/fixtures.ts`) put the fixtures back: pools an earlier run left past their closing
+time are closed and swept (anyone may), a listing left open is cancelled, the treasury is topped up
+to at least 10 XLM, and `e2e-member-a`'s W14 tokens, delegation and approvals are restored.
+
+To rotate only these two specs at tablet and mobile, skip the project dependencies: a dependency
+project runs every spec in `tests/`, whatever files the command names, so other timelines' chain
+specs would sign with the w11 wallets.
+
+```bash
+E2E_ROTATION=1 pnpm --dir apps/e2e exec playwright test tests/w11-pools-treasury-purchase.spec.ts tests/w14-members.spec.ts --project=tablet-dark-chain --project=mobile-dark-chain --no-deps --workers=1
+```
+
+### The W11 and W14 fixtures
+
+Three tribes on the dev Manager, deployed and launched by `e2e-w11-founder`:
+
+| Tribe | Slug | Tribe id (token) | Config | Artifact |
+|---|---|---|---|---|
+| E2E Pools | `e2e-w11` | `CBJ7PIHIJTQ5HZKJRFFAIXXRBHSJM7LB4VY7YZNXAHZOCMZDQWKLV2TR` | `configs/e2e-walk-e2e-w11-dao.json` | `deploys/dev-testnet-dao-11.json` |
+| E2E Members | `e2e-w11-2` | `CB77DV4E2NFSQFPR66PWAAAYGHOWEI5J5KKWYSFZ5PPR64KR42LNBE26` | `configs/e2e-walk-e2e-w11-2-dao.json` | `deploys/dev-testnet-dao-1101.json` |
+| E2E Members Only | `e2e-w11-3` | `CCGUL3KV7NMR2T67ZIHHWEW3PM4MARB4C6MOXOKGRSAOAVBGOG4TZC7C` | `configs/e2e-walk-e2e-w11-3-dao.json` | `deploys/dev-testnet-dao-1102.json` |
+
+- **E2E Pools**: a market in native XLM with a 2.5% resale fee. `e2e-founder` holds tokens 0-9 and
+  passes proposals alone (quorum 10%); `e2e-member-a` holds 10-19 and sells one to the Treasury per
+  run, and buys one from that run's pool, which a later run lists once 10-19 are gone.
+  The treasury holds testnet XLM for the purchases.
+- **E2E Members**: every membership switch off. `e2e-founder` holds 0-1, `e2e-member-a` 2-3,
+  `e2e-member-b` 4.
+- **E2E Members Only**: members-only delegation on. `e2e-founder` holds 0-1 and `e2e-member-a` 2;
+  `e2e-member-b` holds nothing, so it isn't a member.
+
+Governance is at the contract minimums (300 seconds each). The configs name the w11 wallets'
+addresses; on another machine, run the preflight with `E2E_TIMELINE=w11` first, then put that
+machine's `stellar keys address e2e-w11-founder` (and the members') into the three configs. To
+recreate a tribe, bump its `nonce` (the artifact is `deploys/<label>-testnet-dao-<nonce>.json`; point
+the walk at it with `E2E_W11_POOLS_ARTIFACT`, `E2E_W11_MEMBERS_ARTIFACT` or
+`E2E_W11_MEMBERS_ONLY_ARTIFACT`) and its slug, then run the three phases, for example:
+
+```bash
+DEPLOY_IDENTITY=e2e-w11-founder node scripts/deploy-dao.mjs create_dao configs/e2e-walk-e2e-w11-dao.json configs/testnet-dev-manager.json
+```
+
+```bash
+DEPLOY_IDENTITY=e2e-w11-founder node scripts/deploy-dao.mjs admin_checklist configs/e2e-walk-e2e-w11-dao.json configs/testnet-dev-manager.json
+```
+
+```bash
+DEPLOY_IDENTITY=e2e-w11-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-e2e-w11-dao.json configs/testnet-dev-manager.json
+```
+
+Then fund E2E Pools' treasury (30 XLM, from the founder, through the XLM contract):
+
+```bash
+stellar contract invoke --id CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --source-account e2e-w11-founder --network testnet -- transfer --from "$(stellar keys address e2e-w11-founder)" --to <treasury from the artifact> --amount 300000000
 ```
 
 ## W07 and W08: proposals
@@ -633,13 +724,13 @@ E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
   pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
 ```
 
-For the weekly rotation, run each extra viewport on its own with `--no-deps`. Without it, a
-rotation project pulls in its dependency project's whole test set, every other walkthrough's chain
-specs included, and those would sign with this timeline's wallets:
+For the weekly rotation, name the spec and set `E2E_ROTATION=1`. The chain projects have no
+`dependencies` and a rotation run uses one worker, so only the named spec runs, one viewport after
+another, never two signing at once:
 
 ```bash
 E2E_ROTATION=1 E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
-  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=tablet-dark-chain --no-deps
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts
 ```
 
 Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
