@@ -287,7 +287,13 @@ test.describe.serial('W11 pools and Treasury purchases', { tag: '@chain' }, () =
     });
     // The token page shows the Treasury as the holder.
     await page.goto(`/dao/${tribe.slug}/token/${listedToken}`);
-    await waitForVisible(page.getByText(/Treasury/).first(), 'token page names the Treasury');
+    // "Held by" names the Treasury instead of showing a bare contract address (BUG-W11-6).
+    const heldBy = page.getByRole('region', { name: 'Held by' });
+    await waitForVisible(
+      heldBy.getByText('Treasury (tribe contract)', { exact: true }),
+      'token page names the Treasury'
+    );
+    await expect(heldBy.getByRole('link')).toHaveAttribute('href', new RegExp(`/members/${tribe.treasury}$`));
   });
 
   test('W11 anyone can stock the pool: a wallet with no token here', async ({ page, wallet }) => {

@@ -378,3 +378,19 @@ None.
   wait a few seconds instead of handing over a transaction bound to fail.
 - **Regression test:** `lib/token-holder/actions.test.ts` ("simulates again until RPC has the ledger
   of the last confirmed action"); W14's members-only @chain case.
+
+### BUG-W11-6 · A token the Treasury holds showed a bare contract address as its holder
+- **Flow:** W11, the token page of a token the Treasury bought (`/dao/<tribe>/token/<id>`), "Held by".
+  Every viewport and theme.
+- **Severity:** P3.
+- **Steps:** after a Treasury purchase executes, open the bought token's page.
+- **Expected:** "Held by" names the Treasury, as the member directory does.
+- **Actual:** "CBW6…HND2" with "Read live from the token contract": nothing said it was the tribe's
+  own Treasury (the walkthrough's first check only passed because the navigation's "Treasury" link
+  matched, which is hidden on phones, so the mobile rotation caught it).
+- **Root cause:** only the member directory mapped the tribe's contracts to names, in a local table.
+- **Fix:** `lib/member-directory/system-holders.ts` (`systemHolderName`) names the Treasury, Auction
+  and Marketplace; the directory and the token page's "Held by" both use it ("Treasury (tribe
+  contract)").
+- **Regression test:** `lib/member-directory/system-holders.test.ts`; W11's Treasury purchase case
+  checks the "Held by" region.
