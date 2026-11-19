@@ -1,0 +1,121 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "nonce": 11,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CBJ7PIHIJTQ5HZKJRFFAIXXRBHSJM7LB4VY7YZNXAHZOCMZDQWKLV2TR",
+    "metadata": "CCGXJPP3EN3BBTEIFVWYCNGQWVUXGE6UVKAIIEPKLNFN7MPHRRWJCJJP",
+    "governor": "CA46DIWTVE7BHZTN4ZI2SJTLGPCFYJM75XOHQOS3NTA4CQWH4FXMSCG3",
+    "treasury": "CBW6JFPVUJNACK4UO3JWNXTZUF73OL4KWT4KWAEI3LE5P3IX4YZFHND2",
+    "auction": null,
+    "marketplace": "CCTWPCYZVV345FCCC7F3NOSX3CP7SB2NNKZI4R3KY3GGQBPJDZIALC5Y",
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W11 (quick-buy pools and Treasury purchases), on the dev Manager. Deployed and launched by e2e-w11-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W11 and W14 fixtures\"). Founders: e2e-w11-founder x10 (passes proposals alone), e2e-w11-member-a x10 (lists one token per run for the Treasury purchase). Payment asset is native XLM (SAC). The treasury is funded with testnet XLM.",
+    "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "nonce": 11,
+    "launchAdmin": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "slug": "e2e-w11",
+    "token": {
+      "name": "E2E Pools",
+      "symbol": "E2EP"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for quick-buy pools and Treasury purchases (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+        "amount": 10
+      },
+      {
+        "address": "GDJR6TISXBYPUE3J4XGZ2V4K4OJVVWO3G53NRIIJMH6N772ZD4UES33G",
+        "amount": 10
+      }
+    ],
+    "launch": {
+      "launchMarketplace": true
+    }
+  },
+  "updatedAt": "2026-11-19T04:36:31.381Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "50f82dc81079521fa359cb3fb371071277cecd080214921ac19eba422abf5d2a",
+      "ledger": 5807863
+    },
+    "artworkBatches": [
+      {
+        "txHash": "d35d20b1927bafb9c2a6329b1ba5a861e089aa93029610fd6718b08062d329d8",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807866
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "a3a3a991e087052776e92c034301acf494bf6069ee4be188859e3bd322664ded",
+        "batch": 1,
+        "tokens": 20,
+        "ledger": 5807868
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "363093e284b0f38f0944d99deb2352c25ecf14122d2b6c3e90d0f2558bfa6124",
+      "ledger": 5807870
+    }
+  },
+  "deploymentLedger": 5807863
+}

@@ -1,0 +1,123 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "dev",
+  "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "nonce": 1101,
+  "manager": "CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "185983e793894833a0acdd84b62014bfbd54fcd7",
+  "addresses": {
+    "token": "CB77DV4E2NFSQFPR66PWAAAYGHOWEI5J5KKWYSFZ5PPR64KR42LNBE26",
+    "metadata": "CAMYPPXB2LEFKURXM5I7QAE5A4QAO5YNS3XEP77GWSWGNNAPZPSOXSI4",
+    "governor": "CAAMDPEU2EPMBIY4FOHJ4P3RHYSMFFOPCWELLJASG66XUIKQADMNYRRG",
+    "treasury": "CCDPUQ4MDXJMEKXWQLO2K4AFTBIWYYV5MS7TYEQW43IT6ERBWGKHQ5JO",
+    "auction": null,
+    "marketplace": null,
+    "claims": null
+  },
+  "config": {
+    "$comment": "Fixture tribe for walkthrough W14 (members: directory, profile, delegate, transfer, approve, revoke), on the dev Manager. Open membership: every switch off. Founders: e2e-w11-founder x2, e2e-w11-member-a x2, e2e-w11-member-b x1.",
+    "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "nonce": 1101,
+    "launchAdmin": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+    "slug": "e2e-w11-2",
+    "token": {
+      "name": "E2E Members",
+      "symbol": "E2EMB"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Walkthrough fixture for the member directory and holder actions (testnet).",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://tribes.build"
+          }
+        ],
+        "image": "https://tribes.build/images/dao-logo.png"
+      },
+      "rendererBase": "https://tribes.build/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm",
+              "bg-gray"
+            ]
+          }
+        ]
+      }
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+        "amount": 2
+      },
+      {
+        "address": "GDJR6TISXBYPUE3J4XGZ2V4K4OJVVWO3G53NRIIJMH6N772ZD4UES33G",
+        "amount": 2
+      },
+      {
+        "address": "GDCWPP4K46AMSLOJOEYQ6HFM56HBZ23IBTDDD2F4FOJP3SZLBAUAUT7H",
+        "amount": 1
+      }
+    ],
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": false,
+      "daoRecovery": false
+    }
+  },
+  "updatedAt": "2026-11-19T04:37:17.613Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "06e819e621871800e48f698f0f96721d01d29f8215d5f36224a71c884ac85e9b",
+      "ledger": 5807872
+    },
+    "artworkBatches": [
+      {
+        "txHash": "069b8856ed21227c8b50a1f3cc45813f8e5a9d37ae8a51db3a2e186d7facb899",
+        "batch": 1,
+        "items": 3,
+        "ledger": 5807875
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "59a9d11d18f4475e5101a1cd188c655c9b237f4117e53bad91023f8930f12b3d",
+        "batch": 1,
+        "tokens": 5,
+        "ledger": 5807877
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "3e9ad286261bec1c0a90517b091b9213c0fb330a2fdc0866a5132fd5d7258623",
+      "ledger": 5807879
+    }
+  },
+  "deploymentLedger": 5807872
+}
