@@ -350,6 +350,53 @@ None.
   return only when its review closes.
 - **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
 
+### BUG-W07-1 · The inline confirmation has no accessible name
+- **Flow:** W08, cancel by the proposer (proposal page, Cancel proposal). Every viewport and theme;
+  every `ConfirmAction` (artwork, platform factory, proposal cancel).
+- **Severity:** P3 (screen readers announce an unnamed "dialog" before a destructive action).
+- **Steps:** as the proposer of a pending proposal, press Cancel proposal.
+- **Expected:** a dialog named "Cancel this proposal?", described by its consequence.
+- **Actual:** `role="dialog"` with no `aria-labelledby` or `aria-describedby`.
+- **Root cause:** Ark's popover links the content to its title only when it has seen the title
+  mounted. `ConfirmAction` mounts the content lazily inside a portal, so Ark never links them.
+- **Fix:** `components/ui/confirm-action.tsx` gives the title and description ids (`useId`) and sets
+  `aria-labelledby` and `aria-describedby` on the content itself.
+- **Regression test:** W08's cancel case finds the confirmation by role and name
+  (`getByRole('dialog', { name: 'Cancel this proposal?' })`). Vitest runs in node with no DOM, so the
+  open popover can't be rendered at unit level.
+
+### BUG-W07-2 · On a phone, a suggested proposal title widens the composer past the screen
+- **Flow:** W07, composer with a payment action. Mobile (375px), both themes.
+- **Severity:** P2 (the page zooms out; the action sheet then opens off to one side and its button
+  is covered).
+- **Steps:** on a phone, start a proposal, add "Pay someone" to a G… address, then add another action.
+- **Expected:** the page stays 375px wide; "Suggested from the actions: Send 1 XLM to G…" wraps.
+- **Actual:** the layout viewport grows to about 468px to fit the 56-character address; the next
+  "Set up the action" sheet opens shifted left and "Add to proposal" can't be pressed.
+- **Root cause:** `FieldHelperText` (and field errors) wrapped long words with the global
+  `overflow-wrap: break-word`, which breaks a word only after it has set the min-content width, so the
+  grid column grew to the address.
+- **Fix:** `components/ui/field.tsx` sets `overflow-wrap: anywhere` on helper and error text.
+- **Regression test:** `expectNoHorizontalScroll` (`apps/e2e/src/fixtures.ts`) now also fails when
+  the layout viewport is wider than the screen, which a mobile browser does instead of scrolling;
+  W07's composer case checks it after three actions at every viewport.
+
+### BUG-W07-3 · At tablet width the floating Reference button covers Submit proposal
+- **Flow:** W07, composer review step. Tablet (768×1024), both themes.
+- **Severity:** P1 at tablet width (the proposal can't be submitted without scrolling the button away,
+  and at the page's end it can't be).
+- **Steps:** on a tablet, write a proposal and press Next: review.
+- **Expected:** Back and Submit proposal are both pressable.
+- **Actual:** the fixed "Reference" button sat over the right end of the action row, on Submit
+  proposal.
+- **Root cause:** the review step's Reference trigger was `position: fixed` at the bottom right,
+  offset by the tab bar's height. Between md and lg there is no tab bar, so it landed on the page's own
+  action row.
+- **Fix:** `app/dao/[daoId]/proposals/create/page.tsx` puts the trigger in the review step's action
+  row, next to Submit proposal, hidden from lg where the rail is always shown.
+- **Regression test:** W07's composer case (`w08-proposal-states.spec.ts`, every viewport) presses
+  Submit proposal on the review step; Playwright refuses a click on a covered button.
+
 ### BUG-W06-1 · An unreachable claim list shows members a gateway status code
 - **Flow:** W12, claim from a list whose published file no gateway returns. All viewports and themes.
 - **Severity:** P2.

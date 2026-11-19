@@ -388,6 +388,89 @@ DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs admin_checklist configs/
 DEPLOY_IDENTITY=e2e-founder node scripts/deploy-dao.mjs launch_dao configs/e2e-walk-market-dao.json configs/testnet-dev-manager.json
 ```
 
+## W07 and W08: proposals
+
+W07 (proposal lifecycle) and W08 (proposal edge cases) share one timeline in
+`apps/e2e/tests/w07-w08-proposals.spec.ts` (`@chain`), so the 300s voting delay, voting period and
+safety delay are waited out once for every proposal. In order:
+
+| Case | What happens |
+|---|---|
+| W08 cancel | The founder proposes; member A sees no Cancel; the founder cancels before voting opens |
+| W07 propose | The founder composes three actions (2 XLM to member A, 1 XLM to member B, flip members-only delegation) and proposes |
+| W08 propose | Three one-action proposals for the defeated, quorum and expiry cases, a few seconds apart |
+| W07 vote | Founder For (3), member A Against (2), member B Abstain (2), each in their own browser, at the same time |
+| W08 vote | Defeated: A For, B Abstain, founder Against. Quorum: founder For only. Expiry: founder and A For |
+| W07 queue | Member B queues it once the vote passes (anyone can) |
+| W08 defeated, quorum, expired | Each closed proposal's outcome, tally lines and the actions it no longer offers |
+| W07 execute | After the safety delay the founder executes; the treasury pays out 3 XLM, both members receive theirs, the rule flips, the receipt lists three calls |
+
+The whole timeline takes about 20 minutes. `apps/e2e/tests/w08-proposal-states.spec.ts` (`@matrix`)
+covers what signs no transaction at every viewport and theme: a member under the proposal threshold
+is told why they can't propose, the composer with three actions up to the signing step, and a tour of
+each proposal state the chain run leaves on the tribe (run the chain spec first).
+
+```bash
+E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=desktop-dark-chain
+```
+
+```bash
+E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w08-proposal-states.spec.ts
+```
+
+For the weekly rotation, run each extra viewport on its own with `--no-deps`. Without it, a
+rotation project pulls in its dependency project's whole test set, every other walkthrough's chain
+specs included, and those would sign with this timeline's wallets:
+
+```bash
+E2E_ROTATION=1 E2E_TIMELINE=w07 E2E_APP_PORT=4357 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-manager.json \
+  pnpm --dir apps/e2e test:e2e tests/w07-w08-proposals.spec.ts --project=tablet-dark-chain --no-deps
+```
+
+Leave `--reporter` off: it replaces the configured reporters, so the run writes no `summary.json`.
+
+The run's proposal ids are kept in `apps/e2e/.state/<timeline>-proposals.json` (gitignored). A
+failed case doesn't stop the others, and `E2E_RESUME=1` picks up the last run's proposals instead of
+proposing again, skipping the steps that already happened.
+
+**Expired** can't be reached in one run: the Governor expires a passed proposal 14 days after its
+vote ends (`PROPOSAL_EXPIRATION_PERIOD`). Each run leaves one passed "W08 expiry" proposal unqueued
+and checks that its deadline is 14 days out; every later run checks that the probes from 14 or more
+days before now read as Expired, with no Queue or Execute. The annotation on that case says which.
+
+**Unconfirmed transactions.** When a confirmation takes longer than the app's 60-second wait, the
+proposal page and the composer show "Waiting for confirmation…". The helpers handle it when it
+happens (Check again until it confirms) and annotate the test `unconfirmed-recovery`; it is never
+forced.
+
+### The W07 and W08 proposals fixture
+
+"E2E Proposals" (slug `e2e-w07`) on the dev Manager, from `configs/e2e-walk-w07-dao.json`, artifact
+`deploys/dev-testnet-dao-7.json` (`E2E_PROPOSALS_DAO_ARTIFACT` overrides it). No auction or market.
+Founders: `e2e-w07-founder` 3, `e2e-w07-member-a` 2, `e2e-w07-member-b` 2. Voting delay, voting period
+and safety delay 300s; quorum 50% (4 For or Abstain votes, so the founder alone misses it); proposal
+threshold 3 (only the founder can propose). The treasury holds XLM for W07's payments; the spec tops
+it up from the founder when it falls under 20 XLM.
+
+To recreate it (after the preflight has created `e2e-w07-*`), put the three addresses in the config's
+`deployer`, `launchAdmin` and `founders`, then:
+
+```bash
+for phase in create_dao admin_checklist launch_dao; do
+  DEPLOY_IDENTITY=e2e-w07-founder node scripts/deploy-dao.mjs $phase configs/e2e-walk-w07-dao.json configs/testnet-dev-manager.json
+done
+```
+
+```bash
+stellar contract invoke --id CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --source-account e2e-w07-founder --network testnet -- transfer \
+  --from e2e-w07-founder --to <treasury from the artifact> --amount 1000000000
+```
+
+A new tribe needs a new `nonce` and `slug` in the config (701, `e2e-w07-2`, ...).
+
 ## Run W06 (auction) and W12 (claims)
 
 Both run on the `w06` timeline, on port 4356, and share its wallets, so run them one after the other

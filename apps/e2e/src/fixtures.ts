@@ -96,10 +96,14 @@ export async function appliedTheme(page: Page) {
  * grows with it and the overflow never showed.
  */
 export async function expectNoHorizontalScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-  );
+  const { overflow, layoutWidth } = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    layoutWidth: window.innerWidth
+  }));
   expect(overflow, 'page scrolls horizontally').toBeLessThanOrEqual(0);
+  // And the layout viewport itself must not have grown past the screen (BUG-W07-2).
+  const viewport = page.viewportSize();
+  if (viewport) expect(layoutWidth, 'layout viewport widened past the screen').toBeLessThanOrEqual(viewport.width);
 }
 
 /**
