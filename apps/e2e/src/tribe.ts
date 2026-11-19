@@ -148,12 +148,15 @@ export async function createTribe(page: Page, wallet: E2ESigner): Promise<string
   // The app opens the tribe once the directory has it; if its own wait ran out first, continue by hand.
   await waitForUi(
     'opens the new tribe',
-    async (timeout) => {
-      const opened = page.waitForURL(new RegExp(`/dao/${daoId}`), { timeout });
-      const button = page.getByRole('button', { name: 'Continue to setup' });
-      if (await button.isVisible().catch(() => false)) await button.click();
-      await opened;
-    },
+    (timeout) =>
+      expect(async () => {
+        const tribe = new RegExp(`/dao/${daoId}`);
+        if (tribe.test(page.url())) return;
+        // The button goes away as the app navigates on its own, so a click may find nothing.
+        const button = page.getByRole('button', { name: 'Continue to setup' });
+        if (await button.isVisible()) await button.click({ timeout: 2_000 }).catch(() => undefined);
+        await page.waitForURL(tribe, { timeout: 5_000 });
+      }).toPass({ timeout }),
     { governingS: 30 }
   );
   return daoId!;
