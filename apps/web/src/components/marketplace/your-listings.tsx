@@ -125,65 +125,68 @@ export function YourListings({
       ) : null}
     </>
   );
-  if (!shown.length) return dialogs;
-
   return (
-    <Section title="Your listings">
-      {ended.length ? (
-        <Callout
-          variant="warning"
-          title={
-            ended.length === 1
-              ? `Your listing of token #${ended[0]!.tokenId} has ended`
-              : `${ended.length} of your listings have ended`
-          }
-          description="The market still holds your token. Return it to your wallet to vote with it again or list it once more."
-        />
+    <>
+      {shown.length ? (
+        <Section title="Your listings">
+          {ended.length ? (
+            <Callout
+              variant="warning"
+              title={
+                ended.length === 1
+                  ? `Your listing of token #${ended[0]!.tokenId} has ended`
+                  : `${ended.length} of your listings have ended`
+              }
+              description="The market still holds your token. Return it to your wallet to vote with it again or list it once more."
+            />
+          ) : null}
+          <div>
+            {shown.map((listing) => {
+              const state = yourListingState(listing);
+              const asset = marketplaceAssetLabel(network, listing.paymentAsset);
+              const pending = isPendingListing(listing);
+              return (
+                <div key={listing.eventId} className={item}>
+                  <ListRow
+                    wrap
+                    title={`Token #${listing.tokenId} · ${marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} ${asset}`}
+                    meta={state.meta}
+                    trailing={
+                      <Chip tone={pending ? 'neutral' : listing.status === 'awaiting-expiry' ? 'warning' : 'yours'}>
+                        {state.label}
+                      </Chip>
+                    }
+                  />
+                  {pending ? null : listing.status === 'awaiting-expiry' ? (
+                    <div className={actions}>
+                      <Button size="sm" onClick={() => trade(listing, 'expire')}>
+                        Return my token
+                      </Button>
+                    </div>
+                  ) : listing.status === 'open' ? (
+                    <div className={actions}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!config || !purchasesEnabled}
+                        onClick={() => setChanging(listing)}
+                      >
+                        Change price
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => trade(listing, 'cancel')}>
+                        Cancel listing
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </Section>
       ) : null}
-      <div>
-        {shown.map((listing) => {
-          const state = yourListingState(listing);
-          const asset = marketplaceAssetLabel(network, listing.paymentAsset);
-          const pending = isPendingListing(listing);
-          return (
-            <div key={listing.eventId} className={item}>
-              <ListRow
-                wrap
-                title={`Token #${listing.tokenId} · ${marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} ${asset}`}
-                meta={state.meta}
-                trailing={
-                  <Chip tone={pending ? 'neutral' : listing.status === 'awaiting-expiry' ? 'warning' : 'yours'}>
-                    {state.label}
-                  </Chip>
-                }
-              />
-              {pending ? null : listing.status === 'awaiting-expiry' ? (
-                <div className={actions}>
-                  <Button size="sm" onClick={() => trade(listing, 'expire')}>
-                    Return my token
-                  </Button>
-                </div>
-              ) : listing.status === 'open' ? (
-                <div className={actions}>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={!config || !purchasesEnabled}
-                    onClick={() => setChanging(listing)}
-                  >
-                    Change price
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => trade(listing, 'cancel')}>
-                    Cancel listing
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+      {/* Outside the section, so they keep their state when the last row hides. */}
       {dialogs}
-    </Section>
+    </>
   );
 }
 

@@ -189,6 +189,7 @@ None.
   `components/marketplace/your-listings.tsx` returned nothing when no rows were left, unmounting the
   review and the Change price sequence it renders. `ListingCard` likewise hid its own card, with its
   review inside, on confirmation.
-- **Fix:** Your listings keeps its review, Change price dialog and sequence mounted while one is open,
-  even with no rows left; a public card reports its cancel or return only when its review closes.
+- **Fix:** Your listings renders its review, Change price dialog and sequence outside the section, so
+  they stay mounted, with their state, when no rows are left; a public card reports its cancel or
+  return only when its review closes.
 - **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
