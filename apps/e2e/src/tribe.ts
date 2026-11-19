@@ -124,16 +124,17 @@ export async function createTribe(page: Page, wallet: E2ESigner): Promise<string
     for (let i = 0; i < localStorage.length; i++) {
       const value = localStorage.getItem(localStorage.key(i)!) ?? '';
       if (!value.includes('"drafts"')) continue;
-      let state: { drafts?: { deployment?: { addresses?: { token?: string } } }[] } | undefined;
+      type Draft = { id?: string; deployment?: { addresses?: { token?: string } } };
+      let state: { drafts?: Draft[]; activeDraftId?: string } | undefined;
       try {
         state = JSON.parse(value)?.state;
       } catch {
         continue;
       }
-      for (const draft of state?.drafts ?? []) {
-        const token = draft.deployment?.addresses?.token;
-        if (token && new RegExp(pattern).test(token)) return token;
-      }
+      // The draft just created is the active one; earlier tribes' drafts stay in the list.
+      const active = state?.drafts?.find((draft) => draft.id === state?.activeDraftId);
+      const token = active?.deployment?.addresses?.token;
+      if (token && new RegExp(pattern).test(token)) return token;
     }
     return null;
   }, CONTRACT_ID.source);

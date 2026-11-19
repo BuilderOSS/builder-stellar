@@ -226,6 +226,19 @@ file itself is not on IPFS.
 
 A drive is one-shot: run the script again (`ready`, `fail` or `both`) before each W05 run. Run the
 fail drive's script just before the spec, since the spec claims first and then waits out the deadline.
+For a full run of W03 to W05 in one go, give the fail drive time for W03 and W04 to finish first
+(about 15 minutes):
+
+```bash
+E2E_TIMELINE=w03 E2E_FAIL_WINDOW_S=1500 node apps/e2e/scripts/w05-drive-fixtures.mjs both
+```
+
+```bash
+E2E_TIMELINE=w03 E2E_APP_PORT=4353 pnpm --dir apps/e2e test:e2e tests/w03-create-tribe.spec.ts tests/w04-setup-launch.spec.ts tests/w05-launch-drive.spec.ts
+```
+
+`fixtures/w04-states.json` names a tribe a W03 run created and nobody set up; W04's `@matrix` tour
+reads its "nothing done yet" setup page. Any W03 auction tribe can replace it.
 
 ## Running walkthroughs in parallel
 

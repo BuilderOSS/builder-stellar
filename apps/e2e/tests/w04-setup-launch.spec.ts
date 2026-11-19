@@ -190,9 +190,15 @@ test.describe('W04 setup and launch', { tag: '@chain' }, () => {
       { label: 'first auction', path: `/api/dao/${daoId}/auctions`, predicate: (body) => body.status === 'active' },
       { governingS: 0 }
     );
-    await page.goto(`/dao/${daoId}/setup`);
-    await waitForUi('setup hands over to Home', (timeout) =>
-      expect(page).not.toHaveURL(/\/setup$/, { timeout })
+    // The server caches a tribe's config for 30s, so the hand-over shows on a load after that.
+    await waitForUi(
+      'setup hands over to Home',
+      (timeout) =>
+        expect(async () => {
+          await page.goto(`/dao/${daoId}/setup`);
+          await expect(page).not.toHaveURL(/\/setup$/, { timeout: 5_000 });
+        }).toPass({ timeout }),
+      { governingS: 30 }
     );
   });
 });
