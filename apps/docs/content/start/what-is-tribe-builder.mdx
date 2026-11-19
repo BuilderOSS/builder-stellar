@@ -1,5 +1,53 @@
-<Placeholder />
+Tribe Builder is an app for building and running a tribe: a group of people who hold funds together and decide together how to use them. You can build a new tribe, or find one that already exists and become a member.
 
-## Coming soon
+For people who know the terms: a tribe is a DAO on Stellar, with a shared treasury, onchain votes, and NFT membership.
 
-This page is planned and not written yet.
+## What you can do with it
+
+- **Build a tribe.** Give it a name, an image, artwork for its membership tokens, and a link to share. Then choose how people join and how votes work.
+- **Join a tribe.** Win a membership in an auction, buy one on the tribe's market, or claim one if the tribe has put you on a list.
+- **Decide together.** Members write [proposals](/reference/glossary#proposal) and vote For, Against, or Abstain. A proposal that passes runs exactly as written.
+- **Hold funds together.** Payments for memberships go to the tribe's [treasury](/reference/glossary#treasury). The treasury pays out only when a proposal passes, and anyone can see each payment.
+- **Hand over your vote.** A member can let another person vote with their tokens. This is called delegation.
+
+## How it works
+
+Each tribe runs on its own set of smart contracts on the Stellar network. A smart contract is a program that runs on the network and follows fixed rules.
+
+- The **membership token** records who the members are. Each token is one vote.
+- The **governor** counts votes on proposals.
+- The **treasury** holds the tribe's funds and runs proposals that pass.
+- The **metadata** contract holds the artwork for the tokens.
+- Optional **modules** add ways to join: an auction, a market, and claim lists.
+
+Every tribe gets its own copy of these contracts when it is created. They belong to that tribe, not to Tribe Builder.
+
+A tribe starts in **Setup**. During Setup, one wallet, the [launch admin](/reference/glossary#launch-admin), adds artwork and the founders' tokens. At launch, control of every setting passes to the tribe's treasury. From then on, changes need a proposal that members vote on.
+
+## What Tribe Builder does and does not do
+
+- Tribe Builder never holds your funds. Your wallet asks you to approve each transaction, and shows what it does and its network fee first.
+- Tribe Builder does not create memberships for anyone. Only the tribe's own rules can create a membership.
+- After launch, Tribe Builder cannot change a tribe's settings or move its funds. Only a proposal that members pass can do that.
+- The app shows information read from the network and from an index of past activity. New activity can take a short time to appear.
+
+The [safety and security model](/concepts/safety-and-security) describes what the contracts allow and what they do not.
+
+## Where it runs
+
+Tribe Builder runs on the Stellar test network (testnet) today. Testnet is for trying things out: its XLM is free test currency and is not the same as XLM on the main Stellar network (mainnet). Tribes created on testnet stay on testnet.
+
+The app is at [tribes.build](https://tribes.build). The contracts are open source under the MIT licence, and the tribe model is based on Nouns Builder.
+
+## Where to go next
+
+- If you want to join a tribe, read [Your first 10 minutes](/start/first-10-minutes).
+- If you want to start one, read [Build your first tribe](/start/build-your-first-tribe).
+- If the idea of a DAO is new to you, read [What's a tribe](/start/whats-a-tribe).
+
+## Related
+
+- [What's a tribe](/start/whats-a-tribe)
+- [Tribes and DAOs](/concepts/tribes-and-daos)
+- [Wallets and Stellar basics](/concepts/wallets-and-stellar)
+- [Safety and security model](/concepts/safety-and-security)

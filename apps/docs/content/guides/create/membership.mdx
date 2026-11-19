@@ -1,25 +1,67 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Membership is section 2 of **Build a tribe**. You choose how people become members, and who can hold a membership. Each membership is a token: an NFT on Stellar that carries one vote. See [Membership tokens](/concepts/membership-tokens).
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Complete the [Identity](/guides/create/identity) section and select **Continue to Membership**.
+- Prices, timings, and membership rules start with defaults. You can change any of them later by a vote. The payment asset for each sale is set when you create the tribe, so choose it with care.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Under **How do people join?**, choose one option. Each option decides which modules your tribe is created with. A module is a contract that sells or gives out memberships. See [Modules](/concepts/modules).
+   - **Daily auction** (Recommended): one new token is auctioned at a time, and each sale goes to the [treasury](/reference/glossary#treasury). Creates an auction.
+   - **Auction + resale**: auctions, and members can also resell their tokens to others. Creates an auction and a market.
+   - **Fixed-price sales**: the tribe sells tokens at a set price from quick-buy pools. Members open each pool by vote after launch. Creates a market.
+   - **Invite only**: no sales. People claim their tokens from invite lists the tribe publishes. Creates a claims module.
+
+   <Shot id="create/membership/01" alt="The How do people join? choices with Daily auction selected and marked Recommended" />
+
+2. Under **Who can hold a membership?**, choose one option.
+   - **Open membership**: members can sell, give, or [delegate](/reference/glossary#delegate) their tokens freely.
+   - **Members-only club**: a membership changes hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example to rescue a lost key.
+
+   <Shot id="create/membership/02" alt="The Who can hold a membership? choices with Open membership selected" />
+
+3. Open **Advanced settings** if you want to change the defaults. The groups you see depend on your choice in step 1.
+   - **Auctions**: **Bids are in** (XLM or USDC), **Starting price** (the lowest first bid, at least 0.0001, up to 7 decimal places; default 1), **Each auction lasts** (5 minutes to 30 days; default 1 day), and **A late bid adds** (a bid near the end extends the auction by this much, up to 1 day; default 15 minutes).
+   - **Market**: **Prices are in** (XLM or USDC) and **Fee on resales** (paid by the seller, from 0% to 25%; default 5%).
+   - **Membership rules**: the three rules behind step 2, one checkbox each. A mix that matches neither option is shown as your own mix.
+   - **Claim lists**: **Let members claim tokens from published lists** adds a claims module to any option. Paid lists use the auction's asset. With no auction, choose it in **Paid lists are in**.
+
+   <Shot id="create/membership/03" alt="Advanced settings open, showing the Auctions fields, the membership rules checkboxes, and the claim lists option" />
+
+   <Callout title="Payment assets are set when you create the tribe" description="Check Bids are in, Prices are in, and Paid lists are in before you create the tribe. The app treats these assets as fixed, and launch is refused if a module no longer uses the asset chosen at creation." />
+
+4. Select **Continue to Voting**.
+
+   <Shot id="create/membership/04" alt="The Voting section opening below a completed Membership section" />
+
+Modules you leave out can be added later by vote. If you turn off every way to join, only founder tokens exist until a vote adds one. You mint at least one founder token in Setup before launch. See [Set up: founders](/guides/setup/founders).
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Nothing in this section is sent to the network yet. Your choices are saved in the draft in this browser.
+
+  When you create the tribe, the factory contract (the Manager) deploys only the modules your choice needs: an auction contract, a market contract, a claims contract (ClaimMinter), or a combination. It records each module's payment asset. At launch, the Manager checks that each module still uses that asset.
+
+  The three membership rules are settings on the membership token contract: transfers locked, members-only delegation, and DAO recovery. All three are off for **Open membership** and on for **Members-only club**. After launch they change only by a proposal.
+
+  Auctions do not start, and the market does not open, at creation. You choose that when you launch. See [Launch your tribe](/guides/setup/launch).
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Use an amount from 0.0001 with up to 7 decimal places"**. Check the **Starting price**. Use a dot for decimals and no more than 7 digits after it.
+- **"The marketplace fee is at most 2,500 bps (25%)."** Lower the **Fee on resales** to 25% or less.
+- **A message says members can't resell on the market.** This appears when you choose a market and memberships are locked. The market can still sell new tokens from pools the tribe opens by vote.
+- **The review says "only founder tokens exist until a vote adds a way to join".** You chose **Invite only** and turned off claim lists. Turn claim lists back on, or choose another option.
 
 ## Related
+
+- [Create a tribe: voting rules](/guides/create/voting)
+- [Membership tokens](/concepts/membership-tokens)
+- [Modules](/concepts/modules)
+- [Assurance drives](/guides/setup/assurance-drives)
+- [Make a claim list](/guides/claims/create)

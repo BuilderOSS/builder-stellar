@@ -1,25 +1,67 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Every membership token has an image built from layers, such as a background, a body, and a head. Each layer holds several images, and each token gets one image from each layer: these are its traits. In this step you add the layers to your tribe before you mint any tokens.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Your tribe is created and in Setup. See [Create a tribe: review and create](/guides/create/review-and-deploy).
+- Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network. Only the launch admin can add artwork during setup.
+- Use one browser for the whole step. Your artwork plan and progress are saved in this browser until every batch is signed. The browser must support Web Locks.
+- To use your own art, prepare one folder for the collection with one subfolder per layer. Name the subfolders in drawing order, from background to foreground, such as `0-backgrounds`, `1-bodies`, and `2-heads`. Put each layer's images in its subfolder.
+
+<Callout title="Add artwork before you mint founder tokens" description="Traits are chosen when a token is minted. A token minted while the tribe has no artwork gets no traits until someone seeds them later. The checklist lists artwork first for this reason." />
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Open the launch checklist: on your tribe's page, select **Continue setup**. The first step, **Add your artwork**, says "The layers every token is drawn from. Do this first." Select **Add artwork**.
+
+   <Shot id="setup/artwork/01" alt="The Required to launch checklist with Add your artwork as step 1 and its Add artwork button" />
+
+2. Choose where the artwork comes from. On the **Artwork** page, in **Add your artwork**, do one of these:
+   - Select **Use Tribe Builder Demo Collection (CC0)** to use a ready-made collection that anyone may reuse.
+   - Select **Choose a folder** and pick your collection folder. **Download example folder** gives you a folder in the right shape. Then select **Upload artwork files**, which shows the number of files.
+
+   <Shot id="setup/artwork/02" alt="The Add your artwork card with the demo collection button and the Choose a folder control" />
+
+3. Check the layers and the preview. Each layer is listed as its name and number of items. The first layer is drawn at the back and the last at the front. Use **Move up** and **Move down** to change the order. You can't change the order after you sign the first batch.
+
+   <Shot id="setup/artwork/03" alt="The layer list with Move up and Move down buttons beside a preview of one combined token image" />
+
+4. Select **Sign artwork batch 1** and approve it in your wallet. Each batch holds up to 30 images. The line above the button counts the confirmed batches, for example "1 of 3 signed artwork batches confirmed". Repeat until the page says "All planned artwork batches are confirmed."
+
+   <Shot id="setup/artwork/04" alt="The batch counter and the Sign artwork batch 2 button after the first batch confirmed" />
+
+5. Return to the checklist. **Add your artwork** is marked done and shows the number of layers and traits. Next, mint founder tokens. See [Set up: founders](/guides/setup/founders).
+
+   <Shot id="setup/artwork/05" alt="The launch checklist with Add your artwork marked done, showing 5 layers and their trait count" />
+
+The limits for an uploaded folder are: up to 16 layers and 1,000 images in total, PNG, JPEG, or WebP in one format throughout, each image square, from 64 to 4,000 pixels on each side and up to 2 MB, and up to 100 MB for the whole folder.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Uploading the folder stores the images on IPFS through Tribe Builder's upload service. That is not a blockchain transaction. The preview and the layer order stay in this browser.
+
+  Each **Sign artwork batch** is one transaction to the tribe's artwork and profile contract (Metadata). The first batch creates every layer with its first image. Later batches add the remaining images, up to 30 per transaction. Each transaction has a Stellar network fee, which your wallet shows before you sign. The contract records the IPFS address of the collection and the name of each layer and image, so anyone can read them.
+
+  When a token is minted, the contract picks one image from each layer for it. The selection is pseudo-random: it is not designed to resist someone who tries to influence it.
+
+  During setup, the launch admin adds artwork directly. After launch, the artwork contract's admin is the [treasury](/reference/glossary#treasury), so new layers are added only by a proposal. The **Artwork** page then shows **Add new layers by vote**.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Use collection/layer/item.png directories"**. The folder you chose must hold layer subfolders, and each subfolder must hold images only. Choose the collection folder itself, not a layer folder or a folder above it.
+- **"Each artwork file must be a PNG, JPG, or WebP under 2 MB"**. Resize or convert the file, then choose the folder again.
+- **A batch was signed, but the page did not see it confirm.** The button changes to **Check saved artwork transaction**. Select it before anything else. It checks the saved transaction and does not sign a new one.
+- **"Artwork is being configured in another tab"**. Close the other tab, or finish there.
+- **"Connect the launch admin wallet on the DAO network"**. Switch to the launch admin wallet, or switch your wallet to the tribe's network.
+- **"This metadata contract already has artwork."** The setup panel only adds a new collection. If an earlier upload stopped partway, continue it from the browser where you started. The card is titled **Finish adding your artwork** while that is possible.
+- **Founder tokens were minted before the artwork.** The **Artwork** page lists tokens without traits. You can seed them there, directly during setup or by a proposal after launch.
 
 ## Related
+
+- [Set up: founders](/guides/setup/founders)
+- [Membership tokens](/concepts/membership-tokens)
+- [Launch your tribe](/guides/setup/launch)
+- [Limits and timings](/reference/limits-and-timings)

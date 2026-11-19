@@ -1,25 +1,63 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+An auction doesn't finish on its own when the time runs out. Someone has to settle it. Settling sends the token to the winner and the winning bid to the tribe's [Treasury](/reference/glossary#treasury), then starts the next auction. Anyone can do this, and it costs only the network fee.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Anyone with a Stellar wallet on the tribe's network can settle. You don't need to be the winner or a member.
+- The auction must have ended. No one can settle an auction before its end time, even while auctions are paused.
+- Keep a small amount of XLM for the network fee. Settling and starting the next auction mints a new token, so the fee is usually a little higher than for a bid.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the Auction page.** When the time is up, the page shows **Auction ended**, the **Winning bid** and the time it ended. If you won, the bidder row says **You won**.
+
+   <Shot id="auctions/settle/01" alt="The Auction page after the end time, labelled Auction ended, with the winning bid and the winner" />
+
+2. **Choose the settle button.** It reads **Settle and start the next auction**. If the tribe has paused auctions, it reads **Settle (no new auction)** instead. The help icon beside it explains what settling will do for this auction.
+
+   <Shot id="auctions/settle/02" alt="The Settle and start the next auction button under the ended auction" />
+
+3. **Sign in your wallet.** Review the transaction and sign. The page reports **Settlement sent**, then **Auction settled** once the network confirms it.
+
+   <Shot id="auctions/settle/03" alt="The wallet open over the Auction page, asking to sign the settlement" />
+
+4. **See the result.** The auction appears under **Past auctions**, with the winner and the winning bid. If a new auction started, the page now shows it with a **Live** label.
+
+   <Shot id="auctions/settle/04" alt="The next auction live on the Auction page, with the settled one listed under Past auctions" />
+
+### When no one bid
+
+An auction with no bids can still be settled. The token goes to the tribe's Treasury, and **Past auctions** lists it as **Unsold**. The token is not burned. Tokens held by the Treasury carry no votes, so they don't change how many votes a proposal needs. Members can later decide by proposal what to do with the token.
+
+### While auctions are paused
+
+A tribe pauses its auctions by proposal, usually to change a setting. A running auction keeps its end time during a pause. Once that time passes, **Settle (no new auction)** closes it: the winner still receives the token and the bid still goes to the Treasury, but no new auction starts until the tribe resumes auctions.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  The button calls `settle_and_create_new` on the tribe's Auction contract, or `settle_auction` while auctions are paused. Both are open to any account, and both fail with `AuctionActive` before the end time.
+
+  Settling marks the auction as settled first, then transfers the token from the Auction contract to the winner and the winning bid to the Treasury. With no bids, the token goes to the Treasury. `settle_and_create_new` then mints the next token to the Auction contract and starts a new auction, whose end time is the current time plus the tribe's auction duration.
+
+  The app checks the live auction again before you sign. If auctions were paused or resumed since you opened the page, it stops and asks you to review, so a settle-only action never turns into one that starts a new auction.
+
+  The person who settles pays the Stellar network fee in XLM. The winner doesn't need to sign anything to receive the token. The result is public on chain once confirmed. **Past auctions** reads from an index and can be a few moments behind.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **There is no settle button.** The auction hasn't ended yet, it was already settled, or it is still loading. Wait for the countdown to finish, then refresh.
+- **"This auction can't be settled yet."** The end time hasn't passed on the network. A late bid may have extended it. Wait, then try again.
+- **"Settlement state changed. Refresh and review it again."** Someone else settled first, or auctions were paused or resumed. Nothing was signed. Refresh the page.
+- **The settlement failed with `AuctionSettled`.** Another person settled the auction a moment before you. The result is the same, and you can bid on the next auction.
+
+For an error code, see [Error messages](/reference/error-messages/).
 
 ## Related
+
+- [Bid in an auction](/guides/auctions/bid/)
+- [Auction refunds](/guides/auctions/refunds/)
+- [Auction settings](/guides/auctions/settings/)
+- [The Treasury](/concepts/treasury/)

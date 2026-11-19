@@ -1,25 +1,72 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+The Platform page is the operator's view of Tribe Builder itself: the shared storage every tribe relies on, each tribe's storage, the registry of contract versions, and whether new tribes can be created. Anyone can read it. Only the platform admin wallet can make changes from it. This guide is for the people who run a Tribe Builder deployment.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- The page is at `/platform` on the app. It isn't listed in search. When you connect and sign in with the platform admin wallet, the You sheet shows a **Platform** row that links to it.
+- Reading needs no wallet. Without the admin wallet, the page says "Read only: changes need the platform admin wallet."
+- To make changes, sign in with the platform admin wallet, on the same network as Tribe Builder. Testnet is the live network today.
+- Keep XLM in that wallet for network fees. Renewing shared storage can cost more than an everyday transaction. The page shows the price before you sign.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the Platform page.** If everything is in order, the title shows **Nothing needs attention**. Otherwise, **Needs attention** lists each issue, marked **Now** or **Soon**, and links to the section it concerns.
+
+   <Shot id="platform/operators/01" alt="The Platform page with the Needs attention list at the top" />
+
+2. **Check shared storage.** **Shared storage** covers the shared contract code, the registry records and the Manager. Each group is marked **Healthy**, **Renew soon** (under 60 days left), **Renew now** (under 14 days) or **Expired**. Archived items are listed under **Archived**.
+
+   <Shot id="platform/operators/02" alt="The Shared storage section with each storage group and its status" />
+
+3. **Renew shared storage.** Choose how many days to extend it: 30, 90, 170 or a custom value of at least 5 days. Choose **Get a price**. The page shows the number of transactions, the network fee and the approximate yearly cost. Then choose **Renew for 170 days** (with the price) and sign. Archived items are restored first, then extended.
+
+   <Shot id="platform/operators/03" alt="A renewal priced for 170 days, with the fee and the Renew button" />
+
+4. **Check every tribe.** **Tribes** lists every tribe in this deployment, read from chain three at a time, most urgent first. Use **Show** to choose **All** or **Needs renewal**. Each tribe renews its own storage from **Manage**, then **Storage renewal**, and anyone can pay for it. Each row links there.
+
+   <Shot id="platform/operators/04" alt="The Tribes section filtered to tribes that need renewal" />
+
+5. **Manage the registry.** **Registry** lists every registered contract version, with labels such as **Latest**, **New tribes get this**, **Running** and **Revoked**. The admin can register an implementation, set a version as latest, choose what new tribes get, approve an upgrade path, or revoke a version.
+
+   <Shot id="platform/operators/05" alt="The Registry section with versions and their labels" />
+
+6. **Review the factory and admin.** **Factory and admin** shows whether new tribes can be created, the upgrade notice, the platform admin, any pending admin handover, and the Tribe Builder version. The admin can **Pause new tribes** or **Resume new tribes**, and change the upgrade notice.
+
+   <Shot id="platform/operators/06" alt="The Factory and admin section with the New tribes switch and the upgrade notice" />
+
+## What each change does
+
+- **Register an implementation.** Upload the code first with the deploy scripts. Registering records it in the registry. It doesn't change what is latest or what new tribes get.
+- **Use for new tribes.** Sets the versions new tribes and new modules are deployed from. Existing tribes don't change.
+- **Approve an upgrade path.** Tribes can upgrade from one version to another only along approved paths, and only by their own vote.
+- **Revoke.** This can't be undone. New tribes can't be deployed from that version, tribes can't upgrade to it, and a tribe in setup that runs it can't launch until it upgrades. Tribes already running it keep working.
+- **Pause new tribes.** New tribes and modules can't be created, launched or renamed until you resume. Existing tribes keep working.
+- **Upgrade notice.** How long a Tribe Builder upgrade waits after it is approved. A longer notice applies at once. A shorter notice applies only after the current notice has passed.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Registry, factory and admin changes are calls to the Manager contract, signed by the platform admin. They are rare and high-privilege, and each one emits an event that is public on chain.
+
+  Shared contract code is the platform's to renew, and nothing renews it automatically. A tribe's contracts extend their own code by only 4 days, which is why a renewal must be longer than that. If the platform's renewal lapses, a tribe with no activity for 4 days has its code archived, and its calls fail until someone restores it. The renewal is one or more `ExtendFootprintTTL` transactions, plus a restore for anything archived. Any funded account can run the same renewal with the script in the repository.
+
+  The app refuses to sign a transaction whose fee is far above normal, most often because it would pay to renew shared code. On the Platform page, the admin sees the price first, and the app allows a fee up to that price.
+
+  Tribe rows read each tribe's storage from chain. A renewal emits no event, so the page shows each tribe's earliest expiry, not when it was last renewed. The registry list comes from the index and is checked again on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Switch your wallet's network."** Reading works, but changes are blocked until your wallet is on Tribe Builder's network.
+- **"The registry didn't load."** Try again in a moment. Any reads that failed are listed under **Reads that failed**.
+- **"Renewal needs attention."** The renewal stopped. Get a new price and try again. If the restore step would cost much more than estimated, renewal stops there and asks for a new quote.
+- **A tribe "couldn't be checked".** Its storage couldn't be read. Open its **Storage renewal** tab to check it directly.
+- **"That change didn't go through."** The Manager refused the call. The message gives the reason. See [Error messages](/reference/error-messages/).
 
 ## Related
+
+- [Storage and renewal](/concepts/storage-and-renewal/)
+- [Upgrades](/concepts/upgrades/)
+- [Safety and security model](/concepts/safety-and-security/)
+- [Contract addresses](/reference/contract-addresses/)

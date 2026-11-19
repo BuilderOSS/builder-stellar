@@ -1,5 +1,94 @@
-<Placeholder />
+## Overview
 
-## Coming soon
+Building a tribe has four stages: create it, set it up, launch it, and hold its first vote. This page describes each stage and links to the guide with the detailed steps.
 
-This page is planned and not written yet.
+Tribe Builder runs on the Stellar test network (testnet) today, so you can try every stage with free test XLM.
+
+## Before you start
+
+- **A Stellar wallet set to Testnet, with test XLM.** [Your first 10 minutes](/start/first-10-minutes) explains how to set one up. The wallet that creates the tribe becomes its [launch admin](/reference/glossary#launch-admin) during Setup.
+- **Enough XLM for the fees.** Creating a tribe stores several contracts on the network, so its fee is higher than the fee for a vote or a bid. On testnet it has been about 10 XLM. Your wallet shows the exact fee before you approve.
+- **A name, a symbol, an image, and a short description** for the tribe.
+- **Artwork for the membership tokens**, as image layers such as backgrounds, bodies, and accessories. See [Set up: artwork](/guides/setup/artwork).
+- **The addresses of the founders**, the people who receive the first tokens.
+
+## 1. Create the tribe
+
+Select **Build a tribe** on the home page. The create form has four sections. Each section opens after the one before it.
+
+1. **Identity.** The tribe name, symbol, link, image, and description. The link is the address people share, such as `/dao/my-tribe`. See [Create a tribe: identity](/guides/create/identity).
+2. **Membership.** How people join: **Daily auction**, **Auction + resale**, **Fixed-price sales**, or **Invite only**. Then who can hold a membership: **Open membership** or **Members-only club**. See [Create a tribe: membership](/guides/create/membership).
+3. **Voting.** How fast decisions happen: **Fast**, **Balanced**, or **Deliberate**, plus **Super fast** on testnet only. Exact values, such as the quorum and the votes needed to propose, are under **Advanced settings**. See [Create a tribe: voting rules](/guides/create/voting).
+4. **Review and create.** Every choice in plain words. Nothing is signed until you select **Create tribe**. See [Create a tribe: review and create](/guides/create/review-and-deploy).
+
+The form saves your progress as a draft in this browser, under **Your drafts**. A local draft is not created on the network, shared, or approved. Only **Create tribe** sends it to the network.
+
+<Shot id="start/build-your-first-tribe/01" alt="The create form with the Identity section open" />
+
+## 2. Set it up
+
+After creation, the tribe is in **Setup**. It exists on the network, but nobody can join yet. The **Setup** page lists what is left to do, in order.
+
+1. **Add your artwork.** The layers every token is drawn from. Do this first, because each token gets its traits when it is created. See [Set up: artwork](/guides/setup/artwork).
+2. **Mint founder tokens.** At least one token, so someone can vote once you launch. See [Set up: founders](/guides/setup/founders).
+
+Two more steps appear only when they are needed:
+
+- **Pick a new link**, if another tribe launched first with the link you chose. See [Set up: your link](/guides/setup/slug).
+- **Upgrade your contracts**, if one of them is on a version that was withdrawn. See [Set up: contracts](/guides/setup/contracts).
+
+Anyone can see the Setup page and its progress. Only the launch admin can complete the steps.
+
+<Shot id="start/build-your-first-tribe/02" alt="The Setup page with artwork added and founder tokens still to mint" />
+
+## 3. Launch it
+
+When every step is done, the Setup page shows **Ready to launch**. Choose whether to **Start auctions** and **Open the market** at launch, if the tribe has them. Then select **Launch**, followed by the tribe's name, and approve the transaction.
+
+At launch, your setup admin rights pass to the tribe's treasury. After that, every change goes through a proposal that members vote on. Read [Setup versus launched](/concepts/setup-and-launch) before you launch. See [Launch your tribe](/guides/setup/launch).
+
+<Callout
+  title="Launch can't be undone"
+  description="After launch, no single wallet can change the tribe's settings, artwork, or treasury. Check every setting in Setup first."
+/>
+
+Instead of launching straight away, you can open an **assurance drive**. The tribe then launches only if enough people commit to join before a deadline. If the deadline passes first, everyone can get a refund. See [Assurance drives](/guides/setup/assurance-drives).
+
+<Shot id="start/build-your-first-tribe/03" alt="The launch card with the Start auctions choice and the Launch button" />
+
+## 4. Hold the first vote
+
+Once the tribe is live, any member with enough votes can write a proposal from **Proposals** by selecting **New proposal**. A good first proposal is small and clear, such as updating the tribe's profile or paying a contributor.
+
+Members vote during the voting period. If the proposal passes, it waits for the [safety delay](/reference/glossary#safety-delay). After that, any wallet can queue and execute it.
+
+See [Write a proposal](/guides/proposals/write), [Vote](/guides/proposals/vote), and [Queue and execute](/guides/proposals/queue-and-execute).
+
+<Shot id="start/build-your-first-tribe/04" alt="The Proposals page of a newly launched tribe with the New proposal button" />
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+
+- **Create tribe** sends one transaction to the Tribe Builder Manager contract. It deploys the tribe's own token, metadata, governor, and treasury contracts, plus the auction, market, and claims modules you chose. The launch admin is the admin of each one during Setup.
+- **Artwork** and **founder tokens** are separate transactions. A later transaction that fails does not undo earlier ones.
+- **Launch** is one transaction. It checks the setup, makes every contract live, hands every admin role to the treasury, and claims the tribe's link. If any check fails, nothing changes.
+- Each transaction has a network fee in XLM. Creation costs the most, because it stores new contracts.
+- Everything a tribe does is public on the network, including during Setup.
+
+</Disclosure>
+
+## If something goes wrong
+
+- **Creation did not confirm.** Your settings are saved. Trying again uses the same addresses, and the app checks for the earlier transaction before it signs a new one.
+- **The link is taken.** Several tribes in Setup can ask for the same link, and the first to launch gets it. Pick a new link on the Setup page.
+- **Founder tokens have no traits.** Artwork must be added before founder tokens are minted. See [Set up: artwork](/guides/setup/artwork).
+- **Launch is blocked.** The Setup page says why, in one sentence, next to the launch button.
+
+## Related
+
+- [Tribes and DAOs](/concepts/tribes-and-daos)
+- [Setup versus launched](/concepts/setup-and-launch)
+- [Membership tokens](/concepts/membership-tokens)
+- [Modules](/concepts/modules)
+- [Proposals](/concepts/proposals)

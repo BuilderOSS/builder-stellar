@@ -1,25 +1,66 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+A claim list sets aside membership tokens for specific wallets. Each wallet on the list claims its own tokens, for free or at a price per token, until the list closes. The full list is published to IPFS, so anyone can check who can claim and how much.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- The tribe must have a claims module. If it doesn't, the page says "This tribe has no claims module".
+- **Before launch:** connect and sign in with the [launch admin](/reference/glossary#launch-admin) wallet. A list opened in setup is free.
+- **After launch:** connect and sign in with a wallet that can make proposals. The list goes into a [proposal](/reference/glossary#proposal), and it can have a price. The Treasury must be the tribe's admin.
+- **Before launch, with a price:** use a launch drive instead. People pay to claim, and the tribe launches only when enough of them do. See [Assurance drives](/guides/setup/assurance-drives/).
+- Prepare a CSV file with two columns: the wallet address, then how many tokens it can claim. A header row and extra columns, such as a name, are fine. One list holds up to 10,000 wallets.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open Manage, then Claim lists.** The page shows the tribe's existing lists, then **Open a claim list**. Before launch, choose **Free list** under **List type**.
+
+   <Shot id="claims/create/01" alt="The Claim lists page in Manage with the Open a claim list form and Free list selected" />
+
+2. **Add who can claim.** Under **Who can claim**, drop a CSV on the box or choose **Choose a file**. To type the list instead, choose **Paste addresses instead** and enter one wallet per line, for example `GABC…,5`. A sample file is linked beside the box.
+
+   <Shot id="claims/create/02" alt="A CSV file loaded into the Who can claim box, with the number of rows read" />
+
+3. **Check the preview.** The preview counts **Wallets** and **Tokens** and shows the first rows. Rows that can't be read are listed with their line numbers: fix them in the file and upload it again. If a wallet appears more than once, choose **Combine their amounts** to add them up, or fix the file.
+
+   <Shot id="claims/create/03" alt="The list preview with wallet and token totals and a notice about a wallet listed twice" />
+
+4. **Set the terms.** Enter **Claims stay open for (days)**, from 1 to 365. After launch, also enter **Price per token** in the tribe's payment asset, with up to 7 decimal places. 0 makes the list free.
+
+   <Shot id="claims/create/04" alt="The Claims stay open for field set to 30 days" />
+
+5. **Publish and open the list.** Before launch, choose **Publish the list and open it**. After launch, choose **Publish the list and add to proposal**. The page shows each stage as it runs: **Build the claim tree**, **Publish the full list to IPFS**, then the last step.
+
+   <Shot id="claims/create/05" alt="The publish steps with the claim tree built and the list published to IPFS" />
+
+6. **Sign, or finish the proposal.** Before launch, you sign twice: first to let the claims module mint the list's total, then to open the list. After launch, the list is added to your proposal draft. Finish and submit the proposal, and the list opens if members vote for it. See [Write a proposal](/guides/proposals/write/).
+
+   <Shot id="claims/create/06" alt="The new claim list card marked Open, with its price, total and closing date" />
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  The app builds a merkle tree from the list in your browser. Each entry is a wallet and an amount. The full tree is published to IPFS, and only its root and IPFS link are stored on chain.
+
+  Before launch, the launch admin signs two transactions. The first is `increase_mint_allowance` on the Token, which lets the tribe's ClaimMinter mint up to the list's total. The second is `open_list` on the ClaimMinter, with the root, the IPFS link, the payment asset, a price of 0, the expiry and the total. Lists opened before launch need the tribe's artwork to be uploaded first.
+
+  After launch, the same two calls go into one proposal and run from the Treasury once the vote passes and the [safety delay](/reference/glossary#safety-delay) ends.
+
+  Payments for claims on a list opened after launch go to the Treasury. A launch drive is the only list whose payments are held until launch.
+
+  The launch admin pays the network fees in XLM for the direct transactions. The list, its root and every claim are public.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Connect and sign in with the launch admin wallet to open a list."** Before launch, only the launch admin can open a list. Connect that wallet and sign in.
+- **"The launch drive is open, so no other list can open now."** While a launch drive runs, the Treasury holds every module. New lists open only after launch, through a proposal.
+- **Rows need fixing.** Nothing is published until every row reads cleanly. Fix the rows named in the preview and upload the file again.
+- **Signing failed after the list was published.** Try again. The app reuses the list it already published to IPFS, so it isn't uploaded twice.
+- **"The tribe or your account changed. Refresh and try again."** The tribe launched, or you switched wallets, while the form was open. Refresh the page.
 
 ## Related
+
+- [Claim](/guides/claims/claim/)
+- [Claim refunds](/guides/claims/refund/)
+- [Assurance drives](/guides/setup/assurance-drives/)
+- [Modules](/concepts/modules/)

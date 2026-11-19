@@ -1,25 +1,86 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Members decide each proposal by voting For, Against, or Abstain. This guide shows how to cast your vote, add a reason, and read the results.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Connect your wallet on the tribe's network. Testnet is the live network today.
+- You need voting power at the proposal's snapshot. The snapshot is taken when the proposal is made, so the votes you held, or had [delegated](/reference/glossary#delegate) to you, at that moment are the ones that count. Tokens or delegations you receive later don't count for this proposal.
+- Voting must be open. A proposal that shows **Voting soon** opens after the tribe's wait before voting opens.
+- Have a small amount of XLM for the network fee.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the proposal.** Choose **Proposals** in the tribe's navigation. Proposals you can vote on are under **Open now**, with the **Voting** label. Choose one to open it.
+
+   <Shot id="proposals/vote/01" alt="The Proposals page with one proposal under Open now, labelled Voting" />
+
+2. **Read it.** The proposal page shows the reason under **The proposal**, and what will run under **If it passes**. The side panel shows **Voting open** and the time left to vote.
+
+   <Shot id="proposals/vote/02" alt="A proposal page with its description, the actions it would run, and the time left to vote" />
+
+3. **Check your votes.** The side panel says how many votes you have on this proposal, for example "You have 3 votes on this proposal".
+
+   <Shot id="proposals/vote/03" alt="The voting panel showing You have 3 votes on this proposal" />
+
+4. **Choose your vote.** Under **Your vote**, choose **For**, **Against** or **Abstain**.
+
+   <Shot id="proposals/vote/04" alt="The Your vote choices with For selected" />
+
+5. **Add a reason, if you want.** Type it in **Why? (optional)**. Members see your reason next to your vote.
+
+   <Shot id="proposals/vote/05" alt="The Why? (optional) box with a short reason typed in" />
+
+6. **Cast your vote.** The button names what you are doing, for example **Cast 3 votes For**. Your wallet opens to show the transaction. Review it, then sign. The page reports when the vote is sent, then **Vote cast** once the network confirms it. All your votes on this proposal go to one choice.
+
+   <Shot id="proposals/vote/06" alt="The Cast 3 votes For button below the reason box" />
+
+7. **See your vote.** After it is recorded, the panel shows **You voted For** with your reason. Your vote also appears in the list of votes, marked **You**. A vote can't be changed once it is cast.
+
+   <Shot id="proposals/vote/07" alt="The voting panel showing You voted For, and the vote in the Votes so far list" />
+
+### How a proposal passes
+
+When voting closes, a proposal passes if both of these are true:
+
+- It has more For votes than Against votes.
+- For and Abstain votes together reach the [quorum](/reference/glossary#quorum).
+
+The results panel shows both while voting is open, for example "Quorum reached (12 of 10)" and "More For than Against". Abstain helps a proposal reach quorum, but doesn't count for or against it.
+
+If it passes, the label changes to **Passed**, and the next step is to [queue it](/guides/proposals/queue-and-execute/). If it doesn't, the label changes to **Didn't pass**.
+
+### Comments
+
+Under **Discussion**, any connected wallet can post a comment on the proposal. Each comment is a separate transaction with its own network fee.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  Voting calls `cast_vote` on the tribe's Governor contract with your choice and your reason. The Governor counts your voting power at the proposal's snapshot ledger, which is the ledger before the proposal was made. A wallet with no votes at the snapshot can't vote. Each wallet can vote once on each proposal.
+
+  The quorum is stored with each proposal when it is made. It is a share of the voting supply at that moment. Tokens held by the tribe's Treasury, Auction and Marketplace don't count toward that supply.
+
+  A reason or a comment can be up to 8,192 bytes. Comments are recorded as events and aren't stored in the contract.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. Votes, voters, choices and reasons are public on chain once the transaction is confirmed. The app's list of votes reads from an index, which can be a few moments behind.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"You didn't hold any votes when this proposal was made, so you can't vote on it."** Your wallet had no voting power at the snapshot. You can vote on later proposals once you hold or are delegated votes.
+- **"You've already voted. Your vote shows here once it's indexed."** Your vote is recorded on chain. It appears in the list shortly.
+- **"Connect a wallet to vote."** Connect a wallet on the tribe's network.
+- **"This proposal changed since you opened it. Refresh and try again."** Voting may have closed, or the proposal was cancelled. Nothing was signed. Refresh the page.
+- **"Your reason is too long."** Shorten it, or post the rest as a comment under **Discussion**.
+- **"Live chain state is unavailable, so actions are paused until it refreshes."** The app couldn't read the proposal from the network. Wait a moment, then choose **Refresh**.
+- **The vote was signed but the page shows an error.** Check the transaction in the notification before you try again. If it was confirmed, the page shows **You've already voted**.
+
+For an error code, see [Error messages](/reference/error-messages/).
 
 ## Related
+
+- [Delegate your votes](/guides/members/delegate/)
+- [Queue and execute](/guides/proposals/queue-and-execute/)
+- [Votes and delegation](/concepts/votes-and-delegation/)
+- [Proposals](/concepts/proposals/)

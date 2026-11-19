@@ -1,25 +1,61 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+The Members page lists everyone who holds a membership token or has votes in the tribe. Each member has a profile with their tokens, their votes and who they delegate to. Anyone can view it, with or without a wallet.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- You don't need a wallet to browse. Connect one to see yourself marked as **You**.
+- To look someone up, have their Stellar address. Account addresses start with G, and contract addresses start with C.
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. **Open the Members page.** Choose **Members** in the tribe's navigation. Under the title, a quiet line says "Each membership is an NFT with one vote." Each row shows a member's address, how many tokens they hold and how many votes they have.
+
+   <Shot id="members/find/01" alt="The Members page with a list of members, each with a token count and a vote count" />
+
+2. **Sort the list.** Use **Sort by votes** to choose **Votes: highest first** or **Votes: lowest first**. The list is split into pages. Use the page controls at the bottom to move through it.
+
+   <Shot id="members/find/02" alt="The Sort by votes menu open with Votes: highest first selected" />
+
+3. **Find someone.** Enter a Stellar address in **Find someone** and choose **Find**. A row appears with "Open their profile". Choose it.
+
+   <Shot id="members/find/03" alt="An address entered in Find someone, with a row below to open their profile" />
+
+4. **Read a profile.** A profile shows **Tokens** and **Votes**, and a **Delegated** row if the member lets someone else vote for them. Below that, **Tokens** shows each token they hold. On your own profile, **Delegate votes** opens the delegation form.
+
+   <Shot id="members/find/04" alt="A member profile with the token and vote counts and a grid of the tokens they hold" />
+
+5. **Open a token.** Choose a token to see its artwork, who holds it under **Held by**, and its **Traits**. **View raw metadata** shows the token's data as published.
+
+   <Shot id="members/find/05" alt="A token page with its artwork, the Held by card and the Traits section" />
+
+### What the list shows
+
+- **Tokens and votes can differ.** Votes include any delegated to that address, and leave out the member's own votes if they delegated them elsewhere. A delegate can have votes without holding any tokens.
+- **"Votes go to …"** under a member means they have delegated their votes to that address.
+- **Tribe contracts.** The tribe's Treasury, Auction and Marketplace can hold tokens. They appear as, for example, "Treasury (tribe contract)" with "Held by the tribe, no votes". Tokens they hold carry no votes.
+- **Tribes with another vote source.** If a tribe's votes come from another source, the subtitle says so, the list shows tokens only, and a profile's votes come from that source. See [Vote sources](/concepts/vote-sources/).
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  The directory reads from an index of the tribe's Token contract events: transfers, mints and delegations. It is a read cache, so recent changes can take a short time to appear. Use the refresh button on the page to load the latest data.
+
+  A token page reads its holder live from the Token contract when it can. It says "Read live from the token contract". If the chain can't be read, it shows the index's answer and says actions are paused until the chain can be read.
+
+  Browsing signs nothing and costs nothing. Every holding and delegation is public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **"Members didn't load."** The index couldn't be reached. Choose **Try again**.
+- **"That isn't a valid Stellar address."** Check the address. It should start with G or C and have no spaces.
+- **"Not a member right now."** The address holds no token and has no votes in this tribe at the moment. It may have taken part before.
+- **A change you made isn't shown yet.** The index can be a few moments behind the chain. Refresh the page.
 
 ## Related
+
+- [Delegate your votes](/guides/members/delegate/)
+- [Transfer a token](/guides/members/transfer/)
+- [Membership tokens](/concepts/membership-tokens/)
+- [Votes and delegation](/concepts/votes-and-delegation/)

@@ -1,5 +1,115 @@
-<Placeholder />
+A proposal is a list of actions. If members vote for it, the actions run in order, exactly as written. This page lists every action the app can add to a proposal, grouped the way the Manage page groups a tribe's parts.
 
-## Coming soon
+## Who can do what
 
-This page is planned and not written yet.
+- **Propose.** Any wallet with at least the tribe's votes needed to propose (the proposal threshold). Votes are counted at the ledger before the proposal is made, and delegated votes count.
+- **Vote.** Any wallet that had votes when the proposal was made. See [Vote](/guides/proposals/vote).
+- **Queue and execute.** Any wallet, once the proposal is eligible. The wallet that submits pays the network fee. See [Queue and execute](/guides/proposals/queue-and-execute).
+- **Cancel.** Only the person who made the proposal, before voting ends. See [Cancel a proposal](/guides/proposals/cancel).
+
+## What happens on chain
+
+After launch, the tribe's Treasury is the admin of every tribe contract. When a proposal runs, the Treasury makes each action's contract call itself, in order, in one transaction. No person signs those calls.
+
+If any action fails, the whole proposal reverts and nothing changes. The proposal stays queued, and anyone can try again until it expires, 14 days after its safety delay ends. A proposal holds at most 20 actions.
+
+## Where actions are added
+
+The proposal composer offers actions in three places:
+
+- **Choose what to do.** Common goals in plain words, such as "Pay someone" or "Add members".
+- **Change a setting.** Each setting shows its current value, and you choose the new one.
+- **Advanced.** Actions most tribes rarely need.
+
+Some actions are prepared on their own page, such as Manage → Tribe profile or Manage → Market, and added to a proposal from there. The tables below mark these "Prepared in". See [Choose actions](/guides/proposals/actions) for the steps.
+
+## Treasury
+
+| Action | What it does | Notes |
+|---|---|---|
+| Send treasury funds ("Pay someone") | Sends XLM or another asset from the Treasury to an address. | The Treasury must hold enough of the asset when the proposal runs. |
+| Give a treasury token | Sends a membership token the Treasury holds to an address. | The Treasury must still hold the token. |
+| Buy a listing for the treasury | The Treasury buys a membership listed in the market, at no more than a set price. | Prepared in Manage → Market. The app adds "Authorize the next action (Treasury)" directly before it. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
+| Authorize the next action (Treasury) | Lets the Treasury approve the payment that the next action makes. | Added by the app only. It must come directly before the action it approves. |
+
+## Membership
+
+| Action | What it does | Notes |
+|---|---|---|
+| Mint membership tokens ("Add members") | Creates new membership tokens for one or more addresses. | At most 43 tokens to one address, or 18 addresses with one token each, in one action. |
+| Mint a membership token ("Add one member") | Creates one new membership token for an address. | |
+| Recover a membership | Moves a membership from one wallet to another, for example when a member loses access to their wallet. | DAO recovery must be on, in this proposal or an earlier one. A token held by a module, such as one in an auction, can't be moved. |
+| Lock memberships | Turns locked memberships on or off. When locked, tokens move only by sale, by being given to the tribe, or by a vote. | The new value must differ from the current one. |
+| Members-only delegation | Turns on or off the rule that votes can be delegated only to members. | The new value must differ from the current one. |
+| DAO recovery | Turns on or off the tribe's power to move any membership by vote. | The new value must differ from the current one. |
+| Change a mint allowance | Raises or lowers how many tokens a module, such as the auction or claims, may mint. | The module must be registered. |
+| Approve a membership transfer | Moves a membership that its holder has approved the Treasury to move. | Advanced. The holder's approval must still be valid. |
+| Change a transfer agent | Lets a module move memberships while they are locked, or stops it. | Advanced. The module must be registered. |
+| Open a claim list | Opens a list of people who can claim tokens, with an optional price and an end date. | Prepared in Manage → Claim lists. Raise the claims module's mint allowance first, or every claim fails. See [Make a claim list](/guides/claims/create). |
+| Add artwork layers | Adds artwork layers and items that new tokens are drawn from. | Prepared in Manage → Artwork. At most 16 layers and 30 items in one action. |
+| Change the artwork renderer | Changes where token images are drawn from. Existing token images can change too. | Prepared in Manage → Artwork. |
+| Seed traits for a token | Gives artwork traits to a token minted before the artwork was added. | Prepared in Manage → Artwork. |
+| Add a module | Creates a new auction, market or claims module for the tribe. | Prepared in Manage → Membership. A tribe has at most one module of each kind. |
+| Register a module | Adds an existing contract to the tribe as a module. | Prepared in Manage → Membership. |
+| Remove a module | Removes a module from the tribe. | Prepared in Manage → Membership. |
+
+## Voting rules
+
+| Action | What it does | Limits |
+|---|---|---|
+| Change the wait before voting opens | Sets how long after a proposal is made before members can vote (voting delay). | 5 minutes to 30 days |
+| Change how long voting stays open | Sets how long members have to vote (voting period). | 5 minutes to 30 days |
+| Change the safety delay | Sets how long a passed proposal waits after it's queued before it can run (queue delay). | 5 minutes to 30 days |
+| Change the votes needed to propose | Sets how many votes someone needs to make a proposal (proposal threshold). | At least 1 vote |
+| Change the quorum | Sets the share of all votes that must be For or Abstain for a proposal to pass. | 0.01% to 100% |
+
+The wait before voting, the voting period and the quorum are fixed when each proposal is made. The safety delay in force when a proposal is queued is the one it waits for. See [Manage: governance](/guides/manage/governance).
+
+## Selling: auctions
+
+Auction settings change only while auctions are paused. Put "Pause auctions" first in the proposal, and "Resume auctions" last if you want them to start again. See [Manage: auction](/guides/manage/auction).
+
+| Action | What it does | Limits |
+|---|---|---|
+| Pause auctions | Stops auctions until a vote resumes them. | Auctions must be running. |
+| Resume auctions | Starts auctions again, with any new settings. | Auctions must be paused. |
+| Change the starting price | Sets the lowest opening bid (reserve price). | At least 1,000 stroops (0.0001 XLM) |
+| Change how long each auction runs | Sets the auction duration. | 5 minutes to 30 days |
+| Change how much time a late bid adds | Sets how much a bid near the end extends the auction (time buffer). | 1 second to 1 day |
+| Change the minimum bid increase | Sets how much higher each new bid must be than the last. | 1% to 100% |
+| Change the auction payment asset | Changes the asset bids are paid in. | Advanced. Not possible after the first bid. |
+| Cancel the current auction | Refunds the top bid and sends the token to the Treasury. | Auctions must be paused first. |
+
+## Selling: market
+
+| Action | What it does | Limits |
+|---|---|---|
+| Change the resale fee | Sets the fee the tribe takes on each resale in the market. | 0% to 25% |
+| Change the market payment asset | Changes the asset buyers pay in. Open listings keep the asset they were listed in. | XLM or USDC |
+| Pause the market | Stops sales in the market until a vote reopens it. | |
+| Reopen the market | Lets sales in the market start again. | |
+| Open a quick-buy pool | Sells newly minted tokens at a fixed price, with limits per wallet and per period. | Prepared in Manage → Market. Raise the market's mint allowance first. At most 8 pools open at once. |
+| Close a pool | Stops sales from a pool. | The pool must be open. |
+| Sweep a closed pool | Returns a closed pool's unsold tokens to the Treasury. | The pool must be closed. At most 25 tokens per sweep. |
+| Open a module | Starts a new auction or market module for the first time. | Prepared in Manage → Membership. An auction needs a mint allowance first. |
+
+See [Marketplace pools](/guides/marketplace/pools) and [Manage: marketplace](/guides/manage/marketplace).
+
+## Tribe
+
+| Action | What it does | Notes |
+|---|---|---|
+| Rename the tribe | Changes the tribe's name and token symbol. | No quotes, backslashes or control characters. |
+| Change the tribe link | Changes the tribe's link on tribes.build. | Prepared in Manage → Tribe profile. Propose it on its own: if another tribe takes the link first, the whole proposal fails. |
+| Update the tribe profile | Replaces the description, links and image people see. | Prepared in Manage → Tribe profile. If another profile update runs first, this one fails, and you propose again. |
+
+See [Manage: profile](/guides/manage/profile).
+
+## System
+
+| Action | What it does | Notes |
+|---|---|---|
+| Upgrade a module | Moves one of the tribe's contracts to a newer release that the platform has approved. | Prepared in Manage → Contract upgrades. An unapproved upgrade fails and changes nothing. See [Upgrades](/concepts/upgrades). |
+| Migrate module storage | Updates a contract's stored data after an upgrade that needs it. | Not offered yet: every contract is on its first storage version. |
+
+Source: `docs/PROPOSAL_ACTIONS.md` and `apps/web/src/lib/proposal-actions/catalog.ts`. Each action's errors are listed in [Error messages](/reference/error-messages).

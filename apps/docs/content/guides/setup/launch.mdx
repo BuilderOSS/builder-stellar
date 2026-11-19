@@ -1,25 +1,75 @@
-<Placeholder />
-
 ## Overview
 
-What you want to do, in one or two plain sentences.
+Launching opens your tribe to members. In one transaction, control of every setting passes from the [launch admin](/reference/glossary#launch-admin) to the tribe's [treasury](/reference/glossary#treasury). From then on, every change goes through a [proposal](/reference/glossary#proposal) that members vote on.
 
 ## Before you start
 
-Who can do this, which wallet you need, and anything else to have ready.
+- Complete the required steps in the launch checklist: [artwork](/guides/setup/artwork) and [founder tokens](/guides/setup/founders). If the checklist shows **Pick a new link** or **Upgrade your contracts**, finish those too. See [Set up: your link](/guides/setup/slug) and [Set up: contracts](/guides/setup/contracts).
+- Connect the launch admin wallet, sign in, and use the tribe's network.
+- If you want the tribe to launch only once enough people commit, read [Assurance drives](/guides/setup/assurance-drives) first. A drive replaces this step.
+
+<Callout title="Launching can't be undone" description="After launch, you no longer change settings directly. The treasury holds every contract, and changes require DAO governance: a proposal that members vote on." />
 
 ## Steps
 
-Each step will have one screenshot from the app, in your theme.
+1. Open the launch checklist: on your tribe's page, select **Go to launch**. The page is titled **Set up and launch**. Under **Required to launch**, every step is marked done.
+
+   <Shot id="setup/launch/01" alt="The Set up and launch page with both required steps marked done" />
+
+2. Check **Review (optional)**. It shows what you chose at creation: **Auctions**, **Voting rules**, **Market**, and **Claims**, for the modules your tribe has. Select **Edit** to change one now. You can also change these later by a vote.
+
+   <Shot id="setup/launch/02" alt="The Review (optional) list with Auctions and Voting rules and their Edit buttons" />
+
+3. In the **Launch** card, under **What starts at launch**, choose what opens straight away:
+   - **Start auctions**: the first token goes up for auction right away.
+   - **Open the market**: members can list and buy tokens.
+
+   The switches start from the choices in your draft when the draft is in this browser. Check them before you launch. Anything you leave off stays closed until a vote opens it.
+
+   <Shot id="setup/launch/03" alt="The Launch card with the Start auctions switch on and the list of what launching does" />
+
+4. Read **What launching does**. It lists the consequences: your setup admin rights pass to the tribe treasury, changes then go through proposals, and your link is claimed.
+
+   <Shot id="setup/launch/04" alt="The What launching does list in the Launch card" />
+
+5. Select **Launch** followed by your tribe's name. A dialog asks you to confirm and says "This can't be undone." Select **Sign and launch**, then approve the transaction in your wallet.
+
+   <Shot id="setup/launch/05" alt="The Launch dialog with the list of consequences and the Sign and launch button" />
+
+6. When the launch confirms, the card says your tribe is live. Select **Go to the tribe**. The directory can take a moment to show the change.
+
+   <Shot id="setup/launch/06" alt="The Launch card saying the tribe is live, with the Go to the tribe button" />
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Which contracts are called, what it costs, how long it takes, and who can see it.
+  **Sign and launch** sends one transaction to the Tribe Builder factory contract (the Manager). Before it changes anything, the Manager checks that:
+
+  - the tribe has at least one vote held by a member (tokens held by the treasury or by a module do not count);
+  - your wallet is still the launch admin and the token's admin;
+  - no other tribe has claimed your link;
+  - every contract runs approved code that has not been withdrawn;
+  - each module still uses the payment asset chosen at creation.
+
+  If any check fails, nothing launches and the tribe stays in setup.
+
+  If every check passes, the Manager launches the token, the governor, the treasury, each module, and the artwork and profile contract. Each contract's admin becomes the treasury, and the Manager keeps no authority over the tribe. A started auction can mint one token per auction for as long as it runs. Other sales, such as quick-buy pools and claim lists, mint only what a vote allows them. The link is claimed for your tribe.
+
+  You pay the Stellar network fee, which your wallet shows before you sign. The launch is public on the network as soon as it confirms.
 </Disclosure>
 
 ## If something goes wrong
 
-What to check, and how to recover.
+- **The launch button is unavailable.** Read the hint beside it, such as "Add your artwork first.", "Mint founder tokens first.", or "Connect the launch admin wallet to launch."
+- **"We couldn't confirm your launch rights"**. The factory contract has a different launch admin for this tribe. Refresh the page and check you are using the right wallet.
+- **"Token admin has moved"**. The membership token is no longer controlled by the launch admin, so the launch would be refused.
+- **"Payment assets changed"**. An auction or market no longer uses the asset chosen at creation. Restore it before you launch.
+- **"Another tribe launched first with your link."** Choose a new link in the **Pick a new link** step, then launch again.
+- **"Your launch is in progress"**. A launch transaction was sent from this browser, but the page has not seen its result. Select **Check the launch** before anything else. **Send it again** resends the same signed transaction. Neither one signs anything new. Don't launch twice.
 
 ## Related
+
+- [Setup versus launched](/concepts/setup-and-launch)
+- [Assurance drives](/guides/setup/assurance-drives)
+- [Write a proposal](/guides/proposals/write)
+- [Bid in an auction](/guides/auctions/bid)

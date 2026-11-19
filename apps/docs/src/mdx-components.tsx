@@ -6,7 +6,17 @@ import NextLink from 'next/link';
 import type { ComponentProps } from 'react';
 
 import { GlossaryList } from '@/components/glossary-list';
-import { proseCode, proseH2, proseH3, proseLink, proseList, proseP, prosePre } from '@/components/prose';
+import {
+  proseCode,
+  proseH2,
+  proseH3,
+  proseLink,
+  proseList,
+  proseP,
+  prosePre,
+  proseTable,
+  proseTableWrap
+} from '@/components/prose';
 import { Shot } from '@/components/shot';
 
 function Link({ href = '', children, ...props }: ComponentProps<'a'>) {
@@ -50,6 +60,11 @@ const components: MDXComponents = {
   a: Link,
   code: (props) => <code className={proseCode} {...props} />,
   pre: (props) => <pre className={prosePre} {...props} />,
+  table: (props) => (
+    <div className={proseTableWrap}>
+      <table className={proseTable} {...props} />
+    </div>
+  ),
   Callout,
   Disclosure,
   GlossaryList,
