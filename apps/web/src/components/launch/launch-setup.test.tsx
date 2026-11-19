@@ -58,10 +58,6 @@ vi.mock('@/components/create-dao/launch-readiness', () => ({
   launchReadinessIssues: () => []
 }));
 vi.mock('@/components/create-dao/SlugRename', () => ({ SlugRename: () => <div>Rename form</div> }));
-vi.mock('@/stores/create-dao-store', () => {
-  const store = Object.assign(() => [], { persist: { rehydrate: async () => {} }, getState: () => ({ drafts: [] }) });
-  return { useCreateDaoStore: store };
-});
 vi.mock('@/stores/local-preferences-store', () => {
   const prefs = { launches: {}, setLaunch: vi.fn() };
   const store = Object.assign((selector: (s: typeof prefs) => unknown) => selector(prefs), {
@@ -71,6 +67,7 @@ vi.mock('@/stores/local-preferences-store', () => {
   return { useLocalPreferencesStore: store, preferenceScopeKey: () => 'scope', assertPreferencesSaved: () => {} };
 });
 
+import { launchDefaults } from './launch-card';
 import { LaunchSetup } from './launch-setup';
 
 // The existing Vitest config uses classic JSX, while Next uses the automatic runtime.
@@ -87,8 +84,15 @@ const config = {
   status: 'pending'
 } as never;
 const readiness = (patch: Record<string, unknown> = {}) => ({
-  pending: { launch_admin: ADMIN, slug: 'lantern-club', auction_payment_asset: 'CA', marketplace_payment_asset: 'CA' },
+  pending: {
+    launch_admin: ADMIN,
+    slug: 'lantern-club',
+    auction_payment_asset: 'CA',
+    marketplace_payment_asset: 'CA',
+    addresses: { token: 'CDAO', auction: 'CAUCTION' }
+  },
   supply: 0n,
+  proposalThreshold: 1n,
   admin: ADMIN,
   live: false,
   paymentAssetsMatch: true,
@@ -124,7 +128,7 @@ describe('LaunchSetup', () => {
     const html = render();
     expect(html).toContain('All required steps done');
     expect(html).toContain('2 layers · 8 traits');
-    expect(html).toContain('3 tokens minted');
+    expect(html).toContain('3 voting tokens minted');
     // Saved launch choices load in an effect, so a static render can't show the button enabled;
     // the hint comes from the same plan that enables it.
     expect(html).toContain('Ready to launch.');
@@ -132,6 +136,26 @@ describe('LaunchSetup', () => {
     expect(html.replace(/<!-- -->/g, '')).toContain(
       'Your link /dao/lantern-club is claimed. Changing it later takes a vote.'
     );
+  });
+
+  it('starts the auction by default when the tribe was created with one, on any device', () => {
+    state.readiness = readiness({ supply: 3n });
+    state.artwork = artwork(2);
+    const html = render();
+    const auctionSwitch = html.match(/<label[^>]*data-scope="switch"[^>]*>/)?.[0] ?? '';
+    expect(auctionSwitch).toContain('data-state="checked"');
+    expect(html).toContain('On: the first token goes up for auction right away.');
+    expect(html).not.toContain('No one could propose after launch');
+  });
+
+  it('warns at launch when founders hold fewer votes than a proposal needs', () => {
+    state.readiness = readiness({ supply: 1n, proposalThreshold: 2n });
+    state.artwork = artwork(2);
+    const html = render();
+    expect(html).toContain('No one could propose after launch');
+    expect(html).toContain('A proposal needs 2 votes. Members hold 1 vote');
+    // It is a warning: the plan can still launch.
+    expect(html).toContain('Ready to launch.');
   });
 
   it('adds the rename step when another community took the link', () => {
@@ -259,5 +283,16 @@ describe('LaunchSetup', () => {
     expect(html).toContain('0 of 2 required steps done');
     expect(html).not.toContain('Launch Lantern Club');
     expect(html).not.toContain('Add artwork');
+  });
+});
+
+describe('launchDefaults', () => {
+  const modules = { auctionContractId: 'CINDEXED', marketplaceContractId: '' };
+  it('follows the modules on chain once the pending DAO is read', () => {
+    const pending = { addresses: { auction: undefined, marketplace: 'CMARKET' } } as never;
+    expect(launchDefaults(modules, { pending })).toEqual({ auction: false, marketplace: true });
+  });
+  it('falls back to the indexed modules before the chain read arrives', () => {
+    expect(launchDefaults(modules, undefined)).toEqual({ auction: true, marketplace: false });
   });
 });

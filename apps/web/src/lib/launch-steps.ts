@@ -1,4 +1,5 @@
 import type { LaunchReadiness } from '@/components/create-dao/launch-readiness';
+import { proposalThresholdWarning } from '@/lib/proposal-threshold-warning';
 
 export type StepStatus = 'done' | 'todo' | 'blocked' | 'loading';
 
@@ -24,6 +25,11 @@ export type LaunchPlan = {
   canLaunch: boolean;
   /** Why the launch button is disabled, in one short sentence. */
   launchHint: string;
+  /**
+   * Launch would succeed, but members would hold fewer votes than a proposal needs, so no one
+   * could propose afterwards. Null when there is nothing to warn about.
+   */
+  proposalWarning: string | null;
 };
 
 type ArtworkState = { properties: Array<{ id: number; count: number }> } | undefined;
@@ -56,7 +62,8 @@ export function buildLaunchPlan({
       doneCount: 0,
       totalCount: 0,
       canLaunch: false,
-      launchHint: 'This tribe is already live.'
+      launchHint: 'This tribe is already live.',
+      proposalWarning: null
     };
 
   const layers = artwork?.properties.length ?? 0;
@@ -71,16 +78,23 @@ export function buildLaunchPlan({
       : 'The layers every token is drawn from. Do this first.'
   };
 
+  // `supply` is the voting supply: tokens held by the treasury or a sales module don't count.
   const supply = readiness?.supply ?? 0n;
   const foundersDone = supply > 0n;
+  const proposalWarning = foundersDone
+    ? proposalThresholdWarning({ supply, threshold: readiness?.proposalThreshold })
+    : null;
   const foundersStep: LaunchStep = {
     id: 'founders',
     title: 'Mint founder tokens',
     status: !readiness ? 'loading' : foundersDone ? 'done' : 'todo',
     detail: foundersDone
-      ? `${plural(supply, 'token', 'tokens')} minted`
-      : 'At least one token, so someone can vote once you launch.',
-    caution: !foundersDone && artwork && !artworkDone ? 'Add artwork first so founder tokens get traits.' : undefined
+      ? `${plural(supply, 'voting token', 'voting tokens')} minted`
+      : 'At least one token held by a member (not the treasury), so someone can vote once you launch.',
+    caution:
+      !foundersDone && artwork && !artworkDone
+        ? 'Add artwork first so founder tokens get traits.'
+        : (proposalWarning ?? undefined)
   };
 
   const required = [artworkStep, foundersStep];
@@ -142,5 +156,14 @@ export function buildLaunchPlan({
               ? 'Fix the problem above first.'
               : '';
 
-  return { live: false, required, blockers, doneCount, totalCount: counted.length, canLaunch, launchHint };
+  return {
+    live: false,
+    required,
+    blockers,
+    doneCount,
+    totalCount: counted.length,
+    canLaunch,
+    launchHint,
+    proposalWarning
+  };
 }

@@ -23,8 +23,12 @@ import type { LaunchPlan } from '@/lib/launch-steps';
 import { formatClaimDate } from '@/lib/minter/display';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-import { useCreateDaoStore } from '@/stores/create-dao-store';
-import { assertPreferencesSaved, preferenceScopeKey, useLocalPreferencesStore } from '@/stores/local-preferences-store';
+import {
+  assertPreferencesSaved,
+  type LocalLaunch,
+  preferenceScopeKey,
+  useLocalPreferencesStore
+} from '@/stores/local-preferences-store';
 
 import { ReleaseSlug } from './release-slug';
 
@@ -103,6 +107,22 @@ export function LaunchDriveCard({
 }
 
 /**
+ * What starts at launch when the launch admin has not chosen on this device: every sales module the
+ * tribe was created with. Modules come from the pending DAO on chain when it has been read, else
+ * from the index.
+ */
+export function launchDefaults(
+  config: Pick<DaoNetworkConfig, 'auctionContractId' | 'marketplaceContractId'>,
+  readiness: Pick<LaunchReadiness, 'pending'> | undefined
+): LocalLaunch {
+  const modules = readiness?.pending?.addresses;
+  return {
+    auction: Boolean(modules ? modules.auction : config.auctionContractId),
+    marketplace: Boolean(modules ? modules.marketplace : config.marketplaceContractId)
+  };
+}
+
+/**
  * Choose what starts, see what launching does, and launch. Launch re-reads readiness right before
  * signing; a saved launch transaction switches the card to its recovery state.
  */
@@ -131,35 +151,23 @@ export function LaunchCard({
   const { launchDao } = useDaoDeployment(session.address, config.name);
   const deployment = getDeploymentConfig();
   const key = `${preferenceScopeKey({ network: config.name, deployment: deployment.managerAddress, wallet: session.address || null })}:${daoId}`;
-  const choice = launches[key] ?? { auction: false, marketplace: false };
+  // Until the launch admin changes a switch, each one follows the tribe's deployed modules: a
+  // tribe created with an auction starts it at launch. Read from the chain (the pending DAO's
+  // addresses), falling back to the index, so it is the same on every device.
+  const defaults = launchDefaults(config, readiness);
+  const saved = launches[key];
+  const choice: LocalLaunch = saved ?? defaults;
 
-  // First visit: start from what was chosen when the community was created.
   useEffect(() => {
     let canceled = false;
     void (async () => {
-      await Promise.all([useCreateDaoStore.persist.rehydrate(), useLocalPreferencesStore.persist.rehydrate()]);
-      if (canceled) return;
-      const prefs = useLocalPreferencesStore.getState();
-      const draft = useCreateDaoStore
-        .getState()
-        .drafts.find(
-          (d) =>
-            d.deployment?.addresses?.token === daoId &&
-            d.scope.network === config.name &&
-            d.scope.deployment === deployment.managerAddress &&
-            d.scope.wallet === session.address
-        );
-      if (!prefs.launches[key] && draft)
-        prefs.setLaunch(key, {
-          auction: draft.configuration.auction.enabled,
-          marketplace: draft.configuration.marketplace.enabled
-        });
-      setReady(true);
+      await useLocalPreferencesStore.persist.rehydrate();
+      if (!canceled) setReady(true);
     })();
     return () => {
       canceled = true;
     };
-  }, [key, daoId, config.name, deployment.managerAddress, session.address]);
+  }, []);
 
   const recover = Boolean(choice.hash && !['failed', 'rejected', 'expired'].includes(choice.status ?? ''));
   const confirmed = choice.status === 'confirmed';
@@ -249,7 +257,11 @@ export function LaunchCard({
             {config.auctionContractId ? (
               <Switch
                 label="Start auctions"
-                description="The first token goes up for auction right away."
+                description={
+                  choice.auction
+                    ? 'On: the first token goes up for auction right away.'
+                    : 'Off: no auction starts at launch. A vote can start auctions later.'
+                }
                 checked={choice.auction}
                 disabled={!ready || busy || !admin}
                 onCheckedChange={(auction) => change({ auction })}
@@ -258,7 +270,11 @@ export function LaunchCard({
             {config.marketplaceContractId ? (
               <Switch
                 label="Open the market"
-                description="Members can list and buy tokens."
+                description={
+                  choice.marketplace
+                    ? 'On: members can list and buy tokens from launch.'
+                    : 'Off: the market stays closed at launch. A vote can open it later.'
+                }
                 checked={choice.marketplace}
                 disabled={!ready || busy || !admin}
                 onCheckedChange={(marketplace) => change({ marketplace })}
@@ -281,6 +297,9 @@ export function LaunchCard({
         </>
       )}
 
+      {!recover && plan.proposalWarning ? (
+        <Callout variant="warning" title="No one could propose after launch" description={plan.proposalWarning} />
+      ) : null}
       {plan.blockers.map((blocker) => (
         <Callout key={blocker.id} variant="error" title={blocker.title} description={blocker.detail} />
       ))}
@@ -354,8 +373,14 @@ export function LaunchCard({
         <ul className={consequences}>
           <li>Your setup admin rights pass to the tribe treasury.</li>
           <li>After this, changes go through proposals.</li>
-          {choice.auction ? <li>The first auction starts right away.</li> : null}
-          {choice.marketplace ? <li>The market opens.</li> : null}
+          {config.auctionContractId ? (
+            <li>
+              {choice.auction ? 'The first auction starts right away.' : 'Auctions stay off until a vote starts them.'}
+            </li>
+          ) : null}
+          {config.marketplaceContractId ? (
+            <li>{choice.marketplace ? 'The market opens.' : 'The market stays closed until a vote opens it.'}</li>
+          ) : null}
           {slug ? <li>/dao/{slug} is claimed. Changing it later takes a vote.</li> : null}
         </ul>
       </Dialog>

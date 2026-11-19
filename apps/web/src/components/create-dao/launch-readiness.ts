@@ -1,5 +1,6 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { Client as ClaimMinterClient } from '@builder-stellar/claim-minter-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { type Assurance, Client as ManagerClient, type PendingDao } from '@builder-stellar/manager-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
@@ -9,7 +10,16 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 
 export type LaunchReadiness = {
   pending: PendingDao | null;
+  /**
+   * The token's `total_supply`, which is its voting supply: tokens held by the Treasury or by a
+   * non-voting module (Auction, Marketplace) are left out. Manager.launch_dao needs it above zero.
+   */
   supply: bigint;
+  /**
+   * Votes one wallet needs to propose (Governor `proposal_threshold`), or null when it could not
+   * be read or the tribe votes through another source, where token supply says nothing about it.
+   */
+  proposalThreshold: bigint | null;
   admin: string;
   live: boolean;
   /** Every module the DAO has still uses the payment asset recorded at creation. */
@@ -19,6 +29,27 @@ export type LaunchReadiness = {
   /** The requested slug is already claimed by another launched DAO (launch would fail with SlugTaken). */
   slugTaken: boolean;
 };
+async function readProposalThreshold(
+  options: { rpcUrl: string; networkPassphrase: string; allowHttp: boolean },
+  governorId: string,
+  daoId: string
+): Promise<bigint | null> {
+  try {
+    const governor = new GovernorClient({ ...options, contractId: governorId });
+    const [threshold, source] = await Promise.all([
+      governor.proposal_threshold(),
+      // Governor 0.4.0 has no vote_source and always votes with the token.
+      governor.vote_source().then(
+        (tx) => tx.result,
+        () => daoId
+      )
+    ]);
+    return source === daoId ? threshold.result : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfig): Promise<LaunchReadiness> {
   const deployment = getDeploymentConfig();
   if (deployment.name !== config.name) throw new Error('DAO network does not match the configured Manager');
@@ -39,6 +70,7 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
   const pending = pendingTx.result;
   let paymentAssetsMatch = false;
   let slugTaken = false;
+  let proposalThreshold: bigint | null = null;
   if (pending) {
     // get_dao_by_slug resolves launched DAOs only; a hit for another DAO means
     // this request lost the race and launch_dao would fail (SlugTaken, 7123).
@@ -48,6 +80,7 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
     // Each module the DAO has must still use the asset recorded when it was created (launch
     // refuses otherwise, PaymentAssetMismatch); a module it does not have has nothing to check.
     const { auction, marketplace, claims } = pending.addresses;
+    const thresholdRead = readProposalThreshold(options, pending.addresses.governor, daoId);
     const checks = await Promise.all([
       auction
         ? new AuctionClient({ ...options, contractId: auction })
@@ -66,10 +99,12 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
         : true
     ]);
     paymentAssetsMatch = checks.every(Boolean);
+    proposalThreshold = await thresholdRead;
   }
   return {
     pending,
     supply: supplyTx.result,
+    proposalThreshold,
     admin: adminTx.result,
     live: liveTx.result,
     paymentAssetsMatch,
@@ -87,7 +122,8 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
   if (!readiness.pending || readiness.pending.launch_admin !== launchAdmin)
     issues.push('Pending DAO admin rights could not be verified on this Manager.');
   if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
-  if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
+  if (readiness.supply <= 0n)
+    issues.push('Mint at least one founder token to a member (not the treasury) before launch.');
   if (readiness.slugTaken && readiness.pending)
     issues.push(`Another tribe launched first with /dao/${readiness.pending.slug}. Choose a different link below.`);
   if (!readiness.paymentAssetsMatch)
