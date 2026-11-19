@@ -12,10 +12,10 @@ import { FRIENDBOT_URL, TESTNET_PASSPHRASE } from './network.ts';
 export const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 export const HORIZON_TESTNET = 'https://horizon-testnet.stellar.org';
 
-/** The separate e2e Manager (decision E1). Written by deploy-manager.mjs from configs/testnet-e2e-manager.json. */
+/** The dev deployment's Manager (dev.tribes.build, docs/DEV_DEPLOYMENT.md); E2E_MANAGER_ARTIFACT overrides it. */
 export const E2E_MANAGER_ARTIFACT = resolve(
   REPO_ROOT,
-  process.env.E2E_MANAGER_ARTIFACT?.trim() || 'deploys/e2e-walk-testnet-manager.json'
+  process.env.E2E_MANAGER_ARTIFACT?.trim() || 'deploys/dev-testnet-manager.json'
 );
 
 /** Identities the preflight funds: the four wallets and the app server's SEP-53/SEP-10 signing key. */
@@ -166,7 +166,7 @@ export type ManagerCheck =
   | { status: 'mismatch'; manager: string; mismatches: HashMismatch[] };
 
 /**
- * Compare the e2e Manager on testnet with `stellar contract build` output (§13.1): a walkthrough
+ * Compare the dev Manager on testnet with `stellar contract build` output (§13.1): a walkthrough
  * against older contracts tests the wrong code. `build: false` reuses the current target/ output.
  */
 export function checkManager({ build = true, log = console.info }: { build?: boolean; log?: Log } = {}): ManagerCheck {
@@ -189,8 +189,8 @@ export function describeMismatch(check: Extract<ManagerCheck, { status: 'mismatc
     (m) => `  ${m.contract.padEnd(12)} on chain ${m.onChain ?? '(unset)'}\n${''.padEnd(15)}built    ${m.built}`
   );
   return (
-    `The e2e Manager ${check.manager} does not run this checkout's contracts:\n${rows.join('\n')}\n` +
-    'Upgrade it (docs/qa/WALKTHROUGHS.md, "Upgrade the e2e Manager to dev") or redeploy, then run again.'
+    `The dev Manager ${check.manager} does not run this checkout's contracts:\n${rows.join('\n')}\n` +
+    'Upgrade it (docs/qa/WALKTHROUGHS.md, "When contracts change on `dev`") or redeploy, then run again.'
   );
 }
 
@@ -207,11 +207,11 @@ export async function preflight({
   const identities = FUNDED_IDENTITIES.map((name) => loadIdentity(name, undefined, { create: true }));
   const funded = await fundIdentities(identities, { log });
 
-  log('Preflight: e2e Manager contracts');
+  log('Preflight: dev Manager contracts');
   const manager = checkManager({ build, log });
   if (manager.status === 'mismatch') throw new Error(describeMismatch(manager));
   if (manager.status === 'no-manager') {
-    const message = `No e2e Manager artifact at ${manager.artifact} (docs/qa/WALKTHROUGHS.md, "Deploy the e2e Manager").`;
+    const message = `No dev Manager artifact at ${manager.artifact} (docs/qa/WALKTHROUGHS.md, "The dev Manager").`;
     if (requireManager) throw new Error(message);
     log(`  ${message} Chain flows will refuse to run; auth and read-only flows go ahead.`);
   } else {

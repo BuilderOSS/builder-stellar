@@ -430,6 +430,7 @@ The deck and the MIDAO team update use the wording "space optional" and present 
 | 2026-11-18 | Plan drafted | Claude |
 | 2026-11-18 | Q1: a test-only E2E Wallet module, flag-gated with a production build assertion, plus one manual Freighter smoke pass per release | User |
 | 2026-11-18 | E1: a separate testnet e2e Manager with its own indexer pipeline and deployment id | User |
+| 2026-11-19 | E1 revised: walkthroughs run on the dev deployment (dev.tribes.build's Manager, pipeline and database) instead of a separate e2e Manager; walkthrough tribes are prefixed `E2E ` | User |
 | 2026-11-18 | Q4: the docs are a custom Next.js MDX site on a Panda preset shared with the app | User |
 | 2026-11-18 | Q3: hybrid responsive coverage. Chain flows run at desktop on each run, with a full mobile and tablet rotation weekly. The state and form tour covers 3 viewports × 2 themes. | User |
 | 2026-11-18 | Defaults, pending override: E2 signs in-process through `exposeBinding`; E3 uses a shared theme cookie on `.tribes.build`; Q5 hosts the docs on Vercel at docs.tribes.build; Q6 keeps a ledger in the repo plus GitHub issues for P0 and P1; Q7 the showcase art is designed by us; Q8 covers members and founders, with a short operator page and NQG shown as coming; Q9 keeps share cards Dusk-only; Q10 registers a test implementation with the platform admin key; Q11 puts funded testnet secrets in GitHub Actions | Claude, stated to the user |

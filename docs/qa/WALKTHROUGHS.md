@@ -2,11 +2,11 @@
 
 The walkthrough suite drives the real app in a browser, against testnet, through every user flow
 (plan: `docs/plans/walkthroughs-and-docs.md` §3). It lives in `apps/e2e`. This page is the runbook:
-the exact commands to set it up, run it, read the results and look after the e2e Manager.
+the exact commands to set it up, run it, read the results and look after the dev Manager.
 
 Today (phase P1) it has the harness and one smoke flow, **W01**: connect a wallet, sign in with
 SEP-53, sign out, refuse a signature, and fall back to SEP-10. Chain flows (W03 onwards) arrive in P2
-and need the e2e Manager below.
+and need the dev Manager below.
 
 All commands run from the repository root unless a `cd` says otherwise.
 
@@ -75,7 +75,7 @@ The suite uses these `stellar keys` identities on the machine that runs it:
 |---|---|
 | `e2e-founder` | The default wallet account; deploys and launches tribes |
 | `e2e-member-a`, `e2e-member-b` | Second and third voters, bidders and buyers |
-| `e2e-operator` | Admin of the e2e Manager; reads views in the preflight |
+| `e2e-operator` | Reads the Manager's views in the preflight |
 | `e2e-web-auth` | The app server's SEP-53/SEP-10 signing key (`STELLAR_WEB_AUTH_SECRET`), not a wallet |
 
 The preflight creates any that are missing (`stellar keys generate`, stored locally) and funds them
@@ -85,13 +85,13 @@ through Friendbot. It prints names and public addresses only.
 pnpm --dir apps/e2e preflight --skip-build
 ```
 
-`--skip-build` skips `stellar contract build`; leave it off once an e2e Manager exists, so the
+`--skip-build` skips `stellar contract build`; leave it off once the dev Manager exists, so the
 contract check compares against a fresh build.
 
 ### Database (optional for W01)
 
 The app reads its read model from Postgres. W01 doesn't need it: the home page shows "Tribes didn't
-load" without one, and sign-in still works. Chain flows need the e2e read model (see the e2e Manager
+load" without one, and sign-in still works. Chain flows need the dev read model (see the dev Manager
 below). Put its read-only URL in `apps/e2e/.env.local` (gitignored):
 
 ```bash
@@ -173,126 +173,34 @@ pnpm --dir apps/e2e typecheck
 pnpm --dir apps/web exec vitest run src/lib/e2e-wallet scripts
 ```
 
-## The e2e Manager (decision E1)
+## The dev Manager
 
-Tribes the suite creates must not appear in the public testnet app. So the suite gets its own
-Manager, indexed by its own Goldsky pipeline under its own deployment id, into its own database.
+Chain flows run against **the dev deployment**: the testnet Manager behind dev.tribes.build, its
+pipeline `builder-stellar-testnet-dev` and the Neon branch `dev` (`docs/DEV_DEPLOYMENT.md`). This
+replaced a separate e2e Manager and pipeline on 2026-11-19: one deployment to keep current, and no
+second pipeline to pay for. Walkthrough tribes are real tribes on dev.tribes.build; every one is
+named with an `E2E ` prefix so they're easy to tell apart.
 
-**Status: prepared, not deployed.** Deploying spends testnet XLM and creates a Goldsky pipeline and a
-database, so each step below waits for a maintainer's go-ahead. Until then the preflight reports "No
-e2e Manager artifact", and chain flows refuse to run.
-
-| Piece | File |
+| Piece | Where |
 |---|---|
-| Manager config (admin `e2e-operator`, label `e2e-walk`) | `configs/testnet-e2e-manager.json` |
-| Manager artifact, written by the deploy (gitignored, like every `deploys/e2e-*`) | `deploys/e2e-walk-testnet-manager.json` |
-| Pipeline settings: name `builder-stellar-testnet-e2e`, secret `BUILDER_E2E_POSTGRES_SECRET` | `packages/goldsky/e2e.env` |
-| Generated pipeline (written by `pnpm generate`, same transforms as the public one) | `packages/goldsky/pipelines/builder-stellar-e2e-events.yaml` |
+| Manager artifact (committed) | `deploys/dev-testnet-manager.json` |
+| Pipeline and database | `docs/DEV_DEPLOYMENT.md` |
+| Override for another Manager | `E2E_MANAGER_ARTIFACT=<path>` |
 
-The artifact's `e2e-` prefix keeps it out of `scripts/generate-web-deployment.mjs`'s pick, so normal
-builds keep the public Manager. `pnpm --dir apps/e2e build:app` pins the e2e Manager through
-`MANAGER_DEPLOYMENT_FILE` once the artifact exists.
+`pnpm --dir apps/e2e build:app` pins the dev Manager through `MANAGER_DEPLOYMENT_FILE`. The app
+server reads the dev read model through `APP_DATABASE_URL` in `apps/e2e/.env.local` (gitignored):
+the dev branch's `app_server` URL, from the Neon console.
 
-### Deploy the e2e Manager
+### When contracts change on `dev`
 
-1. Build the contracts from `dev`:
-
-   ```bash
-   stellar contract build
-   ```
-
-2. Deploy the Manager and register the current implementations, with `e2e-operator` as the deployer
-   and admin:
-
-   ```bash
-   DEPLOY_IDENTITY=e2e-operator node scripts/deploy-manager.mjs configs/testnet-e2e-manager.json
-   ```
-
-   This writes `deploys/e2e-walk-testnet-manager.json`. The artifact is gitignored; share it with
-   other maintainers out of band, or set `E2E_MANAGER_ARTIFACT` to its path.
-
-3. Check it:
-
-   ```bash
-   pnpm --dir apps/e2e preflight --require-manager
-   ```
-
-### Create the e2e read model
-
-A separate database keeps the e2e allowlists (`streamling.*`) and landing tables apart from the
-public ones; sharing one would let the two pipelines' allowlists mix (`db/README.md`).
-
-1. Create an empty Postgres database (a Neon branch or database named `builder_e2e`, say). Then, with
-   its admin URL:
-
-   ```bash
-   export DATABASE_URL=postgres://<admin>@<host>/builder_e2e?sslmode=require
-   ```
-
-   ```bash
-   ./db/setup-roles.sh && ./db/migrate.sh && ./db/grant-permissions.sh
-   ```
-
-2. Store the `goldsky_writer` URL for that database as a Goldsky secret named
-   `BUILDER_E2E_POSTGRES_SECRET` (`goldsky secret create`, interactive).
-
-3. Put the `app_server` URL in `apps/e2e/.env.local` as `APP_DATABASE_URL`.
-
-### Deploy the e2e pipeline
-
-```bash
-cd packages/goldsky && GOLDSKY_ENV_FILE=e2e.env pnpm generate
-```
-
-```bash
-cd packages/goldsky && GOLDSKY_ENV_FILE=e2e.env ./scripts/deploy.sh validate
-```
-
-```bash
-cd packages/goldsky && GOLDSKY_ENV_FILE=e2e.env ./scripts/deploy.sh deploy
-```
-
-Status and logs use the same switch:
-
-```bash
-cd packages/goldsky && GOLDSKY_ENV_FILE=e2e.env ./scripts/deploy.sh status
-```
-
-The public pipeline is untouched: without `GOLDSKY_ENV_FILE` the scripts read `.env` and
-`pipelines/builder-stellar-events.yaml` as before.
-
-### Upgrade the e2e Manager to dev
-
-The preflight refuses to run when the e2e Manager's `wasm_hash` or its `current_implementations`
+The preflight refuses to run when the dev Manager's `wasm_hash` or its `current_implementations`
 differ from `stellar contract build` output, because a walkthrough against older contracts tests the
-wrong code. After contracts change on `dev`:
+wrong code. That also means dev.tribes.build is behind `dev`: upgrade the dev deployment
+(`docs/DEV_DEPLOYMENT.md`, step 1), then check:
 
-1. Build:
-
-   ```bash
-   stellar contract build
-   ```
-
-2. Either redeploy a fresh e2e Manager (simplest on testnet; the old tribes stay on the old one), by
-   moving the old artifact aside and deploying again:
-
-   ```bash
-   mv deploys/e2e-walk-testnet-manager.json deploys/e2e-walk-testnet-manager.old.json
-   ```
-
-   ```bash
-   DEPLOY_IDENTITY=e2e-operator DEPLOY_SALT_SUFFIX=$(date +%Y%m%d) node scripts/deploy-manager.mjs configs/testnet-e2e-manager.json
-   ```
-
-   then regenerate and redeploy the e2e pipeline with a reset of the e2e database (`db/README.md`,
-   "Resetting a deployed database"); or upgrade in place with `scripts/upgrade-contract.mjs`, which
-   waits out the platform upgrade notice (`upgradeDelayLedgers`, 720 ledgers, about an hour).
-
-3. Check:
-
-   ```bash
-   pnpm --dir apps/e2e preflight --require-manager
-   ```
+```bash
+pnpm --dir apps/e2e preflight --require-manager
+```
 
 ## When something fails
 
@@ -302,7 +210,7 @@ wrong code. After contracts change on `dev`:
 | `[ledger-late] …` | Ledger time didn't reach the target in time | Testnet is slow or RPC is down; re-run |
 | `[ui-timeout] …` | The page didn't reach the expected state | A real defect until shown otherwise: open the trace, then file it |
 | `SequenceCollisionError` | Two timelines signed from one account | Give the timeline its own identity |
-| Preflight: "does not run this checkout's contracts" | The e2e Manager is behind `dev` | "Upgrade the e2e Manager to dev" above |
+| Preflight: "does not run this checkout's contracts" | The dev Manager is behind `dev` | "When contracts change on `dev`" above |
 | `E2E Wallet is in a build made without NEXT_PUBLIC_E2E_WALLET=1` | The test wallet leaked into a production build | Fix the guard in `apps/web/src/lib/wallet-kit.ts`; never ship it |
 
 Every defect goes in `docs/qa/BUG_LEDGER.md` with a regression test at the lowest level that catches
