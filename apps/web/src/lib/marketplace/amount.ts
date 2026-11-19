@@ -55,3 +55,8 @@ export function marketplaceId(value: string, kind: 'pool' | 'secondary'): bigint
   if (id > (1n << 32n) - 1n) throw new Error('Listing identifier is out of range.');
   return id;
 }
+
+/** A fee in basis points as a percentage, for example 250 as "2.5%". */
+export function formatFeePercent(feeBps: number) {
+  return `${(feeBps / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 })}%`;
+}

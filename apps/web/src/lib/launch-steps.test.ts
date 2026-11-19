@@ -9,6 +9,7 @@ function readiness(patch: Partial<LaunchReadiness> = {}): LaunchReadiness {
   return {
     pending: { launch_admin: ADMIN, slug: 'lantern-club' } as LaunchReadiness['pending'],
     supply: 0n,
+    proposalThreshold: 1n,
     admin: ADMIN,
     live: false,
     paymentAssetsMatch: true,
@@ -43,10 +44,32 @@ describe('buildLaunchPlan', () => {
 
   it('is ready when both are done and nothing is wrong', () => {
     const plan = buildLaunchPlan({ readiness: readiness({ supply: 3n }), artwork: artwork([5]), launchAdmin: ADMIN });
-    expect(plan.required[1].detail).toBe('3 tokens minted');
+    expect(plan.required[1].detail).toBe('3 voting tokens minted');
+    expect(plan.proposalWarning).toBeNull();
     expect(plan.canLaunch).toBe(true);
     expect(plan.launchHint).toBe('');
     expect([plan.doneCount, plan.totalCount]).toEqual([2, 2]);
+  });
+
+  it('warns, without blocking launch, when founders hold fewer votes than a proposal needs', () => {
+    const plan = buildLaunchPlan({
+      readiness: readiness({ supply: 1n, proposalThreshold: 2n }),
+      artwork: artwork([5]),
+      launchAdmin: ADMIN
+    });
+    expect(plan.required[1].status).toBe('done');
+    expect(plan.proposalWarning).toBe(
+      'A proposal needs 2 votes. Members hold 1 vote, so no one could propose after launch. Mint 1 more founder token, or lower the proposal threshold in Voting rules.'
+    );
+    expect(plan.required[1].caution).toBe(plan.proposalWarning);
+    expect(plan.canLaunch).toBe(true);
+    // An unknown threshold (another vote source, or a failed read) never warns.
+    const unknown = buildLaunchPlan({
+      readiness: readiness({ supply: 1n, proposalThreshold: null }),
+      artwork: artwork([5]),
+      launchAdmin: ADMIN
+    });
+    expect(unknown.proposalWarning).toBeNull();
   });
 
   it('adds a blocked link step when another community took the slug', () => {

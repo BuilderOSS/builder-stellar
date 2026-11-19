@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { activeNavKey, resolveDaoNav, resolveSlot3 } from './dao-nav';
+import { activeNavKey, canSellOnMarket, resolveDaoNav, resolveSlot3 } from './dao-nav';
 
 const base = {
   auctionContractId: '',
@@ -103,5 +103,24 @@ describe('activeNavKey', () => {
   it('prefers the longest matching prefix', () => {
     const nested = [...items, { key: 'gov', href: '/dao/d/admin/governance' }];
     expect(activeNavKey('/dao/d/admin/governance', nested)?.key).toBe('gov');
+  });
+});
+
+describe('canSellOnMarket', () => {
+  const live = {
+    ...base,
+    marketplaceContractId: 'CM',
+    marketplaceEnabled: true,
+    status: 'operational' as const,
+    tokenSettings: { transfersLocked: false }
+  };
+  it('offers Sell on a launched tribe with its market on', () => {
+    expect(canSellOnMarket(live)).toBe(true);
+  });
+  it('hides Sell with no market contract, a market that is off, before launch, or with locked tokens', () => {
+    expect(canSellOnMarket({ ...live, marketplaceContractId: '' })).toBe(false);
+    expect(canSellOnMarket({ ...live, marketplaceEnabled: false })).toBe(false);
+    expect(canSellOnMarket({ ...live, status: 'pending' })).toBe(false);
+    expect(canSellOnMarket({ ...live, tokenSettings: { transfersLocked: true } })).toBe(false);
   });
 });

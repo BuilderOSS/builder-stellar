@@ -18,8 +18,8 @@ export type TreasuryAuthorizeDraft = { nodes: AuthNodeDraft[] };
  */
 export const treasuryAuthorizeHandler: ActionHandler<TreasuryAuthorizeDraft> = {
   type: 'treasury-authorize',
-  label: 'Authorize the next action (Treasury)',
-  description: 'Attach a nested Treasury authorization tree to the following action',
+  label: 'Authorise the next action (Treasury)',
+  description: 'Attach a nested Treasury authorisation tree to the following action',
   group: 'Advanced',
   FormComponent: ({ value }: ActionFormProps<TreasuryAuthorizeDraft>) => (
     <>

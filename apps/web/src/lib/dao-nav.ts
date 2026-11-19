@@ -40,6 +40,17 @@ export function hasMarketplace(config: NavCapabilities) {
 }
 
 /**
+ * Whether members can sell a token on this tribe's market: it has a marketplace that is on, the
+ * tribe has launched, and memberships aren't locked (a locked token refuses member listings).
+ * Every Sell entry point uses this, so they all hide together.
+ */
+export function canSellOnMarket(
+  config: NavCapabilities & { tokenSettings?: { transfersLocked?: boolean } | null }
+): boolean {
+  return hasMarketplace(config) && config.status === 'operational' && config.tokenSettings?.transfersLocked !== true;
+}
+
+/**
  * Slot 3 of the community tab bar: Auction when the community runs (or can
  * resume) auctions, else Market when its marketplace is enabled, else Members.
  */

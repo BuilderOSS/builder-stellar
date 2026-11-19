@@ -22,7 +22,15 @@ vi.mock('@/hooks/use-dao-membership', () => ({
 
 vi.stubGlobal('React', React);
 const { MembershipCard } = await import('./membership-card');
-const config = { tokenName: 'Lantern Club' } as Parameters<typeof MembershipCard>[0]['config'];
+type Config = Parameters<typeof MembershipCard>[0]['config'];
+const config = { tokenName: 'Lantern Club' } as Config;
+const market = {
+  tokenName: 'Lantern Club',
+  marketplaceContractId: 'CM',
+  marketplaceEnabled: true,
+  status: 'operational',
+  tokenSettings: { transfersLocked: false }
+} as Config;
 
 describe('membership card and the vote source', () => {
   beforeEach(() => {
@@ -39,5 +47,23 @@ describe('membership card and the vote source', () => {
     const html = renderToStaticMarkup(<MembershipCard config={config} />);
     expect(html).toContain('2.5');
     expect(html).not.toContain('Delegated');
+  });
+
+  it('offers Sell a token, linking to the sell form, when the tribe has a live market', () => {
+    const html = renderToStaticMarkup(<MembershipCard config={market} />);
+    expect(html).toContain('Sell a token');
+    expect(html).toContain('/dao/lantern-club/marketplace?sell=1');
+  });
+
+  it('hides Sell without a market, when it is off, or when tokens are locked', () => {
+    for (const patch of [
+      { marketplaceContractId: '' },
+      { marketplaceEnabled: false },
+      { tokenSettings: { transfersLocked: true } }
+    ]) {
+      const html = renderToStaticMarkup(<MembershipCard config={{ ...market, ...patch } as Config} />);
+      expect(html).not.toContain('Sell a token');
+    }
+    expect(renderToStaticMarkup(<MembershipCard config={config} />)).not.toContain('Sell a token');
   });
 });

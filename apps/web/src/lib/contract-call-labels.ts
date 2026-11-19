@@ -30,7 +30,7 @@ const ROLE_CALLS: Record<ContractRole, Record<string, string>> = {
     set_proposal_threshold: 'Change the votes needed to propose',
     set_quorum_bps: 'Change the quorum'
   },
-  treasury: { authorize: 'Authorize the next action (Treasury)' },
+  treasury: { authorize: 'Authorise the next action (Treasury)' },
   auction: {
     pause: 'Pause auctions',
     unpause: 'Resume auctions',

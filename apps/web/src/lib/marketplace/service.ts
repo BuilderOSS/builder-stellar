@@ -203,7 +203,7 @@ export async function marketplaceOffers(
   const take = query.kind === 'all' ? 12 : 24;
   const page = { skip: query.page * take, take: take + 1 };
   const [pools, secondary] = await Promise.all([
-    query.kind === 'secondary' || (query.status !== 'all' && !['open', 'closed'].includes(query.status))
+    query.kind === 'secondary' || query.seller || (query.status !== 'all' && !['open', 'closed'].includes(query.status))
       ? []
       : prisma.marketplacePool.findMany({
           where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...(buyable?.pool ?? poolStatus) },
@@ -213,7 +213,12 @@ export async function marketplaceOffers(
     query.kind === 'pool' || query.status === 'closed'
       ? []
       : prisma.marketplaceSecondaryListing.findMany({
-          where: { deploymentId: DEPLOYMENT_ID, OR: scoped, ...(buyable?.secondary ?? listingStatusFilter) },
+          where: {
+            deploymentId: DEPLOYMENT_ID,
+            OR: scoped,
+            ...(buyable?.secondary ?? listingStatusFilter),
+            ...(query.seller ? { seller: query.seller } : {})
+          },
           orderBy: [{ createdLedger: 'desc' }, { eventId: 'desc' }],
           ...page
         })

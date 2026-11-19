@@ -6,8 +6,9 @@ import { Avatar, ButtonLink, Chip, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
-import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
+import { canSellOnMarket, hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
 import { formatVotes } from '@/lib/vote-source';
 
 const card = sva({
@@ -114,6 +115,11 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
       <ButtonLink href={daoRoute(routeId, `members/${membership.address}`)} variant="secondary">
         Your profile
       </ButtonLink>
+      {canSellOnMarket(config) ? (
+        <ButtonLink href={sellHref(routeId)} variant="secondary">
+          Sell a token
+        </ButtonLink>
+      ) : null}
       <ButtonLink href={daoRoute(routeId, 'members')} variant="ghost">
         All members
       </ButtonLink>

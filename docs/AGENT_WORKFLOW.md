@@ -118,9 +118,9 @@ claiming readiness, and ask for missing authoritative destinations rather than
 inventing links. Recheck after replacements. Local ignored feedback records are
 useful context when available, but the check must work from tracked source alone.
 
-The current artwork documentation placeholder is `ARTWORK_GUIDE_URL` in
-`apps/web/src/lib/help-links.ts`. Replace it with the team's final artwork guide
-URL before release, or explicitly report that it remains unresolved.
+`ARTWORK_GUIDE_URL` in `apps/web/src/lib/help-links.ts` points to the artwork
+guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). Add new
+documentation links there, pointing to the matching docs.tribes.build page.
 
 ## Optional Vendor Skills
 

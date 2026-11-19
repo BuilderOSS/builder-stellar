@@ -105,13 +105,15 @@ export type MarketplaceAction =
   | { action: 'buy' | 'cancel' | 'expire'; kind: ListingKind; id: string; eventId: string }
   | { action: 'restock'; kind: 'pool'; id: string; eventId: string }
   | {
-      action: 'approve' | 'list';
+      action: 'list';
       tokenId: string;
       price: string;
       expiresAt: string;
       paymentAsset: string;
       feeBps: number;
     }
+  /** `approve` lets the market move this one token (about 1 hour); `revoke` removes that permission. */
+  | { action: 'approve'; tokenId: string }
   | { action: 'revoke'; tokenId: string }
   | { action: 'trustline'; paymentAsset: string }
   | { action: 'comment'; kind: 'secondary'; id: string; body: string };
@@ -155,4 +157,12 @@ export interface MarketplaceInventory {
   address: string;
   tokenIds: string[];
   hasMore: boolean;
+}
+/** Whether the market may move a token right now (a live single-token or all-token approval). */
+export interface MarketplaceApproval {
+  deploymentId: string;
+  daoId: string;
+  address: string;
+  tokenId: string;
+  approved: boolean;
 }

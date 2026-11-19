@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalDaoUrl, daoRouteId } from './dao-routes';
+import { canonicalDaoUrl, daoRouteId, tokenDelegateRoute } from './dao-routes';
 
 const ADDRESS = `C${'A'.repeat(55)}`;
 
@@ -29,5 +29,13 @@ describe('canonicalDaoUrl', () => {
 
   it('sends a requested (unclaimed) slug back to the address', () => {
     expect(canonicalDaoUrl({ pathname: '/dao/maybe-mine' }, ADDRESS)).toBe(`/dao/${ADDRESS}`);
+  });
+});
+
+describe('tokenDelegateRoute', () => {
+  it('opens the token page on the delegate step', () => {
+    expect(tokenDelegateRoute('lantern-club', 7)).toBe(
+      '/dao/lantern-club/token/7?action=delegate#holder-controls-title'
+    );
   });
 });

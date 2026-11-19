@@ -25,6 +25,7 @@ import {
   isValidTokenSymbol,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_SYMBOL_LENGTH,
+  TOKEN_NAME_LENGTH_MESSAGE,
   utf8Length
 } from './validation';
 
@@ -68,7 +69,7 @@ const identitySchema = z.object({
     .string()
     .trim()
     .min(2, 'Use at least 2 characters')
-    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, `Use at most ${MAX_TOKEN_NAME_BYTES} characters`)
+    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, TOKEN_NAME_LENGTH_MESSAGE)
     // The on-chain token JSON copies the name verbatim (InvalidName).
     .refine(
       (value) => !/["\\\u0000-\u001f\u007f]/.test(value),

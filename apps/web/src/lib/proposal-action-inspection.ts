@@ -55,8 +55,8 @@ export function inspectProposalAdminCall(
     // Indexed args are decoded JSON (types are not recoverable), so render the
     // tree as read; drafts are validated and encoded with explicit types.
     return {
-      title: 'Authorize the next action (Treasury)',
-      risk: 'High risk: lets the NEXT action of this proposal use the Treasury’s authorization for exactly these nested calls (for example SAC transfers out of the Treasury). Read every node.',
+      title: 'Authorise the next action (Treasury)',
+      risk: 'High risk: lets the NEXT action of this proposal use the Treasury’s authorisation for exactly these nested calls (for example SAC transfers out of the Treasury). Read every node.',
       fields: authorizeFields(args[0])
     };
   }

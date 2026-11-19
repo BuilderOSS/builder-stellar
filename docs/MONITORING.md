@@ -52,7 +52,7 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 ## Protocol signals
 
 - A launched DAO has one `DaoLaunched`, one `SlugClaimed` and, per module, one `<Module>Launched` (`TokenLaunched`, `GovernorLaunched`, …) and one `AdminChanged` (launch admin -> Treasury), all in the launch transaction. `admin_changed` is also the Manager's own admin event: key events by (emitter, name). A missing module event is an indexing gap; a later module `admin_changed` is impossible by design and should alert.
-- `Migrated` should follow `Upgraded` for releases that change storage. Manager `AdminProposed` / `AdminChanged` / `PlatformMinterSet` / `LatestImplementationSet` are rare, high-privilege changes worth alerting on.
+- `Migrated` should follow `Upgraded` for releases that change storage. Manager `AdminProposed` / `AdminChanged` / `LatestImplementationSet` are rare, high-privilege changes worth alerting on.
 - `governor.execute` always fails with `UseTreasuryExecute` (7507). Error codes are unique across contracts (one block of 100 per crate, 7000-7899), so a code alone identifies its contract.
 - Successful execution has Governor `ProposalExecuted` and one Treasury `Execute` per action in one transaction. Failure emits no surviving execution events. The app validates complete ordered receipts; confirmed execution and unavailable receipt are separate states.
 - Deferred refunds: sum `RefundDeferred` minus `RefundWithdrawn` per bidder. `BidRefunded` records a successful push.

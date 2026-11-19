@@ -22,7 +22,7 @@ import {
 import { muted } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
-import { daoRoute } from '@/lib/dao-routes';
+import { daoRoute, tokenDelegateRoute } from '@/lib/dao-routes';
 import { useDirectoryMember, useDirectoryTokens } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
 import { formatVotes, useVoteSource } from '@/lib/vote-source';
@@ -37,6 +37,16 @@ const stats = css({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1
 const stat = css({ display: 'grid', gap: '0.5', p: '3.5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 const statValue = css({ textStyle: 'title', fontSize: '1.5rem', fontVariantNumeric: 'tabular-nums' });
 const statLabel = css({ textStyle: 'caption', color: 'ink.muted' });
+const delegate = css({
+  display: 'grid',
+  gap: '3',
+  p: '4',
+  maxW: '28rem',
+  borderRadius: 'card',
+  bg: 'surface',
+  boxShadow: 'raised'
+});
+const delegateTitle = css({ textStyle: 'subheading', m: '0' });
 const tokenGrid = css({
   display: 'grid',
   gap: '4',
@@ -147,15 +157,20 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
         </>
       ) : null}
 
-      {!custom && isViewer && inventory.data?.items[0] ? (
-        <div>
-          <ButtonLink
-            variant="secondary"
-            href={daoRoute(routeId, `token/${inventory.data.items[0].tokenId}?action=delegate`)}
-          >
-            Delegate votes
-          </ButtonLink>
-        </div>
+      {!custom && isViewer && member && inventory.data?.items[0] ? (
+        <section className={delegate} aria-labelledby="delegate-title">
+          <div>
+            <h2 id="delegate-title" className={delegateTitle}>
+              Delegate your votes
+            </h2>
+            <p className={muted}>
+              Let another member vote with your tokens. Your tokens stay with you, and you can change this at any time.
+            </p>
+          </div>
+          <div>
+            <ButtonLink href={tokenDelegateRoute(routeId, inventory.data.items[0].tokenId)}>Delegate votes</ButtonLink>
+          </div>
+        </section>
       ) : null}
       {address ? (
         <Section title="Tokens">

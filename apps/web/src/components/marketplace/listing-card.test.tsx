@@ -63,3 +63,19 @@ describe('pool availability on listing cards', () => {
     }
   );
 });
+
+describe('a listing waiting for the indexer', () => {
+  it('is marked as updating and offers no actions', () => {
+    const resale = {
+      ...pool,
+      kind: 'secondary' as const,
+      id: '7',
+      tokenId: '7',
+      pool: undefined,
+      eventId: 'pending:hash'
+    };
+    const html = renderToStaticMarkup(<ListingCard listing={resale} community={community} network="local" trading />);
+    expect(html).toContain('updating');
+    expect(html).not.toContain('Details');
+  });
+});

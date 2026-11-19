@@ -140,6 +140,8 @@ export function validateDuration(seconds: number, minSeconds: number = 60): stri
 export const MAX_TOKEN_NAME_BYTES = 40;
 export const MAX_TOKEN_SYMBOL_LENGTH = 10;
 export const MAX_TOKEN_URI_BYTES = 200;
+/** Names are limited in bytes (UTF-8), so accented letters and emoji use more than one. */
+export const TOKEN_NAME_LENGTH_MESSAGE = `Use at most ${MAX_TOKEN_NAME_BYTES} bytes. Some characters, such as accented letters and emoji, count as more than one.`;
 export const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 
 /**

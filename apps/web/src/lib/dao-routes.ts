@@ -5,6 +5,14 @@ export function daoRoute(daoId: string, path = ''): Route {
   return `/dao/${encodeURIComponent(daoId)}${normalizedPath}` as Route;
 }
 
+/**
+ * The delegate step for one of the viewer's tokens: delegation lives on the token page
+ * (components/token-holder), opened with the delegate step chosen and scrolled to it.
+ */
+export function tokenDelegateRoute(routeId: string, tokenId: string | number): Route {
+  return daoRoute(routeId, `token/${tokenId}?action=delegate#holder-controls-title`);
+}
+
 /** The id a DAO's URLs should use: its claimed slug once launched, otherwise the token address. */
 export function daoRouteId(dao: { daoId: string; slug?: string | null }) {
   return dao.slug || dao.daoId;
