@@ -2,7 +2,7 @@
 
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { css } from 'styled-system/css';
-import { useSWRConfig } from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 
 import {
   Address,
@@ -85,6 +85,26 @@ export function HolderControls({
   const [hash, setHash] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const inFlight = useRef(false);
+  // The ledger of the last action confirmed here; the next prepare waits for RPC to reach it.
+  const lastLedger = useRef(0);
+  // The token's live single-token approval, shown before cancelling it (BUG-W11-3).
+  const approval = useSWR(
+    kind === 'revoke' && liveOwner && owner ? ['token-approval', config.tokenContractId, tokenId, owner] : null,
+    async () => {
+      const { Client } = await import('@builder-stellar/token-bindings');
+      const token = new Client({
+        contractId: config.tokenContractId,
+        rpcUrl: config.rpcUrl,
+        networkPassphrase: config.passphrase,
+        publicKey: owner ?? undefined,
+        allowHttp: config.name === 'local'
+      });
+      return (await token.get_approved({ token_id: tokenId })).result ?? null;
+    },
+    // An approval just made may not have reached the RPC node read yet: look again while none shows.
+    { revalidateOnFocus: false, refreshInterval: (latest) => (latest === null ? 5_000 : 0) }
+  );
+  const nothingToRevoke = kind === 'revoke' && approval.data === null;
   const allowed =
     session.authStatus === 'authenticated' &&
     session.address === owner &&
@@ -155,7 +175,7 @@ export function HolderControls({
           directoryFetch<HolderPrepared>(`/api/dao/${encodeURIComponent(daoId)}/tokens/prepare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(action)
+            body: JSON.stringify(lastLedger.current ? { ...action, afterLedger: String(lastLedger.current) } : action)
           }),
         {
           address: useAuthSessionStore.getState().address ?? '',
@@ -244,10 +264,12 @@ export function HolderControls({
       if (submitted.status === 'ERROR' || submitted.status === 'TRY_AGAIN_LATER')
         throw new Error('The network did not accept this transaction. Check its hash before retrying.');
       setMessage('Submitted. Waiting for confirmation…');
-      await waitForConfirmation(submitted.hash, config.rpcUrl);
+      const landed = await waitForConfirmation(submitted.hash, config.rpcUrl);
+      lastLedger.current = Math.max(lastLedger.current, landed.ledger);
       setConfirmed(true);
       setMessage('Confirmed. Ownership and votes can take a moment to update here.');
       onRefresh();
+      void approval.mutate();
       await mutate(
         (key) =>
           Array.isArray(key) &&
@@ -360,10 +382,18 @@ export function HolderControls({
             ) : null}
           </Field>
         ) : (
-          <p className={muted}>
-            Removes this token’s single-token approval right away. The current spender isn’t shown because the contract
-            doesn’t expose it. Collection-wide operator permissions don’t change.
-          </p>
+          <div className={form}>
+            {approval.data ? <Address value={approval.data} label="Approved now" compact /> : null}
+            <p className={muted} role="status">
+              {approval.isLoading
+                ? 'Checking this token’s approval…'
+                : approval.data
+                  ? 'Cancelling removes this approval right away. Collection-wide operator permissions don’t change.'
+                  : approval.data === null
+                    ? 'No one is approved to move this token right now. Collection-wide operator permissions aren’t shown here.'
+                    : 'We couldn’t read this token’s approval. Cancelling still removes it right away if there is one. Collection-wide operator permissions don’t change.'}
+            </p>
+          </div>
         )}
         {kind === 'approve' ? (
           <Field>
@@ -428,7 +458,7 @@ export function HolderControls({
           </div>
         ) : null}
         {!hash && !review ? (
-          <Button block variant="secondary" disabled={!allowed} loading={busy} onClick={prepare}>
+          <Button block variant="secondary" disabled={!allowed || nothingToRevoke} loading={busy} onClick={prepare}>
             {busy ? 'Checking' : 'Review'}
           </Button>
         ) : null}

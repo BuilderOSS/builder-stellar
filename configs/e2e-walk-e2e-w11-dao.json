@@ -1,0 +1,64 @@
+{
+  "$comment": "Fixture tribe for walkthrough W11 (quick-buy pools and Treasury purchases), on the dev Manager. Deployed and launched by e2e-w11-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W11 and W14 fixtures\"). Founders: e2e-w11-founder x10 (passes proposals alone), e2e-w11-member-a x10 (lists one token per run for the Treasury purchase). Payment asset is native XLM (SAC). The treasury is funded with testnet XLM.",
+  "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "nonce": 11,
+  "launchAdmin": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "slug": "e2e-w11",
+  "token": {
+    "name": "E2E Pools",
+    "symbol": "E2EP"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for quick-buy pools and Treasury purchases (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
+        }
+      ]
+    }
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+      "amount": 10
+    },
+    {
+      "address": "GDJR6TISXBYPUE3J4XGZ2V4K4OJVVWO3G53NRIIJMH6N772ZD4UES33G",
+      "amount": 10
+    }
+  ],
+  "launch": {
+    "launchMarketplace": true
+  }
+}

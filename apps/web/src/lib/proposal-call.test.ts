@@ -47,6 +47,26 @@ describe('restored mint allocation summaries', () => {
       expect(getProposalActionSummary(action)).toBe('Mint membership tokens (check recipients and amounts)');
     }
   );
+  it('summarises a pool with its asset and sales limit (BUG-W11-4)', () => {
+    const pool = {
+      id: 'pool',
+      type: 'open-pool' as const,
+      recipient: '',
+      amount: '1',
+      price: '1',
+      size: '3',
+      maxPerBuyer: '1',
+      maxSoldPerPeriod: '2',
+      periodHours: '24',
+      expiresAt: '1800000000'
+    };
+    expect(
+      getProposalActionSummary({ ...pool, asset: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC' })
+    ).toBe(
+      'Open a quick-buy pool: 3 tokens at 1 XLM each, at most 1 per wallet and 2 sold every 24h, closing 2027-01-15T08:00:00.000Z'
+    );
+    expect(getProposalActionSummary({ ...pool, asset: recipient })).toContain(`at 1 of asset ${recipient} each`);
+  });
   it('handles null rows and missing recipient fields', () => {
     for (const allocation of [null, { amount: '2' }, { recipient: '', amount: '2' }]) {
       expect(

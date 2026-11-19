@@ -49,11 +49,16 @@ const address = z
       return z.NEVER;
     }
   });
+// `afterLedger`: the ledger of the holder's last confirmed action, so the next one is simulated on
+// state that includes it (BUG-W11-5).
+const after = { afterLedger: id.optional() };
 export const holderActionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('transfer'), tokenId: id, destination: address }).strict(),
-  z.object({ action: z.literal('approve'), tokenId: id, destination: address, expirationLedger: id }).strict(),
-  z.object({ action: z.literal('revoke'), tokenId: id }).strict(),
-  z.object({ action: z.literal('delegate'), tokenId: id, destination: address }).strict()
+  z.object({ action: z.literal('transfer'), tokenId: id, destination: address, ...after }).strict(),
+  z
+    .object({ action: z.literal('approve'), tokenId: id, destination: address, expirationLedger: id, ...after })
+    .strict(),
+  z.object({ action: z.literal('revoke'), tokenId: id, ...after }).strict(),
+  z.object({ action: z.literal('delegate'), tokenId: id, destination: address, ...after }).strict()
 ]);
 export function holderClient(config: DaoNetworkConfig, address: string) {
   return new TokenClient({
@@ -75,11 +80,37 @@ export function holderXdr(tx: AssembledTransaction<void>) {
     throw new HolderError('This action needs another account signature. Nothing was submitted.');
   return tx.toXdr();
 }
+/**
+ * Prepare a holder action. With `afterLedger`, a simulation run on that ledger or an earlier one is
+ * thrown away and run again: its footprint would miss the vote checkpoint the real transaction
+ * creates in a later ledger, and the signed transaction would fail on chain.
+ */
 export async function prepareHolderAction(
   daoId: string,
   actor: { address: string; network: string },
-  action: HolderAction
+  action: HolderAction & { afterLedger?: string },
+  { attempts = 5, pauseMs = 2_000 }: { attempts?: number; pauseMs?: number } = {}
 ): Promise<HolderPrepared> {
+  const after = action.afterLedger ? Number(action.afterLedger) : 0;
+  for (let attempt = 1; ; attempt++) {
+    const { prepared, simulatedAt } = await prepareOnce(daoId, actor, action);
+    // Strictly after: simulated in the last action's own ledger, a vote checkpoint written then is
+    // updated in place, while the real transaction lands later and needs a new checkpoint key.
+    if (!after || simulatedAt === null || simulatedAt > after) return prepared;
+    if (attempt >= attempts)
+      throw new HolderError(
+        'The network doesn’t show your last transaction yet. Wait a few seconds, then review again.',
+        409
+      );
+    await new Promise((resolve) => setTimeout(resolve, pauseMs));
+  }
+}
+
+async function prepareOnce(
+  daoId: string,
+  actor: { address: string; network: string },
+  action: HolderAction
+): Promise<{ prepared: HolderPrepared; simulatedAt: number | null }> {
   const { config, deploymentId, daoId: token } = await directoryScope(daoId);
   const deployment = getDeploymentConfig();
   if (
@@ -140,7 +171,7 @@ export async function prepareHolderAction(
         : `Allow ${action.destination} to transfer only token #${tokenId} until network position ${expiration}. This replaces its single-token approval; ownership does not change.`;
   } else if (action.action === 'revoke') {
     // The pinned NFT Base removes the single-token approval at expiration ledger 0.
-    // No approval getter is exposed by this binding; a valid spender address is still required.
+    // A valid spender address is still required; the holder form shows the live one (get_approved) first.
     tx = await client.approve(
       { owner: actor.address, spender: actor.address, token_id: tokenId, expiration_ledger: 0 },
       options
@@ -173,16 +204,20 @@ export async function prepareHolderAction(
   const envelope = TransactionBuilder.fromXDR(xdr, config.passphrase);
   if (!('source' in envelope) || envelope.source !== actor.address)
     throw new HolderError('Unexpected transaction source.', 503);
+  const simulation = (tx as { simulation?: { latestLedger?: number } }).simulation;
   return {
-    deploymentId,
-    daoId: token,
-    address: actor.address,
-    tokenContractId: token,
-    tokenId,
-    networkPassphrase: config.passphrase,
-    rpcUrl: config.rpcUrl,
-    xdr,
-    fee: envelope.fee,
-    summary
+    prepared: {
+      deploymentId,
+      daoId: token,
+      address: actor.address,
+      tokenContractId: token,
+      tokenId,
+      networkPassphrase: config.passphrase,
+      rpcUrl: config.rpcUrl,
+      xdr,
+      fee: envelope.fee,
+      summary
+    },
+    simulatedAt: typeof simulation?.latestLedger === 'number' ? simulation.latestLedger : null
   };
 }

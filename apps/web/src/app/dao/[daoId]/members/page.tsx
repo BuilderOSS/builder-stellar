@@ -25,6 +25,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useDirectoryMembers } from '@/lib/member-directory/hooks';
+import { systemHolderName } from '@/lib/member-directory/system-holders';
 import { memberAddress } from '@/lib/member-directory/validation';
 import { useVoteSource } from '@/lib/vote-source';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -54,12 +55,6 @@ export default function MembersPage() {
 function MemberDirectory({ daoId }: { daoId: string }) {
   const { daoConfig, routeId } = useDaoContext();
   const viewer = useAuthSessionStore((state) => state.address);
-  // Tokens held by these DAO contracts carry no votes and never delegate.
-  const systemHolders: Record<string, string> = {
-    [daoConfig.treasuryContractId]: 'Treasury',
-    [daoConfig.auctionContractId]: 'Auction',
-    [daoConfig.marketplaceContractId]: 'Marketplace'
-  };
   const [page, setPage] = useState(0);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [address, setAddress] = useState('');
@@ -183,7 +178,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
           {data.items.length ? (
             <ul className={css({ listStyle: 'none', m: '0', p: '0' })}>
               {data.items.map((member) => {
-                const system = systemHolders[member.address];
+                const system = systemHolderName(daoConfig, member.address);
                 const isViewer = Boolean(viewer && viewer === member.address);
                 const delegation = system
                   ? 'Held by the tribe, no votes'
