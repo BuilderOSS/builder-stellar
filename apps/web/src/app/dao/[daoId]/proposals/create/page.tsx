@@ -29,6 +29,7 @@ import {
   Section,
   Skeleton
 } from '@/components/ui';
+import { UnconfirmedTransaction } from '@/components/unconfirmed-transaction';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
@@ -50,7 +51,7 @@ import {
 } from '@/lib/proposal-metadata';
 import { markRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
-import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { isConfirmationUnknown, waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -88,6 +89,9 @@ export default function ProposalCreatePage() {
   const router = useRouter();
   const [openingProposal, setOpeningProposal] = useState(false);
   const [confirmedProposalHref, setConfirmedProposalHref] = useState<ReturnType<typeof daoRoute> | null>(null);
+  // Sent, but not confirmed within the wait: a recovery state, not a failure. The draft is kept.
+  const [unconfirmed, setUnconfirmed] = useState<{ hash: string; proposalId: string } | null>(null);
+  const [checkingUnconfirmed, setCheckingUnconfirmed] = useState(false);
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
@@ -150,9 +154,43 @@ export default function ProposalCreatePage() {
     setConfirmDialogOpen(true);
   };
 
+  /** The proposal is confirmed: clear the draft and open it. */
+  const openConfirmedProposal = (proposalId: string, hash: string) => {
+    const href = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
+    setConfirmedProposalHref(href);
+    txFeedback.success('Proposal created', hash);
+    // Keep a loading surface mounted while clearing the draft and navigating.
+    setOpeningProposal(true);
+    if (proposalId) markRecentProposal(daoId, proposalId);
+    reset(session.address, daoId);
+    router.push(href);
+    return href;
+  };
+
+  const checkUnconfirmed = async () => {
+    if (!unconfirmed || checkingUnconfirmed) return;
+    const sent = unconfirmed;
+    setCheckingUnconfirmed(true);
+    try {
+      await waitForConfirmation(sent.hash, config.rpcUrl, { timeout: 15_000 });
+      setUnconfirmed(null);
+      openConfirmedProposal(sent.proposalId, sent.hash);
+    } catch (err) {
+      if (isConfirmationUnknown(err)) txFeedback.unconfirmed(sent.hash);
+      else {
+        setUnconfirmed(null);
+        setOpeningProposal(false);
+        txFeedback.fail(err, 'Proposal failed', 'governor');
+      }
+    } finally {
+      setCheckingUnconfirmed(false);
+    }
+  };
+
   const handleConfirmSubmit = async () => {
     if (!session.address) return;
     let confirmedHref: ReturnType<typeof daoRoute> | null = null;
+    let submitted: { hash: string; proposalId: string } | null = null;
 
     try {
       setTransactionBusy(true);
@@ -212,19 +250,16 @@ export default function ProposalCreatePage() {
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
       txFeedback.submitted('Proposal sent', hash);
+      submitted = { hash, proposalId };
       await waitForConfirmation(hash, config.rpcUrl);
-
-      confirmedHref = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
-      setConfirmedProposalHref(confirmedHref);
-      txFeedback.success('Proposal created', hash);
-
-      // Keep a loading surface mounted while clearing the draft and navigating.
-      setOpeningProposal(true);
-      if (proposalId) markRecentProposal(daoId, proposalId);
-      reset(session.address, daoId);
-      router.push(confirmedHref);
+      confirmedHref = openConfirmedProposal(proposalId, hash);
     } catch (err: any) {
       setOpeningProposal(false);
+      if (submitted && !confirmedHref && isConfirmationUnknown(err)) {
+        setUnconfirmed(submitted);
+        txFeedback.unconfirmed(submitted.hash);
+        return;
+      }
       console.error('Proposal creation error:', err);
       if (!confirmedHref) txFeedback.fail(err, 'Proposal failed', 'governor');
     } finally {
@@ -244,6 +279,28 @@ export default function ProposalCreatePage() {
         <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
         <p>Your proposal is confirmed. Loading its details…</p>
         {confirmedProposalHref ? <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink> : null}
+      </div>
+    );
+
+  if (unconfirmed)
+    return (
+      <div className={stack}>
+        <PageHeader title="Your proposal was sent" />
+        <UnconfirmedTransaction
+          network={config.name}
+          pending={{ hash: unconfirmed.hash, subject: 'Your proposal' }}
+          checking={checkingUnconfirmed}
+          onCheck={() => void checkUnconfirmed()}
+        />
+        <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>
+          Your draft is kept on this browser until the proposal is confirmed. Don&apos;t submit it again before you
+          check: the same proposal can only be created once.
+        </p>
+        <div>
+          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost">
+            All proposals
+          </ButtonLink>
+        </div>
       </div>
     );
 

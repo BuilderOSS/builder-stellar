@@ -83,6 +83,31 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     }
   }
 
+  /**
+   * Sent, but the network has not confirmed it within the wait: a recovery state, not a failure.
+   * The page shows the same transaction with a way to check again.
+   */
+  function unconfirmed(hash: string) {
+    const payload = {
+      title: 'Waiting for confirmation',
+      description: `Transaction ${shortenHash(hash)} was sent but isn't confirmed yet. Check it before you try again.`,
+      type: 'info' as const,
+      duration: 20000,
+      action: {
+        label: 'Check the transaction',
+        onClick: () => window.open(getExplorerTxUrl(network, hash), '_blank', 'noreferrer')
+      }
+    };
+
+    if (toastIdRef.current) {
+      toaster.update(toastIdRef.current, payload);
+      toastIdRef.current = undefined;
+      return;
+    }
+
+    toaster.create(payload);
+  }
+
   function fail(error: unknown, fallback: string, contract?: ContractName) {
     const payload = {
       title: fallback,
@@ -100,5 +125,5 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     toaster.error(payload);
   }
 
-  return { start, submitted, success, fail };
+  return { start, submitted, success, unconfirmed, fail };
 }
