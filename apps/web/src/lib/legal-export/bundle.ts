@@ -178,7 +178,8 @@ export function holderKind(address: string, tribeContracts: readonly string[]): 
   return address.startsWith('C') ? 'contract' : 'account';
 }
 
-export type KycCategory = 'A' | 'B' | 'C';
+/** `unknown` when the holders or the minted supply couldn't be read: never guess a category. */
+export type KycCategory = 'A' | 'B' | 'C' | 'unknown';
 
 export type AssessedHolder = Holder & { kind: HolderKind; ownershipBps: number; votingBps: number };
 
@@ -194,16 +195,20 @@ export type AssessedHolder = Holder & { kind: HolderKind; ownershipBps: number; 
  * Category A: anyone owning 25% or more. If none, B: every manager. If none, C: any member.
  */
 export function kycAssessment(
-  holders: Holder[],
-  supply: { minted: bigint; voting: bigint },
+  holders: Holder[] | null,
+  supply: { minted: bigint | null; voting: bigint | null },
   managers: Manager[],
   tribeContracts: readonly string[]
-) {
+): { category: KycCategory; owners: AssessedHolder[]; votingOnly: AssessedHolder[]; tribeHeld: AssessedHolder[] } {
+  // Without the holders or the minted supply, "no one owns 25%" would be a guess.
+  if (holders === null || supply.minted === null)
+    return { category: 'unknown', owners: [], votingOnly: [], tribeHeld: [] };
+  const minted = supply.minted;
   const assessed: AssessedHolder[] = holders.map((holder) => ({
     ...holder,
     kind: holderKind(holder.address, tribeContracts),
-    ownershipBps: shareBps(holder.ownedTokens, supply.minted),
-    votingBps: shareBps(holder.votingPower, supply.voting)
+    ownershipBps: shareBps(holder.ownedTokens, minted),
+    votingBps: shareBps(holder.votingPower, supply.voting ?? 0n)
   }));
   const byOwnership = assessed
     .filter((h) => h.ownershipBps >= BENEFICIAL_OWNER_BPS)
@@ -225,8 +230,15 @@ export function kycAssessment(
 export const KYC_CATEGORY_TEXT: Record<KycCategory, string> = {
   A: 'Members who own 25% or more of the membership tokens are beneficial owners and complete KYC.',
   B: 'No member owns 25% or more of the membership tokens, so every listed manager is a beneficial owner and completes KYC.',
-  C: 'No member owns 25% or more of the membership tokens and no managers are listed, so the registrar asks any member to complete KYC. MIDAO does not treat a category C member as a beneficial owner, but still reports them.'
+  C: 'No member owns 25% or more of the membership tokens and no managers are listed, so the registrar asks any member to complete KYC. MIDAO does not treat a category C member as a beneficial owner, but still reports them.',
+  unknown:
+    "The token holders or the number of tokens minted couldn't be read, so the category isn't known. Export again once they load, before sending this to a registrar."
 };
+
+/** "Category A", or "Category not known" when it couldn't be worked out. */
+export function kycCategoryTitle(category: KycCategory) {
+  return category === 'unknown' ? 'Category not known' : `Category ${category}`;
+}
 
 export type ChainFacts = {
   generatedAt: string;
@@ -262,7 +274,8 @@ export type ChainFacts = {
     safetyDelaySeconds: number | null;
   } | null;
   treasury: { address: string; balances: Array<{ asset: string; amount: string }> | null };
-  members: { count: number | null; holders: Holder[] };
+  /** Null when the holder rankings couldn't be read. */
+  members: { count: number | null; holders: Holder[] | null };
 };
 
 const lines = (text: string, max: number) =>
@@ -288,8 +301,8 @@ export function buildBundle(draft: EntityDraft, facts: ChainFacts) {
   const kyc = kycAssessment(
     facts.members.holders,
     {
-      minted: facts.token.totalSupply ? BigInt(facts.token.totalSupply) : 0n,
-      voting: facts.token.votingSupply ? BigInt(facts.token.votingSupply) : 0n
+      minted: facts.token.totalSupply === null ? null : BigInt(facts.token.totalSupply),
+      voting: facts.token.votingSupply === null ? null : BigInt(facts.token.votingSupply)
     },
     draft.managers,
     tribeContracts
@@ -539,7 +552,15 @@ export function bundleToMarkdown(bundle: LegalBundle) {
     `- ${bundle.fees.note}`
   );
   const bo = bundle.beneficialOwnership;
-  out.push('', '## Beneficial ownership', '', `**Category ${bo.category}.** ${bo.explanation}`, '', bo.basis, '');
+  out.push(
+    '',
+    '## Beneficial ownership',
+    '',
+    `**${kycCategoryTitle(bo.category)}.** ${bo.explanation}`,
+    '',
+    bo.basis,
+    ''
+  );
   if (bo.owners.length) out.push('### Beneficial owners', '', ...holderTable(bo.owners));
   if (bo.votingPowerAtOrAboveThreshold.length)
     out.push(

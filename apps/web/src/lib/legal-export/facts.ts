@@ -72,7 +72,11 @@ export function useLegalFacts(config: DaoNetworkConfig, daoId: string, routeId: 
   const treasury = useTreasuryBalances(config);
 
   const loading = members.isLoading || owners.isLoading || supply.isLoading || governor.isLoading || treasury.isLoading;
-  const holders = useMemo(() => mergeHolders(owners.data?.items, members.data?.items), [owners.data, members.data]);
+  // Null unless both rankings loaded: one ranking alone can miss an owner (or a 25% delegate).
+  const holders = useMemo(
+    () => (owners.data && members.data ? mergeHolders(owners.data.items, members.data.items) : null),
+    [owners.data, members.data]
+  );
   const problems = [
     members.error || owners.error ? 'members' : null,
     voteSource.error ? 'vote source' : null,

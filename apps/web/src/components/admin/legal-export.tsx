@@ -38,6 +38,7 @@ import {
   HOLDER_KIND_TEXT,
   KYC_CATEGORY_TEXT,
   kycAssessment,
+  kycCategoryTitle,
   MAX_MANAGERS,
   MAX_PURPOSE_LENGTH,
   NON_PROFIT_PURPOSE_LABELS,
@@ -145,8 +146,8 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
       kycAssessment(
         facts.holders,
         {
-          minted: facts.totalSupply ? BigInt(facts.totalSupply) : 0n,
-          voting: facts.votingSupply ? BigInt(facts.votingSupply) : 0n
+          minted: facts.totalSupply === null ? null : BigInt(facts.totalSupply),
+          voting: facts.votingSupply === null ? null : BigInt(facts.votingSupply)
         },
         draft.managers,
         tribeContracts
@@ -486,11 +487,15 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
             ) : (
               <div className={rows}>
                 <ListRow
-                  title={`Category ${kyc.category}`}
+                  title={kycCategoryTitle(kyc.category)}
                   meta={KYC_CATEGORY_TEXT[kyc.category]}
                   wrap
                   trailing={
-                    <Chip tone={kyc.category === 'A' ? 'warning' : 'neutral'}>{kyc.owners.length} own 25%+</Chip>
+                    kyc.category === 'unknown' ? (
+                      <Chip tone="danger">Not read</Chip>
+                    ) : (
+                      <Chip tone={kyc.category === 'A' ? 'warning' : 'neutral'}>{kyc.owners.length} own 25%+</Chip>
+                    )
                   }
                 />
                 {[...kyc.owners, ...kyc.votingOnly, ...kyc.tribeHeld].map((holder) => {

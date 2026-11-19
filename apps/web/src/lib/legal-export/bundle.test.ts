@@ -170,6 +170,16 @@ describe('kycAssessment', () => {
     expect(holderKind(G1, tribe)).toBe('account');
   });
 
+  it("doesn't guess a category when the holders or the minted supply couldn't be read", () => {
+    expect(kycAssessment(null, supply, [], tribe).category).toBe('unknown');
+    expect(kycAssessment(facts().members.holders, { minted: null, voting: 10n }, [], tribe)).toEqual({
+      category: 'unknown',
+      owners: [],
+      votingOnly: [],
+      tribeHeld: []
+    });
+  });
+
   it('falls back to managers, then to any member', () => {
     const spread = [1n, 1n, 1n, 1n, 1n].map((n, i) => ({ address: `G${i}`, ownedTokens: n, votingPower: n }));
     const five = { minted: 5n, voting: 5n };
@@ -229,6 +239,17 @@ describe('buildBundle', () => {
     const nonProfit = buildBundle(draft({ entityType: 'non-profit', nonProfitPurpose: 'educational' }), facts());
     expect(nonProfit.entity.forProfit).toBeNull();
     expect(nonProfit.entity.nonProfitPurposeCategory).toBe('educational');
+  });
+
+  it('says the category is not known when the holders failed to load', () => {
+    const bundle = buildBundle(
+      draft({ managers: [{ name: 'Bo', role: '', wallet: '' }] }),
+      facts({ members: { count: null, holders: null } })
+    );
+    expect(bundle.beneficialOwnership.category).toBe('unknown');
+    expect(bundleToMarkdown(bundle)).toContain(
+      "**Category not known.** The token holders or the number of tokens minted couldn't be read"
+    );
   });
 
   it('still builds when the governor or treasury could not be read', () => {

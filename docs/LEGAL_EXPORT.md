@@ -64,6 +64,8 @@ The export measures ownership as **membership tokens owned, of all tokens minted
 - `votingPowerAtOrAboveThreshold`: delegates with 25% or more of the votes who don't own that much, for the registrar to weigh.
 - `heldByTribeContracts`: tokens in the tribe's own Treasury, Auction or Marketplace. These are listed, never treated as an owner.
 
+If either ranking or the minted supply can't be read, the category is `unknown` ("Category not known") rather than a guess, since "no one owns 25%" can't be known without them.
+
 Each holder is marked as a Stellar account (G…) or a contract (C…). A contract owner is flagged "confirm KYB and who controls it", because MIDAO looks through a company or multisig to the people behind it. Anyone at 25% or more of either measure is among the top four of that ranking, so one page of 25 from each ranking covers them. Ownership moves with transfers, so the bundle stamps `measuredAt`. The basis is written into the bundle so a registrar can correct it.
 
 ## Schema (v2)
