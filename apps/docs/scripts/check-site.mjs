@@ -236,7 +236,7 @@ for (const theme of themes) {
     (await visible('mobile')) && !(await visible('desktop')),
     `${theme}: a phone doesn't get the mobile screenshot`
   );
-  await page.getByRole('radio', { name: 'Show desktop' }).first().tap({ force: true });
+  await page.getByRole('button', { name: 'Show desktop' }).first().tap();
   expect(
     (await visible('desktop')) && !(await visible('mobile')),
     `${theme}: "Show desktop" doesn't switch the screenshot`
