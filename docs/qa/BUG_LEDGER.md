@@ -680,8 +680,9 @@ None.
 - **"Manage claim lists" in setup.** On a tribe still in setup, any token holder is offered Manage claim
   lists (`apps/web/src/hooks/use-dao-membership.ts`).
 - **"Quorum reached (5 of 1)".** The count reads backwards; "5 votes, 1 needed" would be clearer.
-- **The top bar.** It is transparent (commit 0d5f0cd), so page text shows under the tribe switcher and the
-  avatar when a page scrolls, on phones and on desktop. Awaiting a design decision.
+- **The top bar.** Fixed: it was transparent (commit 0d5f0cd), so page text showed under the tribe
+  switcher and the avatar when a page scrolled. It is translucent again (88% canvas with a 12px blur,
+  `apps/web/src/components/shell/shell-frame.tsx`). Shots captured before the fix still show it.
 - **Raw ids in copy.** The pool buy dialog names the full Treasury contract id ("Pay 25 XLM to the tribe
   Treasury CCJC…"); the Link field shows the contract id before the slug loads; action rows and the
   review on phones show full account addresses.
