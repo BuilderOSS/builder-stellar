@@ -475,7 +475,7 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
     await openComposer(page, tribe);
     const queued = page.getByRole('list', { name: 'Actions in this proposal' });
     await expect(queued.getByText('Open a quick-buy pool', { exact: true })).toBeVisible();
-    await expect(queued.getByText(`Treasury buys listed token #${listed}`)).toBeVisible();
+    await expect(queued.getByText(`Treasury buys listed token #${listed}`, { exact: true })).toBeVisible();
     await pickAction(page, /^Change the resale fee/, (form) =>
       form.getByRole('textbox', { name: 'Resale fee (%)' }).fill(String(before.fee / 100))
     );
