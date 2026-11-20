@@ -149,8 +149,9 @@ pager. The 404 and the component preview are excluded.
 - **Theme.** Each device renders a light and a dark image, and CSS shows the one that
   matches `[data-theme]`. They are lazy, and browsers defer lazy images that are hidden, so a reader normally downloads only the one they see.
 - **Device** (decision 7A). Under 768px readers see the mobile capture; wider screens see
-  desktop. "Show desktop / Show mobile" overrides it for every figure, for the session
-  (sessionStorage). A device is used only when both its theme images exist.
+  desktop. A small muted "Show mobile" (or "Show desktop") under each figure switches every figure, for the session
+  (sessionStorage). Most readers never need it, so it is the size of a caption. A device is used only when
+  both its theme images exist.
 - **Markers** (decision 3A). Each manifest marker has a box per device, as fractions of
   the image. `<Shot>` draws a 2px `signal` ring 4px outside the box, at the control radius
   plus 4px, and a numbered 20px disc. Screen readers get "Step 2: the New proposal button"
