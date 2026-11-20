@@ -3,9 +3,11 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 
-import { Button, ButtonLink } from '@/components/ui';
+import { Button, ButtonLink, Crest } from '@/components/ui';
 import type { NetworkName } from '@/config/networks';
+import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel, marketplaceDisplayAmount } from '@/lib/marketplace/asset-label';
@@ -17,6 +19,21 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { ListingComments } from './listing-comments';
 import styles from './marketplace-styles';
 import { TradeReview } from './trade-review';
+
+const poolArt = css({ position: 'relative', display: 'block', width: '100%', height: '100%' });
+const newBadge = css({
+  position: 'absolute',
+  top: '2',
+  left: '2',
+  px: '2',
+  py: '0.5',
+  borderRadius: 'full',
+  bg: 'raised',
+  color: 'ink',
+  textStyle: 'micro',
+  fontWeight: '600',
+  boxShadow: 'raised'
+});
 
 export function ListingCard({
   listing,
@@ -37,6 +54,9 @@ export function ListingCard({
   onCancelled?: (hash: string) => void;
 }) {
   const address = useAuthSessionStore((s) => s.address);
+  // The tribe's image, when this card is on that tribe's own pages.
+  const context = useOptionalDaoContext();
+  const daoConfig = context?.daoConfig.tokenContractId === community.daoId ? context.daoConfig : null;
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [action, setAction] = useState<MarketplaceAction | null>(null);
   const confirmedHash = useRef('');
@@ -83,7 +103,11 @@ export function ListingCard({
       </div>
       <div className={styles.tokenArt} aria-hidden="true">
         {pool ? (
-          <span>New</span>
+          // A pool sells new tokens from the tribe: its image, marked New, rather than an empty square.
+          <span className={poolArt}>
+            <Crest name={community.name} seed={community.daoId} src={daoConfig?.image || null} size="fill" />
+            <span className={newBadge}>New</span>
+          </span>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={`/api/render/${encodeURIComponent(community.daoId)}/${listing.tokenId}`} alt="" loading="lazy" />

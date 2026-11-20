@@ -96,6 +96,7 @@ export function MarketplaceDirectoryView() {
   return (
     <div className={styles.root}>
       <PageSection
+        guide="guides/marketplace/buy"
         title="Market"
         description="Buy a new token to support a tribe's treasury, or trade with another member."
       >

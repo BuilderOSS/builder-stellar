@@ -18,6 +18,7 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
+  GuideLink,
   Input
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -119,7 +120,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         const context = { config: daoConfig, session: { address, kit: null } };
         const checked = allowance.validate(grantDraft, context);
         if (!checked.valid) throw new Error(checked.message ?? 'Enter how many tokens the pool holds.');
-        const grant = { action: allowance.serialize(grantDraft, context) };
+        const grant = { action: { ...allowance.serialize(grantDraft, context), moduleName: 'the market' } };
         const open = marketplaceGovernanceAction(daoConfig, address, getActionHandler('open-pool'), draft);
         const unit = marketplaceAssetLabel(data.network, data.config.paymentAsset);
         // The allowance and the pool only work together: one item, removed as one.
@@ -168,7 +169,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
           <h1>Market settings</h1>
           <p>
             Once the tribe has launched, members change the market by vote. Each button here adds an action to your
-            proposal draft. Nothing is signed on this page.
+            proposal draft. Nothing is signed on this page. <GuideLink path="guides/manage/marketplace" />
           </p>
         </section>
         {isLoading ? <p role="status">Verifying marketplace state…</p> : null}

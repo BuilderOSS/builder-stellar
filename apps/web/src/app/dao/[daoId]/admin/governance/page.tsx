@@ -124,7 +124,11 @@ export default function GovernanceAdminPage() {
 
   if (!hasGovernanceAccess && !canProposeGovernance) {
     return (
-      <PageSection title="Voting rules" description="How proposals are timed and decided.">
+      <PageSection
+        guide="guides/manage/governance"
+        title="Voting rules"
+        description="How proposals are timed and decided."
+      >
         {settingsError ? (
           <Callout variant="error" title="Voting rules didn't load" description={settingsError.message} />
         ) : null}
@@ -154,6 +158,7 @@ export default function GovernanceAdminPage() {
 
   return (
     <PageSection
+      guide="guides/manage/governance"
       title="Voting rules"
       description={
         hasGovernanceAccess

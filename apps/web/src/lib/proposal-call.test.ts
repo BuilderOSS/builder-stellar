@@ -63,9 +63,23 @@ describe('restored mint allocation summaries', () => {
     expect(
       getProposalActionSummary({ ...pool, asset: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC' })
     ).toBe(
-      'Open a quick-buy pool: 3 tokens at 1 XLM each, at most 1 per wallet and 2 sold every 24h, closing 2027-01-15T08:00:00.000Z'
+      'Open a quick-buy pool: 3 tokens at 1 XLM each, at most 1 per wallet and 2 sold every 24h, closing 15 Jan 2027, 08:00 UTC'
     );
     expect(getProposalActionSummary({ ...pool, asset: recipient })).toContain(`at 1 of asset ${recipient} each`);
+  });
+  it('names a pool’s allowance step and shortens an unnamed module (BUG-CAP-9)', () => {
+    const market = 'CCCIPLJSN5BWQWLAH5JTIDKPYGV3S5K2AEGMJJPYAO45WWWAZP7R6CNY';
+    const grant = {
+      id: 'grant',
+      type: 'change-mint-allowance' as const,
+      recipient: market,
+      module: market,
+      amount: '3'
+    };
+    expect(getProposalActionSummary({ ...grant, moduleName: 'the market' })).toBe(
+      'Raise the mint allowance of the market by 3 tokens'
+    );
+    expect(getProposalActionSummary(grant)).toBe('Raise the mint allowance of CCCI…6CNY by 3 tokens');
   });
   it('handles null rows and missing recipient fields', () => {
     for (const allocation of [null, { amount: '2' }, { recipient: '', amount: '2' }]) {
@@ -261,11 +275,13 @@ describe('current proposal ABI encoding', () => {
 describe('mint draft wording', () => {
   const recipient = Keypair.random().publicKey();
   it('describes queued mints the way the proposal page does', () => {
+    const short = `${recipient.slice(0, 4)}…${recipient.slice(-4)}`;
     const mint = { id: 'a', type: 'batch-mint-governance-token' as const, recipient, amount: '5' };
-    expect(getProposalActionSummary(mint)).toBe(`Mint 5 membership tokens to ${recipient}`);
-    expect(getProposalActionSummary({ ...mint, amount: '1' })).toBe(`Mint a membership token to ${recipient}`);
+    // Sentences name accounts in short; the action's details keep the full address (BUG-CAP-15).
+    expect(getProposalActionSummary(mint)).toBe(`Mint 5 membership tokens to ${short}`);
+    expect(getProposalActionSummary({ ...mint, amount: '1' })).toBe(`Mint a membership token to ${short}`);
     expect(getProposalActionSummary({ ...mint, type: 'mint-governance-token', amount: '' })).toBe(
-      `Mint a membership token to ${recipient}`
+      `Mint a membership token to ${short}`
     );
     expect(getProposalActionLabel('batch-mint-governance-token')).toBe('Mint membership tokens');
   });
@@ -342,7 +358,7 @@ describe('admin draft wording', () => {
     );
     expect(
       getProposalActionSummary({ id: 'a', type: 'transfer-sac-token', recipient, amount: '12.5', assetCode: 'XLM' })
-    ).toBe(`Send 12.5 XLM to ${recipient}`);
+    ).toBe(`Send 12.5 XLM to ${recipient.slice(0, 4)}…${recipient.slice(-4)}`);
   });
 });
 

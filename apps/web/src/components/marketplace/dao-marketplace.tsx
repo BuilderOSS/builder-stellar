@@ -168,7 +168,9 @@ export function DaoMarketplaceView({
   return (
     <div className={styles.scoped}>
       <PageSection
+        guide="guides/marketplace/buy"
         title="Market"
+        actionsPlacement="inline"
         actions={
           <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
             Market settings

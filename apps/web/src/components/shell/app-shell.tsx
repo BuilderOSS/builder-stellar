@@ -12,7 +12,7 @@ import { useDashboardData } from '@/lib/goldsky-queries';
 import { SITE_NAME } from '@/lib/site';
 
 import { BrandLockup } from './brand-mark';
-import { NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
+import { GUIDES_NAV_ITEM, NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
 import { ThemeMenu } from './theme-menu';
 import { WalletButton } from './wallet-button';
@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           label={SITE_NAME}
           items={GLOBAL_NAV}
           activeKey={active}
+          footerItems={[GUIDES_NAV_ITEM]}
           action={{ label: 'Build a tribe', href: '/create', icon: Plus }}
           communities={communities}
           communitiesHref="/#your-tribes"

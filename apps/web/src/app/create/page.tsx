@@ -264,6 +264,7 @@ export default function CreateDaoPage() {
       />
       <div>
         <PageHeader
+          guide="start/build-your-first-tribe"
           title="Build a tribe"
           meta={
             creationStorageError() ||

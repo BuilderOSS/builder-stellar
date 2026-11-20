@@ -42,15 +42,15 @@ const steps = sva({
       '[data-state=current] > &': { bg: 'signal' },
       '[data-state=done] > &': { bg: 'signal.edge' }
     },
+    // Labels wrap rather than clip: in a dialog's narrow columns "Allow the market to hold your
+    // token" lost its last word to an ellipsis.
     label: {
       display: { base: 'none', md: 'flex' },
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: '1.5',
       textStyle: 'label',
-      overflow: 'hidden',
-      whiteSpace: 'nowrap',
-      textOverflow: 'ellipsis',
-      '& svg': { width: '3.5', height: '3.5', color: 'success', flexShrink: '0' }
+      textWrap: 'pretty',
+      '& svg': { width: '3.5', height: '3.5', color: 'success', flexShrink: '0', mt: '0.5' }
     }
   }
 });
@@ -76,8 +76,15 @@ export function ProgressSteps({
   return (
     <nav className={classes.root} aria-label="Progress">
       <p className={classes.counter}>
-        Step {current + 1} of {items.length}
-        {currentItem ? <> · {currentItem.label}</> : null}
+        {current >= items.length ? (
+          // Past the last step: never "Step 3 of 2".
+          <>{items.length === 1 ? 'Done' : `All ${items.length} steps done`}</>
+        ) : (
+          <>
+            Step {current + 1} of {items.length}
+            {currentItem ? <> · {currentItem.label}</> : null}
+          </>
+        )}
       </p>
       <ol className={classes.list}>
         {items.map((item, index) => {

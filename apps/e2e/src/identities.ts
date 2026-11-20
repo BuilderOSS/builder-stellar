@@ -89,3 +89,8 @@ export class IdentityClaims {
     for (const [identity, owner] of this.owners) if (owner === timeline) this.owners.delete(identity);
   }
 }
+
+/** "GAKU…OAEP": how the app names an account in a sentence (proposal action summaries). */
+export function shortId(address: string) {
+  return `${address.slice(0, 4)}…${address.slice(-4)}`;
+}

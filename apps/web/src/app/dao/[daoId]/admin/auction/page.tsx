@@ -41,6 +41,7 @@ export default function AuctionAdminPage() {
 
   return (
     <PageSection
+      guide="guides/manage/auction"
       title="Auction"
       description="See how auctions run now and change their settings. After launch, changes go to a vote."
     >

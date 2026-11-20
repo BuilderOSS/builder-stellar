@@ -223,6 +223,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
 
   return (
     <PageSection
+      guide="guides/auctions/bid"
       title="Auction"
       description="One token at a time. The winner becomes a member and the bid funds the treasury."
     >

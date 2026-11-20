@@ -27,13 +27,23 @@ export function errorMessage(error: unknown, fallback: string) {
 export function useTransactionFeedback(network: DaoNetworkName) {
   const toastIdRef = useRef<string | undefined>(undefined);
 
+  /**
+   * A second start (the next step of a multi-step flow) moves the same toast on, so an earlier step's
+   * "Approve the transaction" never stays spinning after the flow is done (BUG-CAP-13).
+   */
   function start(message: string) {
-    toastIdRef.current = toaster.create({
+    const payload = {
       title: message,
       description: 'Approve the transaction in your wallet.',
-      type: 'loading',
+      type: 'loading' as const,
       duration: Infinity
-    });
+    };
+    // Reuse it only while it's on screen: a toast the person closed starts a new one.
+    if (toastIdRef.current && toaster.isVisible(toastIdRef.current)) {
+      toaster.update(toastIdRef.current, payload);
+      return;
+    }
+    toastIdRef.current = toaster.create(payload);
   }
 
   /** `description` replaces the default line, for an outcome that sent nothing (e.g. already done). */

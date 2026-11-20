@@ -1,7 +1,19 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { Gavel, House, Landmark, MoreHorizontal, Rocket, Settings, Store, Ticket, Users, Vote } from 'lucide-react';
+import {
+  BookOpen,
+  Gavel,
+  House,
+  Landmark,
+  MoreHorizontal,
+  Rocket,
+  Settings,
+  Store,
+  Ticket,
+  Users,
+  Vote
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
@@ -13,10 +25,11 @@ import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { activeNavKey, type DaoNavItem, type DaoNavKey, resolveDaoNav } from '@/lib/dao-nav';
 import { canonicalDaoUrl } from '@/lib/dao-routes';
+import { docsHref } from '@/lib/site';
 import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import { DaoSwitcher } from './dao-switcher';
-import { NavRail, type ShellNavItem, TabBar } from './nav';
+import { GUIDES_NAV_ITEM, NavRail, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
 import { ThemeMenu } from './theme-menu';
 import { WalletButton } from './wallet-button';
@@ -91,7 +104,14 @@ export function DaoShell({ children }: { children: ReactNode }) {
 
   return (
     <ShellFrame
-      rail={<NavRail label={`${name} sections`} items={rail} footerItems={railFooter} activeKey={active} />}
+      rail={
+        <NavRail
+          label={`${name} sections`}
+          items={rail}
+          footerItems={[...railFooter, GUIDES_NAV_ITEM]}
+          activeKey={active}
+        />
+      }
       topStart={<DaoSwitcher current={{ id: daoId, name, image: daoConfig.image, seed: daoConfig.tokenContractId }} />}
       topEnd={
         <>
@@ -129,6 +149,18 @@ export function DaoShell({ children }: { children: ReactNode }) {
                   />
                 );
               })}
+              <ListRow
+                as="li"
+                href={docsHref()}
+                external
+                media={
+                  <span className={moreIcon}>
+                    <BookOpen aria-hidden="true" />
+                  </span>
+                }
+                title="Guides"
+                meta="How everything works, step by step"
+              />
             </ul>
             <div className={css({ mt: '4' })}>
               <Disclosure title="Contracts">

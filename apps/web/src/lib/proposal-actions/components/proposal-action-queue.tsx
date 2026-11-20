@@ -276,7 +276,9 @@ export function ProposalActionQueue({
             editingIndex !== undefined &&
             editingIndex >= entry.start &&
             editingIndex < entry.start + entry.actions.length;
-          const open = expanded[entry.key] ?? false;
+          // A multi-step item starts open: the heading counts actions ("2 actions"), so its steps are
+          // shown rather than folded into one row (BUG-CAP-7). It can still be folded.
+          const open = expanded[entry.key] ?? true;
           const shown = rowFindings(entry, findings);
           const pickable = !entry.bundleId && isPickable(getActionHandler(first.type));
           const href = actionEditHref(first);

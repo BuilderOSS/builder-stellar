@@ -1,12 +1,13 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutGrid } from 'lucide-react';
+import { BookOpen, LayoutGrid } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css, cx, sva } from 'styled-system/css';
 
 import { Crest } from '@/components/ui';
+import { docsHref } from '@/lib/site';
 
 import { BrandMark, BrandWordmark } from './brand-mark';
 
@@ -18,6 +19,17 @@ export type ShellNavItem = {
   exact?: boolean;
   /** Small count or dot on the icon (e.g. open votes, a saved draft). */
   badge?: number | boolean;
+  /** Another site (the guides): opens in a new tab and is never the active item. */
+  external?: boolean;
+};
+
+/** The guides site, at the foot of every rail. */
+export const GUIDES_NAV_ITEM: ShellNavItem = {
+  key: 'guides',
+  label: 'Guides',
+  href: docsHref(),
+  icon: BookOpen,
+  external: true
 };
 
 const badgeClass = css({
@@ -218,16 +230,28 @@ export function NavRail({
   const renderItem = (item: ShellNavItem) => {
     const Icon = item.icon;
     const active = item.key === activeKey;
+    const inner = (
+      <>
+        <span className={classes.icon}>
+          <Icon aria-hidden="true" strokeWidth={active ? 2.25 : 1.75} />
+          <NavBadge value={item.badge} />
+        </span>
+        <span className={classes.label}>{item.label}</span>
+        {item.badge ? <span className="sr-only">{badgeLabel(item).slice(item.label.length)}</span> : null}
+      </>
+    );
     return (
       <li key={item.key}>
-        <NextLink href={item.href as Route} className={classes.item} aria-current={active ? 'page' : undefined}>
-          <span className={classes.icon}>
-            <Icon aria-hidden="true" strokeWidth={active ? 2.25 : 1.75} />
-            <NavBadge value={item.badge} />
-          </span>
-          <span className={classes.label}>{item.label}</span>
-          {item.badge ? <span className="sr-only">{badgeLabel(item).slice(item.label.length)}</span> : null}
-        </NextLink>
+        {item.external ? (
+          <a href={item.href} className={classes.item} target="_blank" rel="noopener noreferrer">
+            {inner}
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        ) : (
+          <NextLink href={item.href as Route} className={classes.item} aria-current={active ? 'page' : undefined}>
+            {inner}
+          </NextLink>
+        )}
       </li>
     );
   };

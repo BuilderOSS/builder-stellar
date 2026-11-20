@@ -53,7 +53,9 @@ function format(value: bigint) {
 
 function quorumLine(quorum: bigint | null, participation: bigint, met: boolean, phase: 'upcoming' | 'open' | 'closed') {
   if (quorum === null) return 'Quorum unavailable';
-  if (met) return `Quorum reached (${format(participation)} of ${format(quorum)})`;
+  // "5 votes, 1 needed": "(5 of 1)" read backwards (BUG-CAP-10).
+  if (met)
+    return `Quorum reached: ${format(participation)} ${participation === 1n ? 'vote' : 'votes'}, ${format(quorum)} needed`;
   const missing = quorum > participation ? quorum - participation : 0n;
   const votes = missing === 1n ? 'vote' : 'votes';
   if (phase === 'upcoming')

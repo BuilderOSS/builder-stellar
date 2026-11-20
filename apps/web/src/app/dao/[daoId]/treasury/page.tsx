@@ -10,6 +10,7 @@ export default function TreasuryPage() {
   const { daoId } = useDaoContext();
   return (
     <PageSection
+      guide="concepts/treasury"
       title="Treasury"
       description="Funds the tribe holds together. They move only when a proposal passes."
       daoNote={

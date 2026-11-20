@@ -17,6 +17,7 @@ import {
   Disclosure,
   Field,
   FieldLabel,
+  GuideLink,
   Pagination,
   ProgressBar,
   Textarea
@@ -287,7 +288,8 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         <p>
           {admin
             ? 'Set aside tokens for specific wallets. People on a list claim their own tokens, free or at a price you set, until the list closes.'
-            : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
+            : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}{' '}
+          <GuideLink path={admin ? 'guides/claims/create' : 'guides/claims/claim'} />
         </p>
         <div className={styles.row}>
           {admin ? (

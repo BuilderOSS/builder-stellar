@@ -142,7 +142,9 @@ const control = {
   _placeholder: { color: 'ink.faint' },
   _hover: { borderColor: 'rule.strong' },
   _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'hover' },
-  _invalid: { borderColor: 'danger' },
+  // Panda's _invalid matches the native :invalid, so an empty required field showed red before anyone
+  // typed (BUG-CAP-19). Flag it only when the app says so, or after the person has interacted.
+  '&[aria-invalid=true], &[data-invalid], &:user-invalid': { borderColor: 'danger' },
   _focusVisible: { borderColor: 'signal', boxShadow: '0 0 0 3px token(colors.signal.wash)' }
 } as const;
 

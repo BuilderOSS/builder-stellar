@@ -1,3 +1,4 @@
+import { shortId } from '../src/identities.ts';
 import type { Page } from '@playwright/test';
 
 import { signedTransactions } from '../src/connect.ts';
@@ -124,7 +125,7 @@ test.describe('W07 and W08 proposals', { tag: '@chain' }, () => {
     kind: 'pay',
     to: ids[MEMBER_A]!,
     amount,
-    summary: new RegExp(`^Send ${amount.replace('.', '\\.')} XLM to ${ids[MEMBER_A]}`)
+    summary: new RegExp(`^Send ${amount.replace('.', '\\.')} XLM to ${shortId(ids[MEMBER_A]!)}`)
   });
 
   /* ---------- W08 · cancel by the proposer ---------- */
@@ -207,7 +208,7 @@ test.describe('W07 and W08 proposals', { tag: '@chain' }, () => {
           kind: 'pay',
           to: ids[MEMBER_B]!,
           amount: PAY_B,
-          summary: new RegExp(`^Send ${PAY_B} XLM to ${ids[MEMBER_B]}`)
+          summary: new RegExp(`^Send ${PAY_B} XLM to ${shortId(ids[MEMBER_B]!)}`)
         },
         { kind: 'toggle', setting: 'Members-only delegation', summary: /delegat/i }
       ]
@@ -349,7 +350,7 @@ test.describe('W07 and W08 proposals', { tag: '@chain' }, () => {
       await expect(column.getByText('You voted For')).toBeVisible();
     // 3 For + 2 Abstain = 5 of the 4 needed; 3 For beat 2 Against.
     await waitForUi('tally shown', (timeout) =>
-      expect(column.getByText(`Quorum reached (5 of ${fixture.quorum})`)).toBeVisible({ timeout })
+      expect(column.getByText(`Quorum reached: 5 votes, ${fixture.quorum} needed`)).toBeVisible({ timeout })
     );
     await expect(column.getByText('More For than Against')).toBeVisible();
     await expect(page.getByText('3 members voted').first()).toBeVisible();
@@ -453,7 +454,7 @@ test.describe('W07 and W08 proposals', { tag: '@chain' }, () => {
     await expect(stateChip(page).getByText("Didn't pass", { exact: true })).toBeVisible();
     await expect(lifecycleHeading(page)).toHaveText("The vote didn't pass");
     const column = statusColumn(page);
-    await expect(column.getByText(`Quorum reached (4 of ${fixture.quorum})`)).toBeVisible();
+    await expect(column.getByText(`Quorum reached: 4 votes, ${fixture.quorum} needed`)).toBeVisible();
     await expect(column.getByText('Not more For than Against')).toBeVisible();
     await expect(column.getByRole('button', { name: /Queue|Execute/ })).toHaveCount(0);
     await expect(page.getByText('3 members voted').first()).toBeVisible();

@@ -14,7 +14,12 @@ GitHub issue labelled `walkthrough`.
 
 ## Open
 
-None.
+None. Two known items aren't app bugs:
+- **Test tribes on dev's Discover.** dev.tribes.build lists the walkthrough tribes ("E2E …"); three docs
+  shots show them.
+- **Older screenshots.** Shots taken before #103 and #104 show the old transparent top bar and theme
+  switch. The capture's retakes (`apps/e2e/capture/13-retakes`, `14-retakes-ui`) refresh the pages that
+  can be photographed again.
 
 ## Fixed
 
@@ -674,30 +679,124 @@ None.
   `apps/web/src/components/proposal/proposal-context-rail.tsx`.
 - **Regression test:** none yet; the claims shots show it.
 
-### BUG-CAP-5 · Open: smaller findings from the capture
-- **Manage nav "Required".** After artwork and founder tokens are done, the Manage menu still marks both
-  Required (`apps/web/src/components/admin/manage-nav.tsx`). Seen in setup/assurance-drives/01 to 05.
-- **"Manage claim lists" in setup.** On a tribe still in setup, any token holder is offered Manage claim
-  lists (`apps/web/src/hooks/use-dao-membership.ts`).
-- **"Quorum reached (5 of 1)".** The count reads backwards; "5 votes, 1 needed" would be clearer.
-- **The top bar.** Fixed: it was transparent (commit 0d5f0cd), so page text showed under the tribe
-  switcher and the avatar when a page scrolled. It is translucent again (88% canvas with a 12px blur,
-  `apps/web/src/components/shell/shell-frame.tsx`). Shots captured before the fix still show it.
-- **Raw ids in copy.** The pool buy dialog names the full Treasury contract id ("Pay 25 XLM to the tribe
-  Treasury CCJC…"); the Link field shows the contract id before the slug loads; action rows and the
-  review on phones show full account addresses.
-- **"Step 3 of 2".** The List for sale dialog says it after both steps are done (phones); on desktop the
-  step labels are clipped ("Allow the market to hold your tol…").
-- **The Why byte count.** An empty Why box reports "46 used" (the title and links count too, but the line
-  reads as the box's own count).
-- **Raw values in a pool's steps.** "Raise the mint allowance of CCCIPL… by 3 tokens" names the
-  marketplace by its contract id, and "closing 2026-12-04T12:30:00.000Z" shows an ISO timestamp.
-- **Collapsed steps.** "In this proposal (2 actions)" shows one row for a pool or a Treasury purchase,
-  whose two steps are folded into it.
-- **Phones.** The Market settings bar covers listing content above the tab bar; Manage pages show the
-  action button twice (inline and in the sticky bar); the CSV row cuts the file name and wraps "3 rows
-  read" onto three lines; the contract rows' badges don't line up; the legal summary preview shows two
-  lines.
-- **The pool card on the tribe home** shows an empty image area before the pool has stock.
-- **Claims toast.** After both signatures of a free list, the first toast keeps spinning with "Approve
-  the transaction in your wallet" (`apps/web/src/components/minter/allocation-draft.tsx`).
+### BUG-CAP-5 · Smaller findings from the capture (index)
+The screenshot capture and its audit logged these together. Each one now has an entry of its own below,
+apart from two that were fixed or closed elsewhere:
+- **The top bar** was transparent (commit 0d5f0cd), so page text showed under the tribe switcher and the
+  avatar when a page scrolled. Fixed in #103: it is translucent again (88% canvas with a 12px blur,
+  `apps/web/src/components/shell/shell-frame.tsx`). It also explains a platform-page shot where the bar
+  looked about 70px too low on a phone; checked again after the fix, it sits at the top.
+- **Dates follow the reader's locale** ("Dec 3, 2026" for an en-US browser). Closed by design: a global
+  audience should read dates in their own format, and British spelling applies to words. Text that every
+  voter reads (a proposal's action summaries) uses one fixed UTC form instead (BUG-CAP-9).
+
+### BUG-CAP-6 · The List for sale dialog said "Step 3 of 2", and clipped its step labels
+- **Flow:** W10, List for sale, after both steps. Phones (the counter); desktop (the labels).
+- **Severity:** P2.
+- **Root cause:** `ProgressSteps` (`apps/web/src/components/ui/progress-steps.tsx`) printed "Step
+  {current + 1} of {total}" past the last step, and kept every label on one line with an ellipsis.
+- **Fix:** past the last step it says "All 2 steps done"; labels wrap to a second line.
+- **Regression test:** `apps/web/src/components/ui/progress-steps.test.tsx`.
+
+### BUG-CAP-7 · "In this proposal (2 actions)" showed one row
+- **Flow:** the composer with a pool or a Treasury purchase (each is one item of two steps). All viewports.
+- **Severity:** P2.
+- **Root cause:** a multi-step item started folded, so the heading's count and the rows disagreed.
+- **Fix:** a multi-step item starts open, showing its numbered steps; it can still be folded
+  (`apps/web/src/lib/proposal-actions/components/proposal-action-queue.tsx`).
+- **Regression test:** the capture's marketplace/pools/08 and treasury-purchases/03 show the steps.
+
+### BUG-CAP-8 · The pool buy dialog named the Treasury by its full contract id
+- **Flow:** W11, Buy from a quick-buy pool; also Give back to the Treasury and Approve the Treasury.
+- **Severity:** P2.
+- **Fix:** the summaries name it short, "the tribe Treasury (CCJC…Q6EB)" (`lib/marketplace/actions.ts`,
+  `lib/token-holder/actions.ts`). The wallet still shows the full transaction.
+- **Regression test:** `apps/web/src/lib/token-holder/actions.test.ts` (summary wording).
+
+### BUG-CAP-9 · A pool's steps showed a contract id and an ISO timestamp
+- **Flow:** the composer and proposal pages for a pool. All viewports.
+- **Severity:** P2.
+- **Actual:** "Raise the mint allowance of CCCIPL… by 3 tokens" and "closing 2026-12-04T12:30:00.000Z".
+- **Fix:** the pool's grant names "the market", any other module is shortened ("CCCI…6CNY"), and closing
+  times read "4 Dec 2026, 12:30 UTC", one fixed form for every voter (`apps/web/src/lib/proposal-call.ts`).
+- **Regression test:** `apps/web/src/lib/proposal-call.test.ts`, `proposal-actions/admin-actions.test.ts`.
+
+### BUG-CAP-10 · "Quorum reached (5 of 1)" read backwards
+- **Flow:** any proposal page past quorum. All viewports.
+- **Severity:** P2.
+- **Fix:** "Quorum reached: 5 votes, 1 needed" (`apps/web/src/components/proposal/proposal-vote-summary.tsx`).
+- **Regression test:** `apps/web/src/components/proposal/proposal-vote-summary.test.tsx`; W07 asserts it.
+
+### BUG-CAP-11 · Manage kept "Required" on finished setup steps
+- **Flow:** a tribe in setup, after artwork and founder tokens are done. The Manage menu and overview.
+- **Severity:** P2.
+- **Root cause:** the menu read a fixed list of required sections, never the checklist.
+- **Fix:** during setup the menu and the overview read the launch checklist (`useLaunchPlan`); a done step
+  shows Done (`components/admin/manage-nav.tsx`, `app/dao/[daoId]/admin/layout.tsx` and `page.tsx`).
+- **Regression test:** none at unit level; the setup shots show it.
+
+### BUG-CAP-12 · Founders were offered Manage during setup
+- **Flow:** a tribe in setup, signed in as a founder who isn't the launch admin.
+- **Severity:** P2.
+- **Root cause:** `canManage` in `apps/web/src/hooks/use-dao-membership.ts` was true for any member.
+- **Fix:** in setup only the launch admin is offered Manage (nothing can be voted on yet); after launch,
+  members.
+- **Regression test:** `apps/web/src/lib/dao-nav.test.ts` covers the nav from `canManage`.
+
+### BUG-CAP-13 · A multi-step flow left its first toast spinning
+- **Flow:** Claims, open a free list (two signatures). All viewports.
+- **Severity:** P2.
+- **Root cause:** each `tx.start` in `apps/web/src/lib/transaction-feedback.ts` made a new toast and
+  forgot the previous one.
+- **Fix:** a second start moves the same toast on, while it is still on screen.
+- **Regression test:** `apps/web/src/lib/transaction-feedback.test.ts`.
+
+### BUG-CAP-14 · The Link field showed the contract id before the link loaded
+- **Flow:** Manage, Tribe profile, opened by id. Phones (it also overflowed).
+- **Severity:** P2.
+- **Fix:** "Loading the link…" until the Manager answers, and long values wrap
+  (`apps/web/src/components/admin/community-profile.tsx`).
+- **Regression test:** none at unit level.
+
+### BUG-CAP-15 · Action sentences showed full account addresses
+- **Flow:** the composer, its review and the draft bar. Phones especially.
+- **Severity:** P2.
+- **Fix:** Send, Give and Mint sentences name accounts short ("GAKU…OAEP"); each action's details keep the
+  full address (`apps/web/src/lib/proposal-call.ts`).
+- **Regression test:** `apps/web/src/lib/proposal-call.test.ts`; W07 and W08 assert the summaries.
+
+### BUG-CAP-16 · The CSV row cut the file name on phones
+- **Fix:** Replace and Remove wrap under the name when there's no room
+  (`apps/web/src/components/minter/claim-csv-input.tsx`). **Severity:** P3.
+
+### BUG-CAP-17 · The contract rows' badges didn't line up on phones
+- **Fix:** a right-aligned version column and a narrower status column under md
+  (`apps/web/src/components/admin/contract-updates.tsx`). **Severity:** P3.
+
+### BUG-CAP-18 · The legal summary preview showed two lines
+- **Root cause:** `maxH: '120'` and `borderColor: 'line'` aren't tokens, so the box had no real height or
+  border. **Fix:** `min(36rem, 70vh)` and the `rule` colour; the scrollable box takes keyboard focus
+  (`apps/web/src/components/admin/legal-export.tsx`). **Severity:** P3.
+
+### BUG-CAP-19 · Empty required fields showed the error border before anyone typed
+- **Flow:** any form with a required field (the composer's Title first). All viewports.
+- **Severity:** P3.
+- **Root cause:** the input recipe's `_invalid` matched the native `:invalid`.
+- **Fix:** the error border shows for `aria-invalid`, `data-invalid` or `:user-invalid` only
+  (`packages/design-tokens/src/recipes.ts`).
+
+### BUG-CAP-20 · The Market settings bar covered listings on phones
+- **Fix:** a secondary page link stays in the header on phones (`actionsPlacement="inline"` on
+  `PageHeader`/`PageSection`); the Market page uses it. **Severity:** P3.
+
+### BUG-CAP-21 · Manage pages showed their button twice on phones
+- **Fix:** with the sticky bar showing it, the inline copy hides under md
+  (`components/admin/community-profile.tsx`, `auction-settings-builder.tsx`). **Severity:** P3.
+
+### BUG-CAP-22 · An empty Why box said "46 used"
+- **Fix:** the line says the title, the reason and the links share the byte budget
+  (`app/dao/[daoId]/proposals/create/page.tsx`). **Severity:** P3.
+
+### BUG-CAP-23 · A pool card showed an empty square
+- **Fix:** on its own tribe's pages a pool card shows the tribe's image, marked New
+  (`apps/web/src/components/marketplace/listing-card.tsx`). **Severity:** P3.

@@ -35,6 +35,7 @@ import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
+const desktopSubmit = css({ display: { base: 'none', md: 'contents' } });
 const fieldGrid = css({
   display: 'grid',
   gap: '5',
@@ -470,7 +471,8 @@ export function AuctionSettingsBuilder({
 
         <div className={footer}>
           <FieldHelperText>{actionAuthorityText(direct)}</FieldHelperText>
-          {submit}
+          {/* On phones the sticky bar below carries the button: one, not two. */}
+          {steps.length ? <div className={desktopSubmit}>{submit}</div> : submit}
         </div>
       </section>
       {steps.length ? <ActionBar mobileOnly>{submit}</ActionBar> : null}

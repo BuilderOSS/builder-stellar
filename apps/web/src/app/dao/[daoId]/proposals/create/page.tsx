@@ -349,6 +349,7 @@ export default function ProposalCreatePage() {
             }}
           />
           <PageHeader
+            guide="guides/proposals/write"
             title={hasDraft ? 'Your proposal' : 'New proposal'}
             meta="Explain the reason, add the actions, then sign. Actions you add from Manage, Treasury or Claims are added here too. Drafts are saved on this browser."
           />
@@ -430,8 +431,10 @@ export default function ProposalCreatePage() {
                         id="description-budget"
                         tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
                       >
-                        Required. Up to {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes (
-                        {descriptionBytes.toLocaleString()} used).
+                        {/* The budget covers the title and links too, so say so: an empty box read "46 used". */}
+                        Required. The title, the reason and the links share{' '}
+                        {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes ({descriptionBytes.toLocaleString()}{' '}
+                        used).
                       </FieldHelperText>
                       {queuedActions.length && whatItDoes !== metadata.description ? (
                         <div>
