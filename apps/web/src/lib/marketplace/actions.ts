@@ -4,6 +4,7 @@ import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { z } from 'zod';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { shortAddress } from '@/lib/activity-feed';
 import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
@@ -332,7 +333,7 @@ export async function prepareMarketplaceAction(
       await livePool(client, indexed, poolId);
       const page = (await client.pool_stock({ pool_id: poolId, page: pick.page })).result;
       if (!page.includes(pick.tokenId)) throw new MarketplaceError(STALE_PURCHASE, 409);
-      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} to the tribe Treasury ${config.treasury} and receive token #${pick.tokenId} from pool ${poolId}.`;
+      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} to the tribe Treasury (${shortAddress(config.treasury)}) and receive token #${pick.tokenId} from pool ${poolId}.`;
     } else {
       throw new MarketplaceError('Pools are closed by DAO governance, not by buyers.');
     }

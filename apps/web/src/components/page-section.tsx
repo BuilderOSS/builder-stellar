@@ -16,6 +16,8 @@ export function PageSection({
   help,
   daoNote,
   actions,
+  actionsPlacement,
+  guide,
   eyebrow,
   children
 }: {
@@ -24,6 +26,10 @@ export function PageSection({
   help?: ReactNode;
   daoNote?: ReactNode;
   actions?: ReactNode;
+  /** `inline` keeps a secondary link in the header on phones (see PageHeader). */
+  actionsPlacement?: 'bar' | 'inline';
+  /** This page's guide on docs.tribes.build (see PageHeader). */
+  guide?: string;
   eyebrow?: ReactNode;
   children: ReactNode;
 }) {
@@ -55,6 +61,8 @@ export function PageSection({
         }
         meta={meta}
         actions={actions}
+        actionsPlacement={actionsPlacement}
+        guide={guide}
         eyebrow={eyebrow}
       />
       <div className={body}>{children}</div>

@@ -176,6 +176,7 @@ export default function TokenAdminPage() {
   return (
     <>
       <PageSection
+        guide="guides/manage/token"
         title="Mint tokens"
         help="Create membership tokens. Module minting is limited by the allowances under Membership."
       >

@@ -3,6 +3,7 @@ import { rpc, StrKey, TransactionBuilder } from '@stellar/stellar-sdk';
 import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { z } from 'zod';
 
+import { shortAddress } from '@/lib/activity-feed';
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { directoryScope } from '@/lib/member-directory/query';
@@ -144,7 +145,7 @@ async function prepareOnce(
       options
     );
     summary = giveBack
-      ? `Give token #${tokenId} back to the tribe Treasury ${treasury}. You will no longer own it, and it carries no vote while the Treasury holds it.`
+      ? `Give token #${tokenId} back to the tribe Treasury (${shortAddress(treasury)}). You will no longer own it, and it carries no vote while the Treasury holds it.`
       : `Transfer token #${tokenId} to ${action.destination}. You will no longer own it. Its voting unit moves to the recipient’s delegate.`;
   } else if (action.action === 'approve') {
     if (settings.transfers_locked && action.destination !== treasury)
@@ -167,7 +168,7 @@ async function prepareOnce(
     );
     summary =
       action.destination === treasury
-        ? `Allow the tribe Treasury ${treasury} to transfer only token #${tokenId} until network position ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
+        ? `Allow the tribe Treasury (${shortAddress(treasury)}) to transfer only token #${tokenId} until network position ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
         : `Allow ${action.destination} to transfer only token #${tokenId} until network position ${expiration}. This replaces its single-token approval; ownership does not change.`;
   } else if (action.action === 'revoke') {
     // The pinned NFT Base removes the single-token approval at expiration ledger 0.

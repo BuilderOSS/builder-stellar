@@ -103,7 +103,10 @@ describe('quick-buy pool proposal actions', () => {
     // A draft queued before this kept the datetime-local text; it still builds.
     const legacy = openPoolHandler.deserialize({ ...action, expiresAt: '2030-01-01T00:00' });
     expect(openPoolHandler.buildCallVector(legacy, buildContext).args[2]).toBe(seconds);
-    expect(getProposalActionSummary(action)).toContain(new Date(Number(seconds) * 1000).toISOString());
+    // One fixed UTC form, the same for every voter (BUG-CAP-9).
+    expect(getProposalActionSummary(action)).toContain(
+      `${new Date(Number(seconds) * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`
+    );
   });
 
   it('rejects an invalid price, asset, count or a past closing time', () => {

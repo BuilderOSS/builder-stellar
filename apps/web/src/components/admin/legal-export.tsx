@@ -62,13 +62,15 @@ const managerRow = css({
 });
 const nav = css({ display: 'flex', gap: '3', justifyContent: 'space-between', flexWrap: 'wrap' });
 const actions = css({ display: 'flex', gap: '3', flexWrap: 'wrap' });
+// A real height: '120' isn't a size token, so the box clipped the summary to two lines (BUG-CAP-18).
 const preview = css({
   border: '1px solid',
-  borderColor: 'line',
+  borderColor: 'rule',
   borderRadius: 'card',
   p: { base: '4', md: '6' },
-  maxH: '120',
-  overflowY: 'auto'
+  maxH: 'min(36rem, 70vh)',
+  overflowY: 'auto',
+  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
 });
 
 const STEPS = [
@@ -566,7 +568,7 @@ export function LegalExport({ config, daoId, routeId }: { config: DaoNetworkConf
               <p className={muted} aria-live="polite">
                 {exported ?? 'Check the summary below before you send it.'}
               </p>
-              <div className={preview}>
+              <div className={preview} role="region" aria-label="Summary preview" tabIndex={0}>
                 <Markdown source={markdown} />
               </div>
             </div>

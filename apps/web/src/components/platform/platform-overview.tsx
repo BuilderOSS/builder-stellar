@@ -62,6 +62,7 @@ export function PlatformOverview() {
 
   return (
     <PageSection
+      guide="guides/platform/operators"
       title="Platform"
       description={
         admin

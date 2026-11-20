@@ -28,8 +28,10 @@ const drop = css({
   '& p': { m: '0' }
 });
 const dropTitle = css({ textStyle: 'label', color: 'ink' });
+// On a phone the buttons wrap under the name rather than squeezing it to "workshop…" (BUG-CAP-16).
 const file = css({
   display: 'flex',
+  flexWrap: 'wrap',
   alignItems: 'center',
   gap: '3',
   p: '3',
@@ -46,6 +48,8 @@ const fileName = css({
   whiteSpace: 'nowrap'
 });
 const links = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1', mt: '1' });
+const fileText = css({ minW: '0', flex: '1 1 12rem' });
+const fileButtons = css({ display: 'flex', gap: '1', ml: 'auto' });
 
 /**
  * Who can claim: a CSV dropped or chosen, or addresses pasted. Hands back the text and where it
@@ -123,7 +127,7 @@ export function ClaimCsvInput({
       ) : source?.kind === 'file' ? (
         <div className={file}>
           <FileText aria-hidden="true" />
-          <div className={css({ minW: '0', flex: '1' })}>
+          <div className={fileText}>
             <p className={fileName} title={source.name}>
               {source.name}
             </p>
@@ -131,12 +135,14 @@ export function ClaimCsvInput({
               {rows.toLocaleString()} {rows === 1 ? 'row' : 'rows'} read
             </FieldHelperText>
           </div>
-          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => input.current?.click()}>
-            Replace
-          </Button>
-          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange('', null)}>
-            Remove
-          </Button>
+          <div className={fileButtons}>
+            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => input.current?.click()}>
+              Replace
+            </Button>
+            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange('', null)}>
+              Remove
+            </Button>
+          </div>
         </div>
       ) : (
         <>

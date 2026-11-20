@@ -124,6 +124,7 @@ export function MembershipSettings() {
   if (state.isLoading || !state.data)
     return (
       <PageSection
+        guide="concepts/membership-tokens"
         title="Membership"
         description="How tokens move, who members can delegate to, and what modules may mint."
       >
@@ -261,6 +262,7 @@ export function MembershipSettings() {
   return (
     <>
       <PageSection
+        guide="concepts/membership-tokens"
         title="Membership"
         eyebrow={<Chip tone={data.live ? 'live' : 'yours'}>{data.live ? 'Needs a vote' : 'Setup'}</Chip>}
       >

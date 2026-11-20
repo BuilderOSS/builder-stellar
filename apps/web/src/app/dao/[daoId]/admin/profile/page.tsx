@@ -3,7 +3,7 @@ import { PageSection } from '@/components/page-section';
 
 export default function CommunityProfilePage() {
   return (
-    <PageSection title="Tribe profile">
+    <PageSection guide="guides/manage/profile" title="Tribe profile">
       <CommunityProfileEditor />
     </PageSection>
   );

@@ -284,7 +284,7 @@ export default function FoundersAdminPage() {
   }
 
   return (
-    <PageSection title="Founder tokens">
+    <PageSection guide="guides/setup/founders" title="Founder tokens">
       <Stack gap="4">
         {token.error ? (
           <Callout variant="error" title="The token didn't load" description={token.error.message} />

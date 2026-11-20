@@ -1,3 +1,4 @@
+import { shortId } from '../src/identities.ts';
 import { expect, expectNoHorizontalScroll, test } from '../src/fixtures.ts';
 import {
   composeProposal,
@@ -49,8 +50,8 @@ test.describe('W08 threshold and W07 composer', { tag: '@matrix' }, () => {
       title: 'W07 composer check (not submitted)',
       why: 'Checks the composer at this viewport. It is cancelled before signing.',
       actions: [
-        { kind: 'pay', to: a, amount: '2', summary: new RegExp(`^Send 2 XLM to ${a}`) },
-        { kind: 'pay', to: b, amount: '1', summary: new RegExp(`^Send 1 XLM to ${b}`) },
+        { kind: 'pay', to: a, amount: '2', summary: new RegExp(`^Send 2 XLM to ${shortId(a)}`) },
+        { kind: 'pay', to: b, amount: '1', summary: new RegExp(`^Send 1 XLM to ${shortId(b)}`) },
         { kind: 'toggle', setting: 'Members-only delegation', summary: /delegat/i }
       ]
     });

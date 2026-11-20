@@ -165,7 +165,7 @@ export default function ArtworkAdminPage() {
 
   return (
     <>
-      <PageSection title="Artwork">
+      <PageSection guide="guides/setup/artwork" title="Artwork">
         <Stack gap="4">
           {!config.metadataContractId ? (
             <Callout

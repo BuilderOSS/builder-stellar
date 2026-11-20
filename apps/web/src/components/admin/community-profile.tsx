@@ -45,6 +45,7 @@ import { MAX_TOKEN_NAME_BYTES, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation'
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
+const desktopSubmit = css({ display: { base: 'none', md: 'contents' } });
 const grid = css({
   display: 'grid',
   gap: '5',
@@ -85,6 +86,7 @@ const linkStatus = css({
   alignItems: 'center',
   gap: '1.5',
   textStyle: 'caption',
+  overflowWrap: 'anywhere',
   minH: '5',
   m: '0',
   transitionProperty: 'color',
@@ -196,6 +198,9 @@ export function CommunityProfileEditor() {
   const link = useManagerLink(config, daoId, readSource);
   const [linkEdit, setLinkEdit] = useState<string | undefined>();
   const currentLink = link.data?.slug ?? null;
+  // Until the Manager answers, say so rather than show the page's id (a contract id when opened by
+  // id) as if it were the link (BUG-CAP-14).
+  const shownLink = currentLink ?? (link.data || link.error ? routeId : null);
   const nextLink = (linkEdit ?? currentLink ?? '').trim();
   const linkChanged = linkEdit !== undefined && nextLink !== currentLink;
   const availability = useLinkAvailability(linkChanged ? nextLink : '');
@@ -495,7 +500,7 @@ export function CommunityProfileEditor() {
               <Input
                 id="profile-link"
                 value={linkEdit ?? currentLink ?? ''}
-                placeholder={currentLink ?? routeId}
+                placeholder={shownLink ?? ''}
                 maxLength={63}
                 spellCheck={false}
                 autoCapitalize="none"
@@ -522,9 +527,11 @@ export function CommunityProfileEditor() {
                   {linkCheck?.state === 'bad' ? <X aria-hidden="true" strokeWidth={2} /> : null}
                   {linkCheck
                     ? linkCheck.text
-                    : !live
-                      ? `/dao/${currentLink ?? routeId}. Yours once you launch.`
-                      : `/dao/${currentLink ?? routeId}. Changing it takes its own vote.`}
+                    : !shownLink
+                      ? 'Loading the link…'
+                      : !live
+                        ? `/dao/${shownLink}. Yours once you launch.`
+                        : `/dao/${shownLink}. Changing it takes its own vote.`}
                 </p>
               </Changed>
             </div>
@@ -620,7 +627,8 @@ export function CommunityProfileEditor() {
         {shownSteps.length || !linkStep ? (
           <div className={footer}>
             <FieldHelperText>{actionAuthorityText(direct)}</FieldHelperText>
-            {submit}
+            {/* On phones the sticky bar below carries the button: one, not two. */}
+            {shownSteps.length ? <div className={desktopSubmit}>{submit}</div> : submit}
           </div>
         ) : null}
       </section>

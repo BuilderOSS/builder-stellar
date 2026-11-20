@@ -19,7 +19,11 @@ const advanced = css({
 export default function ModuleVersionsPage() {
   const { daoConfig: config } = useDaoContext();
   return (
-    <PageSection title="Contract upgrades" description="Keep your tribe's contracts on their latest approved releases.">
+    <PageSection
+      guide="guides/setup/contracts"
+      title="Contract upgrades"
+      description="Keep your tribe's contracts on their latest approved releases."
+    >
       <div className={page}>
         <ContractUpdates />
         {/* For people checking a specific release by hash, or adding a storage migration by hand. */}

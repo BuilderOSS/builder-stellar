@@ -18,7 +18,7 @@ import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
 import { sellHref } from '@/lib/marketplace/sell';
 import { useIsPlatformAdmin } from '@/lib/platform/registry';
-import { DISCORD_URL } from '@/lib/site';
+import { DISCORD_URL, docsHref } from '@/lib/site';
 import { formatVotes } from '@/lib/vote-source';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
 
@@ -175,7 +175,12 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
       footer={
         <>
           <ThemeSegments id="you-appearance" preference={preference} onChange={setThemePreference} />
-          <nav className={footerLinks} aria-label="Legal and community">
+          <nav className={footerLinks} aria-label="Guides, legal and community">
+            <span>
+              <a href={docsHref()} target="_blank" rel="noopener noreferrer">
+                Guides
+              </a>
+            </span>
             <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
             </span>

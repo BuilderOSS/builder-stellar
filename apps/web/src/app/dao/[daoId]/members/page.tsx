@@ -66,6 +66,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
 
   return (
     <PageSection
+      guide="guides/members/find"
       title="Members"
       daoNote={
         custom

@@ -23,8 +23,8 @@ export function isMemberItem(item: GoldskyMemberItem | null | undefined) {
 
 /**
  * The connected wallet's standing in a community: indexed tokens and voting
- * power, plus whether Manage should be offered. Manage is for members, and
- * for the launch admin while the community is still in Setup.
+ * power, plus whether Manage should be offered: to the launch admin while the
+ * community is in Setup, and to members once it has launched.
  *
  * A tribe that votes through another source (docs/designs/governance-adapter.md)
  * takes voting power from that source, read on chain; delegation doesn't apply.
@@ -45,7 +45,9 @@ export function useDaoMembership(config: DaoNetworkConfig) {
     isMember,
     isLoading: Boolean(address) && isLoading,
     isLaunchAdmin,
-    canManage: isMember || (config.status === 'pending' && isLaunchAdmin),
+    // In setup only the launch admin can change anything (there are no votes yet), so a founder holding
+    // a token isn't offered Manage (BUG-CAP-12). After launch, members propose changes.
+    canManage: config.status === 'pending' ? isLaunchAdmin : isMember,
     tokenCount: toBigInt(member?.owned_token_count),
     votingPower: custom ? (sourcePower.data?.votes ?? 0n) : toBigInt(member?.voting_power),
     /** Decimal places of `votingPower` (0 for the token). */

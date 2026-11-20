@@ -32,6 +32,7 @@ export default async function DiscoverPage({
   }
   return (
     <PageSection
+      guide="start/first-10-minutes"
       title="Discover"
       actions={
         <ButtonLink href="/create">
