@@ -46,15 +46,21 @@ export function Menu({
   trigger,
   items,
   placement = 'bottom-end',
-  label
+  label,
+  id
 }: {
   trigger: ReactNode;
   items: MenuEntry[];
   placement?: 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end' | 'right-end';
   label?: string;
+  /**
+   * Stable id for server-rendered pages. Ark's generated id can differ between the server and the
+   * browser, and then the open menu can't find its trigger and sits at the page's top-left corner.
+   */
+  id?: string;
 }) {
   return (
-    <ArkMenu.Root positioning={{ placement, gutter: 6 }} lazyMount unmountOnExit>
+    <ArkMenu.Root {...(id ? { id } : {})} positioning={{ placement, gutter: 6 }} lazyMount unmountOnExit>
       <ArkMenu.Trigger asChild>{trigger}</ArkMenu.Trigger>
       <Portal>
         <ArkMenu.Positioner>

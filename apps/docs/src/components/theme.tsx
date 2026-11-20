@@ -10,8 +10,7 @@ import {
   THEME_STORAGE_KEY,
   type ThemePreference
 } from '@builder-stellar/design-tokens/theme';
-import { SegmentedControl } from '@builder-stellar/web/ui/segmented-control';
-import { Moon, Sun, SunMoon } from 'lucide-react';
+import { ThemeMenu as ThemeMenuControl, ThemeSegments } from '@builder-stellar/web/ui/theme-switch';
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { DOCS_DEFAULT_THEME } from '@/lib/site';
@@ -54,23 +53,12 @@ export function ThemeRuntime() {
   return null;
 }
 
-/** Dark, Light and System: the same control as the app's You sheet. */
-export function ThemeControl({ id, fill = false }: { id: string; fill?: boolean }) {
-  const preference = useThemePreference();
-  return (
-    <SegmentedControl
-      id={id}
-      fill={fill}
-      label="Appearance"
-      value={preference}
-      onValueChange={(next) => {
-        if (isThemePreference(next)) saveThemePreference(next);
-      }}
-      options={[
-        { value: 'dark', label: 'Dark', icon: <Moon aria-hidden="true" /> },
-        { value: 'light', label: 'Light', icon: <Sun aria-hidden="true" /> },
-        { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
-      ]}
-    />
-  );
+/** Dark, Light and System in the header: the same control as the app's top bar, square like search. */
+export function ThemeMenu() {
+  return <ThemeMenuControl shape="square" preference={useThemePreference()} onChange={saveThemePreference} />;
+}
+
+/** "Appearance" with the three choices, for the mobile menu: the same row as the app's You sheet. */
+export function ThemeRow({ id }: { id: string }) {
+  return <ThemeSegments id={id} preference={useThemePreference()} onChange={saveThemePreference} />;
 }

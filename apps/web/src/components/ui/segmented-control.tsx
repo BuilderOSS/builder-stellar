@@ -77,9 +77,27 @@ const segmented = sva({
         text: { overflow: 'hidden', textOverflow: 'ellipsis' }
       },
       false: {}
+    },
+    size: {
+      md: {},
+      // Compact, for a settings row: 32px items (44px on touch screens), a tighter track.
+      sm: {
+        root: { p: '0.5', gap: '0.5' },
+        indicator: { borderRadius: '6px' },
+        item: { minH: '8', px: '2.5', borderRadius: '6px' }
+      }
+    },
+    iconOnly: {
+      // The label stays for assistive technology and the hover title; the icon carries it visually.
+      true: {
+        item: { px: '0', aspectRatio: '1', '@media (pointer: coarse)': { minW: 'touch' } },
+        text: { srOnly: true }
+      },
+      false: {}
     }
   },
-  defaultVariants: { fill: false }
+  compoundVariants: [{ size: 'sm', iconOnly: true, css: { item: { minW: '8' } } }],
+  defaultVariants: { fill: false, size: 'md', iconOnly: false }
 });
 
 /** Small mutually exclusive switch (Appearance, list/grid, filters). */
@@ -90,6 +108,8 @@ export function SegmentedControl({
   onValueChange,
   fill = false,
   disabled = false,
+  size = 'md',
+  iconOnly = false,
   id
 }: {
   label: string;
@@ -100,12 +120,16 @@ export function SegmentedControl({
   fill?: boolean;
   /** Shown as unavailable; its options can't be chosen. */
   disabled?: boolean;
+  /** `sm` for a settings row. */
+  size?: 'md' | 'sm';
+  /** Icons only; each option's label is still read out and shown as its title. */
+  iconOnly?: boolean;
   /** Stable id for server-rendered pages, so Ark's generated ids hydrate identically. */
   id?: string;
 }) {
   // Ark needs a defined id; passing undefined would override its own default.
   const fallbackId = useId();
-  const classes = segmented({ fill });
+  const classes = segmented({ fill, size, iconOnly });
   return (
     <SegmentGroup.Root
       id={id ?? fallbackId}
@@ -119,7 +143,12 @@ export function SegmentedControl({
     >
       <SegmentGroup.Indicator className={classes.indicator} />
       {options.map((option) => (
-        <SegmentGroup.Item key={option.value} value={option.value} className={classes.item}>
+        <SegmentGroup.Item
+          key={option.value}
+          value={option.value}
+          className={classes.item}
+          title={iconOnly && typeof option.label === 'string' ? option.label : undefined}
+        >
           {option.icon}
           <SegmentGroup.ItemText className={classes.text}>{option.label}</SegmentGroup.ItemText>
           <SegmentGroup.ItemControl />

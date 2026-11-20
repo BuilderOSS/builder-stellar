@@ -1,13 +1,14 @@
 'use client';
 
-import { LogOut, Moon, ServerCog, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
+import { LogOut, ServerCog, Settings, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css } from 'styled-system/css';
 
 import { DraftRow } from '@/components/drafts/draft-row';
 import { useAllDrafts } from '@/components/drafts/use-all-drafts';
-import { Address, Avatar, Button, Chip, ListRow, SegmentedControl, Sheet, Skeleton, Text } from '@/components/ui';
+import { Address, Avatar, Button, Chip, ListRow, Sheet, Skeleton, Text } from '@/components/ui';
+import { ThemeSegments } from '@/components/ui/theme-switch';
 import { setThemePreference, useThemePreference } from '@/components/warm-ink-theme';
 import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
@@ -20,7 +21,6 @@ import { useIsPlatformAdmin } from '@/lib/platform/registry';
 import { DISCORD_URL } from '@/lib/site';
 import { formatVotes } from '@/lib/vote-source';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
-import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
 import { BuilderDaoCredit } from './brand-mark';
 import { formatXlmBalance, useWalletSession } from './wallet-session';
@@ -174,19 +174,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
       footerLayout="stack"
       footer={
         <>
-          <SegmentedControl
-            fill
-            label="Appearance"
-            value={preference}
-            onValueChange={(next) => {
-              if (isWarmInkPreference(next)) setThemePreference(next);
-            }}
-            options={[
-              { value: 'dark', label: 'Dark', icon: <Moon aria-hidden="true" /> },
-              { value: 'light', label: 'Light', icon: <Sun aria-hidden="true" /> },
-              { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
-            ]}
-          />
+          <ThemeSegments id="you-appearance" preference={preference} onChange={setThemePreference} />
           <nav className={footerLinks} aria-label="Legal and community">
             <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
