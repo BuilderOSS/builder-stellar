@@ -366,7 +366,7 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
     await pickAction(page, /^Cancel the current auction/, async () => undefined);
     // Pause, five changes, cancel, resume: one "Change the auction" item.
     await expect(
-      page.getByRole('list', { name: 'Actions in this proposal' }).getByText('Change the auction')
+      page.getByRole('list', { name: 'Actions in this proposal' }).getByText('Change the auction', { exact: true })
     ).toBeVisible();
     await expect.poll(() => draftCount(page)).toBe(8);
     await propose(page, wallet, 'auction', 'Walkthrough W09: every auction setting, then a fresh auction.', next);
@@ -474,7 +474,7 @@ test.describe('W09 proposal actions', { tag: '@chain' }, () => {
 
     await openComposer(page, tribe);
     const queued = page.getByRole('list', { name: 'Actions in this proposal' });
-    await expect(queued.getByText('Open a quick-buy pool')).toBeVisible();
+    await expect(queued.getByText('Open a quick-buy pool', { exact: true })).toBeVisible();
     await expect(queued.getByText(`Treasury buys listed token #${listed}`)).toBeVisible();
     await pickAction(page, /^Change the resale fee/, (form) =>
       form.getByRole('textbox', { name: 'Resale fee (%)' }).fill(String(before.fee / 100))

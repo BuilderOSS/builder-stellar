@@ -58,7 +58,9 @@ async function addPayout(page: Page, recipient: string, amount: string) {
   // A payout is high risk, so it gets a second look before it joins the draft. Nothing is signed.
   const review = page.getByRole('dialog', { name: 'Add this to your proposal?' });
   await waitForVisible(review, 'high-risk review');
-  await expect(review).toContainText(`Send ${amount} XLM to ${recipient}`);
+  // The sentence shortens the address; the full one is beside it, to check before adding.
+  await expect(review).toContainText(`Send ${amount} XLM to ${recipient.slice(0, 4)}…${recipient.slice(-4)}`);
+  await expect(review.getByRole('definition').filter({ hasText: recipient })).toBeVisible();
   // BUG-W02-2: the warning names what a payout does.
   await expect(review).toContainText('Sends funds out of the treasury.');
   await review.getByRole('button', { name: 'Add to proposal' }).click();

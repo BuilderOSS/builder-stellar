@@ -388,7 +388,7 @@ test.describe.serial('W10 marketplace', { tag: '@chain' }, () => {
 
     // The contract only needs an end after the listing lands; the field works in whole minutes.
     // Two to three minutes ahead leaves time for Allow and List.
-    await form.getByRole('radio', { name: 'Custom' }).click({ force: true });
+    await form.getByRole('radiogroup', { name: 'Listing ends' }).getByText('Custom', { exact: true }).click();
     const end = await page.evaluate(() => {
       const date = new Date(Date.now() + 120_000);
       date.setSeconds(0, 0);
@@ -490,7 +490,7 @@ test.describe('W10 market pages', { tag: '@matrix' }, () => {
     );
     await expect(form.getByRole('radio', { name: '7 days' })).toBeChecked();
     await expect(form.getByRole('button', { name: 'List for sale' })).toBeEnabled();
-    await form.getByRole('radio', { name: 'Custom' }).click({ force: true });
+    await form.getByRole('radiogroup', { name: 'Listing ends' }).getByText('Custom', { exact: true }).click();
     await expect(form.locator('#sell-expiry')).toBeVisible();
     await expect(form.getByText('Choose a date and time in the future, in your time.')).toBeVisible();
     await expectNoHorizontalScroll(page);
