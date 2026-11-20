@@ -796,7 +796,48 @@ apart from two that were fixed or closed elsewhere:
 ### BUG-CAP-22 · An empty Why box said "46 used"
 - **Fix:** the line says the title, the reason and the links share the byte budget
   (`app/dao/[daoId]/proposals/create/page.tsx`). **Severity:** P3.
+- **Reopened (rerun, 2026-11-20):** the first fix kept the count, so an empty box still read "(46 used)":
+  the budget includes fixed framing. The count now shows only past three quarters of the budget, as
+  "(N left)", or as "(N over)" past it.
 
 ### BUG-CAP-23 · A pool card showed an empty square
 - **Fix:** on its own tribe's pages a pool card shows the tribe's image, marked New
   (`apps/web/src/components/marketplace/listing-card.tsx`). **Severity:** P3.
+
+### BUG-RUN-1 · Adding a payout said "Check the recipient" but showed only "GBHR…6DPJ"
+- **Flow:** W13, Treasury → Send funds → Add the payout to proposal; any payment or token gift to an
+  account. All viewports. Found by the walkthrough rerun on 2026-11-20.
+- **Severity:** P2.
+- **Root cause:** BUG-CAP-15 shortened account addresses in action sentences, and the "Add this to your
+  proposal?" check shows only those sentences, under a warning to check the recipient.
+- **Fix:** the check lists each recipient's full address beneath the sentence, in mono, wrapping
+  (`apps/web/src/components/proposal/propose-action-dialog.tsx`).
+- **Regression test:** `apps/web/src/components/proposal/propose-action-dialog.test.ts`; W13 asserts the
+  full address in the check.
+
+### BUG-RUN-2 · A mint allowance made in the composer named the market by its contract id
+- **Flow:** W09, the composer's "Change a mint allowance", picking "Marketplace (quick-buy pools)". The
+  suggested title read "Raise the mint allowance of CDT5…C2Y6 by 2 tokens".
+- **Severity:** P2.
+- **Root cause:** BUG-CAP-9 named the market only for the allowance a pool adds from Manage → Market; the
+  composer's own form left `moduleName` empty.
+- **Fix:** the allowance step names the tribe's own modules wherever it is made: "the market", "the
+  auction" or "the claim lists" (`apps/web/src/lib/proposal-actions/membership-actions.tsx`).
+- **Regression test:** `apps/web/src/lib/proposal-actions/membership-actions.test.ts`.
+
+### BUG-RUN-3 · The composer's member reference listed the tribe's contracts as members
+- **Flow:** the composer's For reference → Members. Rows read "CBYT…P3EC, 0 votes".
+- **Severity:** P3.
+- **Fix:** the Treasury, Auction and Marketplace contracts are named "Treasury (tribe contract)" and so on,
+  as on the Members page (`apps/web/src/components/proposal/proposal-context-rail.tsx`, through
+  `systemHolderName`).
+
+### BUG-RUN-4 · Some walkthrough tribes showed "Artwork unavailable"
+- **Flow:** dev.tribes.build, tokens of the script-deployed fixture tribes (e2e-w07, e2e-w09, e2e-w11-2 and
+  others). Not the app: the starter collection that founders pick renders.
+- **Severity:** P3 (test fixtures only).
+- **Root cause:** the fixture template `configs/e2e-testnet-dao.json`, copied into each walkthrough
+  config, listed a third background, `bg-gray`, that the starter collection on IPFS doesn't have. A token
+  that drew it had a layer no gateway could serve, and the renderer fell back.
+- **Fix:** `bg-gray` removed from the template and the 12 configs made from it. Fixture tribes already on
+  chain keep their art as deployed.

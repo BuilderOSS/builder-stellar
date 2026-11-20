@@ -431,10 +431,16 @@ export default function ProposalCreatePage() {
                         id="description-budget"
                         tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
                       >
-                        {/* The budget covers the title and links too, so say so: an empty box read "46 used". */}
+                        {/* The budget covers the title and links too, plus fixed framing, so a count on an
+                            empty box read "46 used". The count shows only once it matters. */}
                         Required. The title, the reason and the links share{' '}
-                        {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes ({descriptionBytes.toLocaleString()}{' '}
-                        used).
+                        {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
+                        {descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES
+                          ? ` (${(descriptionBytes - PROPOSAL_DESCRIPTION_MAX_BYTES).toLocaleString()} over)`
+                          : descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES * 0.75
+                            ? ` (${(PROPOSAL_DESCRIPTION_MAX_BYTES - descriptionBytes).toLocaleString()} left)`
+                            : ''}
+                        .
                       </FieldHelperText>
                       {queuedActions.length && whatItDoes !== metadata.description ? (
                         <div>
