@@ -10,7 +10,7 @@ import { css } from 'styled-system/css';
 
 import { DocsNav } from '@/components/docs-nav';
 import { SearchDialog } from '@/components/search-dialog';
-import { ThemeControl } from '@/components/theme';
+import { ThemeMenu, ThemeRow } from '@/components/theme';
 import { openSearch } from '@/lib/site';
 
 const header = css({
@@ -79,9 +79,8 @@ const kbd = css({
   borderColor: 'rule'
 });
 const mobileOnly = css({ display: { base: 'inline-flex', md: 'none' } });
-const desktopOnly = css({ display: { base: 'none', md: 'block' } });
-const sheetTheme = css({ display: 'grid', gap: '2', pt: '4', mt: '2', borderTopWidth: '1px', borderColor: 'rule' });
-const sheetLabel = css({ textStyle: 'label', color: 'ink.muted', m: '0' });
+const desktopOnly = css({ display: { base: 'none', md: 'inline-flex' } });
+const sheetTheme = css({ pt: '3', mt: '2', borderTopWidth: '1px', borderColor: 'rule' });
 
 const noSubscribe = () => () => {};
 const shortcutLabel = () => (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K');
@@ -122,7 +121,7 @@ export function SiteHeader() {
           </kbd>
         </button>
         <div className={desktopOnly}>
-          <ThemeControl id="theme-header" />
+          <ThemeMenu />
         </div>
         <span className={mobileOnly}>
           <IconButton ref={mobileTrigger} label="Search" onClick={() => search(mobileTrigger.current)}>
@@ -143,8 +142,7 @@ export function SiteHeader() {
           >
             <DocsNav onNavigate={() => setNavOpen(false)} />
             <div className={sheetTheme}>
-              <p className={sheetLabel}>Appearance</p>
-              <ThemeControl id="theme-sheet" fill />
+              <ThemeRow id="theme-sheet" />
             </div>
           </Sheet>
         </span>
