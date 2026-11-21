@@ -1,0 +1,8 @@
+{
+  "network": "testnet",
+  "label": "rehearsal",
+  "adminAddress": "GDEQSMUTSXGAZAWVZVAOPXC4UNJQGUHXCRECHALISXJ3HJZCNIDWYWOS",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "upgradeDelayLedgers": 60
+}

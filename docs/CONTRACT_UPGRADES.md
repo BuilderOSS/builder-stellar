@@ -126,7 +126,10 @@ then each DAO.
       ```sh
       node scripts/upgrade-contract.mjs <module> configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
       ```
-      Argument order for DAO modules is **DAO config, then network config**. It uploads the WASM,
+      Argument order for DAO modules is **DAO config, then network config**. The DAO config's `nonce` must
+      have an artifact (`deploys/<label>-<network>-dao-<nonce>.json`; each artifact's `.config` is the config
+      it was deployed with). For a platform release, pass a **launched** DAO: a DAO still in setup is
+      upgraded directly with `DEPLOY_IDENTITY`. It uploads the WASM,
       `register_implementation(<Name>, <release version>, <to-hash>)` (skipped if already registered),
       `approve_upgrade(<from>, <to>)`, then upgrades the DAO named in the DAO config: directly if it is in setup,
       or, if live, writes `deploys/<label>-<network>-dao-<nonce>-<module>-upgrade.json` and prints the
