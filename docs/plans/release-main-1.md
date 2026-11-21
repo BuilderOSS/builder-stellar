@@ -118,6 +118,10 @@ Production runs its own deployment, separate from dev.tribes.build, so each piec
 3. Record the production Manager's state: `current_implementations`, latest pointers, `upgrade_delay`, and
    every tribe's module hashes (`manager.module_versions`). This is the rollback reference.
 
+Done 2026-11-21: Neon branch `pre-release-1-2026-11-21` (`br-falling-shadow-b5zt02o1`, no compute) holds
+production as it was. `deploys/release-1/pre-release-state.json` records the Manager: 0.4.0, notice 720,
+admin `GCLGEIQB…`, and every latest pointer and current hash.
+
 ## Phase 4: indexer and database (indexer first, so the first new event is decoded)
 
 1. Apply 0011 and refresh grants on the production branch **(approval)**:
@@ -125,6 +129,13 @@ Production runs its own deployment, separate from dev.tribes.build, so each piec
 2. Apply the pipeline in place **(approval)**, from `packages/goldsky`:
    `GOLDSKY_ENV_FILE=prod.env ./scripts/deploy.sh deploy`. It only adds an event, so no replay.
 3. Check `/api/health` on www.tribes.build stays healthy (the current `main` app ignores the new column).
+
+Done 2026-11-21:
+- **Database.** 0011 was applied through Neon's SQL tool in one transaction: both views, the read grant on
+  `manager.vote_sources`, and the ledger row with the file's checksum, exactly as `migrate.sh` records it.
+  `app_server` reads both views; all 9 tribes read as token-weighted.
+- **Pipeline.** `builder-stellar-testnet` was applied from `prod.env`. It runs and fetches current ledgers.
+- **App.** www.tribes.build stayed healthy, and its pages answered 200.
 
 ## Phase 5: contracts on the production Manager (testnet-admin, each **approval**)
 

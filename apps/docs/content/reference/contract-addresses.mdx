@@ -22,11 +22,11 @@ Current releases for new tribes:
 
 | Contract | Version | Code hash |
 |---|---|---|
-| Manager | 0.4.0 | `f5b32ab19f0817a563606c9a88ab290da05871a8bf21e006fb408406659e69c1` |
+| Manager | 0.5.0 | `ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853` |
 | Token | 0.4.0 | `3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d` |
-| Metadata | 0.4.0 | `44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb` |
+| Metadata | 0.5.0 | `a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da` |
 | Auction | 0.4.0 | `8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff` |
-| Governor | 0.4.0 | `41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd` |
+| Governor | 0.5.0 | `8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807` |
 | Treasury | 0.4.0 | `597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d` |
 | Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
 | Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
@@ -58,7 +58,7 @@ Current releases for new tribes:
 | Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
 | Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
 
-The Manager, Metadata and Governor code on dev.tribes.build is a newer build than on tribes.build, under the same version number, so their hashes differ. The next release to tribes.build registers that same code there as 0.5.0: the Manager upgrades in place, new tribes get Governor and Metadata 0.5.0, and each existing tribe can upgrade its Governor by vote from Manage → Contract upgrades.
+Both sites run the same code. tribes.build registers the Manager, Metadata and Governor as 0.5.0 (release 1, 21 November 2026), while dev.tribes.build's own registry records the same hashes as 0.4.0, so the version numbers differ but the code doesn't. Tribes created on tribes.build before release 1 run Governor and Metadata 0.4.0 (`41ad48e8…`, `44a0c4b6…`) until they upgrade by vote.
 
 Source: `deploys/dev-testnet-manager.json`.
 
