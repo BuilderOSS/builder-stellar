@@ -5,7 +5,7 @@ the [membership models](membership-models.md) in PR #45 (contracts) and PR #46 (
 build, so "today" means the Token before these switches. The owner's decisions D1 to D8 are marked inline where they
 were made.
 
-Related: the savings-circle design, `docs/designs/savings-circle.md` on the `feat/savings-circle` branch, plugs in as
+Related: the savings-circle design, [savings-circle](savings-circle.md), plugs in as
 a transfer agent (see "How the Circle plugs in later").
 
 ## Problem Statement

@@ -5,7 +5,7 @@ quick-buy pools. It shipped in PR #45 (contracts) and PR #46 (web). It was writt
 means the 0.3.0 contracts it replaced; the "As built" notes in §7 and the implementation notes at the end record
 where the build differed. Code cites it by section (§1 to §7) and by decision (R1 to R9).
 
-Related: the savings-circle design, `docs/designs/savings-circle.md` on the `feat/savings-circle` branch. Its
+Related: the savings-circle design, [savings-circle](savings-circle.md). Its
 Circle mints badges only within a mint allowance the DAO grants.
 
 ## Problem Statement
