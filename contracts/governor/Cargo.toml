@@ -18,6 +18,7 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 common = { path = "../common", features = ["testutils"] }
 token = { path = "../token", features = ["testutils"] }
 treasury = { path = "../treasury", features = ["testutils"] }
+vote-adapter-mock = { path = "../vote-adapter-mock", features = ["testutils"] }
 
 [features]
 testutils = ["soroban-sdk/testutils"]

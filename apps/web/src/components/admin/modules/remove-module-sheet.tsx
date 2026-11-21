@@ -51,8 +51,7 @@ export function RemoveModuleSheet({
   daoId,
   address,
   module,
-  propose,
-  onMessage
+  propose
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -60,9 +59,8 @@ export function RemoveModuleSheet({
   daoId: string;
   address: string | null;
   module: RemovableModule | null;
-  propose: (request: ActionRequest) => ProposeResult;
+  propose: (request: ActionRequest, options?: { onAdded?: () => void }) => ProposeResult;
   /** A problem to show beside the card, when the change could not be added. */
-  onMessage: (text: string) => void;
 }) {
   const noun = module ? MODULE_COPY[module.kind].noun : 'the module';
   const safetyDelay = useSafetyDelay(daoId);
@@ -148,12 +146,12 @@ export function RemoveModuleSheet({
         title,
         note: `${steps.map((entry) => entry.title).join('. ')}.`
       });
-      handleOpenChange(false);
-      // A review dialog may follow, so let this sheet finish closing first.
-      requestAnimationFrame(() => {
-        const result = propose(request);
-        if (result.outcome === 'invalid') onMessage(result.message);
-      });
+      // BUG-W09-5: the review dialog opens over this sheet, which closes once the steps are added. Closing
+      // it first let its focus restore land after the dialog opened and dismiss it, adding nothing.
+      const result = propose(request, { onAdded: () => handleOpenChange(false) });
+      if (result.outcome === 'added') handleOpenChange(false);
+      else if (result.outcome === 'invalid') setSubmitError(result.message);
+      else if (result.outcome === 'no-wallet') setSubmitError('Connect your wallet to add this to a proposal.');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Check the values.');
     }
@@ -186,9 +184,9 @@ export function RemoveModuleSheet({
               {checklist.map((row) => (
                 <div key={row.id} className={item} role="listitem">
                   {row.tone === 'ok' ? (
-                    <Check className={ok} aria-label="Fine" />
+                    <Check className={ok} aria-label="No issue" />
                   ) : (
-                    <TriangleAlert className={warn} aria-label="Worth a look" />
+                    <TriangleAlert className={warn} aria-label="Warning" />
                   )}
                   <div>
                     <div className={itemTitle}>{row.title}</div>
@@ -218,7 +216,7 @@ export function RemoveModuleSheet({
             <ModuleCheck value={check} />
             {checklist.some((row) => row.tone === 'warn') ? (
               <FieldHelperText>
-                Warnings never block a removal, and the proposal members vote on repeats them.
+                Warnings do not block a removal. The proposal that members vote on lists them again.
               </FieldHelperText>
             ) : null}
           </>

@@ -1,0 +1,32 @@
+{
+  "network": "testnet",
+  "manager": "CBOGG6KM33NV7KJLLSUOG63KCZKAUFBZIDUEVJW5S4SAMMM3H2LBQJX4",
+  "module": "governor",
+  "target": "CA2P4LOUJ6M4HXEO2LXBZWUFN6646OYKTDA3E74RTPVPH24EE6QOOM34",
+  "fromHash": "41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd",
+  "toHash": "8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807",
+  "version": "0.5.0",
+  "managerApproval": "submitted",
+  "governor": "CA2P4LOUJ6M4HXEO2LXBZWUFN6646OYKTDA3E74RTPVPH24EE6QOOM34",
+  "treasury": "CBTMG46W6G57SA5H2ELHO7SZGVXUIN5FOLZWLEJDVJA47Z6Z73FL356J",
+  "proposal": {
+    "targets": [
+      "CA2P4LOUJ6M4HXEO2LXBZWUFN6646OYKTDA3E74RTPVPH24EE6QOOM34"
+    ],
+    "functions": [
+      "upgrade"
+    ],
+    "args": [
+      [
+        {
+          "bytes": "41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd"
+        },
+        {
+          "bytes": "8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807"
+        }
+      ]
+    ],
+    "description": "Upgrade governor to 0.5.0 (8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807)",
+    "description_hash": "cb570f53355dae4bd75f6b61363214e88d4715ee96c4ad6ff51227cdc50f06f6"
+  }
+}

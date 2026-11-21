@@ -1,7 +1,10 @@
 import { css } from 'styled-system/css';
 
+// One column that may shrink below its content's widest word (a full Stellar address), so a long
+// review line wraps instead of widening the page (BUG-W11-2).
 export const card = css({
   display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr)',
   gap: '4',
   p: '5',
   borderRadius: 'card',
@@ -22,6 +25,7 @@ export const review = css({
   gap: '3',
   p: '4',
   borderRadius: 'control',
+  gridTemplateColumns: 'minmax(0, 1fr)',
   boxShadow: 'inset 0 0 0 1px token(colors.signal.edge)'
 });
-export const reviewTitle = css({ textStyle: 'subheading', m: '0' });
+export const reviewTitle = css({ textStyle: 'subheading', m: '0', overflowWrap: 'anywhere' });

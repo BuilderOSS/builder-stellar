@@ -182,7 +182,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
 
   async function openDrive(draft: ClaimListDraft) {
     const needed = Number(threshold);
-    if (!Number.isInteger(needed) || needed < 1) throw new Error('Say how many people must claim before launch.');
+    if (!Number.isInteger(needed) || needed < 1) throw new Error('Enter how many people must claim before launch.');
     const deadline = Math.floor(Date.now() / 1000) + wholeDays(driveDays, MAX_DRIVE_DAYS, 'The drive') * DAY;
     if (deadline > draft.expiresAt) throw new Error('Claims must stay open at least until the drive ends.');
     const manager = new ManagerClient(walletClientOptions(config, address!, getDeploymentConfig().managerAddress));
@@ -213,7 +213,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       if (!entries) throw new Error('Fix the list first.');
       const people = entries.length;
       const needed = Number(threshold);
-      if (!Number.isInteger(needed) || needed < 1) throw new Error('Say how many people must claim before launch.');
+      if (!Number.isInteger(needed) || needed < 1) throw new Error('Enter how many people must claim before launch.');
       if (needed > people)
         throw new Error(
           `The list has ${people} ${people === 1 ? 'person' : 'people'}, so at most ${people} can claim.`
@@ -325,8 +325,8 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
       {mode === 'drive' ? (
         <Callout
           variant="warning"
-          title="Opening a drive hands the tribe to its Treasury now"
-          description="Add your artwork and mint founder tokens first: after this you can't change settings, artwork, founder tokens or modules. The tribe launches once enough people claim, with the launch choices below, or it never launches and everyone who paid can take it back."
+          title="Opening a drive transfers control of the tribe to its Treasury now"
+          description="Add your artwork and mint founder tokens first: after this you can't change settings, artwork, founder tokens or modules. The tribe launches once enough people claim, with the launch choices below. If not enough people claim, it does not launch and everyone who paid can take their payment back."
         />
       ) : null}
 
@@ -472,7 +472,7 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDrive(null)}>
-              Not yet
+              Cancel
             </Button>
             <Button
               onClick={() => {
@@ -504,10 +504,12 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
               .
             </li>
             <li>
-              If that many don&apos;t claim in time, it never launches
+              If that many people do not claim in time, the tribe does not launch
               {confirmDrive.price === 0n ? '.' : ' and everyone who paid can take their payment back.'}
             </li>
-            <li>The tribe, its settings and its modules pass to its Treasury now. You sign one transaction.</li>
+            <li>
+              Control of the tribe, its settings and its modules moves to its Treasury now. You sign one transaction.
+            </li>
           </ul>
         ) : null}
       </Dialog>

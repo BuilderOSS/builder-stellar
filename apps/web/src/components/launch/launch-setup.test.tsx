@@ -7,7 +7,9 @@ const state = vi.hoisted(() => ({
   address: '',
   readiness: undefined as unknown,
   artwork: undefined as unknown,
-  drive: {} as Record<string, unknown>
+  drive: {} as Record<string, unknown>,
+  auction: undefined as unknown,
+  governance: undefined as unknown
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
@@ -41,14 +43,19 @@ vi.mock('@/stores/auth-session-store', () => ({
 }));
 vi.mock('swr', () => ({
   default: (key: unknown) => ({
-    data: Array.isArray(key) && key[0] === 'launch-readiness' ? state.readiness : undefined,
+    data:
+      Array.isArray(key) && key[0] === 'launch-readiness'
+        ? state.readiness
+        : typeof key === 'string' && key.endsWith('/auctions')
+          ? state.auction
+          : undefined,
     error: undefined,
     isValidating: false,
     mutate: vi.fn()
   })
 }));
 vi.mock('@/lib/admin-surfaces', () => ({ useAdminArtwork: () => ({ data: state.artwork, mutate: vi.fn() }) }));
-vi.mock('@/lib/admin-queries', () => ({ useGovernorSettings: () => ({ data: undefined }) }));
+vi.mock('@/lib/admin-queries', () => ({ useGovernorSettings: () => ({ data: state.governance }) }));
 vi.mock('@/lib/use-dao-deployment', () => ({ useDaoDeployment: () => ({ launchDao: vi.fn() }) }));
 vi.mock('@/lib/deployment-config', () => ({
   getDeploymentConfig: () => ({ name: 'testnet', managerAddress: 'CMANAGER' })
@@ -58,10 +65,6 @@ vi.mock('@/components/create-dao/launch-readiness', () => ({
   launchReadinessIssues: () => []
 }));
 vi.mock('@/components/create-dao/SlugRename', () => ({ SlugRename: () => <div>Rename form</div> }));
-vi.mock('@/stores/create-dao-store', () => {
-  const store = Object.assign(() => [], { persist: { rehydrate: async () => {} }, getState: () => ({ drafts: [] }) });
-  return { useCreateDaoStore: store };
-});
 vi.mock('@/stores/local-preferences-store', () => {
   const prefs = { launches: {}, setLaunch: vi.fn() };
   const store = Object.assign((selector: (s: typeof prefs) => unknown) => selector(prefs), {
@@ -71,6 +74,7 @@ vi.mock('@/stores/local-preferences-store', () => {
   return { useLocalPreferencesStore: store, preferenceScopeKey: () => 'scope', assertPreferencesSaved: () => {} };
 });
 
+import { launchDefaults } from './launch-card';
 import { LaunchSetup } from './launch-setup';
 
 // The existing Vitest config uses classic JSX, while Next uses the automatic runtime.
@@ -87,8 +91,15 @@ const config = {
   status: 'pending'
 } as never;
 const readiness = (patch: Record<string, unknown> = {}) => ({
-  pending: { launch_admin: ADMIN, slug: 'lantern-club', auction_payment_asset: 'CA', marketplace_payment_asset: 'CA' },
+  pending: {
+    launch_admin: ADMIN,
+    slug: 'lantern-club',
+    auction_payment_asset: 'CA',
+    marketplace_payment_asset: 'CA',
+    addresses: { token: 'CDAO', auction: 'CAUCTION' }
+  },
   supply: 0n,
+  proposalThreshold: 1n,
   admin: ADMIN,
   live: false,
   paymentAssetsMatch: true,
@@ -107,6 +118,18 @@ describe('LaunchSetup', () => {
     state.readiness = readiness();
     state.artwork = artwork(0);
     state.drive = {};
+    state.auction = undefined;
+    state.governance = undefined;
+  });
+
+  it('names the pace from chain reads and gives the auction price its unit (BUG-W03-2, BUG-W03-3)', () => {
+    const XLM = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+    state.auction = { config: { duration: 300, reserve_price: '10000000', payment_token: XLM } };
+    // A chain read: the Governor has no queue delay getter.
+    state.governance = { votingDelay: 300, votingPeriod: 600, quorumBps: 100, proposalThreshold: 1n, source: 'chain' };
+    const html = render();
+    expect(html).toContain('starts at 1 XLM');
+    expect(html).toContain('Super fast: votes open after 5 minutes, run 10 minutes');
   });
 
   it('starts with artwork as the clear first step, and launch disabled with a reason', () => {
@@ -124,14 +147,34 @@ describe('LaunchSetup', () => {
     const html = render();
     expect(html).toContain('All required steps done');
     expect(html).toContain('2 layers · 8 traits');
-    expect(html).toContain('3 tokens minted');
+    expect(html).toContain('3 voting tokens minted');
     // Saved launch choices load in an effect, so a static render can't show the button enabled;
     // the hint comes from the same plan that enables it.
-    expect(html).toContain('Ready when you are.');
+    expect(html).toContain('Ready to launch.');
     expect(html).not.toContain('first.');
     expect(html.replace(/<!-- -->/g, '')).toContain(
       'Your link /dao/lantern-club is claimed. Changing it later takes a vote.'
     );
+  });
+
+  it('starts the auction by default when the tribe was created with one, on any device', () => {
+    state.readiness = readiness({ supply: 3n });
+    state.artwork = artwork(2);
+    const html = render();
+    const auctionSwitch = html.match(/<label[^>]*data-scope="switch"[^>]*>/)?.[0] ?? '';
+    expect(auctionSwitch).toContain('data-state="checked"');
+    expect(html).toContain('On: the first token goes up for auction right away.');
+    expect(html).not.toContain('No one could propose after launch');
+  });
+
+  it('warns at launch when founders hold fewer votes than a proposal needs', () => {
+    state.readiness = readiness({ supply: 1n, proposalThreshold: 2n });
+    state.artwork = artwork(2);
+    const html = render();
+    expect(html).toContain('No one could propose after launch');
+    expect(html).toContain('A proposal needs 2 votes. Members hold 1 vote');
+    // It is a warning: the plan can still launch.
+    expect(html).toContain('Ready to launch.');
   });
 
   it('adds the rename step when another community took the link', () => {
@@ -259,5 +302,16 @@ describe('LaunchSetup', () => {
     expect(html).toContain('0 of 2 required steps done');
     expect(html).not.toContain('Launch Lantern Club');
     expect(html).not.toContain('Add artwork');
+  });
+});
+
+describe('launchDefaults', () => {
+  const modules = { auctionContractId: 'CINDEXED', marketplaceContractId: '' };
+  it('follows the modules on chain once the pending DAO is read', () => {
+    const pending = { addresses: { auction: undefined, marketplace: 'CMARKET' } } as never;
+    expect(launchDefaults(modules, { pending })).toEqual({ auction: false, marketplace: true });
+  });
+  it('falls back to the indexed modules before the chain read arrives', () => {
+    expect(launchDefaults(modules, undefined)).toEqual({ auction: true, marketplace: false });
   });
 });

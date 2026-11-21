@@ -171,8 +171,8 @@ function ScopedTreasuryWorkspace() {
           <Disclosure title="Technical details">
             {config.treasuryContractId ? <Address value={config.treasuryContractId} label="Treasury contract" /> : null}
             <p className={muted}>
-              Balances are read live from the chain, exact to seven decimals. History comes from the indexer and can lag
-              a little. Contributions don&apos;t appear in it.
+              Balances are read live from the chain, exact to seven decimals. History comes from the indexer and can be
+              a few moments behind. Contributions don&apos;t appear in it.
             </p>
           </Disclosure>
         </section>
@@ -192,7 +192,7 @@ function ScopedTreasuryWorkspace() {
           {history.data && !history.error ? (
             !history.data.calls.length ? (
               <EmptyState title={page === 0 ? 'Nothing has run yet' : 'Nothing more here'}>
-                {page === 0 ? 'When members vote to spend funds or change something, it shows up here.' : undefined}
+                {page === 0 ? 'When members vote to spend funds or change something, it appears here.' : undefined}
               </EmptyState>
             ) : (
               <ScrollArea label="Treasury execution history">

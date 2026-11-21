@@ -1,0 +1,65 @@
+## In plain words
+
+Tribe Builder runs on Stellar, a public network that records payments and the results of programs called smart contracts. To take part in a tribe, you need a Stellar account. A wallet app holds that account for you.
+
+Your wallet is how you hold a membership, bid, buy, and vote. Each time you act, the wallet shows you what will happen and asks you to approve it. Tribe Builder never holds your funds and can't move them without your approval.
+
+## Accounts and wallets
+
+A Stellar account has a public address and a secret key.
+
+- The **address** starts with G, such as `GABC…WXYZ`. You can share it. Others use it to send you tokens or to delegate votes to you.
+- The **secret key** stays in your wallet. Your wallet uses it to approve actions. Most wallets also give you a recovery phrase. Anyone with the key or the phrase can control the account, so keep them private.
+
+Contracts have addresses too. A contract address starts with C. Each tribe's token, treasury, and other contracts each have one.
+
+Wallets that work with Tribe Builder include Freighter, xBull, LOBSTR, Albedo, and Hana in a browser. On a phone, a wallet that supports WalletConnect, such as Freighter Mobile, works when the app offers it.
+
+## XLM and network fees
+
+XLM is the Stellar network's own currency. You need some XLM for two reasons:
+
+- **To exist.** A Stellar account must hold a small minimum balance of XLM.
+- **To pay fees.** Every transaction pays a network fee in XLM. For a vote, a bid, or a proposal, the fee is small.
+
+Some actions also pay for storage. A contract keeps its data on the network for a set time, and storing new data costs more than an ordinary fee. Creating a tribe stores several new contracts, so it costs more than other actions: about 10 XLM on testnet so far. See [Storage and renewal](/concepts/storage-and-renewal).
+
+As a safeguard, the app refuses to ask you to sign any transaction with a fee above 50 XLM, and explains why.
+
+Auctions and markets can be priced in XLM or in another Stellar asset, such as USDC. To hold an asset other than XLM, your account needs a trustline for it: a one-time setting that says your account accepts that asset. On the Market, the app offers to add a USDC trustline when a purchase needs one.
+
+## Testnet and mainnet
+
+Stellar has two public networks:
+
+- **Testnet** is for testing. Its XLM is free and has no use outside testnet.
+- **Mainnet** is the main network, where XLM is real currency.
+
+Tribe Builder runs on **testnet** today. Tribes, tokens, and votes on testnet stay on testnet.
+
+Your wallet must be set to the same network as the app. If it is not, a notice says **Switch your wallet to Testnet**. You can keep reading, but the app pauses transactions until the networks match.
+
+## Signing in and signing transactions
+
+You sign two kinds of things.
+
+- **A sign-in message.** When you connect, your wallet asks you to sign a short message. This proves you control the address. It is free and moves nothing.
+- **A transaction.** Each bid, vote, or proposal is a transaction. Your wallet shows what it does and its fee before you approve.
+
+## From signing to visible
+
+An action goes through four separate stages. The app names each one, because they are not the same.
+
+1. **Review.** Your wallet shows the transaction. Nothing has happened yet. You can approve or reject it.
+2. **Submitted.** After you approve, the signed transaction is sent to the network. Signing alone does not submit it.
+3. **Confirmed.** The network includes the transaction in a ledger, its record of changes. A new ledger closes about every 5 seconds. The app then shows a link to the transaction.
+4. **Visible in lists.** The app's lists come from an index of network activity. A confirmed action can take a short time longer to appear there.
+
+Sometimes the app can't tell whether a submitted transaction was confirmed, for example after a network timeout. This is a recovery state, not a failure. Open the transaction link to check it before you try again. When you create a tribe, the app saves the signed transaction and checks it before it asks you to sign anything new, so the tribe is not created twice.
+
+## Related
+
+- [Your first 10 minutes](/start/first-10-minutes)
+- [Storage and renewal](/concepts/storage-and-renewal)
+- [Safety and security model](/concepts/safety-and-security)
+- [Troubleshooting](/reference/troubleshooting)

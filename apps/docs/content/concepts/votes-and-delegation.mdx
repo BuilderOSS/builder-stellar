@@ -1,0 +1,59 @@
+## In plain words
+
+Each membership token is one vote. On each proposal, you can vote For, Against, or Abstain, and give a reason that other members can read.
+
+Your votes on a proposal are counted from a fixed moment: immediately before the proposal was created. Tokens you receive after that moment count on later proposals, not on that one.
+
+You can also let someone else vote for you. That person is your [delegate](/reference/glossary#delegate). You keep your tokens, and you can choose a new delegate, or vote for yourself again, at any time.
+
+## How a vote is counted
+
+- **For** supports the proposal.
+- **Against** opposes it.
+- **Abstain** counts towards the [quorum](/reference/glossary#quorum) but supports neither side.
+
+A proposal passes when its For and Abstain votes together reach the quorum and it has more For votes than Against votes. The quorum is a share of all the votes that exist, set by the tribe, such as 10%. See [Proposals](/concepts/proposals).
+
+You can vote once on each proposal. You can't change your vote after it is cast. On the proposal page, the app shows **You have 3 votes on this proposal**, and the vote button names exactly what you will cast, such as **Cast 3 votes For**.
+
+## Why votes are counted at a fixed point
+
+The DAO term for this fixed point is a **snapshot**. When someone creates a proposal, the governor reads everyone's votes as they were at the ledger immediately before it. A ledger is one step in the Stellar network's record, and a new one closes about every 5 seconds. The proposal page shows this as **Voting power snapshot**, with the ledger number.
+
+A snapshot keeps a vote fair:
+
+- **A token can't vote twice.** If you vote and then pass your token to someone else, the new holder has no votes on that proposal.
+- **Votes can't be bought for one decision.** Buying tokens after a proposal appears does not change its result.
+- **The bar is fixed.** The quorum is calculated once, from the votes that existed at the snapshot, and stored with the proposal.
+
+The wait before voting opens, called the voting delay, is a notice period. It gives members time to read the proposal. It does not move the snapshot.
+
+Tokens held by the tribe's treasury, auction, or market carry no votes, so they are not part of the snapshot or the quorum.
+
+## Delegation
+
+To delegate means to let another address vote with your tokens. In the DAO term, your voting power moves, and your NFTs stay in your wallet.
+
+- **It covers every token you hold in that tribe**, not only one.
+- **It starts working at once for new proposals.** Proposals that already exist keep their snapshot.
+- **A delegate needs no tokens.** Votes can be delegated to any Stellar address, unless the tribe allows delegation only to members.
+- **It does not pass along.** Your delegate's count includes the votes delegated to them, and leaves out their own tokens if they delegated those to someone else.
+- **You can take it back.** Select **Vote for myself again** on the delegation form.
+
+When you first receive a token, its votes go to you automatically. Delegation is needed only if you want someone else to vote for you.
+
+If you delegate your votes, you have no votes to cast yourself on proposals created after that. Your delegate votes with them instead.
+
+To delegate, open the **You** sheet, select **View your tokens and delegation**, then select **Delegate votes**. The **Votes go to** line in the **You** sheet shows whether your votes go to you or to a delegate. See [Delegate your votes](/guides/members/delegate).
+
+## Tribes with another vote source
+
+Most tribes count votes from their membership tokens. A tribe can instead be created with another vote source that the platform has approved. In that tribe, votes come from that source, and delegating a token does not move them. See [Vote sources](/concepts/vote-sources).
+
+## Related
+
+- [Vote](/guides/proposals/vote)
+- [Delegate your votes](/guides/members/delegate)
+- [Proposals](/concepts/proposals)
+- [Membership tokens](/concepts/membership-tokens)
+- [Vote sources](/concepts/vote-sources)

@@ -1,0 +1,62 @@
+{
+  "id": "proposals/actions/06",
+  "appCommit": "bccf91b",
+  "ledger": 5815536,
+  "capturedAt": "2026-11-19T15:15:25.846Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Edit button",
+      "box": {
+        "desktop": {
+          "x": 0.5075,
+          "y": 0.4803,
+          "w": 0.0358,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.4373,
+          "y": 0.4776,
+          "w": 0.1375,
+          "h": 0.0443
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Remove button",
+      "box": {
+        "desktop": {
+          "x": 0.546,
+          "y": 0.4803,
+          "w": 0.054,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.5855,
+          "y": 0.4776,
+          "w": 0.2072,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

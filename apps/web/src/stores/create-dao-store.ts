@@ -68,7 +68,15 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
     marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
     claims: { enabled: false },
     tokenSettings: { ...OPEN_MEMBERSHIP },
-    governance: { votingDelay: 86400, votingPeriod: 259200, queueDelay: 3600, quorumBps: 1000, proposalThreshold: 1 }
+    governance: {
+      votingDelay: 86400,
+      votingPeriod: 259200,
+      queueDelay: 3600,
+      quorumBps: 1000,
+      proposalThreshold: 1,
+      voteSource: '',
+      voteSourceDecimals: 0
+    }
   };
 }
 export function sameWorkspace(scope: WorkspaceScope, other: WorkspaceScope) {
@@ -259,7 +267,7 @@ const storage = createJSONStorage(() => ({
       window.localStorage.setItem(key, value);
       storageError = '';
     } catch {
-      storageError = 'Could not save this draft. Free browser storage or remove an image before deploying.';
+      storageError = 'Could not save this draft. Clear some browser storage or remove an image before deploying.';
     }
   },
   removeItem: (key: string) => {
@@ -450,7 +458,8 @@ export const useCreateDaoStore = create<Store>()(
             if (typeof window !== 'undefined')
               window.localStorage.setItem(recoveryKey(snapshot), JSON.stringify(snapshot));
           } catch {
-            storageError = 'Could not save the deployment recovery snapshot. Free browser storage before signing.';
+            storageError =
+              'Could not save the deployment recovery snapshot. Clear some browser storage before signing.';
             throw new Error(storageError);
           }
           saveState({ drafts: drafts.map((d) => (d.id === id ? snapshot : d)) });

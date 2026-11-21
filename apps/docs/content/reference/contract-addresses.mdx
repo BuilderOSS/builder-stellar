@@ -1,0 +1,67 @@
+Tribe Builder runs on Stellar testnet. Test XLM has no value, and tribes on testnet are for trying the product. There is no mainnet deployment yet.
+
+## How the contracts fit together
+
+Each site has one **Manager**, the platform contract that creates tribes, launches them, and keeps the list of approved contract releases.
+
+Each tribe then has its own contracts: a token, a governor, a treasury, metadata, and the modules it chose, such as an auction, a market or claims. Their addresses are different for every tribe. To find them, open the tribe and expand **Technical details** at the foot of its home page, or **Contracts** in the tribe's **More** menu.
+
+A new tribe is created from the releases the Manager lists as current. A tribe moves to a newer release only by its own vote. See [Upgrades](/concepts/upgrades).
+
+## tribes.build
+
+| | |
+|---|---|
+| Network | Stellar testnet |
+| Manager | [`CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD`](https://stellar.expert/explorer/testnet/contract/CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD) |
+| Manager admin | [`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`](https://stellar.expert/explorer/testnet/account/GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO) |
+| Deployed | 13 October 2026, ledger [5174236](https://stellar.expert/explorer/testnet/ledger/5174236) |
+| Upgrade notice | 720 ledgers, about 1 hour |
+
+Current releases for new tribes:
+
+| Contract | Version | Code hash |
+|---|---|---|
+| Manager | 0.5.0 | `ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853` |
+| Token | 0.4.0 | `3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d` |
+| Metadata | 0.5.0 | `a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da` |
+| Auction | 0.4.0 | `8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff` |
+| Governor | 0.5.0 | `8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807` |
+| Treasury | 0.4.0 | `597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d` |
+| Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
+| Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
+
+Source: `deploys/builder-testnet-manager.json`.
+
+## dev.tribes.build
+
+dev.tribes.build is where changes are tried before they reach tribes.build. It has its own Manager, so its tribes are separate from the tribes on tribes.build.
+
+| | |
+|---|---|
+| Network | Stellar testnet |
+| Manager | [`CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY`](https://stellar.expert/explorer/testnet/contract/CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY) |
+| Manager admin | [`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`](https://stellar.expert/explorer/testnet/account/GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO) |
+| Deployed | 19 November 2026, ledger [5806063](https://stellar.expert/explorer/testnet/ledger/5806063) |
+| Upgrade notice | 720 ledgers, about 1 hour |
+
+Current releases for new tribes:
+
+| Contract | Version | Code hash |
+|---|---|---|
+| Manager | 0.4.0 | `ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853` |
+| Token | 0.4.0 | `3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d` |
+| Metadata | 0.4.0 | `a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da` |
+| Auction | 0.4.0 | `8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff` |
+| Governor | 0.4.0 | `8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807` |
+| Treasury | 0.4.0 | `597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d` |
+| Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
+| Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
+
+Both sites run the same code. tribes.build registers the Manager, Metadata and Governor as 0.5.0 (release 1, 21 November 2026), while dev.tribes.build's own registry records the same hashes as 0.4.0, so the version numbers differ but the code doesn't. Tribes created on tribes.build before release 1 run Governor and Metadata 0.4.0 (`41ad48e8…`, `44a0c4b6…`) until they upgrade by vote.
+
+Source: `deploys/dev-testnet-manager.json`.
+
+## Check a contract yourself
+
+Every address on this page and in the app links to [stellar.expert](https://stellar.expert/explorer/testnet), a public Stellar explorer. There you can see a contract's code hash, its storage, and every transaction that called it. A tribe's contracts should run one of the code hashes listed above, or a later release the Manager has approved.

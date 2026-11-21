@@ -1,0 +1,63 @@
+## In plain words
+
+A tribe is a group of people who hold funds together and make decisions together. Members hold tokens, and each token is one vote. The group's money sits in a shared treasury. It moves only when members pass a proposal to move it.
+
+No single person runs a tribe. The person who builds it sets it up, then hands control to the tribe at launch. From then on, members decide every change by vote.
+
+## The DAO term
+
+A tribe is a DAO: a decentralised autonomous organisation. "Decentralised" means no single person or company controls it. "Autonomous" means its rules run as code on a public network, so they apply the same way to everyone.
+
+In Tribe Builder, a DAO has:
+
+- **NFT membership.** Each membership is a non-fungible token (NFT) on Stellar, with one vote. See [Membership tokens](/concepts/membership-tokens).
+- **A shared treasury.** An onchain contract holds the tribe's funds. See [The Treasury](/concepts/treasury).
+- **Onchain votes.** Members vote on proposals, and a proposal that passes runs its actions exactly as written. See [Proposals](/concepts/proposals).
+
+The model is based on Nouns Builder, adapted for Stellar.
+
+## The contracts behind a tribe
+
+Each tribe has its own set of smart contracts on Stellar. Four of them are the core, and every tribe has them:
+
+- **Token.** Records who holds each membership, who has delegated their votes to whom, and how many votes each address had at each point in time.
+- **Metadata.** Holds the artwork layers and the traits of each token, and the tribe's profile.
+- **Governor.** Creates proposals, counts votes, and checks the [quorum](/reference/glossary#quorum).
+- **Treasury.** Holds the tribe's funds and runs the actions of proposals that pass.
+
+A tribe can also have **modules**, which add ways to join:
+
+- **Auction.** Sells one new token at a time to the highest bidder.
+- **Marketplace.** Sells new tokens at a set price from pools, and lets members resell their tokens.
+- **Claims.** Lets people on a published list claim a token.
+
+A tribe chooses its modules when it is created, and it can add more later by vote. See [Modules](/concepts/modules).
+
+A platform contract called the **Manager** creates these contracts. Each contract belongs to the tribe, not to Tribe Builder. The Manager cannot run a tribe after launch.
+
+## Setup and launch
+
+A tribe goes through two stages.
+
+**Setup.** The tribe has been created, but nobody can join yet. One wallet, the [launch admin](/reference/glossary#launch-admin), adds the artwork, mints tokens for the founders, and can adjust settings directly.
+
+**Live.** At launch, the admin role of every contract passes to the tribe's treasury. The treasury acts only when a proposal passes, so from launch onwards every change requires DAO governance: a proposal that members vote on.
+
+This hand-over happens once, and it can't be reversed. See [Setup versus launched](/concepts/setup-and-launch).
+
+## What is public
+
+Everything a tribe does on chain is public. Anyone can see its members, its treasury balance, every payment, every proposal, and every vote with its reason. Tribe Builder also keeps an index of this activity so that pages load quickly. The network is the source of truth. When the index is behind, the app reads the network directly where it can.
+
+## What a tribe is not
+
+- **Not a legal entity.** A tribe is a set of contracts. A tribe that needs a legal wrapper can prepare a [legal entity export](/guides/legal/export).
+- **Not run by Tribe Builder.** After launch, Tribe Builder has no special power over a tribe's settings or funds. The Manager still lists which contract versions exist, as [Upgrades](/concepts/upgrades) explains, but it cannot upgrade a tribe's contracts on its behalf.
+- **Not a financial product.** A membership token is a vote and a record of membership. It carries no promise of value or return.
+
+## Related
+
+- [What's a tribe](/start/whats-a-tribe)
+- [Membership tokens](/concepts/membership-tokens)
+- [Setup versus launched](/concepts/setup-and-launch)
+- [Safety and security model](/concepts/safety-and-security)

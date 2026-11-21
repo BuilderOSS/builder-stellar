@@ -16,7 +16,10 @@ const topBar = css({
   display: 'flex',
   minH: '60px',
   pt: 'env(safe-area-inset-top)',
-  bg: 'transparent'
+  // One translucent layer, so content scrolling beneath stays behind the switcher and the wallet
+  // instead of showing through them (BUG-CAP-5).
+  bg: 'color-mix(in srgb, token(colors.canvas) 88%, transparent)',
+  backdropFilter: 'blur(12px)'
 });
 // On wide screens the switcher starts at the content's right edge. The spacer
 // yields when the controls need that room, keeping both targets on screen.

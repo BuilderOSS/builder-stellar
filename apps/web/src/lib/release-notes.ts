@@ -7,6 +7,8 @@ import type { UpgradeModule } from '@/lib/admin-module-versions';
  */
 export const RELEASE_NOTES: Partial<Record<UpgradeModule, Record<string, string>>> = {
   governor: {
+    '0.5.0':
+      'The Governor reads voting power from the tribe’s vote source, which is its own tokens, as before. Nothing changes for members: proposals, votes and settings stay as they are.',
     '0.2.0':
       'Members can comment on proposals, for discussion and updates. Comments are public and permanent, and anyone can post one. Vote reasons are now capped at about 1,350 words. Proposals and votes stay as they are.'
   },
@@ -18,9 +20,12 @@ export const RELEASE_NOTES: Partial<Record<UpgradeModule, Record<string, string>
     '0.2.0':
       'Anyone can comment on a listing. A resale token keeps its comments across listings. Listings and sales stay as they are.'
   },
+  metadata: {
+    '0.5.0': 'Maintenance only. Artwork, the profile and every token image stay exactly as they are.'
+  },
   token: {
     '0.2.0':
-      'Renaming the tribe (name or symbol) now shows up everywhere in the app. Nothing else changes: tokens, votes and owners stay as they are.'
+      'Renaming the tribe (name or symbol) now appears everywhere in the app. Nothing else changes: tokens, votes and owners stay as they are.'
   }
 };
 

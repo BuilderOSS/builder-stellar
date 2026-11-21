@@ -1,0 +1,61 @@
+{
+  "$comment": "Fixture tribe for walkthrough W14 (members-only delegation), on the dev Manager. Members-only delegation on. Founders: e2e-w11-founder x2, e2e-w11-member-a x1; e2e-w11-member-b holds nothing (not a member).",
+  "deployer": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "nonce": 1102,
+  "launchAdmin": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+  "slug": "e2e-w11-3",
+  "token": {
+    "name": "E2E Members Only",
+    "symbol": "E2EMO"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for members-only delegation (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        }
+      ]
+    }
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GDE3W3G72V5X42H5DMDDOWPGWCKY6AIV7U6KSYDMKK2BYOI7DXFC3NKS",
+      "amount": 2
+    },
+    {
+      "address": "GDJR6TISXBYPUE3J4XGZ2V4K4OJVVWO3G53NRIIJMH6N772ZD4UES33G",
+      "amount": 1
+    }
+  ],
+  "tokenSettings": {
+    "transfersLocked": false,
+    "membersOnlyDelegation": true,
+    "daoRecovery": false
+  }
+}

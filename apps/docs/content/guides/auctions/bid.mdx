@@ -1,0 +1,72 @@
+## Overview
+
+A tribe with an auction sells one membership token at a time. The highest bid when the auction ends wins the token, and the winning bid goes to the tribe's [Treasury](/reference/glossary#treasury). This guide shows how to place a bid, and what happens when someone bids more than you.
+
+## Before you start
+
+- Anyone with a Stellar wallet can bid. You don't need to be a member.
+- Connect your wallet on the tribe's network. Testnet is the live network today.
+- Hold enough of the auction's payment asset for your bid, plus a small network fee in XLM. Most tribes take bids in XLM. The auction page shows the asset next to every amount.
+- The tribe must have launched. During setup the Auction page says "Auctions start after launch".
+
+## Steps
+
+1. **Open the Auction page.** Choose **Auction** in the tribe's navigation. The page shows the token being sold, its artwork, a **Live** label, the **Top bid** (or **Starting at** if no one has bid yet) and the time left under **Ends in**.
+
+   <Shot id="auctions/bid/01" alt="The Auction page with a live auction, the token artwork, the starting price and the time left" />
+
+2. **Enter your bid.** Type an amount in **Your bid**. It must be at least the amount in the field's placeholder: the starting price for the first bid, or the top bid plus the tribe's minimum increase after that. Amounts can have up to 7 decimal places. **Bid the minimum** fills in the lowest amount the auction accepts.
+
+   <Shot id="auctions/bid/02" alt="The Your bid field filled in with 20 XLM, above the comment box" />
+
+3. **Add a comment, if you want.** **Comment (optional)** is one line of text, stored with your bid and shown in the list of bids. It can't be edited later.
+
+   <Shot id="auctions/bid/03" alt="A one-line comment typed in the optional comment box under the bid amount" />
+
+4. **Place the bid.** The button names the amount, for example **Place 200 XLM bid**. Your wallet opens to show the transaction. Review it, then sign. The page reports when the bid is sent, then **Bid confirmed** once the network confirms it.
+
+5. **Follow the auction.** While you lead, the bidder row says **You're winning**. Your bid also appears under **Bids**. New bids can take a moment to show up there.
+
+   <Shot id="auctions/bid/05" alt="The Auction page after a bid, with You're winning in the highest bidder row and the bid in the Bids list" />
+
+### If you're outbid
+
+When someone bids more than you, your full bid is sent back to your wallet in the same transaction as their bid. You don't need to do anything. In rare cases the transfer back can't be completed. The amount is then held for you, and the Auction page shows **Refund waiting**. See [Auction refunds](/guides/auctions/refunds/).
+
+### Bids near the end
+
+A bid placed close to the end extends the auction, so other bidders have time to respond. The tribe sets how much time a late bid adds. An auction can be extended at most 10 times. After that, bids are still accepted until the end time, but the end time no longer moves.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Placing a bid calls `create_bid` on the tribe's Auction contract. The call checks the amount before any payment moves: the first bid must meet the starting price (the reserve price), and each later bid must be at least the top bid plus the minimum increase. Your bid then moves from your wallet to the Auction contract, which holds it while you lead.
+
+  In the same transaction, the Auction contract sends the previous top bid back to that bidder. If that transfer fails, the amount is recorded as a pending refund for them instead, so one bidder can never block the auction.
+
+  If less time is left than the tribe's late-bid extension, the end time moves to the time of the bid plus that extension. The contract allows up to 10 extensions for each auction.
+
+  The payment asset is fixed once the first bid is placed. A comment can be up to 1,024 bytes.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee on bids. Bids, amounts, bidders and comments are public on chain as soon as the transaction is confirmed. The app's list of bids reads from an index, which can be a few moments behind.
+</Disclosure>
+
+## If something goes wrong
+
+- **The bid button is disabled.** Connect a wallet on the tribe's network. The page says "Connect a wallet on Testnet to bid, settle or claim a refund" until it's connected.
+- **"Enter at least … up to 7 decimals."** The amount is below the minimum, or has more than 7 decimal places. Use **Bid the minimum**, or enter a larger amount.
+- **"This auction isn't taking bids."** The auction has ended, been settled or been paused. An ended auction needs to be settled before the next one starts. See [Settle an auction](/guides/auctions/settle/).
+- **"The current auction changed. Review it again."** Another auction started, or the token changed, while you were reviewing. Nothing was signed. Refresh the page and bid again.
+- **Someone placed a higher bid shortly before you.** The contract rejects a bid that is no longer above the minimum, and nothing moves from your wallet. Enter a new amount.
+- **Your comment is too long.** Shorten it to one line under the limit.
+- **The bid was signed but the page doesn't show it.** Check the transaction in the notification before you try again. A confirmed bid can take a moment to appear in the list.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Settle an auction](/guides/auctions/settle/)
+- [Auction refunds](/guides/auctions/refunds/)
+- [Auction settings](/guides/auctions/settings/)
+- [Membership tokens](/concepts/membership-tokens/)
+- [Wallets and Stellar basics](/concepts/wallets-and-stellar/)

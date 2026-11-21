@@ -1,4 +1,4 @@
-import { Asset } from '@stellar/stellar-sdk';
+import { Asset, StrKey } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 
 import { getNetworkConfig } from '@/config/networks';
@@ -25,6 +25,7 @@ import {
   isValidTokenSymbol,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_SYMBOL_LENGTH,
+  TOKEN_NAME_LENGTH_MESSAGE,
   utf8Length
 } from './validation';
 
@@ -68,7 +69,7 @@ const identitySchema = z.object({
     .string()
     .trim()
     .min(2, 'Use at least 2 characters')
-    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, `Use at most ${MAX_TOKEN_NAME_BYTES} characters`)
+    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, TOKEN_NAME_LENGTH_MESSAGE)
     // The on-chain token JSON copies the name verbatim (InvalidName).
     .refine(
       (value) => !/["\\\u0000-\u001f\u007f]/.test(value),
@@ -134,7 +135,18 @@ const governanceSchema = z.object({
   votingPeriod: timing(validateVotingPeriod),
   queueDelay: timing(validateQueueDelay),
   quorumBps: z.number().int().min(1).max(10_000),
-  proposalThreshold: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+  proposalThreshold: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  /**
+   * Where voting power comes from: '' for the tribe's token (token-weighted), else a vote source
+   * the Manager approved (docs/designs/governance-adapter.md). Permanent once created. Drafts saved
+   * before this existed are token-weighted.
+   */
+  voteSource: z
+    .string()
+    .refine((value) => value === '' || StrKey.isValidContract(value), 'Choose an approved vote source')
+    .default(''),
+  /** The vote source's `decimals()`: `proposalThreshold` is in whole votes and scaled by it. */
+  voteSourceDecimals: z.number().int().min(0).max(38).optional()
 });
 export const draftConfigurationSchema = z.object({
   basicInfo: basicInfoSchema,

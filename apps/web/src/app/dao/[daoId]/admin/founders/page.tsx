@@ -26,12 +26,15 @@ import {
 } from '@/components/ui';
 import { CsvFileButton, SampleCsvLink } from '@/components/wallet-csv-import';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useGovernorSettings } from '@/lib/admin-queries';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { batchMintFits, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { daoAdminRoute } from '@/lib/dao-routes';
+import { proposalThresholdWarning } from '@/lib/proposal-threshold-warning';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
+import { useVoteSource } from '@/lib/vote-source';
 import { parseWalletCsv, type WalletProblem } from '@/lib/wallet-csv';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -135,6 +138,17 @@ export default function FoundersAdminPage() {
   const complete = rows.every((item) => item.recipient.trim() && item.amount) && issues.every((issue) => !issue);
   const tokens = rows.reduce((sum, item) => sum + (/^\d+$/.test(item.amount) ? Number(item.amount) : 0), 0);
   const fits = tokens > 0 && batchMintFits(tokens, rows.length);
+  // Founders are wallets (G…), so every token minted here is a vote. Through another vote source,
+  // token supply says nothing about who can propose, so there is no warning.
+  const governance = useGovernorSettings(config, session.address || undefined);
+  const tokenVotes = useVoteSource(config).voteSource?.isToken === true;
+  const thresholdWarning = tokenVotes
+    ? proposalThresholdWarning({
+        supply: token.data?.supply,
+        threshold: governance.data?.proposalThreshold,
+        adding: receipt ? 0n : BigInt(tokens)
+      })
+    : null;
 
   // A signed mint whose outcome this browser never saw: offer to check it before anything else.
   // Read on every render, so it follows this tab's own writes; other tabs' come as storage events.
@@ -270,7 +284,7 @@ export default function FoundersAdminPage() {
   }
 
   return (
-    <PageSection title="Founder tokens">
+    <PageSection guide="guides/setup/founders" title="Founder tokens">
       <Stack gap="4">
         {token.error ? (
           <Callout variant="error" title="The token didn't load" description={token.error.message} />
@@ -325,6 +339,15 @@ export default function FoundersAdminPage() {
                 <div className={css({ mt: '3' })}>
                   <ButtonLink href={daoAdminRoute(routeId, '/artwork')} variant="secondary" size="sm">
                     Go to Artwork
+                  </ButtonLink>
+                </div>
+              </Callout>
+            ) : null}
+            {thresholdWarning && !token.data?.live ? (
+              <Callout variant="warning" title="Not enough votes to propose" description={thresholdWarning}>
+                <div className={css({ mt: '3' })}>
+                  <ButtonLink href={daoAdminRoute(routeId, '/governance')} variant="secondary" size="sm">
+                    Review voting rules
                   </ButtonLink>
                 </div>
               </Callout>

@@ -32,6 +32,9 @@ DAOs keep their addresses and history only through upgrades.
      `common::upgrade::migrate`. Every proposal for this release then runs `upgrade` **then** `migrate`.
 2. Bump the module in [`releases/contracts.json`](../releases/contracts.json) (e.g. `"token": "0.2.0"`). This is the
    version registered for the new hash. **Registry records are write-once**: a wrong version can never be fixed.
+   The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the
+   build or the hash. Each Manager keeps its own records, so the same hash can carry different labels on two
+   Managers (release 0.5.0 registers on tribes.build the hashes dev.tribes.build records as 0.4.0).
 3. Build: `pnpm contracts:build`. Note the new hash: `shasum -a 256 target/wasm32v1-none/release/<module>.wasm`.
 4. Know exactly what ships: the new code is everything since the deployed build, not just your change.
    ```sh
@@ -54,7 +57,10 @@ DAOs keep their addresses and history only through upgrades.
    shasum -a 256 contracts/e2e/fixtures/<module>-<version>.wasm   # must equal <from-hash>
    ```
 3. Add e2e upgrade tests in `contracts/e2e/src/test.rs` that start from the fixture (see the token examples:
-   `dao_on_deployed_token`, `token_upgrade_*`). Cover at least:
+   `dao_on_deployed_token`, `token_upgrade_*`). For a release that also upgrades the Manager, follow
+   `contracts/e2e/src/release_0_5_0.rs`: it instantiates the deployed Manager from its fixture
+   (`contractimport!`, so the old argument types are used before the upgrade) and replays the whole rollout.
+   Cover at least:
    - setup-window upgrade by the launch admin: state kept (balances, owners, votes, settings), `version()` and
      `wasm_hash()` moved, the new behaviour works, launch still succeeds;
    - live upgrade by proposal through `treasury.execute` with `e.set_auths(&[])` (Treasury's own auth only),
@@ -120,7 +126,10 @@ then each DAO.
       ```sh
       node scripts/upgrade-contract.mjs <module> configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
       ```
-      Argument order for DAO modules is **DAO config, then network config**. It uploads the WASM,
+      Argument order for DAO modules is **DAO config, then network config**. The DAO config's `nonce` must
+      have an artifact (`deploys/<label>-<network>-dao-<nonce>.json`; each artifact's `.config` is the config
+      it was deployed with). For a platform release, pass a **launched** DAO: a DAO still in setup is
+      upgraded directly with `DEPLOY_IDENTITY`. It uploads the WASM,
       `register_implementation(<Name>, <release version>, <to-hash>)` (skipped if already registered),
       `approve_upgrade(<from>, <to>)`, then upgrades the DAO named in the DAO config: directly if it is in setup,
       or, if live, writes `deploys/<label>-<network>-dao-<nonce>-<module>-upgrade.json` and prints the
@@ -188,6 +197,10 @@ new one, then calls `upgrade_manager` (Manager admin). The Manager's own upgrade
 ledger from which the upgrade may run; rerun it then. The same latest-only rule applies (`UpgradeNotLatest`,
 7131): the script announces the hash as latest for `Manager` first. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
+
+A Manager release that changes a `create_dao` argument type (for example `GovernanceConfig.vote_source`,
+`docs/designs/governance-adapter.md` §9) breaks old web clients against the new Manager and the reverse. Pause the
+factory (`pause_factory`) across the Manager upgrade and the matching web deploy, then unpause.
 
 ## Module upgrades (Auction, Marketplace, ClaimMinter)
 

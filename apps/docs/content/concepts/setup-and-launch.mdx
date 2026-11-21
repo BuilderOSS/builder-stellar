@@ -1,0 +1,66 @@
+Every tribe has two phases. In **setup**, one wallet prepares the tribe. At **launch**, control of every setting passes to the tribe, and from then on changes need a vote.
+
+For crypto natives: during setup, the launch admin is the admin of every tribe contract. Launch hands each contract's admin to the tribe's Treasury, so every later change requires DAO governance.
+
+## Setup: the launch admin
+
+The [launch admin](/reference/glossary#launch-admin) is the wallet named when the tribe is created. During setup, it can:
+
+- add the artwork that tokens are drawn from;
+- mint founder tokens;
+- change voting rules, auction and market settings, and membership rules;
+- add modules and open free invite lists;
+- apply contract upgrades;
+- change the requested link.
+
+Each change applies at once, signed by the launch admin. Screens show this as "Setup: you apply this directly as the launch admin.", and the button reads "Apply now".
+
+Nobody can vote, propose, bid, or trade during setup. Those open at launch.
+
+## The setup checklist
+
+The Setup page lists what must be done before launch:
+
+1. **Add your artwork.** Do this first, so founder tokens get traits when they are minted.
+2. **Mint founder tokens.** At least one token, so someone can vote once the tribe launches.
+
+Two more steps appear only when there is a problem:
+
+- **Pick a new link**, if another tribe launched first with the link you asked for. A link is reserved only at launch, and the first tribe to launch with it keeps it.
+- **Upgrade your contracts**, if one of them is on a withdrawn version.
+
+## Launching
+
+When the checklist is done, the launch admin chooses "Launch", followed by the tribe's name. They can also choose to "Start auctions" and "Open the market" at the same time, if the tribe has those modules.
+
+Launch is one transaction. It checks that the launch admin still controls the tribe, the link is still free, every contract is on a version that hasn't been withdrawn, at least one token can vote, and the payment assets are the ones chosen at creation. If any check fails, nothing changes and the tribe stays in setup.
+
+## After launch: "Requires DAO governance"
+
+At launch, each contract's admin becomes the tribe's treasury, and the treasury acts only through passed proposals. The launch admin has no special power after launch. If it holds tokens, it votes like any other member.
+
+Screens show this as "Requires DAO governance: it runs only if members vote for it." The button reads "Add to proposal", and the change runs only if the proposal passes. There is no way to hand control back to one person.
+
+### In practice
+
+Sofía creates a tribe. In setup she adds 6 artwork layers, mints 3 founder tokens, and changes the auction's starting price with one signature. She launches. A week later the tribe wants a longer voting period. Sofía can no longer change it herself. She adds the change to a proposal, and it takes effect only if members vote for it.
+
+## Launch drives
+
+Instead of launching directly, the launch admin can open a launch drive. People on an invite list claim a membership, and pay into escrow if it has a price. If enough different wallets claim before the deadline, which is at most 90 days away, anyone can launch the tribe and the escrow goes to the treasury. If not, everyone can get their payment back.
+
+Opening a drive passes every setting to the treasury at once, so nothing in setup can change while it is open. A drive counts wallets, not people: one person could hold several of the wallets on the list.
+
+## What to check before you join
+
+The launch admin can mint any number of founder tokens during setup. With the shortest timings, a holder of most votes could pass and run a proposal about 15 minutes after launch. Before you bid or buy, look at how many tokens the founders hold and who they delegate to.
+
+## Related
+
+- [Launch your tribe](/guides/setup/launch)
+- [Set up: artwork](/guides/setup/artwork)
+- [Set up: founders](/guides/setup/founders)
+- [Set up: your link](/guides/setup/slug)
+- [Assurance drives](/guides/setup/assurance-drives)
+- [The Treasury](/concepts/treasury)
+- [Safety and security model](/concepts/safety-and-security)

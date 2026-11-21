@@ -58,10 +58,17 @@ export function assertAuctionWallet(
   expectedPassphrase: string
 ) {
   if (!address || address !== expectedAddress) throw new Error('Wallet account changed. Reconnect before signing.');
-  if (passphrase !== expectedPassphrase) throw new Error('Switch your wallet to the DAO network before signing.');
+  if (passphrase !== expectedPassphrase) throw new Error('Switch your wallet to this tribe’s network before signing.');
 }
 
-export function validateAuctionBid(data: CurrentAuction, tokenId: string, amount: bigint, now: number) {
+/** `assetCode` names the auction's payment asset in the message (for example XLM), when known. */
+export function validateAuctionBid(
+  data: CurrentAuction,
+  tokenId: string,
+  amount: bigint,
+  now: number,
+  assetCode?: string
+) {
   if (!data.auction || data.auction.token_id !== tokenId)
     throw new Error('The current auction changed. Review it again.');
   if (
@@ -72,5 +79,7 @@ export function validateAuctionBid(data: CurrentAuction, tokenId: string, amount
   )
     throw new Error('This auction is not accepting bids.');
   if (amount <= 0n || amount > MAX_I128 || amount < minimumAuctionBid(data))
-    throw new Error(`Bid at least ${formatAuctionAmount(minimumAuctionBid(data))} payment tokens (up to 7 decimals).`);
+    throw new Error(
+      `Bid at least ${formatAuctionAmount(minimumAuctionBid(data))} ${assetCode ?? 'of the auction’s payment asset'} (up to 7 decimals).`
+    );
 }

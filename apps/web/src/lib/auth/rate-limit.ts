@@ -61,7 +61,7 @@ export function enforceAuthRateLimit(request: Request, scope: string, limit: num
 
   if (current.count >= limit) {
     return NextResponse.json(
-      { code: 'RATE_LIMITED', message: 'Too many authentication requests. Try again shortly.' },
+      { code: 'RATE_LIMITED', message: 'Too many sign-in requests. Try again in a few minutes.' },
       {
         status: 429,
         headers: { 'Retry-After': String(Math.ceil((current.resetAt - now) / 1000)) }

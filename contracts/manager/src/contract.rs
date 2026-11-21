@@ -6,7 +6,8 @@
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
 use common::clients::{
-    ClaimsClient, DaoModuleClient, NftClient, TreasuryLaunchClient, WasmHashClient,
+    ClaimsClient, DaoModuleClient, GovernorVoteSourceClient, NftClient, TreasuryLaunchClient,
+    VoteSourceClient, WasmHashClient,
 };
 use common::modules::{
     AssuranceState, AssuranceTerms, MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE,
@@ -320,6 +321,62 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// Approve `source` as a vote source new DAOs may choose, or withdraw the
+    /// approval (`approved = false`). Admin only.
+    ///
+    /// Approval names an address, not the code behind it: approve only
+    /// sources whose weights no single party can rewrite and whose upgrades,
+    /// if any, are gated by this Manager (docs/designs/governance-adapter.md).
+    /// The mock adapter is for testnet and local networks only.
+    ///
+    /// Approving probes every read the Governor makes, plus `decimals`.
+    /// Withdrawing an approval stops new DAOs and pending DAOs from
+    /// launching with the source; DAOs already launched keep it (it is
+    /// permanent in their Governor).
+    ///
+    /// # Errors
+    ///
+    /// * `InvalidVoteSource` - `source` does not answer the interface
+    pub fn approve_vote_source(
+        env: Env,
+        source: Address,
+        approved: bool,
+        name: String,
+    ) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        Self::validate_string(&name)?;
+        let key = ManagerKey::ApprovedVoteSource(source.clone());
+        if approved {
+            let client = VoteSourceClient::new(&env, &source);
+            let mut answers = matches!(client.try_get_total_supply(), Ok(Ok(_)))
+                && matches!(client.try_decimals(), Ok(Ok(_)))
+                && matches!(client.try_voting_supply_at_previous_ledger(), Ok(Ok(_)));
+            // The checkpoint reads take a past ledger, so they are probed
+            // once one exists (always on a live network).
+            if let Some(past) = env.ledger().sequence().checked_sub(1) {
+                answers = answers
+                    && matches!(client.try_get_total_supply_at_checkpoint(&past), Ok(Ok(_)))
+                    && matches!(
+                        client.try_get_votes_at_checkpoint(&source, &past),
+                        Ok(Ok(_))
+                    );
+            }
+            if !answers {
+                return Err(ManagerError::InvalidVoteSource);
+            }
+            set_persistent(&env, &key, &name);
+        } else {
+            remove_persistent(&env, &key);
+        }
+        emit_vote_source_approved(&env, &source, approved, &name);
+        Ok(())
+    }
+
+    /// Whether new DAOs may choose `source` as their vote source.
+    pub fn is_vote_source_approved(env: Env, source: Address) -> bool {
+        get_persistent::<String>(&env, &ManagerKey::ApprovedVoteSource(source)).is_some()
+    }
+
     /// Check if an upgrade is approved.
     ///
     /// # Arguments
@@ -591,6 +648,18 @@ impl ManagerContract {
         let governor_deployer = env.deployer().with_current_contract(salt("governor"));
         let governor_addr = governor_deployer.deployed_address();
 
+        // The Governor's permanent vote source: the token unless the creator
+        // chose an approved source.
+        let vote_source = match &governance.vote_source {
+            Some(source) if *source != token_addr => {
+                if !Self::is_vote_source_approved(env.clone(), source.clone()) {
+                    return Err(ManagerError::VoteSourceNotApproved);
+                }
+                source.clone()
+            }
+            _ => token_addr.clone(),
+        };
+
         // Treasury (needs the governor).
         treasury_deployer.deploy_v2(
             treasury_wasm.clone(),
@@ -646,7 +715,7 @@ impl ManagerContract {
             governor_wasm.clone(),
             (
                 params.launch_admin.clone(),
-                token_addr.clone(),
+                vote_source,
                 treasury_addr.clone(),
                 governance.voting_delay,
                 governance.voting_period,
@@ -1467,6 +1536,24 @@ impl ManagerContract {
         // At least one voting-capable token must exist.
         if nft.total_supply() <= 0 {
             return Err(ManagerError::LaunchSupplyZero);
+        }
+        // A DAO voting through another source launches only while that
+        // source is still approved and has voting power: with none, no one
+        // could propose and every quorum would be zero.
+        let vote_source =
+            match GovernorVoteSourceClient::new(&env, &addresses.governor).try_vote_source() {
+                Ok(Ok(source)) => source,
+                _ => addresses.token.clone(), // Governor 0.4.0 votes with the token
+            };
+        if vote_source != addresses.token {
+            if !Self::is_vote_source_approved(env.clone(), vote_source.clone()) {
+                return Err(ManagerError::VoteSourceNotApproved);
+            }
+            match VoteSourceClient::new(&env, &vote_source).try_get_total_supply() {
+                Ok(Ok(0)) => return Err(ManagerError::LaunchSupplyZero),
+                Ok(Ok(_)) => {}
+                _ => return Err(ManagerError::InvalidVoteSource),
+            }
         }
         // Payment assets are tunable in Setup; each module launches only with
         // the asset recorded when it was created.

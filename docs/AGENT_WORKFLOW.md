@@ -6,6 +6,18 @@ Code. OpenCode definitions live in `.opencode/agent/`; Claude Code definitions l
 services, frontend, design, and documentation surfaces so changes follow the same path
 as the product data: contract event to indexer to read model to API to UI.
 
+## Branches
+
+`main` is frozen. It holds the last promoted release and changes only when the team
+decides to promote `dev` to `main`; no agent makes that call.
+
+- Start work from an up-to-date `dev`: `git fetch origin && git switch -c <branch> origin/dev`.
+- Open every pull request against `dev`: `gh pr create --base dev`. Stacked pull
+  requests target the branch below them, with the bottom of the stack on `dev`.
+- Never commit, push, merge, or open a pull request into `main`, and never rebase
+  `dev` onto `main`. If a tool defaults to `main`, change the base to `dev`.
+- When this section changes, update the matching notes in `CLAUDE.md` and `AGENTS.md`.
+
 ## Roles
 
 | Agent | Ownership | Required handoff |
@@ -48,12 +60,38 @@ Run the relevant checks before handing work to another agent:
 | Contract | `pnpm contracts:test`, `cargo fmt --all --check` |
 | Indexer | `pnpm indexer:test`, then pipeline generation or validation when affected |
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
+| Docs site | `pnpm --dir apps/docs lint`, `typecheck` and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
+| Docs screenshots | `pnpm --dir apps/e2e build:capture`, then the capture story on testnet (`docs/qa/SHOWCASE_TRIBE.md`, "Capturing") |
 | Database | Forward migration, rollback, permission, and query-plan evidence |
 
 Checks are requirements, not a claim of a passing run. Current CI runs Cargo
 workspace tests, web codegen before lint/typecheck/web tests, Goldsky tests, and
-a separate Build Web job. It caches node_modules and uses Node 23. Configuration
+a separate Build Web job, which also builds the docs site and checks every docs page in
+both themes. It caches node_modules and uses Node 23. Configuration
 changes belong to implementation owners, not docs-steward.
+
+## Docs ship with the change
+
+A change and the documentation it affects land in the same pull request. Docs never trail
+code into a later PR, because a merged change with stale docs is what users read the moment
+`dev` deploys.
+
+Before opening a PR, check each surface the change can touch and update it in the same branch:
+
+| Change | Update |
+| --- | --- |
+| What a user sees or does: copy, a flow, a button, an error | The guide and reference pages in `apps/docs/content` that describe it. Search for the old wording |
+| A visible screen in a captured flow | Retake the affected shots (`docs/qa/SHOWCASE_TRIBE.md`), or name them under "Docs" in the PR if testnet can't take them now |
+| Contract interface, limits, errors or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md` and so on) |
+| API routes, views, indexer or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
+| A walkthrough, fixture or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
+| Design primitives or tokens | `DESIGN.md` |
+| Finished or new work items | `TODOS.md` |
+
+Every PR description has a **Docs** line: the pages updated, or "None affected" with the reason
+(for example, a test-only change). A reviewer treats a missing or unexplained Docs line as a
+blocking finding. When a change makes a doc wrong and you can't fix it in the same PR, don't
+merge it: fix the doc first.
 
 ## Documentation handoff and acceptance
 
@@ -104,9 +142,9 @@ claiming readiness, and ask for missing authoritative destinations rather than
 inventing links. Recheck after replacements. Local ignored feedback records are
 useful context when available, but the check must work from tracked source alone.
 
-The current artwork documentation placeholder is `ARTWORK_GUIDE_URL` in
-`apps/web/src/lib/help-links.ts`. Replace it with the team's final artwork guide
-URL before release, or explicitly report that it remains unresolved.
+`ARTWORK_GUIDE_URL` in `apps/web/src/lib/help-links.ts` points to the artwork
+guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). Add new
+documentation links there, pointing to the matching docs.tribes.build page.
 
 ## Optional Vendor Skills
 

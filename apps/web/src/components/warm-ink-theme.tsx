@@ -1,5 +1,12 @@
 'use client';
 
+import {
+  applyThemePreference as applyTheme,
+  currentThemePreference,
+  readThemeCookie,
+  saveThemePreference,
+  THEME_EVENT
+} from '@builder-stellar/design-tokens/theme';
 import { useEffect, useSyncExternalStore } from 'react';
 
 import {
@@ -9,53 +16,27 @@ import {
   type WarmInkPreference
 } from '@/lib/warm-ink-theme';
 
-const THEME_EVENT = 'builder:warm-ink-theme';
-
 function subscribe(listener: () => void) {
   window.addEventListener(THEME_EVENT, listener);
   return () => window.removeEventListener(THEME_EVENT, listener);
 }
 
 function getPreference(): WarmInkPreference {
-  const preference = document.documentElement.dataset.themePreference;
-  return isWarmInkPreference(preference) ? preference : WARM_INK_DEFAULT_PREFERENCE;
+  return currentThemePreference(WARM_INK_DEFAULT_PREFERENCE);
 }
 
-function applyTheme(preference: WarmInkPreference) {
-  const root = document.documentElement;
-  const resolved =
-    preference === 'system'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-      : preference;
-  const changed = root.dataset.theme !== resolved;
-  if (changed) root.setAttribute('data-theme-switching', '');
-  root.dataset.theme = resolved;
-  root.dataset.themePreference = preference;
-  if (changed) {
-    // Flush the new colors with transitions suppressed, then restore motion.
-    void root.offsetHeight;
-    requestAnimationFrame(() => root.removeAttribute('data-theme-switching'));
-  }
-  window.dispatchEvent(new Event(THEME_EVENT));
-}
-
+/** Saves to the shared cookie and this app's localStorage key, then applies. */
 export function setThemePreference(next: WarmInkPreference) {
-  try {
-    window.localStorage.setItem(WARM_INK_THEME_KEY, next);
-  } catch {
-    /* In-memory theme still works. */
-  }
-  applyTheme(next);
+  saveThemePreference(next);
 }
 
 export function useThemePreference(): WarmInkPreference {
   return useSyncExternalStore(subscribe, getPreference, () => WARM_INK_DEFAULT_PREFERENCE);
 }
 
-// One controller, no app-wide context rerenders. OS and cross-tab changes share
-// the same update path as the appearance control in the You sheet.
+// One controller, no app-wide context rerenders. OS, cross-tab and docs-site changes
+// (the shared cookie, re-read when the tab regains focus) share the same update path
+// as the appearance control in the You sheet.
 export function WarmInkThemeRuntime() {
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -66,12 +47,18 @@ export function WarmInkThemeRuntime() {
       if (event.key !== WARM_INK_THEME_KEY && event.key !== null) return;
       applyTheme(isWarmInkPreference(event.newValue) ? event.newValue : WARM_INK_DEFAULT_PREFERENCE);
     };
+    const onFocus = () => {
+      const shared = readThemeCookie(document.cookie);
+      if (shared && shared !== getPreference()) applyTheme(shared);
+    };
     applyTheme(getPreference());
     media.addEventListener('change', onSystemChange);
     window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', onFocus);
     return () => {
       media.removeEventListener('change', onSystemChange);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 

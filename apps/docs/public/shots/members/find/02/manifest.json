@@ -1,0 +1,44 @@
+{
+  "id": "members/find/02",
+  "appCommit": "bccf91b",
+  "ledger": 5816795,
+  "capturedAt": "2026-11-19T17:00:18.901Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Votes: highest first option",
+      "box": {
+        "desktop": {
+          "x": 0.7514,
+          "y": 0.2906,
+          "w": 0.1472,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0587,
+          "y": 0.3528,
+          "w": 0.8827,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

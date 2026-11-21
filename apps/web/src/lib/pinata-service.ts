@@ -71,8 +71,10 @@ export class PinataService {
    */
   async createSignedUploadUrl(uploadType: UploadType): Promise<string> {
     try {
+      // Single files (images, a claim list) get their own type and size; only the artwork folder is a
+      // directory. A claim list fell through to `directory`, so Pinata refused its JSON (BUG-CAP-3).
       const uploadPolicy =
-        uploadType === 'dao-image' || uploadType === 'markdown-image'
+        uploadType === 'dao-image' || uploadType === 'markdown-image' || uploadType === 'claim-list'
           ? {
               max_file_size: UPLOAD_POLICIES[uploadType].maxBytes,
               allow_mime_types: [...UPLOAD_POLICIES[uploadType].allowedMimes]

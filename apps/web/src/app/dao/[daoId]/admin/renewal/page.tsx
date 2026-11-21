@@ -7,7 +7,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 export default function RenewalPage() {
   const { daoConfig: config } = useDaoContext();
   return (
-    <PageSection title="Storage renewal">
+    <PageSection guide="concepts/storage-and-renewal" title="Storage renewal">
       <RenewalPanel config={config} />
     </PageSection>
   );

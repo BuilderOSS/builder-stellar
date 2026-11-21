@@ -36,7 +36,8 @@ const row = css({
   borderColor: 'rule',
   _last: { borderBottomWidth: '0' }
 });
-const statusCol = css({ display: 'inline-flex', justifyContent: 'flex-end', minW: '48' });
+// Fixed widths keep the versions and badges in one column down the list, phones included (BUG-CAP-17).
+const statusCol = css({ display: 'inline-flex', justifyContent: 'flex-end', minW: { base: '28', md: '48' } });
 const compactRow = css({
   display: 'flex',
   alignItems: 'center',
@@ -55,7 +56,7 @@ const rowHead = css({
   flexWrap: 'wrap'
 });
 const name = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
-const version = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink.muted' });
+const version = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink.muted', minW: '12', textAlign: 'right' });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const hashes = css({
   display: 'grid',
@@ -63,6 +64,7 @@ const hashes = css({
   '& code': { textStyle: 'mono', fontSize: '0.75rem', overflowWrap: 'anywhere' }
 });
 const actions = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
+const rowStatus = css({ display: 'flex', gap: '2', alignItems: 'center', flexShrink: '0' });
 const upToDate = css({
   display: 'flex',
   alignItems: 'center',
@@ -177,7 +179,7 @@ export function ContractUpdates() {
                   ? pending
                     ? 'During setup you apply upgrades yourself. Each one is a signature.'
                     : 'Upgrades go to a vote like any other change.'
-                  : 'New contract releases show up here when they are approved for your tribe.'}
+                  : 'New contract releases appear here when they are approved for your tribe.'}
               </p>
             </div>
 
@@ -267,7 +269,7 @@ export function ContractUpdates() {
             <li key={item.module} className={compactRow}>
               <p className={name}>{MODULE_LABELS[item.module]}</p>
               {item.ok ? (
-                <span className={actions}>
+                <span className={rowStatus}>
                   <span className={version}>{item.update.current}</span>
                   {/* Fixed-width status column keeps the versions aligned down the list. */}
                   <span className={statusCol}>

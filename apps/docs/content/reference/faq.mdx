@@ -1,0 +1,91 @@
+## Getting started
+
+### Is Tribe Builder on the main Stellar network?
+
+No. Tribe Builder runs on Stellar testnet. Test XLM has no value, so you can try every flow without spending real money. Set your wallet to Testnet. See [Wallets and Stellar basics](/concepts/wallets-and-stellar).
+
+### Which wallets work?
+
+In a browser: Freighter, xBull, LOBSTR, Albedo, Hana and others. On a phone: a wallet that supports WalletConnect, such as Freighter Mobile, when the app offers it.
+
+### How do I get test XLM?
+
+Your account needs some XLM to exist on Stellar and to pay network fees. On testnet, XLM is free from Friendbot, Stellar's test faucet. Many wallets, Freighter included, can fund a new testnet account with Friendbot. See [Your first 10 minutes](/start/first-10-minutes).
+
+### Does signing in cost anything?
+
+No. To sign in, you sign a short message. It's free and moves nothing. If your wallet can't sign messages, the app asks it to sign a sign-in transaction instead, which is not submitted to the network. A sign-in lasts 7 days.
+
+### Does Tribe Builder hold my funds?
+
+No. Your wallet holds your account. Tribe Builder can't move anything without your approval: each bid, vote or proposal asks your wallet to approve one transaction, and your wallet shows what it does and its network fee first.
+
+## Membership and voting
+
+### How many votes do I have?
+
+One for each membership token you hold, unless you have delegated them, plus any votes others have delegated to you. When you receive a token and have no delegate yet, its votes are delegated to you. They count on proposals made after that. See [Votes and delegation](/concepts/votes-and-delegation).
+
+### Why can't I vote on a proposal?
+
+Voting power is counted at the ledger before the proposal was made. If you received a token or a delegation after that, you can vote on later proposals, but not on this one. Voting also opens only after the tribe's wait before voting, and closes at the end of the voting period.
+
+### Can I change my vote?
+
+No. Each wallet votes once on each proposal.
+
+### If I delegate, do I give away my tokens?
+
+No. Your tokens stay in your wallet, and you can change your delegate at any time. Only your voting power moves. Some tribes allow delegation only to members. See [Delegate your votes](/guides/members/delegate).
+
+### Why can't I transfer or sell my membership?
+
+The tribe may have locked memberships. When memberships are locked, tokens move only by sale through the tribe's market, by being given to the tribe, or by a vote. See [Transfer a token](/guides/members/transfer).
+
+## Proposals and the treasury
+
+### Who can move the tribe's funds?
+
+No one person. After launch, the Treasury moves funds only when a proposal passes and runs. See [The Treasury](/concepts/treasury).
+
+### Who can make a proposal?
+
+Anyone with at least the tribe's votes needed to propose. See [Write a proposal](/guides/proposals/write).
+
+### A proposal passed. Why hasn't anything happened?
+
+A passed proposal doesn't run by itself. Someone has to queue it, wait for the safety delay, and then execute it. Any wallet can do both steps, and pays the network fee. A passed proposal that is never queued expires 14 days after voting ends. A queued proposal expires 14 days after its safety delay ends. See [Queue and execute](/guides/proposals/queue-and-execute).
+
+### Can a queued proposal be stopped?
+
+Not by a vote. Once a proposal is queued, only its expiry stops it. Its author can cancel it only before voting ends. See [Cancel a proposal](/guides/proposals/cancel).
+
+### Where are my proposal drafts saved?
+
+In this browser only. A draft is not shared, sent or approved until you submit it. Drafts on another device or browser are separate.
+
+## Tribes and the platform
+
+### What does the launch admin control?
+
+During setup, the launch admin configures the tribe: artwork, founder tokens, the link and modules. At launch, every setting passes to the tribe's Treasury. After that, changes require DAO governance. See [Setup versus launched](/concepts/setup-and-launch).
+
+### Can the Tribe Builder team change my tribe?
+
+The platform admin chooses which contract releases new tribes use, approves upgrades, can withdraw a release, and can pause the creation and launch of tribes. It can't mint tokens for a tribe, move a tribe's funds, or change its settings. A tribe's contracts upgrade only when the tribe votes for it. See [Safety and security model](/concepts/safety-and-security) and [Upgrades](/concepts/upgrades).
+
+### Why does storage need renewing?
+
+Data on Stellar is kept for a limited time, and someone pays rent to keep it longer. Contracts extend their own data as people use them. A quiet tribe can renew everything at once from Manage → Storage renewal. See [Storage and renewal](/concepts/storage-and-renewal).
+
+### What is the difference between tribes.build and dev.tribes.build?
+
+Both run on Stellar testnet. dev.tribes.build is where changes are tried first, and it has its own Manager, so a tribe made on one site doesn't appear on the other. See [Contract addresses](/reference/contract-addresses).
+
+### Is everything public?
+
+Yes, for anything on chain: tribes, tokens, bids, votes, proposals and their comments, and every treasury payment. Anyone can read them in the app or in a Stellar explorer. You don't need to connect a wallet to read.
+
+### Can Tribe Builder help set up a legal entity?
+
+Manage → Legal entity export prepares a bundle of the tribe's details for a DAO registrar, such as MIDAO. It is a starting point for the registrar's own process, not legal advice. See [Legal entity export](/guides/legal/export).

@@ -82,7 +82,7 @@ export function PlatformTribes({ tribes }: { tribes: ReturnType<typeof usePlatfo
     <Section
       id="tribes"
       title="Tribes"
-      description="Each tribe renews its own storage from Manage → Renewal; anyone can pay for it. Worst first."
+      description="Each tribe renews its own storage from Manage → Renewal; anyone can pay for it. Most urgent first."
       action={
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => void tribes.refresh()}>
           <RefreshCw aria-hidden="true" />

@@ -1,0 +1,44 @@
+{
+  "id": "claims/claim/05",
+  "appCommit": "bccf91b",
+  "ledger": 5816893,
+  "capturedAt": "2026-11-19T17:08:28.130Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the claim under Past claims",
+      "box": {
+        "desktop": {
+          "x": 0.1806,
+          "y": 0.5259,
+          "w": 0.6889,
+          "h": 0.025
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.6132,
+          "w": 0.8293,
+          "h": 0.0277
+        }
+      }
+    }
+  ]
+}

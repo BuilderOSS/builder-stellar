@@ -73,7 +73,6 @@ export function AddModuleSheet({
   present,
   registered,
   propose,
-  onMessage,
   onChanged
 }: {
   open: boolean;
@@ -85,9 +84,8 @@ export function AddModuleSheet({
   live: boolean;
   present: ReadonlySet<ModuleKind>;
   registered: number;
-  propose: (request: ActionRequest) => ProposeResult;
+  propose: (request: ActionRequest, options?: { onAdded?: () => void }) => ProposeResult;
   /** A problem to show beside the card, when the change could not be added. */
-  onMessage: (text: string) => void;
   onChanged: () => void;
 }) {
   const assets = useMemo(() => creationAssets(config.name), [config.name]);
@@ -251,12 +249,12 @@ export function AddModuleSheet({
         title,
         note: `${steps.map((entry) => entry.title).join('. ')}.`
       });
-      handleOpenChange(false);
-      // A review dialog may follow, so let this sheet finish closing first.
-      requestAnimationFrame(() => {
-        const result = propose(request);
-        if (result.outcome === 'invalid') onMessage(result.message);
-      });
+      // BUG-W09-5: the review dialog opens over this sheet, which closes once the steps are added. Closing
+      // it first let its focus restore land after the dialog opened and dismiss it, adding nothing.
+      const result = propose(request, { onAdded: () => handleOpenChange(false) });
+      if (result.outcome === 'added') handleOpenChange(false);
+      else if (result.outcome === 'invalid') setSubmitError(result.message);
+      else if (result.outcome === 'no-wallet') setSubmitError('Connect your wallet to add this to a proposal.');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Check the values.');
     }
@@ -275,8 +273,8 @@ export function AddModuleSheet({
       description={
         choosing
           ? live
-            ? 'Pick what your tribe can do next. Members vote on it first, and nothing changes until it passes.'
-            : 'Pick what your tribe can do next. You are the launch admin, so it is signed straight away.'
+            ? 'Choose what your tribe can do next. Members vote on it first, and nothing changes until the proposal passes.'
+            : 'Choose what your tribe can do next. You are the launch admin, so you sign it now.'
           : undefined
       }
       footer={
@@ -382,9 +380,7 @@ export function AddModuleSheet({
             {steps ? (
               <PlanList steps={steps} label="Steps" />
             ) : reads.error ? (
-              <FieldHelperText tone="error">
-                The chain could not be read just now. Close this and try again.
-              </FieldHelperText>
+              <FieldHelperText tone="error">The network could not be read. Close this and try again.</FieldHelperText>
             ) : (
               <Skeleton className={css({ height: '8rem' })} />
             )}

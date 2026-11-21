@@ -130,6 +130,41 @@ const SCV_BYTES = 13;
 const SCV_STRING = 14;
 const SCV_SYMBOL = 15;
 const SCV_VEC = 16;
+const SCV_ADDRESS = 18;
+const SC_ADDRESS_TYPE_CONTRACT = 1;
+
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function crc16xmodem(bytes) {
+  let crc = 0;
+  for (const byte of bytes) {
+    crc ^= byte << 8;
+    for (let i = 0; i < 8; i += 1) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+/** The 32-byte id of a `C...` contract strkey (version byte and CRC16 checked). */
+export function contractIdBytes(strkey) {
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const char of strkey) {
+    const index = BASE32.indexOf(char);
+    if (index < 0) throw new Error(`not a contract address: ${strkey}`);
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  const bytes = Buffer.from(out);
+  if (bytes.length !== 35 || bytes[0] !== 2 << 3) throw new Error(`not a contract address: ${strkey}`);
+  const crc = crc16xmodem(bytes.subarray(0, 33));
+  if (bytes.readUInt16LE(33) !== crc) throw new Error(`bad checksum: ${strkey}`);
+  return bytes.subarray(1, 33);
+}
 
 function u32be(n) {
   const b = Buffer.alloc(4);
@@ -147,7 +182,10 @@ export const scv = {
   bytes: (buf) => Buffer.concat([u32be(SCV_BYTES), padded(Buffer.from(buf))]),
   string: (s) => Buffer.concat([u32be(SCV_STRING), padded(Buffer.from(s, 'utf8'))]),
   symbol: (s) => Buffer.concat([u32be(SCV_SYMBOL), padded(Buffer.from(s, 'utf8'))]),
-  vec: (items) => Buffer.concat([u32be(SCV_VEC), u32be(1), u32be(items.length), ...items])
+  vec: (items) => Buffer.concat([u32be(SCV_VEC), u32be(1), u32be(items.length), ...items]),
+  /** A contract address (`C...`). */
+  address: (strkey) =>
+    Buffer.concat([u32be(SCV_ADDRESS), u32be(SC_ADDRESS_TYPE_CONTRACT), contractIdBytes(strkey)])
 };
 
 /** Prefix of every Builder storage key (contracts/common/src/lib.rs `STORAGE_NAMESPACE`). */

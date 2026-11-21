@@ -1,0 +1,64 @@
+A [proposal](/reference/glossary#proposal) is how a tribe makes a decision. A member writes down what should happen and why. Members vote on it. If it passes, its actions run exactly as written.
+
+For crypto natives: a governance proposal with onchain actions. The tribe's Governor contract counts the votes, and its Treasury contract runs the actions.
+
+## What a proposal contains
+
+- A title and a description that explain the reason.
+- One or more actions, up to 20. Each action is one contract call, such as a payment from the treasury or a change to a voting rule.
+
+The actions are fixed when the proposal is created. Nobody can edit them afterwards, so what members vote on is exactly what runs. The [proposal actions reference](/reference/proposal-actions) lists every action the app can add.
+
+Before you submit it, a proposal is a local draft. It is saved in your browser only. It is not shared, and nothing is on chain yet.
+
+## Who can propose
+
+You need at least the tribe's proposal threshold in votes. Manage → Voting rules shows it as "Votes needed to propose". Your votes are counted at the ledger just before you submit, so a token or delegation you receive in the same moment doesn't count. Proposals open only after the tribe launches.
+
+## The lifecycle
+
+The app shows each state in plain words. The contract's own name for the state is in brackets.
+
+1. **Voting soon** (Pending). The proposal waits through the voting delay, "Wait before voting opens". This gives members time to read it.
+2. **Voting** (Active). Members vote For, Against, or Abstain until the voting period ends.
+3. **Passed** (Succeeded) or **Didn't pass** (Defeated). The result is fixed when voting closes.
+4. **Queued**. Any wallet can queue a passed proposal with "Queue for execution". Queueing starts the [safety delay](/reference/glossary#safety-delay).
+5. **Executed**. When the safety delay ends, any wallet can choose "Execute now". The treasury runs every action in order.
+
+A proposal can also end in two other ways:
+
+- **Cancelled** (Canceled). The proposer withdrew it. This is possible only while it is in Voting soon or Voting.
+- **Expired**. It passed but nobody queued it within 14 days of voting closing, or it was queued but nobody executed it within 14 days of the safety delay ending.
+
+## How a proposal passes
+
+When voting closes, a proposal passes only if both of these are true:
+
+- **Quorum is reached.** For and Abstain votes together reach the tribe's [quorum](/reference/glossary#quorum).
+- **For is more than Against.** A tie does not pass.
+
+Quorum is a share of all votes, from 0.01% to 100%, set in the tribe's voting rules. The number of votes it needs is fixed when the proposal is created, from the votes that exist at that moment. Later mints, transfers, or rule changes don't change it. Tokens held by the treasury, the auction, or the market carry no votes, so they never count toward quorum.
+
+### In practice
+
+A tribe has 40 votes in total and a quorum of 10%. A proposal needs 4 For or Abstain votes. Members cast 3 For, 1 Abstain, and 2 Against. For and Abstain make 4, which reaches quorum, and 3 For is more than 2 Against. The proposal passes.
+
+## Timings
+
+Each tribe sets three waits: before voting opens, how long voting stays open, and the safety delay. Each one is between 5 minutes and 30 days, and each can change later by vote. The "Balanced" pace in the create flow, for example, opens voting after 1 day, keeps it open for 3 days, and uses a safety delay of 1 hour. See [Limits and timings](/reference/limits-and-timings) for every bound.
+
+## Running a proposal
+
+Queueing and executing are open to any wallet, member or not. The wallet that submits pays the network fee. Execution runs every action in one transaction, in order. If any action fails, nothing changes: the proposal stays Queued and can be tried again until it expires.
+
+Once a proposal is queued, there is no veto. Only expiry stops it. Read the actions before you vote.
+
+## Related
+
+- [Write a proposal](/guides/proposals/write)
+- [Choose actions](/guides/proposals/actions)
+- [Vote](/guides/proposals/vote)
+- [Queue and execute](/guides/proposals/queue-and-execute)
+- [Cancel a proposal](/guides/proposals/cancel)
+- [Votes and delegation](/concepts/votes-and-delegation)
+- [The Treasury](/concepts/treasury)

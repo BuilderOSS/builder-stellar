@@ -30,6 +30,7 @@ const [MANAGER, TOKEN, METADATA, TREASURY, AUCTION, MARKET, GOVERNOR, CLAIMS, AS
   { length: 11 },
   contract
 );
+const ADAPTER = contract();
 const MEMBER = Keypair.random().publicKey();
 const NOW = 2_000_000_000;
 
@@ -106,7 +107,7 @@ const renewalKeys: ModuleRenewalRead = async (module, cursor) => {
 };
 
 /** A ledger with one launched DAO: 2 properties (40 + 3 items), 70 minted tokens, 3 proposals. */
-function ledger(omit: string[] = [], withOutside = false) {
+function ledger(omit: string[] = [], withOutside = false, voteSource?: string) {
   const entries = new Map<string, LedgerEntryInfo>();
   const put = (owner: string, key: xdr.ScVal, val: xdr.ScVal, label: string) => {
     if (omit.includes(label)) return;
@@ -155,10 +156,13 @@ function ledger(omit: string[] = [], withOutside = false) {
     inst,
     instance([
       [ns('ProposalCount'), u32(3)],
-      [oz('NumQuorumCheckpoints'), u32(1)]
+      [oz('NumQuorumCheckpoints'), u32(1)],
+      // The Governor's OZ token-contract slot holds its vote source.
+      [oz('TokenContract'), addr(voteSource ?? TOKEN)]
     ]),
     'governor'
   );
+  if (voteSource) put(voteSource, inst, instance([]), 'adapter');
   put(METADATA, ns('PropertyNames'), xdr.ScVal.scvVoid(), 'names');
   for (const [i, pages] of [
     [0, 2],
@@ -289,6 +293,15 @@ describe('DAO renewal inventory', () => {
     });
     expect(inventory.uncovered).toEqual([OUTSIDE]);
     expect(labels(inventory.present)).toContain('Vault');
+  });
+
+  it('renews the instance of a vote source adapter, not the token twice', async () => {
+    const scope = { manager: MANAGER, token: TOKEN, nowSeconds: NOW, renewalKeys };
+    const adapterDao = await buildDaoInventory(ledger([], false, ADAPTER), scope);
+    expect(adapterDao.missing).toEqual([]);
+    expect(labels(adapterDao.present)).toContain('Vote source');
+    const tokenDao = await buildDaoInventory(ledger(), scope);
+    expect(labels(tokenDao.present)).not.toContain('Vote source');
   });
 
   it('decodes a RenewalPage, keeping keys as raw XDR', () => {

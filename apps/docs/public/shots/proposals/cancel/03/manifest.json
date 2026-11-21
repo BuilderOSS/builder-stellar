@@ -1,0 +1,44 @@
+{
+  "id": "proposals/cancel/03",
+  "appCommit": "bccf91b",
+  "ledger": 5816014,
+  "capturedAt": "2026-11-19T15:55:15.437Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Cancel proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.7885,
+          "y": 0.4799,
+          "w": 0.0893,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.5931,
+          "y": 0.4778,
+          "w": 0.3429,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

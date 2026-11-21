@@ -7,7 +7,8 @@ export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgr
   type: 'upgrade-dao-module',
   label: 'Upgrade a module',
   group: 'System',
-  description: 'Upgrade a current module along a Manager-approved transition. Approval is checked again on-chain.',
+  description:
+    'Upgrade a module to a release the Manager has approved. The contract checks the approval again when the proposal runs.',
   FormComponent: ({ value, onChange, disabled }) => (
     <>
       <Field>
@@ -49,7 +50,7 @@ export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgr
   getDefaultValues: () => ({ module: 'token', fromHash: '', toHash: '' }),
   validate: (data, context) => {
     if (!(data.module in moduleAddressKeys) || !context.config[moduleAddressKeys[data.module]])
-      return { valid: false, message: 'Choose a configured DAO module.' };
+      return { valid: false, message: 'Choose one of the tribe’s modules.' };
     try {
       hashFromHex(data.fromHash);
       hashFromHex(data.toHash);

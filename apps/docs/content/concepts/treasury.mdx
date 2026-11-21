@@ -1,0 +1,53 @@
+The [treasury](/reference/glossary#treasury) holds the funds the tribe owns together. Its money moves only when members pass a proposal. No single person, including the people who started the tribe, can spend it on their own.
+
+For crypto natives: an onchain treasury contract that custodies the tribe's assets and runs the actions of passed proposals. Every payment in and out is public.
+
+## What the treasury holds
+
+- **Funds**, such as XLM or USDC. The Treasury page lists them under "Treasury balances".
+- **Membership tokens** the tribe owns, for example a token from an auction nobody bid on. They appear under "Tokens the treasury holds".
+
+## How funds come in
+
+- Each auction sale pays the winning bid to the treasury.
+- Fixed-price sales from the market pay the treasury.
+- Paid invite lists pay the treasury. In a launch drive, payments wait in escrow until the tribe launches.
+- The market's resale fee, if the tribe sets one, goes to the treasury.
+- Anyone can send XLM or USDC from their wallet with "Add funds". It then belongs to the tribe and is spent only by vote.
+
+## How funds move
+
+A payment is an action in a proposal. On the Treasury page, "Propose a payout" adds one to your proposal draft. Then the normal lifecycle applies:
+
+1. Members vote, and the proposal passes.
+2. Any wallet queues it, and the [safety delay](/reference/glossary#safety-delay) starts.
+3. When the delay ends, any wallet executes it. The treasury makes each payment in the order the proposal lists.
+
+"Execution history" on the Treasury page shows what has run.
+
+## Why no single person can move funds
+
+The treasury contract has no function that pays out on request. It acts only by running a proposal that the tribe's Governor marks as passed, queued, and past its safety delay. The person who executes the proposal pays the network fee but chooses nothing: the actions are the ones members voted on.
+
+From launch onwards, the treasury is also the admin of every contract the tribe runs. So changing a voting rule, an auction setting, or a module is also a treasury action, and it also needs a passed proposal. Before launch the treasury cannot run anything.
+
+Tokens the treasury holds carry no votes. The treasury can't vote with them, and they don't count toward quorum. They regain a vote only when a proposal sends them to someone.
+
+### In practice
+
+Amara proposes paying 2,400 XLM to Kenji for design work. The proposal passes. Anyone queues it, and after the tribe's 1-hour safety delay, anyone executes it. The 2,400 XLM moves from the treasury to Kenji's wallet in that transaction. Until then, it stays in the treasury.
+
+## What the treasury doesn't protect against
+
+- **A majority vote.** A proposal that passes can spend anything the treasury holds. The protection is that members can read every action, and that the safety delay gives time to review it.
+- **No veto after queueing.** Once a proposal is queued, only expiry stops it.
+- **The asset's own issuer.** Some Stellar assets let their issuer freeze or reclaim balances. Funds held in such an asset depend on that issuer. Tribes should use plain assets for prices and payments.
+
+## Related
+
+- [Proposals](/concepts/proposals)
+- [Write a proposal](/guides/proposals/write)
+- [Choose actions](/guides/proposals/actions)
+- [Queue and execute](/guides/proposals/queue-and-execute)
+- [Treasury purchases](/guides/marketplace/treasury-purchases)
+- [Safety and security model](/concepts/safety-and-security)

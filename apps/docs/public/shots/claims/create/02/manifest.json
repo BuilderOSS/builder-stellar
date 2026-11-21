@@ -1,0 +1,44 @@
+{
+  "id": "claims/create/02",
+  "appCommit": "bccf91b",
+  "ledger": 5815886,
+  "capturedAt": "2026-11-19T15:44:33.243Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the loaded CSV file and its rows read",
+      "box": {
+        "desktop": {
+          "x": 0.3778,
+          "y": 0.488,
+          "w": 0.3593,
+          "h": 0.05
+        },
+        "mobile": {
+          "x": 0.2027,
+          "y": 0.4857,
+          "w": 0.2036,
+          "h": 0.0831
+        }
+      }
+    }
+  ]
+}

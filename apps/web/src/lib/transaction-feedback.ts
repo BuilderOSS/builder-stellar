@@ -27,25 +27,35 @@ export function errorMessage(error: unknown, fallback: string) {
 export function useTransactionFeedback(network: DaoNetworkName) {
   const toastIdRef = useRef<string | undefined>(undefined);
 
+  /**
+   * A second start (the next step of a multi-step flow) moves the same toast on, so an earlier step's
+   * "Approve the transaction" never stays spinning after the flow is done (BUG-CAP-13).
+   */
   function start(message: string) {
-    toastIdRef.current = toaster.create({
+    const payload = {
       title: message,
       description: 'Approve the transaction in your wallet.',
-      type: 'loading',
+      type: 'loading' as const,
       duration: Infinity
-    });
+    };
+    // Reuse it only while it's on screen: a toast the person closed starts a new one.
+    if (toastIdRef.current && toaster.isVisible(toastIdRef.current)) {
+      toaster.update(toastIdRef.current, payload);
+      return;
+    }
+    toastIdRef.current = toaster.create(payload);
   }
 
   /** `description` replaces the default line, for an outcome that sent nothing (e.g. already done). */
   function success(message: string, hash: string, description?: string) {
     const payload = {
       title: message,
-      description: description ?? (hash ? 'Transaction confirmed on-chain.' : 'Transaction submitted.'),
+      description: description ?? (hash ? 'Transaction confirmed onchain.' : 'Transaction submitted.'),
       type: 'success' as const,
       duration: hash ? 20000 : 8000,
       action: hash
         ? {
-            label: `View tx ${shortenHash(hash)}`,
+            label: `View transaction ${shortenHash(hash)}`,
             onClick: () => window.open(getExplorerTxUrl(network, hash), '_blank', 'noreferrer')
           }
         : undefined
@@ -83,6 +93,31 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     }
   }
 
+  /**
+   * Sent, but the network has not confirmed it within the wait: a recovery state, not a failure.
+   * The page shows the same transaction with a way to check again.
+   */
+  function unconfirmed(hash: string) {
+    const payload = {
+      title: 'Waiting for confirmation',
+      description: `Transaction ${shortenHash(hash)} was sent but isn't confirmed yet. Check it before you try again.`,
+      type: 'info' as const,
+      duration: 20000,
+      action: {
+        label: 'Check the transaction',
+        onClick: () => window.open(getExplorerTxUrl(network, hash), '_blank', 'noreferrer')
+      }
+    };
+
+    if (toastIdRef.current) {
+      toaster.update(toastIdRef.current, payload);
+      toastIdRef.current = undefined;
+      return;
+    }
+
+    toaster.create(payload);
+  }
+
   function fail(error: unknown, fallback: string, contract?: ContractName) {
     const payload = {
       title: fallback,
@@ -100,5 +135,5 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     toaster.error(payload);
   }
 
-  return { start, submitted, success, fail };
+  return { start, submitted, success, unconfirmed, fail };
 }

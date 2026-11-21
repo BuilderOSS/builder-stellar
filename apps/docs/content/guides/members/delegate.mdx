@@ -1,0 +1,65 @@
+## Overview
+
+You can let someone else vote with your tokens. They become your [delegate](/reference/glossary#delegate). You keep your tokens, and you can change your delegate or take your votes back at any time.
+
+## Before you start
+
+- You need to hold at least one of the tribe's tokens, in a wallet connected and signed in on the tribe's network.
+- The tribe must count votes by token. If its votes come from another source, delegating a token doesn't move votes, and the app doesn't offer it. See [Vote sources](/concepts/vote-sources/).
+- Have your delegate's Stellar address ready. It starts with G or C.
+- Some tribes only let you delegate to members. A member here is someone who holds a token that isn't listed for sale.
+- Keep a small amount of XLM for the network fee.
+
+## Steps
+
+1. **Open your profile.** On the Members page, choose your own row, marked **You**. Then choose **Delegate votes**. It opens one of your tokens with the delegation form ready.
+
+   <Shot id="members/delegate/01" alt="Your member profile with the Delegate votes button under the vote count" />
+
+2. **Choose Delegate votes.** In the **Your token** card, under **What do you want to do?**, choose **Delegate votes**.
+
+   <Shot id="members/delegate/02" alt="The Your token card with Delegate votes selected" />
+
+3. **Enter the delegate.** Type their address in **Delegate address**. Delegation applies to every token you hold in this tribe, not only this one. To take your votes back, choose **Vote for myself again**.
+
+   <Shot id="members/delegate/03" alt="A delegate address entered, with the note that it applies to every token you hold here" />
+
+4. **Review.** Choose **Review**. The app checks that you still hold the token and prepares the transaction. The summary names how many tokens' votes move, your current delegate and your current voting power. "Checks passed. Review the details below. Nothing is signed yet." means it is ready.
+
+   <Shot id="members/delegate/04" alt="The delegation review with the summary and the network fee" />
+
+5. **Sign and send.** Choose **Sign and send**, then sign in your wallet. Once it is confirmed, the page says "Confirmed. Ownership and votes can take a moment to update here." Your profile then shows a **Delegated** row with your delegate.
+
+   <Shot id="members/delegate/05" alt="Your profile after delegating, with the Delegated row naming the delegate" />
+
+## When the change counts
+
+Each proposal counts votes at a fixed point in time, called its snapshot. A delegation counts for proposals whose snapshot comes after it. It doesn't change votes on a proposal that is already open. There is a short voting delay before each vote starts, which gives members time to change their delegation. See [Votes and delegation](/concepts/votes-and-delegation/).
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  The app calls `delegate` on the tribe's Token contract, with your account and the delegate's. Your tokens' voting units move from your current delegate to the new one. Your tokens stay in your wallet. Votes other members delegated to you stay with you.
+
+  New holders are delegated to themselves automatically, so you don't need to delegate to vote for yourself. **Vote for myself again** delegates back to your own address.
+
+  If the tribe has members-only delegation on, the contract refuses a delegate who holds no token, or who is the Treasury or a tribe contract that doesn't vote. You can always delegate to yourself. Delegations made before the setting was turned on stay in place.
+
+  You pay the Stellar network fee in XLM. Delegations are public on chain.
+</Disclosure>
+
+## If something goes wrong
+
+- **The Delegate votes choice is missing.** The tribe's votes come from another source, so delegation doesn't apply.
+- **"This tribe only lets you delegate to members."** The address holds no token, or only tokens listed for sale. Choose a member, or ask them to hold a token first.
+- **"Live ownership has to load before you can act."** The app couldn't read the token from the chain. Refresh the page.
+- **"Switch your wallet to this tribe's network."** Change the network in your wallet, then try again.
+- **"You no longer own this token. Refresh before trying again."** The token moved. Open another token you hold, or refresh.
+- **Your votes didn't change on an open proposal.** That proposal counts votes from its snapshot. The delegation applies to later proposals.
+
+## Related
+
+- [Votes and delegation](/concepts/votes-and-delegation/)
+- [Vote](/guides/proposals/vote/)
+- [Find members](/guides/members/find/)
+- [Transfer a token](/guides/members/transfer/)

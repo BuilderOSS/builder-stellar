@@ -1,0 +1,63 @@
+{
+  "$comment": "Fixture tribe for walkthrough W10 (marketplace), on the dev Manager. Deployed and launched by e2e-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md). Founders: e2e-founder x3, e2e-member-a x2; e2e-member-b buys. Payment asset is native XLM (SAC).",
+  "deployer": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+  "nonce": 1,
+  "launchAdmin": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+  "slug": "e2e-market",
+  "token": {
+    "name": "E2E Market",
+    "symbol": "E2EM"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for the marketplace (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        }
+      ]
+    }
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GCQRH4IU7RVEEX2BCULLQI3DA5FOJY4V3NEFJNBIPWEB5POU76NYVX4D",
+      "amount": 3
+    },
+    {
+      "address": "GDEBASDTDUPEU4G5HL4UGZCILI2TBSICVGSFRAULXPXYUZ4YH42HBRDL",
+      "amount": 2
+    }
+  ],
+  "launch": {
+    "launchMarketplace": true
+  }
+}

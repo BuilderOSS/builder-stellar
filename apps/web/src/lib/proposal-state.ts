@@ -47,7 +47,7 @@ const STATE_DISPLAY: Record<string, string> = {
   Queued: 'Queued',
   Executed: 'Executed',
   Defeated: "Didn't pass",
-  Canceled: 'Canceled',
+  Canceled: 'Cancelled',
   Expired: 'Expired'
 };
 

@@ -61,6 +61,14 @@ pub struct ImplementationRevoked {
     pub wasm_hash: BytesN<32>,
     pub revoked_ledger: u64,
 }
+/// A vote source approved (or its approval withdrawn) for new DAOs.
+#[contractevent]
+pub struct VoteSourceApproved {
+    #[topic]
+    pub source: Address,
+    pub approved: bool,
+    pub name: String,
+}
 #[contractevent]
 pub struct DaoCreated {
     #[topic]
@@ -214,6 +222,15 @@ pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_le
     ImplementationRevoked {
         wasm_hash: wasm_hash.clone(),
         revoked_ledger,
+    }
+    .publish(env);
+}
+
+pub fn emit_vote_source_approved(env: &Env, source: &Address, approved: bool, name: &String) {
+    VoteSourceApproved {
+        source: source.clone(),
+        approved,
+        name: name.clone(),
     }
     .publish(env);
 }

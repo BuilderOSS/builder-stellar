@@ -1,8 +1,8 @@
 import '../../styled-system/styles.css';
 import './globals.css';
 
+import { fontVariables } from '@builder-stellar/design-tokens/fonts';
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
 import { AgentationDevToolbar } from '@/components/agentation-dev-toolbar';
@@ -13,16 +13,6 @@ import { WarmInkThemeRuntime } from '@/components/warm-ink-theme';
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from '@/lib/site';
 import { warmInkBootScript } from '@/lib/warm-ink-theme';
 
-// Fetched by Next at build time and self-hosted; no runtime font CDN.
-const display = Bricolage_Grotesque({
-  subsets: ['latin'],
-  display: 'swap',
-  axes: ['opsz'],
-  variable: '--font-display'
-});
-const ui = Figtree({ subsets: ['latin'], display: 'swap', variable: '--font-ui' });
-const mono = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-mono' });
-
 export const metadata: Metadata = {
   metadataBase: siteUrl(),
   title: { default: SITE_NAME, template: `%s · ${SITE_NAME}` },
@@ -30,7 +20,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   openGraph: {
     title: SITE_NAME,
-    description: 'Your people. Your rules. Your treasury.',
+    description: 'Build a tribe on Stellar. Members share a treasury and vote on decisions together.',
     siteName: SITE_NAME,
     type: 'website'
   },
@@ -55,12 +45,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${ui.variable} ${mono.variable}`}
-      data-theme="dark"
-      suppressHydrationWarning
-    >
+    <html lang="en" className={fontVariables} data-theme="dark" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="dark light" />
         <script dangerouslySetInnerHTML={{ __html: warmInkBootScript }} />

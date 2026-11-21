@@ -328,7 +328,7 @@ export function DesignCatalogue() {
             <Skeleton className={css({ width: '40', height: '4' })} />
             <Button
               variant="secondary"
-              onClick={() => toaster.success({ title: 'Vote cast', description: 'Transaction confirmed on-chain.' })}
+              onClick={() => toaster.success({ title: 'Vote cast', description: 'Transaction confirmed onchain.' })}
             >
               Toast
             </Button>
@@ -395,7 +395,7 @@ export function DesignCatalogue() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Not yet
+              Cancel
             </Button>
             <Button onClick={() => setDialogOpen(false)}>Place bid</Button>
           </>

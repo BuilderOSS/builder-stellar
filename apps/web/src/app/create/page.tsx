@@ -180,14 +180,14 @@ export default function CreateDaoPage() {
     indexingRequest.current?.abort();
     const controller = new AbortController();
     indexingRequest.current = controller;
-    setIndexingMessage('Waiting for your tribe to show up in the directory…');
+    setIndexingMessage('Waiting for your tribe to appear in the directory…');
     try {
       const indexed = await pollCreatedDao(token, controller.signal);
       if (controller.signal.aborted) return;
       if (indexed) router.push(`/dao/${token}`);
       else
         setIndexingMessage(
-          "It's created. The directory hasn't caught up yet, so check again in a moment. Don't create it a second time."
+          "Your tribe is created, but the directory hasn't updated yet. Check again shortly. Don't create it a second time."
         );
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -264,6 +264,7 @@ export default function CreateDaoPage() {
       />
       <div>
         <PageHeader
+          guide="start/build-your-first-tribe"
           title="Build a tribe"
           meta={
             creationStorageError() ||

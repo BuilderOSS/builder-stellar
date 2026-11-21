@@ -10,6 +10,17 @@ Voting delay, voting period, and queue delay are each 300–2,592,000 seconds. Q
 
 `propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { proposal_id, vote_start, vote_end, snapshot_ledger, quorum_votes }`; the quorum is final at proposal time: `ceil(voting_supply * quorum_bps / 10_000)` from the voting supply at the previous ledger (`token.voting_supply_at_previous_ledger`, the ledger votes are snapshotted at) and the current rate, stored on the proposal (`proposal(id).quorum`). `proposal_state`, `queue` and `execute` use the stored value and never read historical checkpoints, so only the latest supply and quorum checkpoints need to stay live (D33). Tokens minted or escrowed in the proposing ledger change neither the quorum nor anyone's weight (both use the previous ledger), so escrowing tokens while proposing cannot lower the bar (D40). `quorum(ledger)` remains as a view for any past ledger.
 
+## Vote source
+
+Voting power comes from the Governor's **vote source**. That is the DAO's Token unless the DAO was created with an adapter the Manager approved ([governance adapter design](../../docs/designs/governance-adapter.md)). Every vote read goes through `common::clients::VoteSourceApi`:
+
+- `get_votes_at_checkpoint` at propose and vote;
+- `voting_supply_at_previous_ledger` for the quorum fixed at propose;
+- `get_total_supply_at_checkpoint` for the `quorum(ledger)` view;
+- `get_total_supply` for the threshold check.
+
+The source is stored in OpenZeppelin's token-contract slot, which is set once, so it is permanent. `vote_source()` returns it, and for an adapter DAO OZ's `get_token_contract()` returns the adapter, not the membership NFT. Thresholds and quorum are in the source's units.
+
 ## Main interface
 
 ```text
@@ -20,7 +31,7 @@ cancel(targets, functions, args, description_hash, operator) -> proposal_id
 consume(targets, functions, args, description_hash) -> proposal_id
 proposal_state(id); proposal_snapshot(id); proposal_deadline(id); proposal_proposer(id)
 proposal_count(); proposal_ids(start, limit) -> Vec<id>; proposal(id) -> ProposalInfo
-quorum(ledger); quorum_bps(); has_voted(id, account)
+quorum(ledger); quorum_bps(); has_voted(id, account); vote_source()
 set_voting_delay(v); set_voting_period(v); set_queue_delay(v)
 set_proposal_threshold(v); set_quorum_bps(v)
 admin(); treasury(); launch(treasury)
@@ -31,7 +42,7 @@ upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version(
 
 Queue is permissionless: the inherited `eta` and `operator` arguments are ignored and ETA is now + queue delay. `consume` is only authorizable by the stored Treasury; it fails with `ProposalNotReady` (7513) before the ETA. `execute(..., executor)` always rejects with `UseTreasuryExecute` (7507). A vote with zero weight at the snapshot fails with `ZeroVotingWeight` (7512); the Treasury, Auction and Marketplace can never vote.
 
-Setters are admin-only: the launch admin in setup, the Treasury (a passed proposal) after launch. Setter events carry the admin as the `changed_by` topic. There is no ownership transfer, renounce, or mutable Treasury/Token wiring.
+Setters are admin-only: the launch admin in setup, the Treasury (a passed proposal) after launch. Setter events carry the admin as the `changed_by` topic. There is no ownership transfer, renounce, or mutable Treasury or vote-source wiring.
 
 Proposals can be listed from chain state alone. `propose` writes `ProposalId(seq) -> id` (about 60 bytes, proposer-paid) and bumps an instance counter; the entry renews with the proposal core on every lifecycle call. `proposal_ids` returns at most 50 ids per call (`MAX_PROPOSAL_IDS_PAGE`). `proposal(id)` returns the stored window, eta and sequence number with the state computed now. The payload is never stored: the proposer and indexer keep the preimage (docs/STORAGE_DIET.md D10). `name()` is a constant and `version()` is read from the Manager registry, so OpenZeppelin's `Name` and `Version` entries are never written.
 

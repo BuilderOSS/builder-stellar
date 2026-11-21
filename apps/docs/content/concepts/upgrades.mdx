@@ -1,0 +1,57 @@
+The contracts a tribe runs can be upgraded to newer releases. An upgrade replaces a contract's code and keeps everything it stores: members, tokens, votes, settings, and funds. The tribe decides whether to take each upgrade. Tribe Builder can make a release available, but it can't apply it to a tribe.
+
+For crypto natives: each contract swaps its WASM in place with `upgrade(from_hash, to_hash)`. The Manager registers releases and approves upgrade paths. The contract's admin, which is the Treasury after launch, applies them by proposal.
+
+## Who does what
+
+- **The Manager** is Tribe Builder's registry and factory contract. Its operator registers each release and approves which version can upgrade to which. An upgrade is possible only along an approved path.
+- **The tribe** chooses whether and when to upgrade. During setup, the [launch admin](/reference/glossary#launch-admin) applies upgrades directly. After launch, an upgrade is a proposal, and it runs only if members vote for it.
+
+Approval can't force a tribe to upgrade. A tribe that never votes for an upgrade keeps running the code it has.
+
+Every tribe contract is upgraded the same way: the core contracts, and the auction, market, and invite list modules. Each tribe's contracts are its own, so one tribe's upgrade never changes another tribe.
+
+## Where upgrades appear
+
+Manage → Contract upgrades lists each contract, its version, and its status:
+
+- **Upgrade available**: a newer release is approved for this tribe.
+- **Newer release not approved**: a newer release exists, but there is no approved path from this tribe's version yet.
+- **Version withdrawn**: the platform has withdrawn the version this contract runs.
+
+A notice also appears on the Manage overview and, for members of launched tribes, on Home. During setup, the launch checklist shows it. Each upgrade has a release note in members' words, which also appears in the proposal.
+
+## During setup and after launch
+
+- **During setup**, the launch admin chooses "Apply … now". Each upgrade is one signature.
+- **After launch**, a member chooses "Add … to proposal". The upgrades go into the proposal draft, then through the normal vote, queue, and safety delay before they run.
+
+The treasury's own upgrade goes in a proposal by itself. The treasury runs the proposal, so later actions in the same proposal would still use its old code. The app separates it for you.
+
+When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal.
+
+## Withdrawn versions
+
+The platform can withdraw a release, for example after finding a problem. This is also called revocation.
+
+- A tribe already on a withdrawn version keeps working. The app asks it to upgrade as soon as it can.
+- A tribe in setup can't launch on a withdrawn version. "Upgrade your contracts" appears on the checklist and blocks launch until the upgrade is applied.
+- Nobody can upgrade to a withdrawn version.
+
+There is no downgrade button. Going back to an older release needs a new approved path and another upgrade.
+
+## Platform contracts
+
+The Manager itself can also be upgraded. Its upgrade applies only after a notice period, so tribes can see it coming. Manage → Contract upgrades shows a "Platform contracts" card, with "Upgrade pending" and the time from which it can apply. The Manager approves the upgrades a tribe can vote on. It can't change a tribe's contracts.
+
+## What to check before voting
+
+The chain checks that an upgrade path is approved. It doesn't check what the new code does. An upgrade action names the new code by its hash, a fingerprint of the exact code. Read the release note. If you can, compare the hash with a published build of that release before you vote.
+
+## Related
+
+- [Proposals](/concepts/proposals)
+- [Set up: contracts](/guides/setup/contracts)
+- [Choose actions](/guides/proposals/actions)
+- [Safety and security model](/concepts/safety-and-security)
+- [Changelog](/reference/changelog)

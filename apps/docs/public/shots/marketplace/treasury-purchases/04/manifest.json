@@ -1,0 +1,24 @@
+{
+  "id": "marketplace/treasury-purchases/04",
+  "appCommit": "bccf91b",
+  "ledger": 5816005,
+  "capturedAt": "2026-11-19T15:54:29.700Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  }
+}

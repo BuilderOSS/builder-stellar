@@ -1,0 +1,76 @@
+## Overview
+
+A [proposal](/reference/glossary#proposal) is a suggestion that members vote on. It has a title, a reason, and one or more actions that run only if the vote passes. This guide shows how to write one, review it, and submit it for a vote.
+
+## Before you start
+
+- The tribe must have launched. During setup the page says "Proposals open once your tribe launches."
+- Connect a member wallet on the tribe's network. Testnet is the live network today.
+- To submit, your wallet needs at least as many votes as the tribe's **Votes needed to propose**. You can see this number in **Manage → Voting rules**. If you have fewer, you can still write a draft, but you can't submit it.
+- Have a small amount of XLM for the network fee. Proposing is free otherwise.
+
+## Steps
+
+1. **Open Proposals.** Choose **Proposals** in the tribe's navigation, then **New proposal**. If you already have a draft for this tribe, the button reads **Continue your proposal**.
+
+   <Shot id="proposals/write/01" alt="The Proposals page with the New proposal button at the top right" />
+
+2. **Give it a title.** Type a short title in **Title (required)**. Once you add actions, the page may suggest a title under the field. Choose **Use it** to accept it.
+
+   <Shot id="proposals/write/02" alt="The New proposal page on the Write step, with a title typed in" />
+
+3. **Explain why.** Write the reason in **Why**: the problem, who it helps, and what it costs. The field accepts Markdown. The title, the reason and the links share 4,096 bytes. Once you have used three quarters of them, the line under the field shows how many are left, or how far over you are. You can add a **Discussion link (optional)**, for example a forum thread.
+
+   <Shot id="proposals/write/03" alt="The Why field filled in with a reason, and the byte count beneath it" />
+
+4. **Add the actions.** Under **In this proposal**, choose **Add an action** and pick what should happen if the vote passes. See [Choose actions](/guides/proposals/actions/). After you add actions, **Add “What this does” from the actions** writes a plain summary of them into **Why**. You can edit it afterwards.
+
+   <Shot id="proposals/write/04" alt="The In this proposal list with two numbered actions and the Add an action button" />
+
+5. **Go to review.** Choose **Next: review**. The button is available once the proposal has a title, a reason, and at least one action. If something is missing, a line under the button says what to add.
+
+   <Shot id="proposals/write/05" alt="The Next: review button, with a note saying what is still missing" />
+
+6. **Check the preview.** The Review step shows the proposal as members will see it, and lists the actions under **If it passes, these run in order**. Fix anything flagged at the top before you continue. Choose **Back** to make changes.
+
+   <Shot id="proposals/write/06" alt="The Review step with the proposal preview and its ordered list of actions" />
+
+7. **Submit.** Choose **Submit proposal**, then confirm in the **Submit this proposal?** dialog. Your wallet opens to show the exact transaction. Check the contracts, recipients and amounts there, then sign. When the network confirms it, the app opens the new proposal.
+
+   <Shot id="proposals/write/07" alt="The Submit this proposal? dialog over the Review step" />
+
+### Drafts
+
+Your draft is saved on this browser, for this wallet and this tribe. It is a local draft: no one else can see it, and nothing is on chain until you submit. Actions you add from Manage, Treasury or Claims join the same draft. To start again, choose **Discard draft**.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Submitting calls `propose` on the tribe's Governor contract with the list of actions and the description. The Governor checks that your voting power at the previous ledger meets the proposal threshold, that there is at least one action and no more than 20, and that the description fits the limit.
+
+  The Governor records a snapshot of everyone's voting power at the ledger before the proposal. Votes are counted from that snapshot, so tokens or delegations that change later don't affect this proposal. It also stores the quorum needed at that moment.
+
+  Voting opens after the tribe's wait before voting opens (the voting delay), and stays open for the voting period. Both are set in **Manage → Voting rules**.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The proposal, its description and its actions are public on chain once the transaction is confirmed. The app reads proposals from an index, which can be a few moments behind.
+</Disclosure>
+
+## If something goes wrong
+
+- **"You can't propose yet."** Your wallet isn't a member, or has fewer votes than the tribe needs to propose. The message shows the number needed and your current voting power. You can [ask someone to delegate](/guides/members/delegate/) votes to you.
+- **"You can keep drafting, but can't submit yet."** Your draft is kept. **Submit proposal** stays off until your wallet has enough votes.
+- **"Some actions repeat or clash."** Go back to the Write step and remove or replace the flagged action.
+- **"Check the order of actions."** The proposal can be submitted, but an action depends on one that comes after it, so the proposal would fail when it runs. Move the actions into the right order.
+- **The description is too long.** The line under **Why** says how many bytes over you are. Shorten the title, the reason or the links until it shows bytes left.
+- **"Your proposal was created" with "We couldn't open it automatically."** The transaction is confirmed. Choose **Open proposal**. Its details can take a moment to appear.
+- **The wallet was signed but the page shows an error.** Check the transaction in the notification before you try again. If it was confirmed, the proposal exists and appears in the list shortly.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Choose actions](/guides/proposals/actions/)
+- [Vote](/guides/proposals/vote/)
+- [Proposals](/concepts/proposals/)
+- [Votes and delegation](/concepts/votes-and-delegation/)
+- [Limits and timings](/reference/limits-and-timings/)

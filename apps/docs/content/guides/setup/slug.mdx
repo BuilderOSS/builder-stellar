@@ -1,0 +1,56 @@
+## Overview
+
+Your tribe's link is the short address people share, such as `/dao/lantern-club`. You choose it when you create the tribe. Until launch it is only a request: it becomes yours when the tribe launches. This page explains how to change the link during setup, and what to do if another tribe launches with it first.
+
+## Before you start
+
+- Your tribe is created and in Setup.
+- Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network.
+- A link uses 4 to 63 lowercase letters, numbers, and single hyphens, with no hyphen at the start or end.
+
+<Callout title="The first tribe to launch with a link claims it" description="Several tribes in setup can ask for the same link. Only a launched tribe holds one. If another tribe launches first with your link, you choose a new one before you can launch." />
+
+## Steps
+
+1. To change the link during setup, open **Manage** and select **Tribe profile**. The **Link** field shows your current link, with "Yours once you launch."
+
+   <Shot id="setup/slug/01" alt="The Tribe profile page with the Link field and the note Yours once you launch" />
+
+2. Type the new link. The page checks it and shows, for example, "/dao/lantern-club is available." If another tribe has it, the page says "Another tribe has this link."
+
+   <Shot id="setup/slug/02" alt="The Link field with a new link and a tick beside the message that it is available" />
+
+3. Select the **Apply** button, which shows how many changes you are applying, and approve each transaction in your wallet. The page confirms "Your link is now" with the new link.
+
+   <Shot id="setup/slug/03" alt="The Tribe profile page with the Apply 1 change now button" />
+
+4. If another tribe launches first with your link, the launch checklist adds a step, **Pick a new link**, with the message "Another tribe took" and your link. Type a link in **New link** and select **Change the link**. The launch button stays unavailable until you do, with the hint "Pick a new link first."
+
+When the tribe launches, the link is claimed for it. After launch, changing the link takes its own proposal that members vote on. When that proposal passes, the old link is freed at once and any tribe can claim it.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  The link lives in the Tribe Builder factory contract (the Manager). When you create the tribe, the Manager checks the format and that no launched tribe holds the link, then records it as your tribe's request. A request blocks no one.
+
+  Changing the link during setup is one transaction to the Manager. It has a Stellar network fee, which your wallet shows before you sign. There is no other charge for a link today.
+
+  At launch, the Manager claims the link for your tribe. If another tribe has claimed it since, the launch is refused and nothing changes, so you can choose a new link and launch again.
+
+  Opening an [assurance drive](/guides/setup/assurance-drives) reserves the link at once. While a drive is open, the link can't change. If the drive ends without a launch, anyone can free the link so another tribe can use it.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Use 4-63 lowercase letters, numbers or single hyphens."** Check the length, and remove capital letters, spaces, and double hyphens.
+- **"Another tribe has this link."** or **"/dao/… is taken by another tribe."** Choose a different link.
+- **"Couldn't check this link. Try again in a moment."** The availability check did not respond. Wait and try again.
+- **"This is your link now."** The link you typed is already your tribe's link.
+- **"Another tribe launched first with your link. Pick a new link above, then launch."** The launch was refused for this reason. Change the link in the **Pick a new link** step, then launch again.
+
+## Related
+
+- [Create a tribe: identity](/guides/create/identity)
+- [Launch your tribe](/guides/setup/launch)
+- [Assurance drives](/guides/setup/assurance-drives)
+- [Manage: profile](/guides/manage/profile)

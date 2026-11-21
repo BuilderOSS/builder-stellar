@@ -17,7 +17,7 @@ type VerifyAuthInput = {
 
 function assertChallenge(session: AuthSession) {
   if (!session.challenge) {
-    throw new AuthError('NO_CHALLENGE', 'Authentication challenge is missing or already consumed.');
+    throw new AuthError('NO_CHALLENGE', 'Authentication challenge is missing or already used.');
   }
   if (session.challenge.method !== 'sep53') {
     throw new AuthError('INVALID_MESSAGE', 'Authentication challenge type is invalid.');

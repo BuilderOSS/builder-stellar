@@ -22,9 +22,11 @@ import {
 import { muted } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
-import { daoRoute } from '@/lib/dao-routes';
+import { daoRoute, tokenDelegateRoute } from '@/lib/dao-routes';
 import { useDirectoryMember, useDirectoryTokens } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
+import { formatVotes, useVoteSource } from '@/lib/vote-source';
+import { useVotingPower } from '@/lib/voting-power';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const back = css({ justifySelf: 'start', ml: '-3' });
@@ -35,6 +37,16 @@ const stats = css({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1
 const stat = css({ display: 'grid', gap: '0.5', p: '3.5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 const statValue = css({ textStyle: 'title', fontSize: '1.5rem', fontVariantNumeric: 'tabular-nums' });
 const statLabel = css({ textStyle: 'caption', color: 'ink.muted' });
+const delegate = css({
+  display: 'grid',
+  gap: '3',
+  p: '4',
+  maxW: '28rem',
+  borderRadius: 'card',
+  bg: 'surface',
+  boxShadow: 'raised'
+});
+const delegateTitle = css({ textStyle: 'subheading', m: '0' });
 const tokenGrid = css({
   display: 'grid',
   gap: '4',
@@ -54,7 +66,10 @@ export default function MemberProfilePage() {
 }
 
 function Profile({ daoId, address }: { daoId: string; address: string | null }) {
-  const { routeId } = useDaoContext();
+  const { routeId, daoConfig } = useDaoContext();
+  // A tribe voting through another source: votes come from that source and delegation doesn't apply.
+  const custom = useVoteSource(daoConfig).voteSource?.isToken === false;
+  const sourcePower = useVotingPower(daoConfig, custom ? address || '' : '');
   const [tokenPage, setTokenPage] = useState(0);
   const viewer = useAuthSessionStore((state) => state.address);
   const profile = useDirectoryMember(daoId, address);
@@ -112,17 +127,26 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
               <span className={statLabel}>{member.owned_token_count === '1' ? 'Token' : 'Tokens'}</span>
             </div>
             <div className={stat}>
-              <span className={statValue}>{member.voting_power}</span>
+              <span className={statValue}>
+                {custom
+                  ? sourcePower.data
+                    ? formatVotes(sourcePower.data.votes, sourcePower.data.decimals)
+                    : sourcePower.error
+                      ? 'Unavailable'
+                      : '…'
+                  : member.voting_power}
+              </span>
               <span className={statLabel}>
                 Votes{' '}
                 <HelpTip label="Votes">
-                  Votes include any delegated to this address and leave out their own if they delegated elsewhere.
-                  Delegating never moves a token. The directory can lag the chain a little.
+                  {custom
+                    ? "This tribe's votes come from its vote source, not from tokens, so delegating a token doesn't move them."
+                    : 'Votes include any delegated to this address and leave out their own if they delegated elsewhere. Delegating never moves a token. Recent changes can take a short time to appear here.'}
                 </HelpTip>
               </span>
             </div>
           </div>
-          {member.delegated_to && member.delegated_to !== member.address ? (
+          {!custom && member.delegated_to && member.delegated_to !== member.address ? (
             <ListRow
               href={daoRoute(routeId, `members/${member.delegated_to}`)}
               media={<Avatar address={member.delegated_to} size="sm" />}
@@ -133,15 +157,20 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
         </>
       ) : null}
 
-      {isViewer && inventory.data?.items[0] ? (
-        <div>
-          <ButtonLink
-            variant="secondary"
-            href={daoRoute(routeId, `token/${inventory.data.items[0].tokenId}?action=delegate`)}
-          >
-            Delegate votes
-          </ButtonLink>
-        </div>
+      {!custom && isViewer && member && inventory.data?.items[0] ? (
+        <section className={delegate} aria-labelledby="delegate-title">
+          <div>
+            <h2 id="delegate-title" className={delegateTitle}>
+              Delegate your votes
+            </h2>
+            <p className={muted}>
+              Let another member vote with your tokens. Your tokens stay with you, and you can change this at any time.
+            </p>
+          </div>
+          <div>
+            <ButtonLink href={tokenDelegateRoute(routeId, inventory.data.items[0].tokenId)}>Delegate votes</ButtonLink>
+          </div>
+        </section>
       ) : null}
       {address ? (
         <Section title="Tokens">

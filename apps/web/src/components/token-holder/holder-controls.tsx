@@ -2,7 +2,7 @@
 
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { css } from 'styled-system/css';
-import { useSWRConfig } from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 
 import {
   Address,
@@ -21,11 +21,14 @@ const form = css({ display: 'grid', gap: '4' });
 /** About 120 days of ledgers: a proposal's longest timeline is 104 days, under the 180-day approval cap. */
 const VOTE_APPROVAL_LEDGERS = 120 * 17_280;
 const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
+const header = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { formatStroops } from '@/lib/auction-values';
 import { estimateDate } from '@/lib/chain-reads/renewal';
+import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
 import { withArchivedRestore } from '@/lib/restore-archived-client';
@@ -33,6 +36,7 @@ import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { useVoteSource } from '@/lib/vote-source';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -51,6 +55,11 @@ export function HolderControls({
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
+  // Selling goes through the tribe's market: hidden when it has none, it is off, or tokens are locked.
+  const canSell = canSellOnMarket(config);
+  // Delegation is offered only for a token-weighted tribe: through another source (or while the
+  // source can't be read) delegating a token may move no votes.
+  const delegation = useVoteSource(config).voteSource?.isToken === true;
   const membersOnly = config.tokenSettings.membersOnlyDelegation;
   const queryAction = useSyncExternalStore(
     (listener) => {
@@ -61,7 +70,8 @@ export function HolderControls({
     () => null
   );
   const [selectedKind, setKind] = useState<HolderAction['action'] | null>(null);
-  const kind: HolderAction['action'] = selectedKind ?? (queryAction === 'delegate' ? 'delegate' : 'transfer');
+  const kind: HolderAction['action'] =
+    selectedKind ?? (queryAction === 'delegate' && delegation ? 'delegate' : 'transfer');
   const [typed, setDestination] = useState('');
   // A locked community: a token moves only back to the Treasury, or by a vote the Treasury runs.
   const fixedToTreasury = locked && (kind === 'transfer' || kind === 'approve');
@@ -75,6 +85,26 @@ export function HolderControls({
   const [hash, setHash] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const inFlight = useRef(false);
+  // The ledger of the last action confirmed here; the next prepare waits for RPC to reach it.
+  const lastLedger = useRef(0);
+  // The token's live single-token approval, shown before cancelling it (BUG-W11-3).
+  const approval = useSWR(
+    kind === 'revoke' && liveOwner && owner ? ['token-approval', config.tokenContractId, tokenId, owner] : null,
+    async () => {
+      const { Client } = await import('@builder-stellar/token-bindings');
+      const token = new Client({
+        contractId: config.tokenContractId,
+        rpcUrl: config.rpcUrl,
+        networkPassphrase: config.passphrase,
+        publicKey: owner ?? undefined,
+        allowHttp: config.name === 'local'
+      });
+      return (await token.get_approved({ token_id: tokenId })).result ?? null;
+    },
+    // An approval just made may not have reached the RPC node read yet: look again while none shows.
+    { revalidateOnFocus: false, refreshInterval: (latest) => (latest === null ? 5_000 : 0) }
+  );
+  const nothingToRevoke = kind === 'revoke' && approval.data === null;
   const allowed =
     session.authStatus === 'authenticated' &&
     session.address === owner &&
@@ -145,7 +175,7 @@ export function HolderControls({
           directoryFetch<HolderPrepared>(`/api/dao/${encodeURIComponent(daoId)}/tokens/prepare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(action)
+            body: JSON.stringify(lastLedger.current ? { ...action, afterLedger: String(lastLedger.current) } : action)
           }),
         {
           address: useAuthSessionStore.getState().address ?? '',
@@ -167,7 +197,7 @@ export function HolderControls({
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertHolderEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared });
-      setMessage('Looks good. Review the details below. Nothing is signed yet.');
+      setMessage('Checks passed. Review the details below. Nothing is signed yet.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to prepare this action.');
     } finally {
@@ -234,10 +264,12 @@ export function HolderControls({
       if (submitted.status === 'ERROR' || submitted.status === 'TRY_AGAIN_LATER')
         throw new Error('The network did not accept this transaction. Check its hash before retrying.');
       setMessage('Submitted. Waiting for confirmation…');
-      await waitForConfirmation(submitted.hash, config.rpcUrl);
+      const landed = await waitForConfirmation(submitted.hash, config.rpcUrl);
+      lastLedger.current = Math.max(lastLedger.current, landed.ledger);
       setConfirmed(true);
       setMessage('Confirmed. Ownership and votes can take a moment to update here.');
       onRefresh();
+      void approval.mutate();
       await mutate(
         (key) =>
           Array.isArray(key) &&
@@ -262,10 +294,15 @@ export function HolderControls({
 
   return (
     <section className={card} aria-labelledby="holder-controls-title">
-      <div>
+      <div className={header}>
         <h2 id="holder-controls-title" className={title}>
           Your token
         </h2>
+        {canSell ? (
+          <ButtonLink href={sellHref(routeId, tokenId)} variant="secondary" size="sm">
+            Sell
+          </ButtonLink>
+        ) : null}
       </div>
       {!allowed ? (
         <p className={muted} role="status">
@@ -290,29 +327,28 @@ export function HolderControls({
           // On a locked community the only useful approval is one that outlasts a vote: suggest it.
           if (value === 'approve' && locked && !expiry) void suggestVoteApproval();
         }}
-        options={
-          locked
-            ? [
-                { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
-                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-                { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
-                {
-                  value: 'revoke',
-                  label: 'Cancel token approval',
-                  description: 'Remove permission to transfer this token'
-                }
-              ]
-            : [
-                { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
-                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-                { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
-                {
-                  value: 'revoke',
-                  label: 'Cancel token approval',
-                  description: 'Remove permission to transfer this token'
-                }
-              ]
-        }
+        options={(locked
+          ? [
+              { value: 'transfer', label: 'Give back', description: 'Return this token to the tribe' },
+              { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+              { value: 'approve', label: 'Approve the tribe', description: 'Let a vote move this token' },
+              {
+                value: 'revoke',
+                label: 'Cancel token approval',
+                description: 'Remove permission to transfer this token'
+              }
+            ]
+          : [
+              { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
+              { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+              { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
+              {
+                value: 'revoke',
+                label: 'Cancel token approval',
+                description: 'Remove permission to transfer this token'
+              }
+            ]
+        ).filter((option) => delegation || option.value !== 'delegate')}
       />
       <div className={form}>
         {fixedToTreasury ? (
@@ -346,10 +382,18 @@ export function HolderControls({
             ) : null}
           </Field>
         ) : (
-          <p className={muted}>
-            Removes this token’s single-token approval right away. The current spender isn’t shown because the contract
-            doesn’t expose it. Collection-wide operator permissions don’t change.
-          </p>
+          <div className={form}>
+            {approval.data ? <Address value={approval.data} label="Approved now" compact /> : null}
+            <p className={muted} role="status">
+              {approval.isLoading
+                ? 'Checking this token’s approval…'
+                : approval.data
+                  ? 'Cancelling removes this approval right away. Collection-wide operator permissions don’t change.'
+                  : approval.data === null
+                    ? 'No one is approved to move this token right now. Collection-wide operator permissions aren’t shown here.'
+                    : 'We couldn’t read this token’s approval. Cancelling still removes it right away if there is one. Collection-wide operator permissions don’t change.'}
+            </p>
+          </div>
         )}
         {kind === 'approve' ? (
           <Field>
@@ -367,10 +411,13 @@ export function HolderControls({
             <FieldHelperText>
               {endsAround
                 ? `Ends around ${endsAround}. `
-                : 'A number, not a date: the network moves on by one about every 5 seconds. '}
+                : 'A ledger number, not a date. It increases by one about every 5 seconds. '}
               {locked
                 ? 'Until then, a proposal members pass can move this token, unless you revoke it first.'
                 : 'The spender can move your token until then or until you revoke it.'}
+              {canSell
+                ? ' Want to sell this token on the tribe’s market? Use Sell instead: it asks for the right permission for you.'
+                : ''}
             </FieldHelperText>
             <div>
               {locked ? (
@@ -411,7 +458,7 @@ export function HolderControls({
           </div>
         ) : null}
         {!hash && !review ? (
-          <Button block variant="secondary" disabled={!allowed} loading={busy} onClick={prepare}>
+          <Button block variant="secondary" disabled={!allowed || nothingToRevoke} loading={busy} onClick={prepare}>
             {busy ? 'Checking' : 'Review'}
           </Button>
         ) : null}
@@ -470,7 +517,7 @@ export function HolderControls({
             </Button>
           ) : (
             <p className={muted}>
-              Don’t send it again while it’s confirming. Check the transaction, or refresh after it lands.
+              Don’t send it again while it’s confirming. Check the transaction, or refresh after it is confirmed.
             </p>
           )}
         </div>

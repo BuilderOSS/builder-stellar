@@ -149,7 +149,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
     );
     const bidder = session.address;
     const assertWallet = async () => {
-      if (!mounted.current) throw new Error('Auction view changed. Review the current DAO before signing.');
+      if (!mounted.current) throw new Error('Auction view changed. Review the current tribe before signing.');
       const current = useAuthSessionStore.getState();
       assertAuctionWallet(current.address, current.walletNetworkPassphrase, bidder, config.passphrase);
       const [wallet, network] = await readSigningWallet();
@@ -178,7 +178,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
         assembled = await prepareBuyerRefund(client, bidder);
       } else {
         assembled = await prepareBuyerAction(client, data!, bidder, action, parsed, Math.floor(Date.now() / 1000), {
-          comment: comment.trim()
+          comment: comment.trim(),
+          assetCode: paymentAssetCode(config.name, data?.config.payment_token)
         });
       }
       // Only this explicit user action opens the wallet. Reads never sign.
@@ -222,6 +223,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
 
   return (
     <PageSection
+      guide="guides/auctions/bid"
       title="Auction"
       description="One token at a time. The winner becomes a member and the bid funds the treasury."
     >
@@ -235,7 +237,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       {state === 'disabled' ? (
         <Callout
           title="This tribe doesn't run auctions"
-          description="Tokens are shared another way, like the market or claims."
+          description="People join another way, such as the market or claims."
         />
       ) : null}
       {state === 'not-launched' ? (
@@ -397,14 +399,14 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 ) : null}
                 <CommentInput
                   id="auction-bid-comment"
-                  label="Say something (optional)"
+                  label="Comment (optional)"
                   value={comment}
                   onChange={setComment}
                   maxBytes={MAX_COMMENT_BYTES}
                   disabled={Boolean(busy)}
                   rows={2}
                   oneLine
-                  helper="One line, shown with your bid for good. It can't be edited."
+                  helper="One line, stored with your bid. It can't be edited later."
                 />
                 <Button
                   block

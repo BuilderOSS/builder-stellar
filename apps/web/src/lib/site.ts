@@ -1,7 +1,19 @@
 export const SITE_NAME = 'Tribe Builder';
 export const SITE_DESCRIPTION =
-  'Gather your people, pool what you put in, and decide together. A DAO on Stellar: shared treasury, onchain votes, NFT membership.';
+  'Build a tribe, share a treasury, and make decisions together. A DAO on Stellar: shared treasury, onchain votes, NFT membership.';
 export const SOURCE_URL = 'https://github.com/BuilderOSS/builder-stellar';
+const DEFAULT_DOCS_URL = 'https://docs.tribes.build';
+
+/**
+ * A page on the guides site (docs.tribes.build), from NEXT_PUBLIC_DOCS_URL when set. `path` is a docs
+ * route such as `guides/marketplace/sell`; the docs use trailing slashes.
+ */
+export function docsHref(path = ''): string {
+  const base = (process.env.NEXT_PUBLIC_DOCS_URL?.trim() || DEFAULT_DOCS_URL).replace(/\/$/, '');
+  const clean = path.replace(/^\/+|\/+$/g, '');
+  return clean ? `${base}/${clean}/` : `${base}/`;
+}
+
 /** Community and support: questions, problems and legal requests all start here. */
 export const DISCORD_URL = 'https://discord.gg/bTygNksyRb';
 

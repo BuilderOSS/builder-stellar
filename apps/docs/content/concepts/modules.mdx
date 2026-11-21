@@ -1,0 +1,57 @@
+A module is an add-on that gives a tribe a way to sell, auction, or hand out memberships. Every tribe has the same four core parts: its membership token, its artwork, its voting rules, and its treasury. Modules sit beside them, and each tribe chooses which ones it has.
+
+For crypto natives: a module is a separate contract registered on the tribe's Token contract. Each module belongs to that tribe alone. It is not shared with other tribes.
+
+## The three built-in modules
+
+| In the app | The module | What it does |
+|---|---|---|
+| Daily auction | Auction module | Sells one new membership at a time to the highest bidder. The next auction starts when one ends. Each sale pays the treasury. |
+| Market | Marketplace module | Lets members resell their memberships, and lets the tribe sell new ones at a fixed price from quick-buy pools it opens by vote. |
+| Invite lists | Claims module | Gives memberships to a published list of wallets, free or at a price. Anyone can check the list. |
+
+## How a tribe chooses its modules
+
+The create flow asks how people join. Each answer sets the modules the tribe starts with:
+
+- **Daily auction**: the auction.
+- **Auction + resale**: the auction and the market.
+- **Fixed-price sales**: the market.
+- **Invite only**: invite lists.
+
+A tribe can add or remove modules later. All of this happens on one card: Manage → Membership → Modules.
+
+## Mint allowances
+
+A module that creates new memberships needs a mint allowance: the number of tokens it may still mint. This caps what any module can do. The auction gets an allowance it will not use up, because it mints one token per auction. The market gets an allowance for each pool the tribe opens. "Change allowance" on the module's row raises or lowers it: directly by the launch admin during setup, and by vote after launch.
+
+Some modules hold memberships without votes. Tokens waiting in the auction or in the market show "Holds tokens without votes", so they never count toward quorum.
+
+## Adding a module
+
+Choose "Add a module", pick a tile, fill in its settings, and review the steps.
+
+- **After launch**, adding a module is a proposal. The steps run together when it executes: create the module, register it on the token, and, where needed, grant its allowance and open it. "Open it when this passes" is on by default for an auction or a market. The review shows the address the module will have, and checks the plan against the chain before you add it.
+- **During setup**, the [launch admin](/reference/glossary#launch-admin) adds it directly, with one signed transaction.
+
+A tribe can have one module of each built-in kind and at most 16 modules in total. During a launch drive, modules can't be changed.
+
+## Removing a module
+
+Only a vote can remove a module, so removal works after launch. Before you add the removal to a proposal, the app checks what the module still holds: memberships, open listings, a running auction, or open invite lists. It warns about each one and offers clean-up steps for the same proposal, such as closing a pool and sending its memberships back to the treasury. It does not block removal.
+
+Removal ends the module's allowance and any right it had to move memberships. Anything it still holds stays with it unless the proposal moves it first.
+
+## Modules from outside Tribe Builder
+
+After launch, the contracts let a tribe register another contract as a module by proposal. The "Add a module" sheet offers only the three built-in modules. A module that Tribe Builder did not deploy shows "Not deployed by Tribe Builder". Tribe Builder can't check its code, and its records are not covered by one-click [storage renewal](/concepts/storage-and-renewal). Its mint allowance still caps what it can mint.
+
+## Related
+
+- [Bid in an auction](/guides/auctions/bid)
+- [Sell a token](/guides/marketplace/sell)
+- [Marketplace pools](/guides/marketplace/pools)
+- [Make a claim list](/guides/claims/create)
+- [Create a tribe: membership](/guides/create/membership)
+- [Membership tokens](/concepts/membership-tokens)
+- [Upgrades](/concepts/upgrades)

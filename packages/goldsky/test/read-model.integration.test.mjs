@@ -139,6 +139,10 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('bb')], data: { name: str('auction'), version: str('0.1.0'), published_ledger: u64(6) }, ledger: 101, evt: 1 });
   emit('manager', 'CMANAGER', 'latest_implementation_set', { topics: [str('token'), bytes('aa')], data: { version: str('0.1.0') }, ledger: 101, evt: 2 });
   emit('manager', 'CMANAGER', 'implementation_revoked', { topics: [bytes('bb')], data: { revoked_ledger: u64(9) }, ledger: 102 });
+  // Vote sources: CADAPTER1 approved; CADAPTER2 approved then withdrawn.
+  emit('manager', 'CMANAGER', 'vote_source_approved', { topics: [addr('CADAPTER1')], data: { approved: bool(true), name: str('Mock adapter') }, ledger: 102, evt: 1 });
+  emit('manager', 'CMANAGER', 'vote_source_approved', { topics: [addr('CADAPTER2')], data: { approved: bool(true), name: str('Old adapter') }, ledger: 102, evt: 2 });
+  emit('manager', 'CMANAGER', 'vote_source_approved', { topics: [addr('CADAPTER2')], data: { approved: bool(false), name: str('Old adapter') }, ledger: 102, evt: 3 });
   emit('manager', 'CMANAGER', 'current_implementations_updated', {
     data: { token: bytes('aa'), metadata: bytes('cc'), auction: bytes('dd'), governor: bytes('ee'), treasury: bytes('ff'), marketplace: bytes('11'), claims: bytes('c7') }, ledger: 103
   });
@@ -545,6 +549,11 @@ test('landing tables fill operation/event positions from the event id and stay i
 });
 
 test('manager: registry, launches, slugs and implementations', { skip }, () => {
+  assert.deepEqual(
+    rows(`SELECT source, name FROM manager.vote_sources ORDER BY source`),
+    [{ source: 'CADAPTER1', name: 'Mock adapter' }],
+    'a withdrawn approval drops the source'
+  );
   const daos = rows(`SELECT * FROM manager.daos ORDER BY created_ledger`);
   assert.equal(daos.length, 4);
   const [a, b, c, d] = daos;
@@ -731,6 +740,11 @@ test('governance: proposals, votes, state, settings and comments', { skip }, () 
     one(`SELECT dao_id, admin, voting_delay_seconds, voting_period_seconds, queue_delay_seconds, proposal_threshold, quorum_bps, updated_ledger FROM governance.settings`),
     { dao_id: 'CTOK1', admin: 'CTRE1', voting_delay_seconds: 1, voting_period_seconds: 20, queue_delay_seconds: 1, proposal_threshold: 1, quorum_bps: 1000, updated_ledger: 136 },
     'constructor values overlaid with the latest setter events'
+  );
+  assert.equal(
+    one(`SELECT vote_source FROM governance.settings WHERE dao_id = 'CTOK1'`).vote_source,
+    'CTOK1',
+    'a token-weighted DAO votes with its token'
   );
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'quorum_changed'`).kind, 'governance.quorum_changed');
   const proposals = rows(`SELECT proposal_number, proposal_id, proposer, state, eta_seconds, snapshot_ledger, vote_start_seconds, vote_end_seconds, quorum_votes, action_count, for_votes, against_votes, abstain_votes, updated_ledger FROM app.proposal_list WHERE dao_id = 'CTOK1' ORDER BY proposal_number`);

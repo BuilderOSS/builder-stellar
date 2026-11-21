@@ -1,0 +1,16 @@
+{
+  "walk": {
+    "daoId": "CA22FAZLTEJLCHYOAXUIMFV7R7LMOE2UEN6U3WKOLZ7SCP7WQLVD5KE4",
+    "deadline": 1795102560,
+    "claimed": true,
+    "refunded": true
+  },
+  "studio": {
+    "daoId": "CCY72EY5M4BYMOI2U765RF3K4ZJTIDLIXBRQ6KYK6NE4HC4HBJTWOZF4",
+    "artwork": true,
+    "founders": true,
+    "driveOpen": true,
+    "claimedA": true,
+    "claimedB": true
+  }
+}

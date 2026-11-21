@@ -43,7 +43,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
     const { daoId } = await params;
     const config = await getDaoNetworkConfigById(daoId);
     if (!config.auctionContractId) {
-      return NextResponse.json({ message: 'Auctions are disabled for this DAO.' }, { status: 404 });
+      return NextResponse.json({ message: "This tribe doesn't run auctions." }, { status: 404 });
     }
 
     const client = new AuctionClient({

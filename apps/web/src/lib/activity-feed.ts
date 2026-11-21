@@ -114,7 +114,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
     case 'proposalexecuted':
       return { category: 'Governance', title: 'Proposal executed', href: proposalHref };
     case 'proposalcancelled':
-      return { category: 'Governance', title: 'Proposal canceled', href: proposalHref };
+      return { category: 'Governance', title: 'Proposal cancelled', href: proposalHref };
     case 'delegatechanged':
       return {
         category: 'Governance',
@@ -142,7 +142,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'auctioncancelled':
-      return { category: 'Auction', title: `Auction for ${tokenLabel} canceled`, href: auctionHref };
+      return { category: 'Auction', title: `Auction for ${tokenLabel} cancelled`, href: auctionHref };
     case 'primarylistingcreated':
       return { category: 'Market', title: `New token offered for ${value ?? 'sale'}`, href: marketHref };
     case 'primarylistingpurchased':

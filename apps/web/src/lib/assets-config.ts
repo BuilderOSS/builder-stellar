@@ -93,3 +93,14 @@ export function paymentAssetCode(
   if (!contractId) return undefined;
   return getTreasuryAssets(network).find((asset) => asset.contractId === contractId)?.code;
 }
+
+/**
+ * The code of a known asset from its SAC contract id on any network ("XLM", "USDC"), for text that
+ * has no network at hand. Contract ids differ between networks, so the match is unambiguous.
+ */
+export function knownAssetCode(contractId: string | null | undefined): string | undefined {
+  if (!contractId) return undefined;
+  for (const assets of [TREASURY_ASSETS.testnet, TREASURY_ASSETS.mainnet])
+    for (const asset of assets) if (asset.contractId === contractId) return asset.code;
+  return undefined;
+}

@@ -514,9 +514,26 @@ view GovernanceSettings {
   initLedger          BigInt    @map("init_ledger")
   initAt              DateTime? @map("init_at")
   updatedLedger       BigInt?   @map("updated_ledger")
+  /** Where voting power comes from: the token (= daoId) or an approved adapter. Permanent. */
+  voteSource          String    @map("vote_source")
 
   @@map("settings")
   @@schema("governance")
+}
+
+/** Vote sources new DAOs may choose (latest VoteSourceApproved per source, approved only). Chain truth: manager.is_vote_source_approved. */
+view ManagerVoteSource {
+  eventId         String    @map("event_id") @unique
+  deploymentId    String    @map("deployment_id")
+  managerContract String    @map("manager_contract")
+  source          String
+  name            String?
+  approvedLedger  BigInt    @map("approved_ledger")
+  approvedAt      DateTime? @map("approved_at")
+  transactionHash String?   @map("transaction_hash")
+
+  @@map("vote_sources")
+  @@schema("manager")
 }
 
 view ManagerDaoModule {

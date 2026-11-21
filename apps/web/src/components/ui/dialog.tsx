@@ -2,7 +2,7 @@
 
 import { Dialog as ArkDialog } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import { sva } from 'styled-system/css';
 
 const dialog = sva({
@@ -63,7 +63,22 @@ const dialog = sva({
       justifyContent: 'flex-end',
       gap: '2'
     }
-  }
+  },
+  variants: {
+    instant: {
+      // Opened from the keyboard (a search shortcut): no motion, so it is there on the keypress.
+      true: {
+        backdrop: { _open: { animation: 'none' }, _closed: { animation: 'none' } },
+        content: {
+          _open: { animation: 'none' },
+          _closed: { animation: 'none' },
+          '@media (prefers-reduced-motion: reduce)': { _open: { animation: 'none' }, _closed: { animation: 'none' } }
+        }
+      },
+      false: {}
+    }
+  },
+  defaultVariants: { instant: false }
 });
 
 /**
@@ -79,7 +94,9 @@ export function Dialog({
   footer,
   role = 'dialog',
   closeOnInteractOutside = true,
-  initialFocusEl
+  initialFocusEl,
+  finalFocusEl,
+  instant = false
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -91,22 +108,38 @@ export function Dialog({
   closeOnInteractOutside?: boolean;
   /** Element to focus on open, e.g. the safe choice in a destructive confirm. */
   initialFocusEl?: () => HTMLElement | null;
+  /** Element to focus on close, when it isn't the one focused before opening (a shortcut opened it). */
+  finalFocusEl?: () => HTMLElement | null;
+  /** Open and close with no motion. */
+  instant?: boolean;
 }) {
-  const classes = dialog();
+  const classes = dialog({ instant });
+  // Name and describe the dialog by explicit ids. Zag drops aria-labelledby when it looks for the title
+  // before a lazily mounted portal has rendered it, which left a dialog opened after mount with no
+  // accessible name (BUG-W02-3).
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
   return (
     <ArkDialog.Root
+      ids={{ title: titleId, description: descriptionId }}
       open={open}
       onOpenChange={(details) => onOpenChange(details.open)}
       role={role}
       closeOnInteractOutside={closeOnInteractOutside}
       initialFocusEl={initialFocusEl}
+      finalFocusEl={finalFocusEl}
       lazyMount
       unmountOnExit
     >
       <Portal>
         <ArkDialog.Backdrop className={classes.backdrop} />
         <ArkDialog.Positioner className={classes.positioner}>
-          <ArkDialog.Content className={classes.content}>
+          <ArkDialog.Content
+            className={classes.content}
+            aria-labelledby={titleId}
+            aria-describedby={description ? descriptionId : undefined}
+          >
             <div>
               <ArkDialog.Title className={classes.title}>{title}</ArkDialog.Title>
               {description ? (

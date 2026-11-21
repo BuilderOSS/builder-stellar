@@ -82,7 +82,9 @@ export function DraftsOverview() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No tribe drafts">When you build a tribe, it saves here as you go.</EmptyState>
+          <EmptyState title="No tribe drafts">
+            When you build a tribe, your progress is saved here automatically.
+          </EmptyState>
         )}
       </Section>
     </div>

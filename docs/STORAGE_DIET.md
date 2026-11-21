@@ -270,6 +270,9 @@ mint counter (no burn extension).
   a constant; drop the OZ `Version`/`Name` keys and `set_version` calls.
 - Rename `GovernorKey::Proposal(id)` to `ProposalTime(id)`: it encodes like OZ `GovernorStorageKey::Proposal(id)`
   but holds `ProposalCoreTime`. Safe today only because every OZ method that reads it is overridden.
+- The vote source (`docs/designs/governance-adapter.md`) lives in OZ's existing `TokenContract` instance slot: no
+  new key, nothing for default tribes. An adapter tribe's sweep also renews the adapter's instance; the adapter's
+  own per-voter storage is the adapter's.
 
 ### Treasury, Auction, Marketplace
 

@@ -44,7 +44,6 @@ function render(props: Partial<React.ComponentProps<typeof ModulesCard>> = {}) {
       busy={false}
       message={null}
       propose={vi.fn()}
-      onMessage={vi.fn()}
       onChanged={vi.fn()}
       onChangeAllowance={() => null}
       onProposeOpen={vi.fn()}
@@ -98,7 +97,7 @@ describe('ModulesCard', () => {
     expect(disabled(render({ canAct: false }))).toBe(true);
     const frozen = render({ frozen: true });
     expect(disabled(frozen)).toBe(true);
-    expect(frozen).toContain('locked in for the launch drive');
+    expect(frozen).toContain('fixed during the launch drive');
     expect(disabled(render())).toBe(false);
   });
 

@@ -8,6 +8,7 @@ import {
   isValidTokenSymbol,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_SYMBOL_LENGTH,
+  TOKEN_NAME_LENGTH_MESSAGE,
   utf8Length
 } from '@/lib/validation';
 
@@ -26,7 +27,7 @@ function validateTokenMetadata(data: TokenMetadataDraft): ValidationResult {
   const fields: Record<string, string> = {};
   const name = data.name.trim();
   if (name.length < 2) fields.name = 'Use at least 2 characters';
-  else if (utf8Length(name) > MAX_TOKEN_NAME_BYTES) fields.name = `Use at most ${MAX_TOKEN_NAME_BYTES} characters`;
+  else if (utf8Length(name) > MAX_TOKEN_NAME_BYTES) fields.name = TOKEN_NAME_LENGTH_MESSAGE;
   else if (UNSAFE_NAME_CHARACTERS.test(name)) fields.name = 'Names cannot contain quotes, backslashes or line breaks';
   if (!isValidTokenSymbol(data.symbol.trim()))
     fields.symbol = `Use capital letters or numbers, up to ${MAX_TOKEN_SYMBOL_LENGTH} characters`;

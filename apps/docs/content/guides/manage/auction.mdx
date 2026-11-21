@@ -1,0 +1,69 @@
+## Overview
+
+**Manage → Auction** shows how the tribe's auctions run now, and lets you change their settings. During setup the launch admin changes them directly. After launch the changes go to a vote, and the page adds the steps they need for you.
+
+## Before you start
+
+- The tribe must have an auction. A tribe created without one shows "This tribe has no auction". A module can be added later by proposal in **Manage → Membership**.
+- **During setup**, the [launch admin](/reference/glossary#launch-admin) changes the settings directly. Connect the launch admin wallet. Each change is its own signature.
+- **After launch**, changes require DAO governance. Any connected wallet can add them to a proposal draft. They apply only if members vote for them and the proposal is executed. To submit the proposal, you need enough votes. See [Write a proposal](/guides/proposals/write/).
+- Connect your wallet on the tribe's network. Testnet is the live network today.
+
+## Steps
+
+1. **Open Auction.** Choose **Manage** in the tribe's navigation, then **Auction**. The **Auction now** card shows the current token and whether it is settled, a **Running**, **Paused** or **Not launched yet** label, and the current settings.
+
+   <Shot id="manage/auction/01" alt="The Auction now card with the Running label and the current auction settings" />
+
+2. **Change the settings.** In **Change auction settings**, edit any of these. Each changed field shows **Changed** with an **Undo** button.
+
+   - **Starting price**: the lowest opening bid (the reserve price). At least 0.0001 in the auction's payment asset.
+   - **Minimum bid increase (%)**: how much higher each new bid must be than the last. From 1 to 100.
+   - **Each auction runs for**: between 5 minutes and 30 days.
+   - **A late bid adds**: how much time a bid near the end adds to the auction. Up to 1 day.
+
+   <Shot id="manage/auction/02" alt="The Change auction settings card with a new starting price and the Changed label" />
+
+3. **Choose what happens to the current auction.** After launch, two more choices appear. **Also cancel the current auction** refunds the top bid and sends the token to the Treasury. **When the changes are done** offers **Resume auctions**, so bidding restarts with the new settings, or **Keep auctions paused**, to resume later with its own vote.
+
+   <Shot id="manage/auction/03" alt="The Also cancel the current auction checkbox and the When the changes are done choice" />
+
+4. **Check the plan.** The box at the bottom lists each step in order. After launch it is headed **If the proposal passes, it will**. Settings can only change while auctions are paused, so the page adds **Pause auctions** first and, if you chose it, **Resume auctions** last.
+
+   <Shot id="manage/auction/04" alt="The plan box listing Pause auctions, Change the starting price and Resume auctions" />
+
+5. **Apply or add to a proposal.** During setup, choose the button that names the changes, for example **Apply 2 changes now**, and sign each one in your wallet. After launch, choose the button that names the steps, for example **Add 3 steps to proposal**. The steps join your draft as one item, "Change the auction: 3 steps", and nothing is signed yet.
+
+   <Shot id="manage/auction/05" alt="The Add 3 steps to proposal button with the Requires DAO governance line beneath it" />
+
+### The payment asset
+
+**Paid in** shows the asset bids are paid in. It is fixed after the first bid. Before any bid, it can be changed by proposal with **Change the auction payment asset**, under **Advanced** in the action picker. See [Choose actions](/guides/proposals/actions/).
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Each setting is changed on the tribe's Auction contract: `set_reserve_price`, `set_min_bid_increment`, `set_duration` and `set_time_buffer`. The contract accepts these only while auctions are paused. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch they run only as part of a proposal that passes and is executed.
+
+  While auctions are paused, nobody can bid. The current auction can still be settled. Resuming starts a new auction if the last one was settled. Cancelling the current auction refunds the top bidder and sends the token to the Treasury.
+
+  All the steps run together in one execution. If one fails, none of them run, and the proposal stays queued until it is executed or expires. This means a proposal can't leave auctions paused halfway through a change.
+
+  Each transaction costs a Stellar network fee in XLM. Tribe Builder takes no fee. Settings and every change to them are public on chain.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Read only."** During setup, connect the launch admin wallet. After launch, connect a wallet to build a proposal.
+- **"Auction settings didn't load."** Choose the refresh button on the **Auction now** card, or reload the page.
+- **A field shows an error.** The value is outside its limits. Check the ranges above.
+- **The plan is empty.** Change a setting, or choose what happens to auctions, to build a proposal.
+- **A change was signed but the setting didn't update.** Check the transaction in the notification, then refresh the card.
+
+## Related
+
+- [Auction settings](/guides/auctions/settings/)
+- [Settle an auction](/guides/auctions/settle/)
+- [Bid in an auction](/guides/auctions/bid/)
+- [Modules](/concepts/modules/)
+- [Queue and execute](/guides/proposals/queue-and-execute/)

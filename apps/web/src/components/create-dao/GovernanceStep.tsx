@@ -1,9 +1,10 @@
 'use client';
-import { FastForward, Hourglass, Scale, Zap } from 'lucide-react';
+import { BrainCircuit, Coins, FastForward, Hourglass, Plug, Scale, Zap } from 'lucide-react';
 import { useState } from 'react';
 
-import { Chip, ChoiceGroup, Disclosure, DurationInput, Input } from '@/components/ui';
+import { Callout, Chip, ChoiceGroup, Disclosure, DurationInput, Input, OptionSelect } from '@/components/ui';
 import { applyVotingPace, votingPaceOf, votingPaces } from '@/lib/create-dao-presets';
+import { type ApprovedVoteSource, useApprovedVoteSources } from '@/lib/vote-source';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
@@ -17,6 +18,42 @@ const PACE_ICONS: Record<string, typeof Zap> = {
   deliberate: Hourglass
 };
 const GOVERNANCE_FIELDS = ['votingDelay', 'votingPeriod', 'queueDelay', 'quorumBps', 'proposalThreshold'] as const;
+const TOKEN_SOURCE = 'token';
+
+/**
+ * How votes are counted (docs/designs/governance-adapter.md): the tribe's token by default; NQG
+ * once it exists on Stellar; or a vote source the platform approved, chosen under Advanced.
+ */
+export function voteTypeOptions(voteSource: string, approved: ApprovedVoteSource[]) {
+  const chosen = approved.find((entry) => entry.source === voteSource);
+  return [
+    {
+      value: TOKEN_SOURCE,
+      label: 'Token-weighted',
+      description: 'One membership, one vote. Members can delegate their votes.',
+      icon: <Coins aria-hidden="true" strokeWidth={1.75} />,
+      badge: 'Default'
+    },
+    {
+      value: 'nqg',
+      label: 'Neural Quorum Governance (NQG)',
+      description: 'Coming once NQG is available on Stellar.',
+      icon: <BrainCircuit aria-hidden="true" strokeWidth={1.75} />,
+      badge: 'Soon',
+      disabled: true
+    },
+    ...(voteSource
+      ? [
+          {
+            value: voteSource,
+            label: chosen?.name ?? 'Approved vote source',
+            description: 'Votes come from this approved contract. Change it under Advanced settings.',
+            icon: <Plug aria-hidden="true" strokeWidth={1.75} />
+          }
+        ]
+      : [])
+  ];
+}
 
 export function GovernanceStep() {
   const governance = useCreateDaoStore((s) => s.governance);
@@ -26,9 +63,29 @@ export function GovernanceStep() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const paces = votingPaces();
   const pace = votingPaceOf(governance);
-  const hasErrors = GOVERNANCE_FIELDS.some((field) => errors[field]);
+  const hasErrors = GOVERNANCE_FIELDS.some((field) => errors[field]) || Boolean(errors.voteSource);
+  const approved = useApprovedVoteSources().data ?? [];
+  const voteSource = governance.voteSource ?? '';
   return (
     <div className={styles.stack}>
+      <ChoiceGroup
+        variant="card"
+        label="How are votes counted?"
+        value={voteSource || TOKEN_SOURCE}
+        onValueChange={(value) => {
+          if (value === TOKEN_SOURCE) {
+            update({ voteSource: '', voteSourceDecimals: 0 });
+            useCreateDaoStore.getState().clearValidationError('voteSource');
+          }
+        }}
+        options={voteTypeOptions(voteSource, approved)}
+      />
+      {voteSource ? (
+        <Callout variant="warning" title="This contract decides every member's voting power">
+          It is fixed when your tribe is created and can&apos;t be changed later, even by a vote. Memberships still come
+          from your tribe&apos;s token.
+        </Callout>
+      ) : null}
       <ChoiceGroup
         variant="card"
         label="How fast should decisions happen?"
@@ -107,7 +164,11 @@ export function GovernanceStep() {
             <CreationField
               id="proposalThreshold"
               label="Votes needed to propose"
-              hint="A number of tokens, not a percentage."
+              hint={
+                voteSource
+                  ? 'Whole votes from the vote source, not a percentage.'
+                  : 'A number of tokens, not a percentage.'
+              }
             >
               <Input
                 id="proposalThreshold"
@@ -122,6 +183,39 @@ export function GovernanceStep() {
               />
             </CreationField>
           </div>
+          {approved.length > 0 || voteSource ? (
+            <div className={styles.stack}>
+              <CreationField
+                id="voteSource"
+                label="Vote source"
+                hint="The contract your tribe's Governor reads voting power from. Only sources the platform approved are listed."
+              >
+                <OptionSelect
+                  id="voteSource"
+                  label="Vote source"
+                  value={voteSource || TOKEN_SOURCE}
+                  options={[
+                    { value: TOKEN_SOURCE, label: "The tribe's token (token-weighted)" },
+                    ...approved.map((entry) => ({ value: entry.source, label: entry.name })),
+                    ...(voteSource && !approved.some((entry) => entry.source === voteSource)
+                      ? [{ value: voteSource, label: 'No longer approved' }]
+                      : [])
+                  ]}
+                  onValueChange={(value) => {
+                    const entry = approved.find((source) => source.source === value);
+                    if (entry) update({ voteSource: entry.source, voteSourceDecimals: entry.decimals });
+                    else if (value === TOKEN_SOURCE) update({ voteSource: '', voteSourceDecimals: 0 });
+                    useCreateDaoStore.getState().clearValidationError('voteSource');
+                  }}
+                />
+              </CreationField>
+              {errors.voteSource ? (
+                <p className={styles.error} id="voteSource-error">
+                  {errors.voteSource}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </Disclosure>
     </div>

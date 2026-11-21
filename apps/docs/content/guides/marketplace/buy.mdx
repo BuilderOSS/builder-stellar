@@ -1,0 +1,73 @@
+## Overview
+
+A tribe's market sells memberships in two ways: resales listed by members, and new tokens from quick-buy pools the tribe opens by vote. This guide covers buying a member's resale listing. For new tokens, see [Marketplace pools](/guides/marketplace/pools/).
+
+## Before you start
+
+- Anyone with a Stellar wallet can buy. You don't need to be a member. Connect and sign in on the tribe's network. Testnet is the live network today.
+- Hold enough of the listing's payment asset for the price, plus a small network fee in XLM. Your XLM balance must stay above your account's reserve, the minimum a Stellar account keeps.
+- For a USDC listing, your wallet needs a USDC trustline (a setting that lets your account hold USDC). The listing offers **Review adding USDC trustline** if it doesn't have one.
+- The market must be open. While it is paused, listings say "The market is paused or not open yet."
+- You can't buy your own listing.
+
+## Steps
+
+1. **Find a listing.** Open the tribe's **Market** page from its navigation. On a phone, it may be under **More**. Choose **Resale from members** to see only resales, and **For sale now** to see what you can buy. You can also browse every tribe on the site-wide **Market** page: choose **For sale**, then **View in tribe** on a listing.
+
+   <Shot id="marketplace/buy/01" alt="A tribe's Market page filtered to Resale from members, with listing cards showing token artwork and prices" />
+
+2. **Open the details.** Choose **Details** on the listing. It shows when the listing **Ends**, the price asset, the **Seller**, and what the **Seller receives after the resale fee**. The app also checks your account and shows your **Spendable** balance, with anything you need to fix first.
+
+   <Shot id="marketplace/buy/02" alt="An expanded listing card with the end date, seller, the amount the seller receives, and the buyer's spendable balance" />
+
+3. **Choose Buy.** The button names the price, for example **Buy for 50 XLM**. A dialog called **Buy this token** opens. Choose **Check**. The app checks the listing, your balance and the network fee, then shows exactly what you pay and the fee.
+
+   <Shot id="marketplace/buy/03" alt="The Buy this token dialog with the purchase summary and the network fee" />
+
+4. **Sign and send.** Choose **Sign and send**, then review and sign in your wallet. The dialog shows **Submitted** while it waits, then "Confirmed. The market can take a few seconds to update." Choose **Done**.
+
+   <Shot id="marketplace/buy/04" alt="The Buy this token dialog after confirmation, with the transaction link and the Done button" />
+
+5. **Check your membership.** The token is now in your wallet, and its vote is yours. The **Your membership** card on the tribe's home page shows your tokens and votes. A proposal made before you bought counts votes from before you held the token, so the new vote applies to later proposals.
+
+   <Shot id="marketplace/buy/05" alt="The Your membership card on the tribe's home page showing one token and one vote" />
+
+### Comments on a listing
+
+Each resale has **Comments** below its details. Anyone signed in can post one. A comment is one line of public text, up to 1 KB, and it can't be edited or deleted. Comments stay with the token across all its listings.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Buying calls `buy` on the tribe's Marketplace contract with the token, your address, and the highest price you agree to pay, which is the price you reviewed. The contract refuses the purchase if the market is paused, the listing has ended, or the price is now higher.
+
+  In one transaction, your payment is split: the resale fee goes to the tribe's [Treasury](/reference/glossary#treasury), and the rest goes to the seller. The token moves from the Marketplace contract to you. The fee and asset are the ones stored when the token was listed. The seller pays the fee from the price, so you pay only the listed price and the network fee.
+
+  Before you sign, the app checks that the listing is the same one you reviewed, with the same seller, price, fee and end time, and that the transaction pays nothing beyond it. If anything changed, it stops and asks you to reload.
+
+  While the market held the token, it carried no vote. Once it is in your wallet, its vote counts for you.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The purchase, the amounts and the addresses are public on chain once confirmed.
+</Disclosure>
+
+## If something goes wrong
+
+- **The Buy button is disabled.** Connect and sign in on the tribe's network. The button is also disabled for your own listing, while the market is paused, and for an asset other than XLM or USDC.
+- **"Add a USDC trustline before trading."** Choose **Review adding USDC trustline**, sign it, then buy. A trustline adds to the XLM your account keeps in reserve.
+- **"Add XLM above the account reserve to pay network fees."** or **"Insufficient spendable balance."** Add funds to your wallet, then choose **Check** again.
+- **"This listing has expired. It can no longer be purchased."** The listing ended before you bought. The seller can list the token again.
+- **"This listing changed or closed. Refresh before signing."** Someone bought it, or the seller cancelled or relisted it. Nothing was submitted. Reload the page.
+- **"The price is now higher than the price you reviewed."** Reload, review the new price and buy again if you still want it.
+- **"The simulated purchase does not match the reviewed listing."** Nothing was submitted. Reload the listing and review it again.
+- **"The marketplace is paused. Purchases and new listings are unavailable."** Members paused the market by vote. Purchases resume when a vote reopens it.
+- **"Signing was cancelled. No new transaction was submitted."** You closed or declined the wallet request. Choose **Sign and send** again when you are ready.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Marketplace pools](/guides/marketplace/pools/)
+- [Sell a token](/guides/marketplace/sell/)
+- [Membership tokens](/concepts/membership-tokens/)
+- [Votes and delegation](/concepts/votes-and-delegation/)
+- [Wallets and Stellar basics](/concepts/wallets-and-stellar/)

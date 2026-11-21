@@ -11,6 +11,21 @@ import { usePendingActionStore } from '@/stores/pending-action-store';
 const summaryBox = css({ display: 'grid', gap: '1.5', p: '3.5', borderRadius: 'control', bg: 'raised' });
 const summaryText = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const recipientList = css({ display: 'grid', gap: '1', m: '0' });
+const recipientValue = css({ textStyle: 'mono', color: 'ink', m: '0', wordBreak: 'break-all' });
+const ACCOUNT = /^[GC][A-Z2-7]{55}$/;
+
+/**
+ * The full address of everyone an action pays or gives a token to. Summaries shorten addresses to
+ * read well, but a payment that can't be undone is checked against the whole address.
+ */
+export function recipientsOf(actions: { type: string; recipient?: string }[]) {
+  const seen = new Set<string>();
+  for (const action of actions)
+    if (action.type !== 'change-mint-allowance' && action.recipient && ACCOUNT.test(action.recipient))
+      seen.add(action.recipient);
+  return [...seen];
+}
 const FINDING_TITLE = {
   'high-risk': 'High-risk action',
   duplicate: 'Already in your proposal',
@@ -41,6 +56,7 @@ export function ProposeActionDialog() {
   const findings = pending?.findings ?? [];
   const actions = pending?.request.actions ?? [];
   const incoming = new Set(actions.map((action) => action.id));
+  const recipients = recipientsOf(actions);
   // Only what clashes with the proposal so far asks a question; a plan's own steps were ordered by its page.
   const queued = (finding: ActionFinding) => finding.existingIds.some((id) => !incoming.has(id));
   const duplicate = findings.some((finding) => finding.kind === 'duplicate' && queued(finding));
@@ -63,7 +79,7 @@ export function ProposeActionDialog() {
         if (!open) resolve('cancel');
       }}
       title={conflict ? 'Replace the action already in your proposal?' : 'Add this to your proposal?'}
-      description="It joins your proposal on this browser. Your wallet isn't asked to sign anything yet."
+      description="It is added to your proposal in this browser. Your wallet does not sign anything yet."
       footer={
         pending ? (
           <>
@@ -106,6 +122,16 @@ export function ProposeActionDialog() {
               </p>
             ))}
           </div>
+          {recipients.length ? (
+            <dl className={recipientList}>
+              <dt className={note}>{recipients.length > 1 ? 'Recipients' : 'Recipient'}</dt>
+              {recipients.map((address) => (
+                <dd key={address} className={recipientValue}>
+                  {address}
+                </dd>
+              ))}
+            </dl>
+          ) : null}
           {groupFindings(findings).map(({ finding, count }, index) => {
             // Manage only offers approved upgrades, so they read as information rather than a warning.
             const routineUpgrade = finding.kind === 'high-risk' && onlyUpgrades;

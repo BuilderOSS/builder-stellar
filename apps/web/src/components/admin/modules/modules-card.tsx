@@ -86,7 +86,6 @@ export function ModulesCard({
   busy,
   message,
   propose,
-  onMessage,
   onChanged,
   onChangeAllowance,
   onProposeOpen
@@ -100,8 +99,7 @@ export function ModulesCard({
   frozen: boolean;
   busy: boolean;
   message: string | null;
-  propose: (request: ActionRequest) => ProposeResult;
-  onMessage: (text: string) => void;
+  propose: (request: ActionRequest, options?: { onAdded?: () => void }) => ProposeResult;
   onChanged: () => void;
   /** Returns a problem to show, or null once the change was signed or added to the draft. */
   onChangeAllowance: (module: ModuleRowData, direction: 'increase' | 'decrease', amount: string) => string | null;
@@ -127,7 +125,8 @@ export function ModulesCard({
             <Stack gap="1">
               <Heading size="heading">Modules</Heading>
               <HelpTip label="Modules">
-                Add-ons that let your tribe auction, sell or hand out memberships. Each mints only up to its allowance.
+                Modules let your tribe auction, sell or give out memberships. Each module mints only up to its
+                allowance.
               </HelpTip>
             </Stack>
             <Button variant="secondary" size="sm" disabled={!editable} onClick={() => setAdding(true)}>
@@ -229,7 +228,7 @@ export function ModulesCard({
 
           {frozen ? (
             <FieldHelperText>
-              Modules are locked in for the launch drive. After launch, changes go through proposals.
+              Modules are fixed during the launch drive. After launch, changes go through proposals.
             </FieldHelperText>
           ) : null}
           {message ? <Callout variant="info" title={message} /> : null}
@@ -246,7 +245,6 @@ export function ModulesCard({
         present={present}
         registered={modules.length}
         propose={propose}
-        onMessage={onMessage}
         onChanged={onChanged}
       />
       <RemoveModuleSheet
@@ -257,7 +255,6 @@ export function ModulesCard({
         address={address}
         module={removing && isModuleKind(removing.kind) ? { ...removing, kind: removing.kind } : null}
         propose={propose}
-        onMessage={onMessage}
       />
       <AllowanceSheet
         open={allowing !== null}

@@ -17,12 +17,14 @@ import {
   Disclosure,
   Field,
   FieldLabel,
+  GuideLink,
   Pagination,
   ProgressBar,
   Textarea
 } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { formatStroops } from '@/lib/auction-values';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { claimMinterClient } from '@/lib/minter/client';
@@ -69,6 +71,8 @@ function claimCount(list: ClaimListView, entry: Entry) {
 export function Claims({ admin = false }: { admin?: boolean }) {
   const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
+  // Managing lists follows Manage: the launch admin in Setup, members once live (by proposal).
+  const { canManage } = useDaoMembership(config);
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const current = useCurrentClaims(config.tokenContractId, address);
   const [page, setPage] = useState(0);
@@ -125,7 +129,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       if (listPhase(list) !== 'open') throw new Error('This list is not taking claims.');
       if (!verifyClaimProof(address, entry.amount, entry.proof, list.root))
         throw new Error(
-          'This proof doesn’t match your account, amount or the list. Ask whoever runs the claim for a new one.'
+          'This proof doesn’t match your account, amount or the list. Ask the person who manages the list for a new one.'
         );
       const mintNow = claimCount(list, entry);
       if (mintNow < 1) throw new Error('Nothing is left to claim on this list.');
@@ -153,7 +157,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertClaimEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared, list });
-      setMessage('Looks good. Nothing is signed or sent yet.');
+      setMessage('Checks passed. Nothing is signed or sent yet.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "We couldn't prepare your claim.");
     } finally {
@@ -230,7 +234,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       setMessage('Submitted. Waiting for confirmation…');
       await waitForConfirmation(txHash, config.rpcUrl);
       setHash('');
-      setMessage('Claim confirmed. Your claim history can take a moment to catch up.');
+      setMessage('Claim confirmed. Your claim history can take a moment to update.');
       await refreshAll();
     } catch (error) {
       setReview(null);
@@ -284,12 +288,19 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         <p>
           {admin
             ? 'Set aside tokens for specific wallets. People on a list claim their own tokens, free or at a price you set, until the list closes.'
-            : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}
+            : 'A tribe can set aside tokens for specific people. If you are on one of its claim lists, claim your tokens here. Some lists are free; others charge a price per token. You also pay a small network fee in XLM.'}{' '}
+          <GuideLink path={admin ? 'guides/claims/create' : 'guides/claims/claim'} />
         </p>
         <div className={styles.row}>
-          <ButtonLink href={`${base}/${admin ? 'claims' : 'admin/claims'}` as Route} variant="secondary" size="sm">
-            {admin ? 'See the member view' : 'Manage claim lists'}
-          </ButtonLink>
+          {admin ? (
+            <ButtonLink href={`${base}/claims` as Route} variant="secondary" size="sm">
+              See the member view
+            </ButtonLink>
+          ) : canManage ? (
+            <ButtonLink href={`${base}/admin/claims` as Route} variant="secondary" size="sm">
+              {config.status === 'pending' ? 'Manage claim lists' : 'Propose a claim list'}
+            </ButtonLink>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -512,7 +523,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           <p role="status">Loading past claims…</p>
         ) : history.data ? (
           <>
-            <p>{history.data.total} claims so far.</p>
+            <p>
+              {history.data.total} {history.data.total === 1 ? 'claim' : 'claims'} so far.
+            </p>
             {history.data.items.length ? (
               <ul className={styles.history}>
                 {history.data.items.map((item) => {
@@ -521,7 +534,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                   return (
                     <li key={item.claim_id}>
                       <p>
-                        {item.amount ?? 'Some'} tokens from{' '}
+                        {item.amount === '1' ? '1 token' : `${item.amount ?? 'Some'} tokens`} from{' '}
                         {listName(list ?? { listId: item.list_id, assurance: null })}
                         {paid && list ? `, paid ${claimAmountLabel(config.name, list.asset, paid)}` : ''}
                         {item.escrowed ? ' (held until launch)' : ''}
@@ -535,7 +548,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                 })}
               </ul>
             ) : (
-              <p>No claims yet. A claim you just made can take a moment to show up.</p>
+              <p>No claims yet. A recent claim can take a moment to appear.</p>
             )}
             <Pagination
               label="Past claim pages"
@@ -632,7 +645,7 @@ function ClaimListCard({
         entry ? (
           <>
             <p>
-              {entry.amount} tokens for you · {list.claimed ?? 0} claimed
+              {entry.amount} {String(entry.amount) === '1' ? 'token' : 'tokens'} for you · {list.claimed ?? 0} claimed
               {remainingAllocation(list) === 0n ? ' · all claimed' : ''}
             </p>
             {phase === 'open' && next > 0 ? (

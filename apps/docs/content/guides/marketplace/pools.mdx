@@ -1,0 +1,97 @@
+## Overview
+
+A quick-buy pool sells new membership tokens at a fixed price. Members decide by vote to open a pool, with its price, size and limits. Anyone can then buy from it until it closes or sells out, and the payments go to the tribe's [Treasury](/reference/glossary#treasury). This guide covers buying from a pool, stocking it, and how the tribe opens, closes and sweeps pools.
+
+## Before you start
+
+- **To buy,** you need a Stellar wallet on the tribe's network, connected and signed in. You don't need to be a member. Testnet is the live network today. Hold enough of the pool's payment asset for the price, plus a small network fee in XLM. For a USDC pool, your wallet needs a USDC trustline.
+- **To open, close or sweep a pool,** the tribe must have launched. These changes require DAO governance: a proposal that members vote on. Any connected wallet can add them to a proposal draft.
+- Pools work in tribes with locked memberships too, because the tokens come from the tribe itself.
+
+## Steps
+
+### Buy from a pool
+
+1. **Find the pool.** Open the tribe's **Market** page and choose **New from the tribe**. A pool's card is labelled **Quick-buy pool**, with its name (for example "New tokens · pool 3"), the price, and how many tokens are still **available**.
+
+   <Shot id="marketplace/pools/01" alt="The Market page filtered to New from the tribe, showing a Quick-buy pool card with its price and tokens available" />
+
+2. **Open the details.** Choose **Details**. The card shows when the pool **Closes**, how many tokens are **Ready to buy**, the limit **Per wallet**, how many have **Sold**, and the **Sales limit** for each period, for example "5 every 24h".
+
+   <Shot id="marketplace/pools/02" alt="An expanded pool card with its closing time, tokens ready to buy, per-wallet limit and sales limit" />
+
+3. **Stock the pool, if needed.** A pool mints its tokens in batches. If none are ready, the card says "No tokens are ready to buy yet. Anyone can add the next tokens to the pool for the network fee." Choose **Stock this pool**, then **Check**, then **Sign and send**. Each time adds up to 42 tokens. You pay only the network fee.
+
+   <Shot id="marketplace/pools/03" alt="A pool card with no tokens ready to buy and the Stock this pool button" />
+
+4. **Buy a token.** Choose **Buy for**, followed by the price. In the **Buy this token** dialog, choose **Check**. The summary names the token you will receive and says the payment goes to the tribe's Treasury. Choose **Sign and send** and sign in your wallet. When it is confirmed, the dialog says "Confirmed. You now hold the token from the pool."
+
+   <Shot id="marketplace/pools/04" alt="The Buy this token dialog for a pool, with the payment to the Treasury and the token to be received" />
+
+You receive one token for each purchase. To buy another, repeat the purchase, up to the pool's limit per wallet.
+
+### Open a pool by proposal
+
+5. **Open Manage → Market.** Choose **Manage** in the tribe's navigation, then **Market**. Or choose **Market settings** on the Market page. The page is headed **Manage the marketplace**.
+
+   <Shot id="marketplace/pools/05" alt="The Manage the marketplace page with the market status notice and the Propose a quick-buy pool section" />
+
+6. **Fill in the pool.** Under **Propose a quick-buy pool**, enter the **Price per token**, **Tokens in the pool**, **Maximum per wallet**, **Maximum sales per period**, **Period (hours)** and **Closes at (local time)**. The price is in the market's payment asset. Choose a closing time that leaves enough time for the vote, the safety delay and execution.
+
+   <Shot id="marketplace/pools/06" alt="The Propose a quick-buy pool form filled in with a price, size, limits and closing time" />
+
+7. **Read the vote warning.** **Each token sold adds a vote**. A pool larger than the current voting supply could let buyers outvote today's members. Once you enter the size and the per-wallet limit, the warning shows the largest vote share one wallet could buy. Keep pools small and the per-wallet limit low.
+
+   <Shot id="marketplace/pools/07" alt="The Each token sold adds a vote warning, showing the largest vote share one wallet could buy" />
+
+8. **Add it to your proposal.** Choose **Add the pool to proposal**. It joins your draft as one item, "Open a quick-buy pool", with two steps: raising the market's mint allowance by the pool's size, then opening the pool. Submit the proposal from **Review proposal**. See [Write a proposal](/guides/proposals/write/).
+
+   <Shot id="marketplace/pools/08" alt="The proposal draft with the Open a quick-buy pool item and its two steps" />
+
+### Close or sweep a pool
+
+Under **Propose closing or sweeping a pool**, choose a pool from the list or enter its number in **Pool**. Each pool in the list shows how many tokens are left, or that it has ended or closed.
+
+- **Add closing to proposal** stops the pool's sales. Tokens it never minted go back to the market's mint allowance.
+- **Add sweeping to proposal** moves a closed pool's unsold tokens to the Treasury. A pool must be closed before it can be swept.
+
+After its closing time, a pool stops selling at once. Its card says "This pool has ended and no longer sells." A pool that sold every token says "This pool sold every token it was opened with."
+
+To sell more tokens after a pool sells out or closes, members open a new pool by proposal.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  **Opening** runs two calls when the proposal is executed: `increase_mint_allowance` on the tribe's Token contract, then `open_pool` on the Marketplace contract. Each pool reserves part of the market's mint allowance for itself, so one pool can't use up another's. Opening fails if the market is paused, the closing time has passed, any limit is zero, the allowance isn't enough, or 8 pools are already open.
+
+  **Stocking** calls `restock`, which anyone can call until the pool closes. It mints the pool's next batch, at most 42 tokens, into the Marketplace contract. Tokens held by the market carry no votes.
+
+  **Buying** calls `buy_from_pool` with the pool, the token, your address and the highest price you agree to pay. The contract refuses the purchase if the market is paused, the pool has closed or passed its closing time, the price is higher, you have reached the per-wallet limit, or the pool has reached its sales limit for the current period. The payment goes to the Treasury and the token goes to you, in one transaction. There is no resale fee on a pool sale. Each token sold adds one vote to the tribe.
+
+  **Closing** calls `close_pool`. The Treasury can close a pool at any time by proposal. Closing returns the pool's unminted reservation to the mint allowance. Minted tokens that didn't sell stay with the market until the pool is swept.
+
+  **Sweeping** calls `sweep_pool`, which moves up to 25 unsold tokens to the Treasury each time. A pool with more unsold tokens needs another sweep. Tokens held by the Treasury carry no votes.
+
+  The wallet that submits each transaction pays the Stellar network fee in XLM. Tribe Builder takes no fee. Pools, stock and sales are public on chain.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Nothing is stocked in this pool right now. Restock it first."** Choose **Stock this pool**, then buy.
+- **"You already bought the most this pool allows per wallet."** The pool's per-wallet limit is reached for this wallet.
+- **The purchase can't be prepared, and the pool still has tokens.** The pool may have reached its sales limit for the current period (error 7722). Try again when the next period starts. The **Sales limit** in the pool's details shows the period.
+- **"This pool changed or closed. Refresh before signing."** or **"This pool has closed."** The pool sold out, closed, or passed its closing time. Reload the page.
+- **"Pools sell only from a launched, unpaused marketplace."** The market is paused. Purchases resume when a vote reopens it.
+- **"The marketplace is paused."** on Manage → Market. A pool can't open while the market is paused. Add **Reopen the market** before the pool in the same proposal, or wait until a reopening is executed.
+- **"Choose a closing time in the future, allowing time for the vote and execution."** Pick a later closing time. If the time passes before the proposal is executed, opening the pool fails.
+- **"Pool #3 is still open: close it first, then sweep it."** Close the pool in one proposal, then sweep it once it is closed.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Manage: marketplace](/guides/manage/marketplace/)
+- [Buy a token](/guides/marketplace/buy/)
+- [Write a proposal](/guides/proposals/write/)
+- [Modules](/concepts/modules/)
+- [Membership tokens](/concepts/membership-tokens/)

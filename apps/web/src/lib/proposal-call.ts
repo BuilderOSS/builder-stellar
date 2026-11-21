@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { knownAssetCode } from '@/lib/assets-config';
 import { artworkAdditionTitle, mintTitle } from '@/lib/contract-call-labels';
 import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { formatDuration } from '@/lib/duration';
@@ -179,6 +180,30 @@ function seconds(value: unknown) {
   return /^\d+$/.test(text) ? formatDuration(Number(text), { style: 'long', maxUnits: 4 }) : `${text} seconds`;
 }
 
+/**
+ * "4 Dec 2026, 12:30 UTC" for a unix time in seconds. Summaries can go into a proposal's text, which
+ * every voter reads, so they use one fixed form rather than the reader's locale and time zone.
+ */
+function utcDateTime(unixSeconds: unknown) {
+  const text = String(unixSeconds ?? '');
+  if (!/^\d+$/.test(text)) return text;
+  const formatted = new Date(Number(text) * 1000).toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC'
+  });
+  return `${formatted} UTC`;
+}
+
+/** "GCLG…U6CO": enough to recognise a contract or account in a sentence. */
+function shortId(value: unknown) {
+  const text = String(value ?? '');
+  return /^[GC][A-Z2-7]{55}$/.test(text) ? `${text.slice(0, 4)}…${text.slice(-4)}` : text;
+}
+
 /** "12.5%" for basis points; anything else as typed. */
 function percentFromBps(value: unknown) {
   const text = String(value ?? '');
@@ -188,16 +213,17 @@ function percentFromBps(value: unknown) {
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
   if (action.type === 'change-dao-slug')
-    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another tribe takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
+    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed immediately and keeps leading here only until another tribe takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
   if (action.type === 'transfer-dao-token')
-    return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
+    return `Give token #${action.tokenId} from the treasury to ${shortId(action.recipient)}`;
   if (action.type === 'open-claim-list')
-    return `Open a claim list of ${action.total} tokens at ${action.price} base units each, closing ${new Date(Number(action.expiresAt) * 1000).toISOString()}; the full list is at ${action.treeUri}`;
+    return `Open a claim list of ${action.total} tokens at ${action.price} base units each, closing ${utcDateTime(action.expiresAt)}; the full list is at ${action.treeUri}`;
   if (action.type === 'change-mint-allowance')
-    return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.module || action.recipient} by ${action.amount} tokens`;
+    // Named when the step was made for a known module (a pool's grant names "the market").
+    return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.moduleName || shortId(action.module || action.recipient)} by ${action.amount} tokens`;
   if (action.type === 'set-transfers-locked')
     return action.enabled
-      ? 'Lock memberships: tokens move only by sale from the tribe, by giving them back to the DAO or by a DAO vote'
+      ? 'Lock memberships: tokens move only by a sale from the tribe, by being given back to the tribe, or by a vote'
       : 'Unlock memberships: members can transfer and sell their tokens';
   if (action.type === 'set-members-only-delegation')
     return action.enabled ? 'Allow delegating votes to members only' : 'Allow delegating votes to anyone';
@@ -227,7 +253,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
       : `Open the market ${action.address}`;
   if (action.type === 'regenerate-token-traits') return `Seed traits for token #${action.tokenId}`;
   if (action.type === 'treasury-authorize')
-    return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
+    return `Authorise the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
   if (action.type === 'treasury-buy-listing')
     return `The treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
   if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
@@ -259,12 +285,19 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   // "Change how much time a late bid adds to 5 minutes" reads two ways.
   if (action.type === 'set-auction-time-buffer') return `Make a late bid add ${seconds(action.value || action.amount)}`;
   if (action.type === 'set-auction-payment-token' || action.type === 'set-marketplace-payment-token') {
-    return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
+    // BUG-W09-1: "to USDC", not the asset's contract id, when the asset is a known one.
+    const asset = action.paymentToken || action.recipient;
+    return `${getProposalActionLabel(action.type)} to ${knownAssetCode(asset) ?? asset}`;
   }
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
-  if (action.type === 'open-pool')
-    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${/^\d+$/.test(String(action.expiresAt)) ? new Date(Number(action.expiresAt) * 1000).toISOString() : action.expiresAt}`;
+  if (action.type === 'open-pool') {
+    // The price with its asset and the sales limit too: members vote on all of it (BUG-W11-4).
+    const code = knownAssetCode(action.asset);
+    const price = code ? `${action.price} ${code}` : `${action.price} of asset ${action.asset}`;
+    const closing = utcDateTime(action.expiresAt);
+    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${price} each, at most ${action.maxPerBuyer} per wallet and ${action.maxSoldPerPeriod} sold every ${action.periodHours}h, closing ${closing}`;
+  }
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
   if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {
@@ -286,12 +319,12 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
       );
     }
     return /^\d+$/.test(String(action.amount))
-      ? mintTitle([{ recipient: action.recipient, amount: BigInt(action.amount) }])
-      : `Mint ${action.amount} membership tokens to ${action.recipient}`;
+      ? mintTitle([{ recipient: action.recipient, amount: BigInt(action.amount) }], shortId)
+      : `Mint ${action.amount} membership tokens to ${shortId(action.recipient)}`;
   }
-  if (action.type === 'mint-governance-token') return mintTitle([{ recipient: action.recipient, amount: 1n }]);
+  if (action.type === 'mint-governance-token') return mintTitle([{ recipient: action.recipient, amount: 1n }], shortId);
   if (action.type === 'transfer-sac-token') {
-    return `Send ${action.amount} ${action.assetCode || 'tokens'} to ${action.recipient}`;
+    return `Send ${action.amount} ${action.assetCode || 'tokens'} to ${shortId(action.recipient)}`;
   }
   return `${getProposalActionLabel(action.type)} to ${action.recipient}`;
 }

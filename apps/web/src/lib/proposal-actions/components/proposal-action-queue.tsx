@@ -179,9 +179,9 @@ export function ProposalActionQueue({
     if (entry.bundleId || entry.actions.some(isHighRiskProposalAction)) {
       setConfirm({
         title: entry.bundleId ? 'Remove all of its steps?' : 'Remove this action?',
-        message: `“${itemSentence(entry)}” comes out of the proposal${
+        message: `“${itemSentence(entry)}” is removed from the proposal${
           entry.actions.length > 1 ? `, all ${entry.actions.length} steps together` : ''
-        }. You can undo it from the notice.`,
+        }. You can undo this from the notification.`,
         onConfirm: () => {
           remove(entry);
           setConfirm(null);
@@ -276,7 +276,9 @@ export function ProposalActionQueue({
             editingIndex !== undefined &&
             editingIndex >= entry.start &&
             editingIndex < entry.start + entry.actions.length;
-          const open = expanded[entry.key] ?? false;
+          // A multi-step item starts open: the heading counts actions ("2 actions"), so its steps are
+          // shown rather than folded into one row (BUG-CAP-7). It can still be folded.
+          const open = expanded[entry.key] ?? true;
           const shown = rowFindings(entry, findings);
           const pickable = !entry.bundleId && isPickable(getActionHandler(first.type));
           const href = actionEditHref(first);

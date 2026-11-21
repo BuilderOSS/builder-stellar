@@ -1,0 +1,44 @@
+{
+  "id": "auctions/settings/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815700,
+  "capturedAt": "2026-11-19T15:29:04.839Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Add 3 steps to proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.7365,
+          "y": 0.8577,
+          "w": 0.1358,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.3827,
+          "y": 0.7236,
+          "w": 0.5213,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

@@ -72,7 +72,73 @@
 **Priority:** P2
 **Depends on:** the indexer's string fix (#66) and the treasury-purchase re-encode (#67), which this replaces
 
+## Legal
+
+### MIDAO review of the legal entity export
+
+**What:** Get MIDAO to confirm the export bundle (`docs/LEGAL_EXPORT.md`) is useful for their intake, then fold their answers into the next schema version. Schema v2 (2026-11-18) already follows the published docs.midao.org guidance; the ten open questions are in `docs/LEGAL_EXPORT.md`.
+
+**Why:** The SCF Tranche 2 sign-off reads "DAO registrar exports a bundle that is confirmed by MIDAO as useful for their intake process".
+
+**Effort:** S (code), external (review)
+**Priority:** P1
+**Depends on:** our MIDAO contact sharing a sample bundle
+
+## Governance
+
+### NQG vote source adapter
+
+**What:** an `NqgVotes` adapter that implements the vote source interface over an NQG governance contract, plus enabling the "Neural Quorum Governance (NQG)" choice in the create flow.
+
+**Why:** this is the Tranche 2 NQG deliverable. The Governor already reads votes through a vote source (`docs/designs/governance-adapter.md`), and the create flow shows NQG as coming.
+
+**Context:**
+- The adapter design is `docs/designs/nqg-compatibility.md` §4. It uses ledger-keyed epoch snapshots (`stage` then `activate`), clamps scores and scales them from 1e18 to 9 decimals, and gates power by membership token.
+- It must meet the interface's semantics, including the one-supply invariant (governance-adapter.md §1) and approval policy §4 (admin = the tribe's Treasury).
+- The web side:
+  - enable the `nqg` option in `voteTypeOptions` (`apps/web/src/components/create-dao/GovernanceStep.tsx`), offered only on locked tokens as nqg-compatibility.md §9 asks;
+  - show the epoch's age.
+- Per-tribe adapters each need a Manager approval. Consider approval by code hash or an adapter factory (governance-adapter.md §10).
+
+**Effort:** M
+**Priority:** P1 (SCF Tranche 2)
+**Depends on:** a maintained NQG testnet contract (nqg-compatibility.md §8, Q1)
+
+## Savings Circle
+
+### Automatic dues collection (`collect`)
+
+**What:** `circle.collect(member)`, callable by anyone, pulls a member's dues for the current cycle from a SEP-41 allowance the member granted the Circle; the web offers "Approve six months" with the allowance's expiry date shown and a reminder before it lapses.
+
+**Why:** Members who forget to pay miss stamps. Deferred from v1 in the CEO review (RD-1, 2026-10-13) because allowances expire silently (`expiration_ledger`) and overwrite on re-approve, which needs UI, reminders and tests.
+
+**Context:** `docs/designs/savings-circle.md` (Premise 5, entry points, CEO Review RD-1). Allowance semantics: SEP-41 `approve` overwrites; an expired allowance reads as 0.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Circle v1 (`pay_dues`) on testnet
+
+### Guarantor pledges
+
+**What:** `pledge(guarantor, borrower, stamps)` / `withdraw_pledge`, per-member `pledges_in` / `locks_out` lists (at most 8, tagged with their period), locked stamps added to the borrower's cap, and guarantor forfeit when the borrower defaults.
+
+**Why:** Lets a new member with few stamps borrow more with a neighbour's backing, the social collateral real circles use. Deferred from v1 in the CEO review (RD-2, 2026-10-13): the most intricate rules in the design (two lock lists, expiry, guarantor forfeit).
+
+**Context:** `docs/designs/savings-circle.md` Pledges section (kept as the spec) and CEO Review RD-2. v1 cap is `k x own open-period stamps x dues - outstanding`.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Circle v1 on testnet with the forfeit path tested
+
 ## Completed
+
+### Governance adapter: vote source interface and configuration (2026-11-18)
+
+The Governor reads all voting power through `common::clients::VoteSourceApi` on its permanent OZ token-contract slot. It is the DAO's token by default, or an adapter the Manager admin approved. The Manager's allowlist is checked at create and at launch, and a mock adapter crate drives Governor, Manager and e2e tests. The create flow asks how votes are counted (Token-weighted, or NQG shown as coming), and the governance page and every voting-power view follow the source. See `docs/designs/governance-adapter.md`.
+
+### Legal entity export (2026-11-18)
+
+Manage → Legal entity export is a four-step flow (entity, people, review, export) that downloads a JSON bundle and a Markdown summary for a DAO registrar's intake. It combines the founders' answers with the tribe's contracts, voting rules, treasury, and MIDAO's 25% beneficial-ownership test. It stays in the browser and is explicitly not legal advice ([docs/LEGAL_EXPORT.md](docs/LEGAL_EXPORT.md)).
 
 ### `/platform` admin dashboard (2026-11-09)
 

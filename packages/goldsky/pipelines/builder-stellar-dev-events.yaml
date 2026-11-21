@@ -1,0 +1,1388 @@
+name: builder-stellar-testnet-dev
+description: Index Manager CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY on testnet with Goldsky Turbo
+resource_size: s
+use_dedicated_ip: false
+job: false
+sources:
+  stellar_events:
+    type: dataset
+    dataset_name: stellar_testnet.events
+    version: 1.2.0
+    start_at: 5806063
+
+transforms:
+  # Allowlists. The only lookup a Goldsky SQL transform can make outside the stream is
+  # dynamic_table_check(table, value), which answers membership of one key column and nothing
+  # else (no joins, no reading our own views: manager.daos is built from this pipeline's output,
+  # one hop later). So the role is encoded by which table holds an address
+  # (docs/designs/membership-models.md § 7):
+  #   - the core four (token, metadata, governor, treasury) come from DaoCreated, one table each;
+  #   - modules the Manager deployed come from DaoCreated and ModuleCreated, one table per kind;
+  #   - any other module a DAO Token registers (ModuleRegistered, gated by
+  #     dynamic_table_check('dao_tokens') inside the table's own SQL) goes to the catch-all
+  #     `dao_modules`. Goldsky's validator refuses a dynamic table that reads an intermediate
+  #     SQL transform, so the tables read the source directly (docs/designs/membership-models.md
+  #     § 7, review 2 B8).
+  # The role drives every Manager view, app.activity_feed's DAO assignment and the kinds of the
+  # common events. Tables are append-only, so an unregistered module stays allowlisted: the
+  # views drop its later events by registration window (manager.module_events). The tables
+  # persist across redeploys; a Manager change needs `DROP SCHEMA streamling CASCADE`
+  # (db/README.md).
+  dao_tokens:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_tokens
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%dao_created%'
+
+  dao_metadata:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_metadata
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%dao_created%'
+
+  dao_governors:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_governors
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%dao_created%'
+
+  dao_treasuries:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_treasuries
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%dao_created%'
+
+  # Module tables, one per kind the Manager deploys. Filled only from the Manager's own events
+  # (DaoCreated's modules.<kind>, ModuleCreated), so a known role means "the Manager deployed
+  # this code" (vouched). A contract a DAO registers by vote under any kind, a built-in one
+  # included, lands only in the catch-all `dao_modules` (role `module`): its events are
+  # indexed for the DAO but stay out of the domain views and the public feed. Kind symbols are
+  # quoted in `topics`, so `"claims"` matches only the kind. A DaoCreated without a kind has a
+  # void entry, which the pattern doesn't match: the `<> ''` guard drops that row whether
+  # regexp_extract returns '' or NULL. There is no Manager-built Circle yet, so `dao_circles`
+  # stays empty until there is.
+  dao_auctions:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_auctions
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"auction"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
+
+  dao_marketplaces:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_marketplaces
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"marketplace"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
+
+  dao_claims:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_claims
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"claims"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"claims"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"claims"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
+
+  dao_circles:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_circles
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+        AND type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_created%' AND topics LIKE '%"circle"%'
+        AND regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) <> ''
+
+  # Every registered module of any kind (built-in, `custom_<name>` or an unknown future kind),
+  # admitted only when a known DAO Token emitted the registration. The role CASE in dao_events
+  # tries the Manager-built tables first, so this table names the role only of contracts the
+  # Manager didn't deploy.
+  dao_modules:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_modules
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE type = 'contract'
+        AND in_successful_contract_call
+        AND topics LIKE '%module_registered%'
+        AND dynamic_table_check('dao_tokens', contract_id)
+        AND regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) <> ''
+
+  dao_events:
+    type: sql
+    primary_key: event_id
+    sql: |
+      SELECT
+        concat('manager:CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY:', id) AS event_id,
+        'manager:CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY' AS deployment_id,
+        contract_id,
+        CASE
+          WHEN contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY' THEN 'manager'
+          WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
+          WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
+          WHEN dynamic_table_check('dao_governors', contract_id) THEN 'governor'
+          WHEN dynamic_table_check('dao_treasuries', contract_id) THEN 'treasury'
+          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
+          WHEN dynamic_table_check('dao_marketplaces', contract_id) THEN 'marketplace'
+          WHEN dynamic_table_check('dao_claims', contract_id) THEN 'claims'
+          WHEN dynamic_table_check('dao_circles', contract_id) THEN 'circle'
+          WHEN dynamic_table_check('dao_modules', contract_id) THEN 'module'
+          ELSE 'unknown'
+        END AS contract_role,
+        type,
+        topics,
+        data,
+        in_successful_contract_call,
+        transaction_hash,
+        transaction_account,
+        transaction_account_muxed,
+        transaction_fee_account,
+        transaction_fee_account_muxed,
+        transaction_successful,
+        transaction_index,
+        operation_body,
+        operation_result_code,
+        operation_type,
+        ledger_sequence,
+        ledger_hash,
+        ledger_closed_at,
+        CAST(NULL AS BIGINT) AS operation_index,
+        CAST(NULL AS BIGINT) AS event_index,
+        _gs_op
+      FROM stellar_events
+       WHERE ledger_sequence >= 5806063
+         AND type = 'contract'
+         AND in_successful_contract_call
+         AND (
+           contract_id = 'CDZOPJBWJXTISKCLWRARXM4BOXRCVRMMJMPLDYRV4OUAXQPHGQ26RTYY'
+           OR dynamic_table_check('dao_tokens', contract_id)
+           OR dynamic_table_check('dao_metadata', contract_id)
+           OR dynamic_table_check('dao_governors', contract_id)
+           OR dynamic_table_check('dao_treasuries', contract_id)
+           OR dynamic_table_check('dao_auctions', contract_id)
+           OR dynamic_table_check('dao_marketplaces', contract_id)
+           OR dynamic_table_check('dao_claims', contract_id)
+           OR dynamic_table_check('dao_circles', contract_id)
+           OR dynamic_table_check('dao_modules', contract_id)
+         )
+
+  raw_events:
+    type: script
+    from: dao_events
+    language: typescript
+    primary_key: event_id
+    schema:
+      event_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      topics: string
+      data: string
+      transaction_hash: string
+      transaction_successful: boolean
+      ledger_sequence: int64
+      ledger_hash: string
+      ledger_closed_at: string
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      operation_type: string
+      _gs_op: string
+    script: |
+      function invoke(data) {
+        if (!data) return null;
+
+        function stringify(value) {
+          if (value === undefined || value === null) {
+            return '{}';  // Default to empty JSON object string
+          }
+
+          if (typeof value === 'string') {
+            var trimmed = value.trim();
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+              return value;
+            }
+          }
+
+          try {
+            return JSON.stringify(value);
+          } catch {
+            return String(value);
+          }
+        }
+
+        // Type-safe helpers for Arrow table serialization
+        // CRITICAL: For Arrow serialization, all rows must have same type in each column
+        // Never mix null with values for string columns - use empty string for missing values
+        function toStringOrEmpty(value) {
+          if (value === null || value === undefined || value === '') return '';
+          return String(value);
+        }
+        function toNumber(value) {
+          if (value === null || value === undefined) return null;
+          var n = Number(value);
+          return isFinite(n) ? n : null;
+        }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
+        }
+        function toBoolean(value) {
+          if (value === null || value === undefined) return null;
+          return Boolean(value);
+        }
+
+        return {
+          event_id: toStringOrEmpty(data.event_id || data.id),
+          deployment_id: toStringOrEmpty(data.deployment_id),
+          contract_id: toStringOrEmpty(data.contract_id),
+          contract_role: toStringOrEmpty(data.contract_role) || 'unknown',
+          topics: stringify(data.topics),
+          data: stringify(data.data ?? data.payload ?? data),
+          transaction_hash: toStringOrEmpty(data.transaction_hash),
+          transaction_successful: toBoolean(data.transaction_successful),
+          ledger_sequence: toNumber(data.ledger_sequence),
+          ledger_hash: toStringOrEmpty(data.ledger_hash),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
+          transaction_index: toNumber(data.transaction_index),
+          operation_index: toNumber(data.operation_index),
+          event_index: toNumber(data.event_index),
+          operation_type: toStringOrEmpty(data.operation_type),
+          _gs_op: toStringOrEmpty(data._gs_op)
+        };
+      }
+
+  decoded_events:
+    type: script
+    from: raw_events
+    language: typescript
+    primary_key: event_id
+    schema:
+      event_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      event_name: string
+      topic_0: string
+      topic_1: string
+      topic_2: string
+      topic_3: string
+      topics: string
+      args: string
+      transaction_hash: string
+      transaction_successful: boolean
+      ledger_sequence: int64
+      ledger_hash: string
+      ledger_closed_at: string
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      operation_type: string
+      _gs_op: string
+      decoder_version: string
+    script: |
+      function invoke(data) {
+        try {
+          if (!data) return null;
+
+          function toCanonical(name) {
+            return name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+          }
+
+          // PostgreSQL jsonb refuses U+0000, and a profile, comment or description is
+          // free text no contract filters, so one NUL would make every view that reads
+          // the row raise. Replace it with U+FFFD before the text reaches the sink.
+          function text(value) {
+            return String(value).replace(/\u0000/g, '\uFFFD');
+          }
+
+          // XDR-JSON writes a contract String with escape-bytes (stellar-xdr StringM): printable ASCII
+          // as is, a backslash as \\, the bytes 0, 9, 10 and 13 as \0 \t \n \r, and every other byte as
+          // \xNN, so each byte of a non-ASCII character is escaped on its own. Read it back to the
+          // exact text the contract stored: a proposal's ID hashes its description, and a description
+          // indexed with its backslashes doubled no longer reproduces it.
+          function unescapeBytes(value) {
+            var s = String(value);
+            if (s.indexOf('\\') === -1) return s;
+            var bytes = [];
+            for (var i = 0; i < s.length; i += 1) {
+              var c = s.charCodeAt(i);
+              // Escaped text is printable ASCII only; anything else was never escaped, so leave it.
+              if (c < 0x20 || c > 0x7e) return s;
+              if (c !== 0x5c) { bytes.push(c); continue; }
+              var next = s.charAt(i + 1);
+              if (next === 'x') {
+                var hex = s.substr(i + 2, 2);
+                if (!/^[0-9a-fA-F]{2}$/.test(hex)) return s;
+                bytes.push(parseInt(hex, 16));
+                i += 3;
+              } else {
+                var simple = { '\\': 0x5c, '0': 0, 't': 9, 'n': 10, 'r': 13 }[next];
+                if (simple === undefined) return s;
+                bytes.push(simple);
+                i += 1;
+              }
+            }
+            return utf8(bytes);
+          }
+
+          // UTF-8 bytes to text; a malformed sequence reads as U+FFFD, as TextDecoder would.
+          function utf8(bytes) {
+            var out = '';
+            var i = 0;
+            while (i < bytes.length) {
+              var b = bytes[i];
+              var extra = b < 0x80 ? 0 : b >= 0xc2 && b <= 0xdf ? 1 : b >= 0xe0 && b <= 0xef ? 2 : b >= 0xf0 && b <= 0xf4 ? 3 : -1;
+              var code = extra === 0 ? b : extra === 1 ? b & 0x1f : extra === 2 ? b & 0x0f : b & 0x07;
+              var ok = extra >= 0 && i + extra < bytes.length;
+              for (var k = 1; ok && k <= extra; k += 1) {
+                var cont = bytes[i + k];
+                if ((cont & 0xc0) !== 0x80) ok = false;
+                else code = (code << 6) | (cont & 0x3f);
+              }
+              var min = [0, 0x80, 0x800, 0x10000][extra];
+              if (!ok || code < min || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+                out += '\uFFFD';
+                i += 1;
+                continue;
+              }
+              if (code > 0xffff) {
+                code -= 0x10000;
+                out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+              } else out += String.fromCharCode(code);
+              i += extra + 1;
+            }
+            return out;
+          }
+
+          function native(value) {
+            if (value === null || value === undefined || value === 'void') return null;
+            if (typeof value === 'string') return text(value);
+            if (typeof value !== 'object') return value;
+            if (value.symbol !== undefined) return text(value.symbol);
+            if (value.address !== undefined) return String(value.address);
+            if (value.string !== undefined) return text(unescapeBytes(value.string));
+            var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'bool'];
+            for (var i = 0; i < scalar.length; i += 1) {
+              if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
+            }
+            if (Array.isArray(value.vec)) return value.vec.map(native);
+            if (Array.isArray(value.map)) {
+              var out = {};
+              value.map.forEach(function (entry) { if (entry && entry.key !== undefined) out[String(native(entry.key))] = native(entry.val); });
+              return out;
+            }
+            return value;
+          }
+
+          function json(value) {
+            if (typeof value !== 'string') return value;
+            try { return JSON.parse(value); } catch (e) {
+              console.error('JSON parse error:', e.message, 'value:', String(value).substring(0, 100));
+              return null;
+            }
+          }
+
+          var rawTopics = json(data.topics);
+          var rawData = json(data.data);
+          if (!Array.isArray(rawTopics) || rawTopics.length === 0) {
+            console.error('Invalid topics for event:', data.event_id);
+            return null;
+          }
+
+        var values = rawTopics.map(native);
+        var eventName = String(values[0]);
+        var topicValues = values.slice(1);
+        // Topic names mirror the on-chain topic order after the event-name symbol.
+        // They are generated from contracts/*/src/events.rs plus the OpenZeppelin
+        // library events our contracts emit; test/contract-alignment.test.mjs fails
+        // if this map drifts. An event this map does not name (an external module's
+        // own events) is decoded positionally: topic_0.., and arg_0.. for vec data.
+        var topicNames = {
+          // Manager
+          ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
+          ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
+          DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+          // Membership models: a module deployed into a pending DAO, an assurance drive opened (its
+          // slug reserved) and a failed drive's slug released.
+          ModuleCreated: ['token_address', 'kind'], AssuranceOpened: ['token_address'], SlugReleased: ['token_address', 'slug'],
+          // A vote source approved (or withdrawn) for new DAOs (docs/designs/governance-adapter.md).
+          VoteSourceApproved: ['source'],
+          // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
+          // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
+          AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'],
+          LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
+          // Manager 0.2.0+: a launched DAO moved to new_slug by vote; old_slug (data) is released.
+          SlugChanged: ['token_address', 'new_slug'],
+          // contracts/common/src/upgrade.rs: the platform upgrade notice changed (the Manager emits it).
+          UpgradeDelayChanged: [],
+          // Each module's launch handoff (topic `treasury`).
+          TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
+          AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
+          ClaimMinterLaunched: ['treasury'],
+          // contracts/common/src/upgrade.rs: emitted by every DAO module, the ClaimMinter included;
+          // the emitting contract is identified by contract_id/contract_role.
+          // version() is read from the Manager registry since 0.3.0 (no sync event).
+          Upgraded: ['from_hash', 'to_hash'], Migrated: [],
+          // Token (custom + OpenZeppelin non-fungible/votes)
+          // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
+          TokenInitialized: ['admin'], MetadataUpdated: [], MintAllowanceChanged: ['module'], ModuleRegistered: ['kind'], ModuleUnregistered: ['kind'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
+          Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
+          DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+          // Membership switches (docs/designs/locked-tokens.md): all data, no topics.
+          TransfersLockChanged: [], MembersOnlyDelegationChanged: [], DaoRecoveryChanged: [],
+          TransferAgentChanged: ['module'], AgentTransfer: ['agent'], DaoTransfer: ['from', 'to'],
+          // OpenZeppelin pausable: only the Auction uses it (paused at construction, unpaused at launch).
+          Paused: [], Unpaused: [],
+          // Governor (custom + OpenZeppelin governor)
+          GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
+          VoteCast: ['voter', 'proposal_id'],
+          // Governor 0.2.0+: event-only proposal comment (body in data).
+          ProposalCommented: ['proposal_id', 'author'],
+          ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
+          QueueDelayChanged: ['changed_by'], VotingDelayChanged: ['changed_by'], VotingPeriodChanged: ['changed_by'],
+          ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'], QuorumChanged: [],
+          // Treasury
+          TreasuryInitialized: ['admin'], Execute: ['governor', 'target', 'proposal_id'],
+          // Auction
+          AuctionInitialized: ['admin'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+          BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
+          MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
+          RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
+          // Metadata
+          MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
+          // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
+          ProfileUpdated: ['seq'], RendererBaseUpdated: [],
+          // ClaimMinter (role claims): merkle claim lists, paid or free, with an optional assurance escrow.
+          ListOpened: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
+          // Marketplace
+          MarketplaceInitialized: ['token', 'admin'], SecondaryListingCreated: ['token_id'],
+          ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+          // Quick-buy pools: stock minted into Marketplace custody, sold at a fixed price.
+          PoolOpened: ['pool_id'], PoolRestocked: ['pool_id'], PoolPurchased: ['pool_id', 'buyer'], PoolClosed: ['pool_id'], PoolSwept: ['pool_id'],
+          // Marketplace 0.2.0+: event-only comments (body in data).
+          ListingCommented: ['token_id', 'author'],
+          PaymentAssetUpdated: ['changed_by'], SecondaryFeeUpdated: ['changed_by'],
+          MarketplacePaused: ['changed_by'], MarketplaceUnpaused: ['changed_by']
+        };
+        var names = topicNames[eventName] || topicNames[toCanonical(eventName)];
+        var known = Boolean(names);
+        var topics = {};
+        if (known) names.forEach(function (name, index) { if (topicValues[index] !== undefined) topics[name] = topicValues[index]; });
+        else topicValues.forEach(function (value, index) { topics['topic_' + index] = value; });
+        var args = native(rawData);
+        if (Array.isArray(args) && !known) {
+          var positional = {};
+          args.forEach(function (value, index) { positional['arg_' + index] = value; });
+          args = positional;
+        } else if (!args || typeof args !== 'object' || Array.isArray(args)) args = { value: args };
+
+        // Type-safe helpers to ensure consistent Arrow table types
+        // CRITICAL: For Arrow serialization, all rows must have same type in each column
+        // Never mix null with values - use empty string for missing strings, null for missing numbers
+        function toStringOrEmpty(value) {
+          if (value === null || value === undefined) return '';
+          return String(value);
+        }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
+        }
+        function toNumber(value) {
+          if (value === null || value === undefined) return null;
+          var n = Number(value);
+          return isFinite(n) ? n : null;
+        }
+        function toBoolean(value) {
+          if (value === null || value === undefined) return null;
+          return Boolean(value);
+        }
+
+        var result = {
+          event_id: toStringOrEmpty(data.event_id || data.id),
+          deployment_id: toStringOrEmpty(data.deployment_id),
+          contract_id: toStringOrEmpty(data.contract_id),
+          contract_role: String(
+            data.contract_role && data.contract_role !== 'unknown'
+              ? data.contract_role
+              : roleForEvent(eventName)
+          ),
+          event_name: toStringOrEmpty(eventName),
+          topic_0: toStringOrEmpty(topicValues[0]),
+          topic_1: toStringOrEmpty(topicValues[1]),
+          topic_2: toStringOrEmpty(topicValues[2]),
+          topic_3: toStringOrEmpty(topicValues[3]),
+          topics: JSON.stringify(topics),
+          args: JSON.stringify(args),
+          // Not in the sink schema (chain.decoded_events has topics and args); kept for local
+          // fixtures and the activity script's pick(), which reads it when present.
+          payload: JSON.stringify(Object.assign({}, topics, args)),
+          transaction_hash: toStringOrEmpty(data.transaction_hash),
+          transaction_successful: toBoolean(data.transaction_successful),
+          ledger_sequence: toNumber(data.ledger_sequence),
+          ledger_hash: toStringOrEmpty(data.ledger_hash),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
+          transaction_index: toNumber(data.transaction_index),
+          operation_index: toNumber(data.operation_index),
+          event_index: toNumber(data.event_index),
+          operation_type: toStringOrEmpty(data.operation_type),
+          _gs_op: toStringOrEmpty(data._gs_op),
+          decoder_version: 'v3'
+        };
+          return result;
+
+          // Fallback only: the pipeline assigns contract_role from the DAO module
+          // allowlists before decoding, and the common events (Upgraded, Migrated,
+          // AdminChanged, UpgradeDelayChanged) cannot be resolved by name at all.
+          function roleForEvent(name) {
+            var canonical = toCanonical(name);
+            if (/^(MintBatchWithMinter|MetadataUpdated|DaoRecoveryChanged|DaoTransfer|TransfersLockChanged|MembersOnlyDelegationChanged|TransferAgentChanged|AgentTransfer)$/.test(canonical)) return 'token';
+            if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PendingSlug|Slug|ModuleCreated|AssuranceOpened)/.test(canonical)) return 'manager';
+            if (/^(ListOpened|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
+            if (/^(Marketplace|Listing|Secondary|PaymentAsset|Pool)/.test(canonical)) return 'marketplace';
+            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
+            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
+            if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
+            if (/^(Metadata|Property|Properties|Seed|Profile|RendererBase)/.test(canonical)) return 'metadata';
+            if (/^(Transfer|Mint|Delegate|Approve|Token|Module)/.test(canonical)) return 'token';
+            return 'unknown';
+          }
+        } catch (e) {
+          console.error('Decoder error:', e.message, 'event_id:', data?.event_id);
+          return null;
+        }
+      }
+
+  activity_feed:
+    type: script
+    from: decoded_events
+    language: typescript
+    primary_key: activity_id
+    schema:
+      activity_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      event_name: string
+      topics: string
+      args: string
+      kind: string
+      title: string
+      summary: string
+      visibility: string
+      proposal_id: string
+      token_id: string
+      amount: string
+      actor: string
+      addresses: string
+      ledger_sequence: int64
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      ledger_closed_at: string
+      transaction_hash: string
+    script: |
+      function invoke(data) {
+        try {
+          if (!data) return null;
+
+          // Normalize all incoming fields to ensure consistent types across all rows
+          // This is critical for Arrow table serialization - all rows must have identical types
+          function ensureString(val, def) {
+            return (typeof val === 'string' && val) ? val : def;
+          }
+          function ensureNumber(val, def) {
+            var n = Number(val);
+            return isFinite(n) ? n : def;
+          }
+          function normalizeTimestamp(val) {
+            var timestamp = typeof val === 'string' ? val.trim() : '';
+            if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+            return timestamp + ' UTC';
+          }
+
+          var topics = ensureString(data.topics, '{}');
+          var args = ensureString(data.args, '{}');
+          // The SQL transform leaves the positions NULL on purpose; the chain.fill_event_positions
+          // trigger parses them from the event id, and only fires on NULL. A 0 here would freeze
+          // every feed row at position 0 and lose the order inside a transaction.
+          function position(val) {
+            return val === null || val === undefined ? null : ensureNumber(val, null);
+          }
+          var ledger_sequence = ensureNumber(data.ledger_sequence, 0);
+          var transaction_index = position(data.transaction_index);
+          var operation_index = position(data.operation_index);
+          var event_index = position(data.event_index);
+
+          function parsePayload(value) {
+            try {
+              if (typeof value === 'string') {
+                var trimmed = value.trim();
+                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                  return parsePayload(JSON.parse(trimmed));
+                }
+              }
+
+              if (value && typeof value === 'object') {
+                return value;
+              }
+
+              return null;
+            } catch (e) {
+              console.error('Payload parse error:', e.message, 'value:', String(value).substring(0, 100));
+              return null;
+            }
+          }
+
+        function pick(row, keys) {
+          var payloads = [
+            parsePayload(args),
+            parsePayload(topics),
+            parsePayload(row.payload),
+            parsePayload(row.data)
+          ];
+          for (var i = 0; i < keys.length; i += 1) {
+            var key = keys[i];
+            if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+              return String(row[key]);
+            }
+            for (var j = 0; j < payloads.length; j += 1) {
+              var payload = payloads[j];
+              if (payload && payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
+                return String(payload[key]);
+              }
+            }
+          }
+          return '';
+        }
+
+        function unique(values) {
+          var seen = {};
+          var out = [];
+          for (var i = 0; i < values.length; i += 1) {
+            var value = values[i];
+            if (!value || seen[value]) {
+              continue;
+            }
+            seen[value] = true;
+            out.push(value);
+          }
+          return out;
+        }
+
+        var eventName = data.event_name || data.event_type;
+        if (!eventName) {
+          return null;
+        }
+
+        function normalizeEventName(name) {
+          var str = String(name);
+          return str.charAt(0).toUpperCase() + str.slice(1).replace(/_([a-z])/g, function (match, letter) {
+            return letter.toUpperCase();
+          });
+        }
+
+        var normalizedEventName = normalizeEventName(eventName);
+
+        // Public feed: what a member would act on or care about. Per-token mints,
+        // seeds, transfers, vote-weight bookkeeping, setup/launch internals and refunds
+        // stay out (admin/system rows): they are side effects of the events below, which
+        // already tell the story. A listing that closes is news like a listing that opens.
+        var userFacing = {
+          DaoLaunched: true,
+          ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
+          // Event-only comments (governor/marketplace 0.2.0+).
+          ProposalCommented: true, ListingCommented: true,
+          DelegateChanged: true,
+          // A rename changes how members find the community: public.
+          MetadataUpdated: true,
+          // So does a new link.
+          SlugChanged: true,
+          AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
+          SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true, ListingExpired: true,
+          // Quick-buy pools: opening, each sale and closing are news; restocks and sweeps are bookkeeping.
+          PoolOpened: true, PoolPurchased: true, PoolClosed: true,
+          // The ClaimMinter's own rows tell the story of a claim; the token's MintBatchWithMinter in the
+          // same call stays admin so a mint is not announced twice. Refunds are per-claimer side effects.
+          ListOpened: true, Claimed: true, EscrowReleased: true,
+          // An assurance drive opening, and its slug coming back when it fails.
+          AssuranceOpened: true, SlugReleased: true,
+          // A module joining or leaving changes who can mint and whose tokens vote: public.
+          ModuleRegistered: true, ModuleUnregistered: true,
+          // The membership switches change what every holder can do with their token, and a DAO
+          // transfer moves someone's membership without their signature: public.
+          TransfersLockChanged: true, MembersOnlyDelegationChanged: true, DaoRecoveryChanged: true, TransferAgentChanged: true, DaoTransfer: true,
+          // A profile change is something members act on.
+          ProfileUpdated: true,
+          // Contract upgrades are the most security-relevant DAO action: public.
+          Upgraded: true,
+          // A shorter platform notice narrows the window members have to react: public.
+          UpgradeDelayChanged: true,
+          // The Manager's own upgrade changes the factory and registry every DAO relies on: public.
+          ManagerUpgraded: true,
+          // A revoked implementation reaches the feed of every DAO running it (app.activity_feed).
+          ImplementationRevoked: true
+        };
+
+        var kindMap = {
+          TokenInitialized: 'token.initialized',
+          Mint: 'token.mint',
+          MintWithMinter: 'token.mint',
+          MintBatchWithMinter: 'token.batch_mint',
+          MintAllowanceChanged: 'token.mint_allowance_changed',
+          ModuleRegistered: 'token.module_registered',
+          ModuleUnregistered: 'token.module_unregistered',
+          MetadataUpdated: 'token.metadata_updated',
+          Approve: 'token.approve',
+          ApproveForAll: 'token.approve_for_all',
+          Transfer: 'token.transfer',
+          DelegateChanged: 'token.delegate_changed',
+          DelegateVotesChanged: 'token.delegate_votes_changed',
+          TransfersLockChanged: 'token.transfers_lock_changed',
+          MembersOnlyDelegationChanged: 'token.members_only_delegation_changed',
+          DaoRecoveryChanged: 'token.dao_recovery_changed',
+          TransferAgentChanged: 'token.transfer_agent_changed',
+          AgentTransfer: 'token.agent_transfer',
+          DaoTransfer: 'token.dao_transfer',
+          GovernorInitialized: 'governance.initialized',
+          ProposalCreated: 'governance.proposal_created',
+          ProposalScheduled: 'governance.proposal_scheduled',
+          ProposalQueued: 'governance.proposal_queued',
+          VoteCast: 'governance.vote_cast',
+          ProposalCommented: 'governance.proposal_commented',
+          ProposalCancelled: 'governance.proposal_cancelled',
+          ProposalExecuted: 'governance.proposal_executed',
+          QueueDelayChanged: 'governance.queue_delay_changed',
+          VotingDelayChanged: 'governance.voting_delay_changed',
+          VotingPeriodChanged: 'governance.voting_period_changed',
+          ProposalThresholdChanged: 'governance.proposal_threshold_changed',
+          QuorumBpsChanged: 'governance.quorum_bps_changed',
+          QuorumChanged: 'governance.quorum_changed',
+          TreasuryInitialized: 'treasury.initialized',
+          TokenLaunched: 'token.launched',
+          GovernorLaunched: 'governance.launched',
+          TreasuryLaunched: 'treasury.launched',
+          AuctionLaunched: 'auction.launched',
+          MarketplaceLaunched: 'marketplace.launched',
+          MetadataLaunched: 'metadata.launched',
+          ClaimMinterLaunched: 'claims.launched',
+          Execute: 'treasury.execute',
+          AuctionInitialized: 'auction.initialized',
+          AuctionCreated: 'auction.created',
+          BidPlaced: 'auction.bid_placed',
+          AuctionSettled: 'auction.settled',
+          DurationUpdated: 'auction.duration_updated',
+          ReservePriceUpdated: 'auction.reserve_price_updated',
+          MinBidIncrementUpdated: 'auction.min_bid_increment_updated',
+          TimeBufferUpdated: 'auction.time_buffer_updated',
+          PaymentTokenUpdated: 'auction.payment_token_updated',
+          BidRefunded: 'auction.bid_refunded',
+          RefundDeferred: 'auction.refund_deferred',
+          RefundWithdrawn: 'auction.refund_withdrawn',
+          AuctionCancelled: 'auction.cancelled',
+          DaoCreated: 'manager.dao_created',
+          DaoLaunched: 'manager.dao_launched',
+          FactoryPaused: 'manager.factory_paused',
+          FactoryUnpaused: 'manager.factory_unpaused',
+          AdminProposed: 'manager.admin_proposed',
+          AdminChanged: 'manager.admin_changed',
+          UpgradeApproved: 'manager.upgrade_approved',
+          ImplementationRevoked: 'manager.implementation_revoked',
+          ImplementationRegistered: 'manager.implementation_registered',
+          VoteSourceApproved: 'manager.vote_source_approved',
+          CurrentImplementationsUpdated: 'manager.implementations_updated',
+          LatestImplementationSet: 'manager.latest_implementation_set',
+          PendingSlugUpdated: 'manager.pending_slug_updated',
+          SlugClaimed: 'manager.slug_claimed',
+          SlugChanged: 'manager.slug_changed',
+          SlugReleased: 'manager.slug_released',
+          ModuleCreated: 'manager.module_created',
+          AssuranceOpened: 'manager.assurance_opened',
+          MetadataInitialized: 'metadata.initialized',
+          PropertyAdded: 'metadata.property_added',
+          SeedGenerated: 'metadata.seed_generated',
+          SeedsGenerated: 'metadata.seeds_generated',
+          PropertiesReset: 'metadata.properties_reset',
+          ProfileUpdated: 'metadata.profile_updated',
+          RendererBaseUpdated: 'metadata.renderer_base_updated',
+          ListOpened: 'claims.list_opened',
+          Claimed: 'claims.claimed',
+          EscrowReleased: 'claims.escrow_released',
+          Refunded: 'claims.refunded',
+          ManagerInitialized: 'manager.initialized',
+          ManagerUpgraded: 'manager.upgraded',
+          UpgradeDelayChanged: 'manager.upgrade_delay_changed',
+          AdminProposalCancelled: 'manager.admin_proposal_cancelled',
+          MarketplaceInitialized: 'marketplace.initialized',
+          ListingCommented: 'marketplace.listing_commented',
+          PoolOpened: 'marketplace.pool_opened',
+          PoolRestocked: 'marketplace.pool_restocked',
+          PoolPurchased: 'marketplace.pool_purchased',
+          PoolClosed: 'marketplace.pool_closed',
+          PoolSwept: 'marketplace.pool_swept',
+          SecondaryListingCreated: 'marketplace.secondary_listing_created',
+          ListingPurchased: 'marketplace.listing_purchased',
+          ListingCancelled: 'marketplace.listing_cancelled',
+          ListingExpired: 'marketplace.listing_expired',
+          PaymentAssetUpdated: 'marketplace.payment_asset_updated',
+          SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
+          MarketplacePaused: 'marketplace.paused',
+          MarketplaceUnpaused: 'marketplace.unpaused'
+        };
+
+        var titleMap = {
+          TokenInitialized: 'Token initialized',
+          Mint: 'Token minted',
+          MintWithMinter: 'Token minted',
+          MintBatchWithMinter: 'Tokens batch minted',
+          MintAllowanceChanged: 'Mint allowance changed',
+          ModuleRegistered: 'Module added',
+          ModuleUnregistered: 'Module removed',
+          MetadataUpdated: 'Community renamed',
+          Approve: 'Token approval granted',
+          ApproveForAll: 'Operator approval changed',
+          Transfer: 'Token transferred',
+          DelegateChanged: 'Delegation changed',
+          DelegateVotesChanged: 'Voting power changed',
+          TransfersLockChanged: 'Membership transfer lock changed',
+          MembersOnlyDelegationChanged: 'Delegation rule changed',
+          DaoRecoveryChanged: 'DAO recovery changed',
+          TransferAgentChanged: 'Transfer agent changed',
+          AgentTransfer: 'Membership moved by a module',
+          DaoTransfer: 'Membership moved by the DAO',
+          GovernorInitialized: 'Governor initialized',
+          ProposalCreated: 'Proposal created',
+          ProposalScheduled: 'Proposal voting scheduled',
+          ProposalQueued: 'Proposal queued',
+          VoteCast: 'Vote cast',
+          ProposalCommented: 'Proposal comment',
+          ProposalCancelled: 'Proposal cancelled',
+          ProposalExecuted: 'Proposal executed',
+          QueueDelayChanged: 'Queue delay updated',
+          VotingDelayChanged: 'Voting delay updated',
+          VotingPeriodChanged: 'Voting period updated',
+          ProposalThresholdChanged: 'Proposal threshold updated',
+          QuorumBpsChanged: 'Quorum updated',
+          QuorumChanged: 'Quorum set',
+          TreasuryInitialized: 'Treasury initialized',
+          TokenLaunched: 'Token launched',
+          GovernorLaunched: 'Governor launched',
+          TreasuryLaunched: 'Treasury launched',
+          AuctionLaunched: 'Auction launched',
+          MarketplaceLaunched: 'Marketplace launched',
+          MetadataLaunched: 'Metadata launched',
+          ClaimMinterLaunched: 'Claim minter launched',
+          Execute: 'Treasury executed call',
+          AuctionInitialized: 'Auction initialized',
+          AuctionCreated: 'Auction created',
+          BidPlaced: 'Bid placed',
+          AuctionSettled: 'Auction settled',
+          DurationUpdated: 'Auction duration updated',
+          ReservePriceUpdated: 'Reserve price updated',
+          MinBidIncrementUpdated: 'Minimum bid increment updated',
+          TimeBufferUpdated: 'Time buffer updated',
+          PaymentTokenUpdated: 'Payment token updated',
+          BidRefunded: 'Bid refunded',
+          RefundDeferred: 'Bid refund deferred',
+          RefundWithdrawn: 'Bid refund withdrawn',
+          AuctionCancelled: 'Auction cancelled',
+          DaoCreated: 'DAO created',
+          DaoLaunched: 'DAO launched',
+          FactoryPaused: 'Factory paused',
+          FactoryUnpaused: 'Factory unpaused',
+          AdminProposed: 'Manager admin proposed',
+          AdminChanged: 'Manager admin changed',
+          UpgradeApproved: 'Upgrade approved',
+          ImplementationRevoked: 'Implementation revoked',
+          ImplementationRegistered: 'Implementation registered',
+          VoteSourceApproved: 'Vote source approval changed',
+          CurrentImplementationsUpdated: 'Implementations updated',
+          LatestImplementationSet: 'Latest implementation set',
+          PendingSlugUpdated: 'Requested slug changed',
+          SlugClaimed: 'Slug claimed',
+          SlugChanged: 'Community link changed',
+          SlugReleased: 'Slug released',
+          ModuleCreated: 'Module created',
+          AssuranceOpened: 'Assurance drive opened',
+          MetadataInitialized: 'Metadata initialized',
+          PropertyAdded: 'Property added',
+          SeedGenerated: 'Seed generated',
+          SeedsGenerated: 'Seeds generated',
+          PropertiesReset: 'Properties reset',
+          ProfileUpdated: 'Community profile updated',
+          RendererBaseUpdated: 'Renderer base updated',
+          ListOpened: 'Claim list opened',
+          Claimed: 'Tokens claimed',
+          EscrowReleased: 'Assurance escrow released',
+          Refunded: 'Claim refunded',
+          ManagerInitialized: 'Manager initialized',
+          ManagerUpgraded: 'Manager upgraded',
+          UpgradeDelayChanged: 'Manager upgrade notice changed',
+          AdminProposalCancelled: 'Manager admin proposal cancelled',
+          MarketplaceInitialized: 'Marketplace initialized',
+          ListingCommented: 'Listing comment',
+          PoolOpened: 'Quick-buy pool opened',
+          PoolRestocked: 'Pool restocked',
+          PoolPurchased: 'Pool sale',
+          PoolClosed: 'Pool closed',
+          PoolSwept: 'Pool swept',
+          SecondaryListingCreated: 'Secondary listing created',
+          ListingPurchased: 'Listing purchased',
+          ListingCancelled: 'Listing cancelled',
+          ListingExpired: 'Listing expired',
+          PaymentAssetUpdated: 'Marketplace payment asset updated',
+          SecondaryFeeUpdated: 'Secondary sale fee updated',
+          MarketplacePaused: 'Marketplace paused',
+          MarketplaceUnpaused: 'Marketplace unpaused'
+        };
+
+        // `Upgraded` and `Migrated` come from contracts/common and are emitted by
+        // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
+        // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
+        var emitterRole = ensureString(data.contract_role, '');
+        // Roles are registry kinds: the ClaimMinter is `claims`; a module of any other kind (an external
+        // module, `custom_<name>`) is `module`, and `circle` is reserved for the Circle module.
+        var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata', claims: 'Claim minter', circle: 'Circle' };
+        // Kind prefixes: the governor's kinds are `governance.*` everywhere (proposal_created, vote_cast, ...).
+        var kindPrefixes = { governor: 'governance' };
+        var moduleRole = moduleLabels[emitterRole] ? (kindPrefixes[emitterRole] || emitterRole) : 'module';
+        var moduleLabel = moduleLabels[emitterRole] || 'Module';
+        // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
+        var commonEvents = { Upgraded: ['upgraded', 'upgraded'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
+        if (commonEvents[normalizedEventName]) {
+          kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
+          titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
+        }
+        if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
+          kindMap.AdminChanged = moduleRole + '.admin_changed';
+          titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
+        }
+        // A module the platform did not write (role `module`) or the reserved Circle role, under a name
+        // no known event owns there: its own events are shown as they come, never under another
+        // contract's kind (a module's `transfer` is not the Token's).
+        var foreignModule = (emitterRole === 'module' || emitterRole === 'circle') && !commonEvents[normalizedEventName] && normalizedEventName !== 'AdminChanged';
+        if (foreignModule) {
+          kindMap[normalizedEventName] = moduleRole + '.' + String(eventName).toLowerCase();
+          titleMap[normalizedEventName] = moduleLabel + ' event';
+        }
+
+        // Every address field any event carries (contracts/*/src/events.rs and the OpenZeppelin
+        // library events), accounts first, then module, token and payment-asset contracts, the
+        // emitting contract last. Order is the order inside `addresses`.
+        var addresses = unique([
+          pick(data, ['actor']),
+          pick(data, ['proposer']),
+          pick(data, ['voter']),
+          pick(data, ['bidder']),
+          pick(data, ['winner']),
+          pick(data, ['minter']),
+          pick(data, ['authority']),
+          pick(data, ['module']),
+          pick(data, ['agent']),
+          pick(data, ['claimer']),
+          pick(data, ['current_admin']),
+          pick(data, ['proposed_admin']),
+          pick(data, ['cancelled_admin']),
+          pick(data, ['old_admin']),
+          pick(data, ['new_admin']),
+          pick(data, ['admin']),
+          pick(data, ['owner']),
+          pick(data, ['from']),
+          pick(data, ['to']),
+          pick(data, ['approver']),
+          pick(data, ['operator']),
+          pick(data, ['delegator']),
+          pick(data, ['from_delegate']),
+          pick(data, ['to_delegate']),
+          pick(data, ['delegate']),
+          pick(data, ['changed_by']),
+          pick(data, ['cancelled_by']),
+          pick(data, ['governor']),
+          pick(data, ['treasury']),
+          pick(data, ['target']),
+          pick(data, ['token_contract']),
+          pick(data, ['treasury_contract']),
+          pick(data, ['token']),
+          pick(data, ['payment_token']),
+          pick(data, ['payment_asset']),
+          pick(data, ['asset']),
+          pick(data, ['claim_minter']),
+          pick(data, ['token_address']),
+          pick(data, ['address']),
+          pick(data, ['deployer']),
+          pick(data, ['launch_admin']),
+          pick(data, ['recipient']),
+          pick(data, ['buyer']),
+          pick(data, ['seller']),
+          pick(data, ['author']),
+          pick(data, ['contract_id'])
+        ]);
+
+        var proposalId = pick(data, ['proposal_id']);
+        // A money amount only (vote weights and token counts have their own fields in args). A claim's
+        // `amount` is a token count: what it cost is `paid`.
+        var amount = normalizedEventName === 'Claimed' ? pick(data, ['paid']) : pick(data, ['amount', 'total_amount', 'price', 'reserve_price']);
+        var poolId = pick(data, ['pool_id']);
+        var listId = pick(data, ['list_id']);
+        var callIndex = pick(data, ['index']);
+        // Batch events (SeedsGenerated, MintBatchWithMinter) carry the first id of their range.
+        var tokenId = pick(data, ['token_id', 'first_token_id']);
+        var func = pick(data, ['function']);
+        var target = pick(data, ['target']);
+        var owner = pick(data, ['to', 'owner', 'recipient']);
+        var deployer = pick(data, ['deployer']);
+        var tokenAddress = pick(data, ['token_address']);
+        var name = pick(data, ['name']);
+        // Comment text (bid comment or comment body), shortened for the summary line.
+        var commentText = pick(data, ['comment', 'body']);
+        function quoted() {
+          if (!commentText) return '';
+          var text = String(commentText).replace(/\s+/g, ' ').trim();
+          return text.length > 120 ? text.slice(0, 117) + '...' : text;
+        }
+
+        function describeRange() {
+          var firstRaw = pick(data, ['first_token_id']);
+          var countRaw = pick(data, ['count']);
+          var first = Number(firstRaw);
+          var count = Number(countRaw);
+          if (!firstRaw || !countRaw || !isFinite(first) || !isFinite(count) || count < 1) return 'tokens';
+          if (count === 1) return '1 token (' + first + ')';
+          return count + ' tokens (' + first + '-' + (first + count - 1) + ')';
+        }
+
+        var summaryFunctions = {
+          ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
+          ProposalCreated: function() { return 'Proposal created'; },
+          VoteCast: function() { return 'Vote cast on proposal'; },
+          BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown') + (quoted() ? ': "' + quoted() + '"' : ''); },
+          ProposalCommented: function() { return 'Comment on proposal: "' + quoted() + '"'; },
+          ListingCommented: function() { return 'Comment on token ' + (tokenId || 'unknown') + ': "' + quoted() + '"'; },
+          AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
+          AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
+          // One Execute event per call: topics governor/target/proposal_id, data function + index.
+          Execute: function() {
+            return 'Executed ' + (func || 'call') + ' on ' + (target || 'target') +
+              (callIndex !== '' ? ' (call ' + (Number(callIndex) + 1) + (proposalId ? ' of proposal ' + proposalId : '') + ')' : '');
+          },
+          ProposalExecuted: function() { return 'Proposal ' + (proposalId || '') + ' executed'; },
+          BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
+          RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
+          RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
+          AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
+          MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
+          SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+          SlugChanged: function() { return 'Link changed to /dao/' + (pick(data, ['new_slug']) || 'unknown') + ' (was /dao/' + (pick(data, ['old_slug']) || 'unknown') + ')'; },
+          PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+          MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
+          Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
+          ManagerUpgraded: function() { return 'Manager upgraded to version ' + (pick(data, ['to_version']) || '?') + ' (was ' + (pick(data, ['from_version']) || '?') + ')'; },
+          VoteSourceApproved: function() {
+            var name = pick(data, ['name']) || 'unknown';
+            return (pick(data, ['approved']) === 'true' ? 'Vote source approved: ' : 'Vote source withdrawn: ') + name;
+          },
+          ImplementationRevoked: function() {
+            var h = pick(data, ['wasm_hash']);
+            return 'Contract code ' + (h ? String(h).slice(0, 8) : '?') + ' withdrawn by the platform; communities running it should upgrade when a replacement is announced';
+          },
+          // A reduction is in force from effective_ledger; a raise at once.
+          UpgradeDelayChanged: function() {
+            var from = pick(data, ['from_ledgers']);
+            var to = pick(data, ['to_ledgers']);
+            var shorter = Number(to) < Number(from);
+            return 'Upgrade notice ' + (shorter ? 'shortened' : 'lengthened') + ' from ' + (from || '?') + ' to ' + (to || '?') + ' ledgers' +
+              (shorter ? ', in force from ledger ' + (pick(data, ['effective_ledger']) || '?') : '');
+          },
+          // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
+          Upgraded: function() {
+            function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
+            var v = pick(data, ['version']);
+            return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
+          },
+          ProfileUpdated: function() { return 'Community profile updated (revision ' + (pick(data, ['seq']) || '?') + ')'; },
+          AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
+          Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+          MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+          // u32::MAX (4294967295) is the unlimited allowance the Auction holds.
+          MintAllowanceChanged: function() {
+            function allowance(v) { return String(v) === '4294967295' ? 'unlimited' : (v || '0'); }
+            return 'Mint allowance of ' + (pick(data, ['module']) || 'unknown') + ' changed from ' +
+              allowance(pick(data, ['old_allowance'])) + ' to ' + allowance(pick(data, ['allowance']));
+          },
+          ModuleRegistered: function() {
+            return 'Module ' + (pick(data, ['kind']) || 'unknown') + ' added at ' + (pick(data, ['address']) || 'unknown') +
+              (pick(data, ['non_voting']) === 'true' ? ' (tokens it holds carry no votes)' : '');
+          },
+          ModuleUnregistered: function() { return 'Module ' + (pick(data, ['kind']) || 'unknown') + ' removed (' + (pick(data, ['address']) || 'unknown') + ')'; },
+          // One event per batch_mint: the range [first_token_id, first_token_id + count).
+          MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
+          PoolOpened: function() {
+            return 'Pool ' + (poolId || '?') + ' opened: ' + (pick(data, ['size']) || '?') + ' tokens at ' + (amount || '?') +
+              ', at most ' + (pick(data, ['max_per_buyer']) || '?') + ' per buyer';
+          },
+          PoolRestocked: function() { return 'Pool ' + (poolId || '?') + ' restocked with ' + describeRange(); },
+          PoolPurchased: function() { return 'Token ' + (tokenId || '?') + ' bought from pool ' + (poolId || '?') + ' for ' + (amount || '?'); },
+          PoolClosed: function() {
+            var released = Number(pick(data, ['released']));
+            return 'Pool ' + (poolId || '?') + ' closed' + (released > 0 ? '; ' + released + ' unminted tokens returned to the allowance' : '');
+          },
+          PoolSwept: function() { return (pick(data, ['count']) || '0') + ' unsold tokens swept from pool ' + (poolId || '?') + ' to the Treasury'; },
+          ListOpened: function() {
+            var assurance = pick(data, ['assurance']);
+            return 'Claim list ' + (listId || '?') + ' opened: ' + (pick(data, ['total']) || '?') + ' tokens' +
+              (Number(amount) > 0 ? ' at ' + amount + ' each' : ', free') + (assurance && assurance !== 'null' ? ', as an assurance drive' : '');
+          },
+          Claimed: function() {
+            var count = pick(data, ['amount']);
+            return (pick(data, ['claimer']) || 'A member') + ' claimed ' + (count || '?') + (count === '1' ? ' token' : ' tokens') +
+              ' from list ' + (listId || '?') + (pick(data, ['escrowed']) === 'true' ? ' (payment held in escrow)' : '');
+          },
+          EscrowReleased: function() { return 'Escrow of ' + (amount || '0') + ' from list ' + (listId || '?') + ' released to the Treasury'; },
+          Refunded: function() { return 'Refund of ' + (amount || '0') + ' from list ' + (listId || '?') + ' to ' + (pick(data, ['claimer']) || 'a claimer'); },
+          ModuleCreated: function() { return 'Module ' + (pick(data, ['kind']) || '?') + ' created at ' + (pick(data, ['address']) || '?'); },
+          AssuranceOpened: function() {
+            return 'Assurance drive opened: claim list ' + (listId || '?') + ' on ' + (pick(data, ['claim_minter']) || '?') +
+              ', deadline ' + (pick(data, ['deadline']) || '?');
+          },
+          SlugReleased: function() { return 'Slug "' + (pick(data, ['slug']) || '?') + '" released by ' + (tokenAddress || '?') + ' (its assurance drive failed)'; },
+          TransfersLockChanged: function() {
+            return pick(data, ['locked']) === 'true'
+              ? 'Memberships locked: tokens move only by sale, gift to the DAO or a DAO vote'
+              : 'Memberships unlocked: holders can transfer and sell their tokens';
+          },
+          MembersOnlyDelegationChanged: function() {
+            return pick(data, ['enabled']) === 'true' ? 'Votes can be delegated to members only' : 'Votes can be delegated to anyone';
+          },
+          DaoRecoveryChanged: function() {
+            return pick(data, ['enabled']) === 'true' ? 'DAO recovery on: a vote can move any membership' : 'DAO recovery off';
+          },
+          TransferAgentChanged: function() {
+            return (pick(data, ['module']) || 'A module') + (pick(data, ['enabled']) === 'true' ? ' can now move memberships' : ' can no longer move memberships');
+          },
+          AgentTransfer: function() {
+            return 'Token ' + (tokenId || '?') + ' moved from ' + (pick(data, ['from']) || '?') + ' to ' + (pick(data, ['to']) || '?') + ' by ' + (pick(data, ['agent']) || '?');
+          },
+          DaoTransfer: function() {
+            return 'Token ' + (tokenId || '?') + ' moved from ' + (pick(data, ['from']) || '?') + ' to ' + (pick(data, ['to']) || '?') + ' by DAO vote';
+          },
+          SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+          ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
+          DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
+          DaoCreated: function() { return 'DAO created by ' + (deployer || 'unknown') + (pick(data, ['launch_admin']) ? ', launch admin ' + pick(data, ['launch_admin']) : ''); },
+          DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
+          ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
+          SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+          QuorumChanged: function() { return 'Quorum set to ' + (pick(data, ['new_quorum']) || '?') + ' bps'; },
+          SeedsGenerated: function() { return 'Seeds generated for ' + describeRange(); },
+          PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
+        };
+
+        var summary = foreignModule
+          ? moduleLabel + ' ' + (ensureString(data.contract_id, '') || 'contract') + ' emitted ' + String(eventName)
+          : summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
+
+        // The account that acted, first match wins: a person before a contract, a sender before a
+        // receiver, the caller (changed_by, admin) before the subject (authority) or a module
+        // (governor, treasury). DaoLaunched names only contracts (token_address, the modules). A DAO
+        // transfer is the Treasury's act (changed_by), not the holder's.
+        var actor = normalizedEventName === 'DaoLaunched' ? ''
+          : normalizedEventName === 'DaoTransfer' ? pick(data, ['changed_by'])
+          : pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'claimer', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'changed_by', 'cancelled_by', 'authority', 'admin', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin']);
+
+        // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
+        var topicsValue = topics;
+        if (typeof topicsValue === 'string') {
+          // Validate it's valid JSON
+          try {
+            JSON.parse(topicsValue);
+          } catch (e) {
+            topicsValue = '{}';
+          }
+        } else {
+          topicsValue = JSON.stringify(topicsValue || {});
+        }
+
+        var argsValue = args;
+        if (typeof argsValue === 'string') {
+          // Validate it's valid JSON
+          try {
+            JSON.parse(argsValue);
+          } catch (e) {
+            argsValue = '{}';
+          }
+        } else {
+          argsValue = JSON.stringify(argsValue || {});
+        }
+
+        // Strictly type all fields to ensure no mixed types in Arrow table
+        // A module the platform did not write can emit any event shape, `upgraded` with any hashes
+        // included: none of its rows is public news. Role `module` is every contract the Manager did
+        // not deploy, whatever kind a DAO registered it under; `circle` has no Manager-built
+        // implementation yet, so it is treated the same until one ships.
+        var unvouched = emitterRole === 'module' || emitterRole === 'circle';
+        var visibility = foreignModule || unvouched ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+        // The token self-delegates a holder on their first token: automatic, not a
+        // choice anyone made. Only real delegation changes reach the public feed.
+        if (normalizedEventName === 'DelegateChanged') {
+          var delegator = pick(data, ['delegator']);
+          var toDelegate = pick(data, ['to_delegate']);
+          var fromDelegate = pick(data, ['from_delegate']);
+          if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
+        }
+        // The profile written at DAO creation (seq 0) is part of setup, not news.
+        if (normalizedEventName === 'ProfileUpdated' && String(pick(data, ['seq'])) === '0') visibility = 'admin';
+
+        // Helper to safely convert to number
+        // Helper to safely convert to string
+        function toString(val) {
+          if (val === null || val === undefined || val === '') return '';
+          return String(val);
+        }
+
+        return {
+          activity_id: toString(data.event_id || data.id),  // Primary key - derived from source event_id
+          deployment_id: toString(data.deployment_id),
+          contract_id: toString(data.contract_id),
+          contract_role: toString(data.contract_role),
+          kind: toString(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
+          title: toString(titleMap[normalizedEventName] || normalizedEventName),
+          summary: toString(summary),
+          event_name: toString(eventName),
+          topics: toString(topicsValue),
+          args: toString(argsValue),
+          visibility: toString(visibility),
+          proposal_id: toString(proposalId),
+          token_id: toString(tokenId),
+          amount: toString(amount),
+          actor: toString(actor),
+          addresses: JSON.stringify(addresses || []),
+          ledger_sequence: ledger_sequence,
+          transaction_index: transaction_index,
+          operation_index: operation_index,
+          event_index: event_index,
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
+          transaction_hash: toString(data.transaction_hash)
+        };
+        } catch (e) {
+          console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
+          return null;
+        }
+      }
+
+sinks:
+  raw_events_output:
+    type: postgres
+    from: raw_events
+    schema: chain
+    table: raw_events
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    primary_key: event_id
+
+  decoded_events_output:
+    type: postgres
+    from: decoded_events
+    schema: chain
+    table: decoded_events
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    primary_key: event_id
+
+  activity_feed_output:
+    type: postgres
+    from: activity_feed
+    schema: app
+    table: activity_feed_events
+    secret_name: BUILDER_DEV_POSTGRES_SECRET
+    primary_key: activity_id

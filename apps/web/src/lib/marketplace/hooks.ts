@@ -8,6 +8,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type {
   DaoMarketplace,
+  MarketplaceApproval,
   MarketplaceComments,
   MarketplaceDirectory,
   MarketplaceInventory,
@@ -54,12 +55,22 @@ export function useMarketplaceOffers(query: string, enabled: boolean) {
     options
   );
 }
-export function useDaoMarketplace(daoId: string, query = '', enabled = true) {
+/** `fast`: poll every 3 seconds, while a confirmed change waits for the indexer. */
+export function useDaoMarketplace(daoId: string, query = '', enabled = true, fast = false) {
   return useSWR<DaoMarketplace>(
     enabled ? marketplaceKey(daoId, 'dao', `/api/dao/${encodeURIComponent(daoId)}/marketplace?${query}`) : null,
     fetchKey,
-    options
+    fast ? { ...options, refreshInterval: 3_000 } : options
   );
+}
+/** The market's live permission to move one of the signed-in member's tokens, read on chain. */
+export async function fetchMarketplaceApproval(daoId: string, tokenId: string, address: string) {
+  const result = await marketplaceFetch<MarketplaceApproval>(
+    `/api/dao/${encodeURIComponent(daoId)}/marketplace/approval?tokenId=${encodeURIComponent(tokenId)}`
+  );
+  if (result.daoId !== daoId || result.address !== address || result.tokenId !== tokenId)
+    throw new Error('The permission check does not match this account and token. Refresh and try again.');
+  return result.approved;
 }
 export function useMarketplaceListing(daoId: string, kind: string, id: string, eventId: string) {
   const query = new URLSearchParams({ kind, id, eventId }).toString();

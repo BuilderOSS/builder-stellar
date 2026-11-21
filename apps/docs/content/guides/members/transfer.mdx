@@ -1,0 +1,69 @@
+## Overview
+
+You can send a membership token from your wallet to another wallet. The token's vote moves with it. Some tribes lock memberships: then a token can only be given back to the tribe, or moved to a new wallet with the tribe's approval by vote.
+
+## Before you start
+
+- Connect and sign in with the wallet that holds the token, on the tribe's network.
+- Have the recipient's Stellar address ready. It starts with G or C. Check it carefully: a confirmed transfer can't be undone by the app.
+- The token must be in your wallet. A token listed for sale on the market is held by the market until you cancel the listing. See [Cancel a listing](/guides/marketplace/cancel/).
+- Keep a small amount of XLM for the network fee.
+
+## Steps
+
+1. **Open the token.** From your profile on the Members page, choose the token under **Tokens**. The token page shows **Held by** with **Yours**, and a **Your token** card.
+
+   <Shot id="members/transfer/01" alt="A token page with the Held by card marked Yours and the Your token card below" />
+
+2. **Choose Send.** Under **What do you want to do?**, choose **Send** ("Give this token to someone").
+
+   <Shot id="members/transfer/02" alt="The Your token card with Send selected" />
+
+3. **Enter the recipient.** Type the address in **Recipient address**.
+
+   <Shot id="members/transfer/03" alt="A recipient address entered in the Recipient address field" />
+
+4. **Review.** Choose **Review**. The app checks that you still hold the token and prepares the transaction. The summary says the token moves to the recipient, you will no longer own it, and its vote moves to the recipient's delegate. It also shows the network fee.
+
+   <Shot id="members/transfer/04" alt="The transfer review with the summary and the network fee" />
+
+5. **Sign and send.** Choose **Sign and send**, then sign in your wallet. Once it is confirmed, the token belongs to the recipient. The Members page can take a moment to update.
+
+   <Shot id="members/transfer/05" alt="The token page after the transfer, with the new holder under Held by" />
+
+## Tribes with locked memberships
+
+In a tribe with locked memberships, **Send** is replaced by **Give back** ("Return this token to the tribe"). The destination is fixed to the **Tribe Treasury**. The token carries no vote while the Treasury holds it, and you are no longer its holder.
+
+To move a locked token to another wallet, for example a new wallet of your own, the tribe has to approve it by vote:
+
+1. In **Your token**, choose **Approve the tribe** ("Let a vote move this token"). The approval is set to last about 120 days, long enough for a vote. Sign it.
+2. Choose **Draft the proposal**. Add the action **Approve a membership transfer**, which names this token, your wallet and the new wallet.
+3. If the proposal passes, the Treasury moves the token when the proposal runs.
+
+See [Approvals](/guides/members/approvals/) for how the approval works.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  **Send** and **Give back** call `transfer` on the tribe's Token contract, signed by you. The token's voting unit moves from your delegate to the recipient's delegate. A recipient with no delegate is delegated to themselves. Any single-token approval on the token is cleared when it moves.
+
+  When a tribe locks memberships, the Token refuses transfers between members with `TransfersLocked`. It allows a token to move back to the Treasury, out of the tribe's own contracts (for example, auction settlement), and by `transfer_from` when the Treasury is the approved spender, which is how a passed proposal moves it. The lock is a tribe setting. It changes only by a vote.
+
+  You pay the Stellar network fee in XLM. Transfers are public on chain.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Choose a different recipient."** You entered your own address.
+- **"Memberships in this tribe are locked."** Use **Give back**, or approve the tribe and ask for a vote, as described above.
+- **"Live ownership has to load before you can act."** The app couldn't read the token from the chain. Refresh the page.
+- **"Ownership changed. Refresh this token before continuing."** The token moved since you opened the page. Refresh before you try again.
+- **The transfer was submitted and is still confirming.** Don't send it again. Check the transaction hash shown on the page first.
+
+## Related
+
+- [Approvals](/guides/members/approvals/)
+- [Delegate your votes](/guides/members/delegate/)
+- [Sell a token](/guides/marketplace/sell/)
+- [Membership tokens](/concepts/membership-tokens/)

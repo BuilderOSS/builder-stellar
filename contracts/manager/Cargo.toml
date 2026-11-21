@@ -23,6 +23,7 @@ governor = { path = "../governor" }
 treasury = { path = "../treasury" }
 marketplace = { path = "../marketplace" }
 minter = { path = "../minter" }
+vote-adapter-mock = { path = "../vote-adapter-mock" }
 
 [features]
 testutils = ["soroban-sdk/testutils"]

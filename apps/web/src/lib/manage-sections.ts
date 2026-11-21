@@ -21,7 +21,10 @@ export const MANAGE_GROUPS: Array<{ title: string; items: ManageSection[] }> = [
   },
   {
     title: 'Tribe',
-    items: [{ key: 'profile', label: 'Tribe profile', meta: 'Name, link, image and description', section: '/profile' }]
+    items: [
+      { key: 'profile', label: 'Tribe profile', meta: 'Name, link, image and description', section: '/profile' },
+      { key: 'legal', label: 'Legal entity export', meta: 'What a DAO registrar needs to start', section: '/legal' }
+    ]
   },
   {
     title: 'Membership',
@@ -87,7 +90,7 @@ export const MANAGE_GROUPS: Array<{ title: string; items: ManageSection[] }> = [
       {
         key: 'renewal',
         label: 'Storage renewal',
-        meta: 'When data expires, and renewing it in one go',
+        meta: 'When data expires, and how to renew it',
         section: '/renewal'
       }
     ]

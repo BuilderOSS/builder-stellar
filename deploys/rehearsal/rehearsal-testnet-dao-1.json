@@ -1,0 +1,122 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "rehearsal",
+  "deployer": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+  "nonce": 1,
+  "manager": "CBOGG6KM33NV7KJLLSUOG63KCZKAUFBZIDUEVJW5S4SAMMM3H2LBQJX4",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "c20c822aaa4647a7892ee7a63009d5a438fece29",
+  "addresses": {
+    "token": "CCEEXV4XIETYVJJCDREGUJCHB2HWCLDZZODO66W67G5WRFQUUBT5GFYM",
+    "metadata": "CBN3GDTEQ7JR5BYDK6SILVINB7CNEA6DUORBLK6GIQ3MKQUJQN7CIAYL",
+    "governor": "CA2P4LOUJ6M4HXEO2LXBZWUFN6646OYKTDA3E74RTPVPH24EE6QOOM34",
+    "treasury": "CBTMG46W6G57SA5H2ELHO7SZGVXUIN5FOLZWLEJDVJA47Z6Z73FL356J",
+    "auction": "CCJJBOMNKRZ247OLIP2U22OUTFVA6ELVN4U7VPIOKKFQRVRYZWIJMCZJ",
+    "marketplace": "CDFJDQRCTU2A4DAOCGFMFOTHCQZSFJP3VAZGOYIBSDSRB5MKFYCR3Z2I",
+    "claims": null
+  },
+  "config": {
+    "deployer": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+    "nonce": 1,
+    "launchAdmin": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+    "slug": "rehearsal-live",
+    "token": {
+      "name": "Rehearsal Live",
+      "symbol": "RHL"
+    },
+    "metadata": {
+      "profile": {
+        "description": "Testnet end-to-end rehearsal DAO (disposable)",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://builder-stellar-web.vercel.app"
+          }
+        ],
+        "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+      },
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "10000000",
+      "timeBuffer": 60,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+        "amount": 3
+      }
+    ],
+    "launch": {
+      "launchAuction": true,
+      "launchMarketplace": true
+    }
+  },
+  "updatedAt": "2026-11-21T11:01:22.216Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "f9332dca5e04e5655d75edb030f55baa549fa84ce316df83e0859470c9d3ad3b",
+      "ledger": 5847034
+    },
+    "artworkBatches": [
+      {
+        "txHash": "1ee064df7957fd3a61a7d98af2fe75e433d362025fb2c306fad3b4e29ad6265c",
+        "batch": 1,
+        "items": 2,
+        "ledger": 5847037
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "a1fc7fba003553a4552a6e9afe02cc70e2f1d78e184581dd7425a83bb4955b7e",
+        "batch": 1,
+        "tokens": 3,
+        "ledger": 5847039
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "0342546dd1044030fa85f478f085c1d70429b47886ab94abbebe34eabc0fe531",
+      "ledger": 5847048
+    }
+  },
+  "deploymentLedger": 5847034
+}

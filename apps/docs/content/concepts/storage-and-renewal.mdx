@@ -1,0 +1,54 @@
+Stellar charges a small fee to keep data stored on its network, for a set length of time. When that time runs out, the data is set aside and stops working until someone restores it. Keeping a tribe running therefore includes renewing its storage from time to time. Anyone can do it, and the wallet that renews pays.
+
+For crypto natives: Soroban charges rent for ledger entries. Each entry has a TTL (time to live). An entry whose TTL runs out is archived, and a `RestoreFootprint` brings it back. Renewal is an `ExtendFootprintTTL`.
+
+## What expires
+
+Everything a tribe stores on chain has a lifetime:
+
+- **The tribe's contracts**, with their settings and wiring. Ordinary use extends them to about 170 days whenever fewer than 60 days remain.
+- **The tribe's records**: artwork, open proposals, mint allowances, open listings and pools, invite lists, the tribe's link, and the funds and tokens the treasury and modules hold.
+- **Each member's own records**: their tokens, balance, votes, and claims. These renew for 30 days every time the member acts.
+- **The shared contract code** that every tribe runs.
+
+The longest a single renewal can reach is 180 days.
+
+## Archived is not deleted
+
+When an entry's lifetime runs out, it is archived, not deleted. Its data is kept, but contracts can't read it. Any part of the tribe that needs an archived entry stops working until it is restored. Restoring costs about the same as renewing, plus a network fee, and anyone can do it.
+
+## Who renews what
+
+- **Tribe Builder renews the shared code** for every tribe. If that ever lapses, a member's transaction pays for a few days of code storage at most.
+- **The tribe renews its own records**, from Manage → Storage renewal. Anyone can do this, member or not.
+- **Members renew their own records** by using the tribe. A member who returns after more than a month may find their records archived. The app restores them first: one extra signature and a small fee, before the member's own transaction.
+
+Records kept by a module that Tribe Builder didn't deploy are not covered. The renewal screen lists such modules under "not covered by one-click renewal", and renews only the contracts themselves.
+
+## Renewing a tribe
+
+Manage → Storage renewal lists each group of records, such as "The tribe's contracts and modules" and "Open proposals and the quorum rate", with when each expires. To renew:
+
+1. Choose a period: 30, 90, or 180 days, or another number of days.
+2. Choose "Get a price". The screen shows the network fee, and what a year of renewals costs at that rate.
+3. Choose "Renew for 180 days", or the period you chose, and sign in your wallet.
+
+If anything was archived, the same renewal restores it first. A large tribe may need more than one transaction. The screen shows each step.
+
+The fee goes to the network, not to Tribe Builder or the tribe. A tribe that wants to repay the person who renewed can do so by proposal.
+
+## What it costs
+
+Rent is charged per byte, per day. Renewing for 180 days once costs about the same as renewing for 30 days six times, apart from the fee for each transaction. So a longer period never costs more per year.
+
+On testnet in October 2026, renewing a sample tribe with 500 tokens and 50 proposals for 180 days cost about 57 XLM. Rates change with the network, so always use the price the screen quotes.
+
+<Callout title="Rates on testnet" description="Tribe Builder runs on the Stellar testnet today. Testnet XLM has no value, and mainnet rates will differ." />
+
+## Related
+
+- [Wallets and Stellar basics](/concepts/wallets-and-stellar)
+- [Modules](/concepts/modules)
+- [Troubleshooting](/reference/troubleshooting)
+- [Limits and timings](/reference/limits-and-timings)
+- [Safety and security model](/concepts/safety-and-security)

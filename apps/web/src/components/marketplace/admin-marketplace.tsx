@@ -18,6 +18,7 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
+  GuideLink,
   Input
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -30,7 +31,7 @@ import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/m
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { largestBuyerShare } from '@/lib/marketplace/pool-share';
 import { ACTION_SOURCES, planBundle } from '@/lib/proposal-actions/action-request';
-import { ACTION_CATALOG, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
+import { ACTION_CATALOG, actionAvailability, getActionMeta, type SettingValues } from '@/lib/proposal-actions/catalog';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { useEditingAction } from '@/lib/proposal-actions/use-editing-action';
@@ -40,6 +41,11 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
+/** "XLM" for a known asset; undefined for one we can't name, so its contract id shows instead. */
+function knownAssetCode(network: Parameters<typeof marketplaceAssetLabel>[0], id: string) {
+  const label = marketplaceAssetLabel(network, id);
+  return label === 'Unknown asset' ? undefined : label;
+}
 const POOL_TYPES = new Set(['open-pool', 'close-pool', 'sweep-pool']);
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
@@ -85,7 +91,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const share =
     votingSupply.data === undefined ? null : largestBuyerShare(votingSupply.data, pool.size, pool.maxPerBuyer);
   const shareText = share
-    ? `The largest vote share one wallet could buy is ${share.percent}%: ${share.bought} ${share.bought === 1 ? 'token' : 'tokens'}, if nobody else buys (${votingSupply.data} votes today).`
+    ? `The largest vote share one wallet could buy is ${share.percent}%: ${share.bought} ${share.bought === 1 ? 'token' : 'tokens'}, if no one else buys (${votingSupply.data} votes now).`
     : '';
   const picked = pools.find((listing) => listing.id === poolId.trim());
   const pickedClosed = picked?.status === 'closed';
@@ -114,7 +120,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         const context = { config: daoConfig, session: { address, kit: null } };
         const checked = allowance.validate(grantDraft, context);
         if (!checked.valid) throw new Error(checked.message ?? 'Enter how many tokens the pool holds.');
-        const grant = { action: allowance.serialize(grantDraft, context) };
+        const grant = { action: { ...allowance.serialize(grantDraft, context), moduleName: 'the market' } };
         const open = marketplaceGovernanceAction(daoConfig, address, getActionHandler('open-pool'), draft);
         const unit = marketplaceAssetLabel(data.network, data.config.paymentAsset);
         // The allowance and the pool only work together: one item, removed as one.
@@ -156,14 +162,14 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <div>
           <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="ghost" size="sm">
             <ChevronLeft aria-hidden="true" />
-            Tribe market
+            Market
           </ButtonLink>
         </div>
         <section className={styles.hero}>
-          <h1>Manage the marketplace</h1>
+          <h1>Market settings</h1>
           <p>
             Once the tribe has launched, members change the market by vote. Each button here adds an action to your
-            proposal draft. Nothing is signed on this page.
+            proposal draft. Nothing is signed on this page. <GuideLink path="guides/manage/marketplace" />
           </p>
         </section>
         {isLoading ? <p role="status">Verifying marketplace state…</p> : null}
@@ -198,12 +204,12 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             <EditingActionNotice editing={editing.editing} bundle={editing.bundle} onCancel={editing.done} />
             <p>
               A pool sells new tokens at a fixed price. Anyone can stock it once it opens; buyers take one token at a
-              time, within the per-wallet and per-period limits. Choose a closing time that leaves room for the vote.
+              time, within the per-wallet and per-period limits. Choose a closing time that allows time for the vote.
             </p>
             {data?.config?.paused ? (
               <p className={styles.notice}>
-                The marketplace is paused. Add a resume-marketplace action before this one in the same proposal, or wait
-                until a resume proposal executes.
+                The market is paused. Add a Reopen the market action before this one in the same proposal, or wait until
+                a proposal that reopens the market runs.
               </p>
             ) : null}
             <div className={styles.formGrid}>
@@ -228,7 +234,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="pool-per-buyer">Most one wallet can buy</FieldLabel>
+                <FieldLabel htmlFor="pool-per-buyer">Maximum per wallet</FieldLabel>
                 <Input
                   id="pool-per-buyer"
                   inputMode="numeric"
@@ -237,7 +243,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="pool-rate">Most sales per period</FieldLabel>
+                <FieldLabel htmlFor="pool-rate">Maximum sales per period</FieldLabel>
                 <Input
                   id="pool-rate"
                   inputMode="numeric"
@@ -326,7 +332,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               </div>
             ) : null}
             <p className={styles.muted}>
-              Closing stops sales now and hands back the tokens it never minted. Sweeping a closed pool moves its unsold
+              Closing stops sales now and returns the tokens it never minted. Sweeping a closed pool moves its unsold
               tokens to the treasury.
             </p>
             {pendingPools.map((action) => (
@@ -359,7 +365,11 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}
-          values={{ marketplace: data?.config ?? undefined }}
+          values={{
+            marketplace: data?.config
+              ? { ...data.config, assetCode: knownAssetCode(data.network, data.config.paymentAsset) }
+              : undefined
+          }}
           onQueue={(handler, draft, replaces) => {
             try {
               if (!enabled || !data) throw new Error('Connect your wallet and wait for the market to load.');
@@ -400,7 +410,10 @@ function MarketplaceSettings({
   onQueue: (handler: ActionHandler, draft: unknown, replaces?: string[]) => void;
 }) {
   const { daoConfig, routeId } = useDaoContext();
-  const handlers = marketplaceSettingHandlers(daoConfig);
+  // Pause and Reopen show only the one that applies to the market's live state, as in the composer.
+  const handlers = marketplaceSettingHandlers(daoConfig).filter(
+    (handler) => actionAvailability(handler.type, daoConfig, values).available
+  );
   return (
     <section className={styles.panel}>
       <div className={styles.stack}>

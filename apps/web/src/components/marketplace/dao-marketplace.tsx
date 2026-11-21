@@ -21,14 +21,30 @@ import {
   Select,
   Skeleton
 } from '@/components/ui';
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { formatFeePercent, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel, marketplaceDisplayAmount } from '@/lib/marketplace/asset-label';
 import { useDaoMarketplace, useMarketplaceListing } from '@/lib/marketplace/hooks';
+import {
+  isPendingListing,
+  listedTokenIds,
+  type ListTerms,
+  parseSellParam,
+  pendingListing,
+  type PendingListingChange,
+  unsettledChanges,
+  withPendingChanges
+} from '@/lib/marketplace/sell';
+import type { DaoMarketplace, MarketplaceListing } from '@/lib/marketplace/types';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { ListingCard } from './listing-card';
 import styles from './marketplace-styles';
 import { SellForm } from './sell-form';
+import { YourListings } from './your-listings';
 
 const statusCard = css({
   display: 'grid',
@@ -59,25 +75,82 @@ export function DaoMarketplaceView({
   initialKind = 'all',
   initialStatus = 'open',
   selectedId = '',
-  selectedEventId = ''
+  selectedEventId = '',
+  initialSell = ''
 }: {
   daoId: string;
   initialKind?: string;
   initialStatus?: string;
   selectedId?: string;
   selectedEventId?: string;
+  /** `?sell=<tokenId>` or `?sell=1`: open the sell form, with that token chosen. */
+  initialSell?: string;
 }) {
   const { routeId, daoConfig } = useDaoContext();
-  // A locked community refuses member listings (the Token won't move a token into escrow).
-  const locked = daoConfig.tokenSettings.transfersLocked;
+  // No market, a market that is off, or locked memberships: members can't list, so Sell hides.
+  const canSell = canSellOnMarket(daoConfig);
+  const sellLink = parseSellParam(initialSell);
+  const address = useAuthSessionStore((s) => (s.authStatus === 'authenticated' ? s.address : ''));
+  const [pending, setPending] = useState<PendingListingChange[]>([]);
   const [kind, setKind] = useState(['pool', 'secondary'].includes(initialKind) ? initialKind : 'all');
   const [status, setStatus] = useState(
     ['all', 'open', 'purchased', 'cancelled', 'expired'].includes(initialStatus) ? initialStatus : 'open'
   );
   const [page, setPage] = useState(0);
-  const [selling, setSelling] = useState(false);
+  const [selling, setSelling] = useState(sellLink.open && canSell);
+  // The token the form opens with: from a Sell link, or one whose Change price stopped after Cancel.
+  const [sellToken, setSellToken] = useState({ id: sellLink.tokenId, focus: sellLink.open });
+  const waiting = pending.length > 0;
   const query = new URLSearchParams({ kind, status, page: String(page) }).toString();
-  const { data, error, isLoading, mutate } = useDaoMarketplace(daoId, query);
+  const { data, error, isLoading, mutate } = useDaoMarketplace(daoId, query, true, waiting);
+  // "Yours": your open and ended resales, on any page of the main list.
+  const yours = useDaoMarketplace(
+    daoId,
+    new URLSearchParams({ kind: 'secondary', status: 'open', seller: address }).toString(),
+    Boolean(address),
+    waiting
+  );
+  // Settle confirmed changes once the indexer returns them (checked each time new data arrives).
+  const [settledFor, setSettledFor] = useState<[unknown, unknown]>([undefined, undefined]);
+  if (settledFor[0] !== data || settledFor[1] !== yours.data) {
+    setSettledFor([data, yours.data]);
+    const left = unsettledChanges(pending, [...(data?.listings ?? []), ...(yours.data?.listings ?? [])]);
+    if (left.length !== pending.length) setPending(left);
+  }
+  function onListed(market: DaoMarketplace, terms: ListTerms, hash: string) {
+    const listing = pendingListing({
+      terms,
+      daoId,
+      deploymentId: DEPLOYMENT_ID,
+      contractId: market.community.marketplaceContract ?? '',
+      seller: address,
+      hash,
+      priceUnits: parseMarketplaceAmount(terms.price).toString()
+    });
+    setPending((changes) => [...changes, { type: 'listed', listing, at: Date.now() }]);
+  }
+  function onCancelled(listing: MarketplaceListing, _hash: string) {
+    setPending((changes) => [
+      // A cancelled listing that was itself still updating is simply dropped.
+      ...changes.filter((change) => change.type !== 'listed' || change.listing.eventId !== listing.eventId),
+      ...(isPendingListing(listing)
+        ? []
+        : [
+            {
+              type: 'cancelled' as const,
+              tokenId: listing.tokenId ?? listing.id,
+              eventId: listing.eventId,
+              at: Date.now()
+            }
+          ])
+    ]);
+  }
+  const mine = withPendingChanges(yours.data?.listings ?? [], pending);
+  // New listings show at the top of "For sale now" and "Everything" while the indexer catches up.
+  const shownPending =
+    ['open', 'all'].includes(status) && kind !== 'pool' && page === 0
+      ? pending
+      : pending.filter((change) => change.type === 'cancelled');
   const selected = useMarketplaceListing(daoId, initialKind, selectedId, selectedEventId);
   const purchasesEnabled = Boolean(data?.launched && data.config && !data.config.paused);
   const marketState = !data
@@ -95,7 +168,9 @@ export function DaoMarketplaceView({
   return (
     <div className={styles.scoped}>
       <PageSection
+        guide="guides/marketplace/buy"
         title="Market"
+        actionsPlacement="inline"
         actions={
           <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
             Market settings
@@ -122,7 +197,7 @@ export function DaoMarketplaceView({
                 {data.config ? (
                   <span className={note}>
                     Prices in {marketplaceAssetLabel(data.network, data.config.paymentAsset)} · resale fee{' '}
-                    {(data.config.feeBps / 100).toLocaleString()}%
+                    {formatFeePercent(data.config.feeBps)}
                   </span>
                 ) : null}
               </div>
@@ -154,10 +229,10 @@ export function DaoMarketplaceView({
                 <option value="open">For sale now</option>
                 <option value="all">Everything</option>
                 <option value="purchased">Sold</option>
-                <option value="cancelled">Canceled</option>
+                <option value="cancelled">Cancelled</option>
                 <option value="expired">Expired and cleared</option>
               </Select>
-              {locked ? null : (
+              {!canSell ? null : (
                 <div className={sellButton}>
                   <Button
                     variant={selling ? 'ghost' : 'secondary'}
@@ -171,7 +246,35 @@ export function DaoMarketplaceView({
               )}
             </div>
 
-            {selling && !locked ? <SellForm data={data} /> : null}
+            {selling && canSell ? (
+              <SellForm
+                key={sellToken.id}
+                data={data}
+                initialTokenId={sellToken.id}
+                focusOnOpen={sellToken.focus}
+                hiddenTokenIds={listedTokenIds(pending)}
+                onListed={(terms, hash) => onListed(data, terms, hash)}
+                onFinished={() => setSelling(false)}
+              />
+            ) : null}
+            {address ? (
+              <YourListings
+                listings={mine}
+                network={data.network}
+                config={data.config}
+                purchasesEnabled={purchasesEnabled}
+                onCancelled={onCancelled}
+                onListed={(terms, hash) => onListed(data, terms, hash)}
+                onRelist={
+                  canSell
+                    ? (tokenId) => {
+                        setSellToken({ id: tokenId, focus: true });
+                        setSelling(true);
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
             {selected.error ? <Callout variant="error" title={selected.error.message} /> : null}
             {selected.isLoading ? <Skeleton className={css({ height: '40', borderRadius: 'card' })} /> : null}
             {selected.data ? (
@@ -188,9 +291,9 @@ export function DaoMarketplaceView({
               </Section>
             ) : null}
 
-            {data.listings.length ? (
+            {withPendingChanges(data.listings, shownPending).length ? (
               <section className={styles.grid} aria-label="Listings">
-                {data.listings.map((listing) => (
+                {withPendingChanges(data.listings, shownPending).map((listing) => (
                   <ListingCard
                     key={listing.eventId}
                     listing={listing}
@@ -198,14 +301,15 @@ export function DaoMarketplaceView({
                     network={data.network}
                     trading
                     purchasesEnabled={purchasesEnabled}
+                    onCancelled={(hash) => onCancelled(listing, hash)}
                   />
                 ))}
               </section>
             ) : (
               <EmptyState title="Nothing for sale here">
-                {locked
-                  ? 'New tokens go on sale when members vote to open a pool.'
-                  : 'New tokens go on sale when members vote to open a pool. Members can sell a token they hold with the button above.'}
+                {canSell
+                  ? 'New tokens go on sale when members vote to open a pool. Members can sell a token they hold with the button above.'
+                  : 'New tokens go on sale when members vote to open a pool.'}
               </EmptyState>
             )}
 
@@ -229,7 +333,7 @@ export function DaoMarketplaceView({
                       title={`#${sale.tokenId}`}
                       meta={`${sale.kind === 'pool' ? 'New' : 'Resale'}${sale.poolId ? ` · pool ${sale.poolId}` : ''}${
                         sale.at ? ` · ${new Date(sale.at).toLocaleDateString()}` : ''
-                      }${sale.fee ? ` · fee ${marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.fee)}` : ''}`}
+                      }${sale.fee ? ` · resale fee ${marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.fee)}` : ''}`}
                       trailing={
                         <Amount
                           value={marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.price)}

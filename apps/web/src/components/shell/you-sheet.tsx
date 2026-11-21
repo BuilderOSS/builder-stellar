@@ -1,23 +1,26 @@
 'use client';
 
-import { LogOut, Moon, ServerCog, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
+import { LogOut, ServerCog, Settings, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css } from 'styled-system/css';
 
 import { DraftRow } from '@/components/drafts/draft-row';
 import { useAllDrafts } from '@/components/drafts/use-all-drafts';
-import { Address, Avatar, Button, Chip, ListRow, SegmentedControl, Sheet, Skeleton, Text } from '@/components/ui';
+import { Address, Avatar, Button, Chip, ListRow, Sheet, Skeleton, Text } from '@/components/ui';
+import { ThemeSegments } from '@/components/ui/theme-switch';
 import { setThemePreference, useThemePreference } from '@/components/warm-ink-theme';
 import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { canSellOnMarket } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
 import { useIsPlatformAdmin } from '@/lib/platform/registry';
-import { DISCORD_URL } from '@/lib/site';
+import { DISCORD_URL, docsHref } from '@/lib/site';
+import { formatVotes } from '@/lib/vote-source';
 import { hasSeenWalletIntro } from '@/lib/wallet-intro';
-import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
 import { BuilderDaoCredit } from './brand-mark';
 import { formatXlmBalance, useWalletSession } from './wallet-session';
@@ -98,7 +101,8 @@ function YouDrafts() {
 
 function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
   const routeId = useOptionalDaoContext()?.routeId ?? daoId;
-  const { member, isMember, isLoading, isLaunchAdmin, tokenCount, votingPower } = useDaoMembership(config);
+  const { member, isMember, isLoading, isLaunchAdmin, tokenCount, votingPower, voteDecimals, customVoteSource } =
+    useDaoMembership(config);
 
   return (
     <section className={block} aria-label={`Your membership in ${config.tokenName}`}>
@@ -116,20 +120,27 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
           </div>
           <div className={stat}>
             <span className={statLabel}>Voting power</span>
-            <span className={statValue}>{votingPower.toString()}</span>
+            <span className={statValue}>{formatVotes(votingPower, voteDecimals)}</span>
           </div>
-          <div className={stat}>
-            <span className={statLabel}>Votes go to</span>
-            <span className={statValue}>
-              {!member.delegated_to || member.delegated_to === member.address ? 'You' : 'A delegate'}
-            </span>
-          </div>
+          {customVoteSource ? null : (
+            <div className={stat}>
+              <span className={statLabel}>Votes go to</span>
+              <span className={statValue}>
+                {!member.delegated_to || member.delegated_to === member.address ? 'You' : 'A delegate'}
+              </span>
+            </div>
+          )}
           <NextLink
             href={daoRoute(routeId, `members/${member.address}`)}
             className={css({ textStyle: 'label', color: 'signal' })}
           >
-            View your tokens and delegation
+            {customVoteSource ? 'View your tokens' : 'View your tokens and delegation'}
           </NextLink>
+          {canSellOnMarket(config) ? (
+            <NextLink href={sellHref(routeId)} className={css({ textStyle: 'label', color: 'signal' })}>
+              Sell a token
+            </NextLink>
+          ) : null}
         </>
       ) : (
         <Text size="sm">You don&apos;t hold a token here yet. Win an auction or buy one on the market to vote.</Text>
@@ -163,20 +174,13 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
       footerLayout="stack"
       footer={
         <>
-          <SegmentedControl
-            fill
-            label="Appearance"
-            value={preference}
-            onValueChange={(next) => {
-              if (isWarmInkPreference(next)) setThemePreference(next);
-            }}
-            options={[
-              { value: 'dark', label: 'Dark', icon: <Moon aria-hidden="true" /> },
-              { value: 'light', label: 'Light', icon: <Sun aria-hidden="true" /> },
-              { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
-            ]}
-          />
-          <nav className={footerLinks} aria-label="Legal and community">
+          <ThemeSegments id="you-appearance" preference={preference} onChange={setThemePreference} />
+          <nav className={footerLinks} aria-label="Guides, legal and community">
+            <span>
+              <a href={docsHref()} target="_blank" rel="noopener noreferrer">
+                Guides
+              </a>
+            </span>
             <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
             </span>

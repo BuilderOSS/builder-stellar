@@ -1,0 +1,68 @@
+This page describes what the tribe's contracts enforce, what the platform operator can and can't do, and what is left to members to check. It describes how the code behaves today. It is not an audit, and it is not a promise that nothing can go wrong. Tribe Builder runs on the Stellar testnet today.
+
+For crypto natives: the Soroban contracts in the repository are the authority. The project's security model document, `docs/SECURITY_MODEL.md`, describes their behaviour in detail.
+
+## What the contracts enforce
+
+- **Funds move only by passed proposals.** The treasury has no function that pays out on request. It runs a proposal's actions only after the proposal passes, is queued, and its [safety delay](/reference/glossary#safety-delay) ends.
+- **Actions are fixed.** A proposal's actions can't change after it is created. What members vote on is what runs.
+- **Votes are counted at a fixed point in time.** Voting power and quorum are fixed when the proposal is created. Tokens bought or moved afterwards don't change the result.
+- **Setup ends at launch.** At launch, every contract's admin becomes the tribe's treasury. There is no function to hand a contract to another address, or to give up control entirely.
+- **Modules are capped.** A module can mint only up to its mint allowance, which the tribe sets.
+- **Each tribe has its own contracts.** A tribe's modules hold only that tribe's escrow and mint only that tribe's tokens. Tribes on the same release share its code, so a flaw in a release affects every tribe that runs it.
+
+## What the platform operator can do
+
+The operator controls the Manager, Tribe Builder's registry and factory contract. The operator can:
+
+- choose which releases new tribes are created with;
+- approve upgrade paths between releases;
+- withdraw a release, which blocks upgrades to it and blocks launching on it;
+- pause the factory, which stops new tribes, launches, launch drives, and link changes;
+- approve vote sources for new tribes.
+
+By pausing or withdrawing, the operator can stop a launch drive that has enough claims, so that it ends in refunds.
+
+The operator is a single address. Handing it to someone else takes two steps. Its own upgrades of the Manager wait out a notice period, which Manage → Contract upgrades shows.
+
+## What the platform operator can't do
+
+- Mint tokens for any tribe.
+- Move a tribe's funds or tokens.
+- Change a tribe's settings after launch.
+- Apply an upgrade to a tribe. Only the tribe can, by vote.
+
+## What the app does
+
+- Your wallet signs every transaction. The server prepares unsigned transactions and never signs or submits for you.
+- The app refuses to sign any transaction that could charge more than 50 XLM in fees, except a storage renewal at the price you were quoted.
+- A tribe's profile text is shown only when it matches the fingerprint stored on chain. Otherwise the app says the profile is unavailable.
+- Drafts and preferences are stored in your browser only. They are not shared or protected from other people who use the same browser.
+
+## What the contracts don't protect against
+
+- **A majority vote.** A passed proposal can do anything the rules allow, including spending the whole treasury.
+- **Membership switches.** A tribe can vote to lock transfers, and to let the tribe move any membership. Together, a majority could lock memberships and then take them. The app flags these switches in proposal review.
+- **Founder supply.** The launch admin can mint any number of founder tokens before launch. With the shortest timings, a holder of most votes could pass and run a proposal about 15 minutes after launch.
+- **No veto after queueing.** Once a proposal is queued, only expiry stops it.
+- **Upgrade code.** The chain checks that an upgrade is approved, not what the new code does.
+- **Outside modules.** A contract registered by proposal that Tribe Builder didn't deploy is not checked by Tribe Builder.
+- **Asset issuers.** An asset whose issuer can freeze or reclaim balances can freeze funds and escrow held in it.
+- **Many wallets.** Limits per buyer, and launch drive thresholds, count wallets, not people.
+- **Artwork timing.** Whoever controls when a token is minted can influence which traits it gets.
+
+## What you can check
+
+- Read every action before you vote.
+- Look at founder holdings and delegation before you bid or buy.
+- Check the tribe's vote source and its membership switches on Manage → Voting rules and Manage → Membership.
+- Keep the tribe's storage renewed.
+
+## Related
+
+- [The Treasury](/concepts/treasury)
+- [Setup versus launched](/concepts/setup-and-launch)
+- [Upgrades](/concepts/upgrades)
+- [Vote sources](/concepts/vote-sources)
+- [Storage and renewal](/concepts/storage-and-renewal)
+- [Proposals](/concepts/proposals)

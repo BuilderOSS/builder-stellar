@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { run, runQuiet } from './lib.mjs';
+import { LOCAL_NETWORK_PASSPHRASE, LOCAL_RPC_URL } from './local-network.mjs';
 
 const containerName = 'stellar-builder-local';
 const requestedContainerName = 'builder-local';
@@ -48,8 +49,8 @@ writeFileSync(configPath, `${JSON.stringify({
   network: 'local',
   label: 'builder',
   adminAddress: address,
-  rpcUrl: 'http://localhost:8000/soroban/rpc',
-  networkPassphrase: 'Standalone Network ; February 2017'
+  rpcUrl: LOCAL_RPC_URL,
+  networkPassphrase: LOCAL_NETWORK_PASSPHRASE
 }, null, 2)}\n`);
 
 // Deploys Manager, registers implementations and sets current implementations.

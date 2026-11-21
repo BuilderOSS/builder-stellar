@@ -45,7 +45,9 @@ export function ProfileLinksEditor({
     onChange(links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
   return (
     <div className={css({ display: 'grid', gap: '2' })}>
-      <FieldLabel htmlFor={links.length ? `${id}-label-0` : `${id}-add`}>Links</FieldLabel>
+      {/* With no links yet the label names no field: pointing it at the add button renamed that button
+          "Links" for screen readers, hiding "Add a link" (BUG-CAP-1). */}
+      <FieldLabel htmlFor={links.length ? `${id}-label-0` : undefined}>Links</FieldLabel>
       {links.length ? (
         <ul className={list}>
           {links.map((link, index) => {
@@ -100,7 +102,7 @@ export function ProfileLinksEditor({
           onClick={() => onChange([...links, { label: '', url: '' }])}
         >
           <Plus aria-hidden="true" />
-          {links.length >= MAX_PROFILE_LINKS ? `${MAX_PROFILE_LINKS} links is the most` : 'Add a link'}
+          {links.length >= MAX_PROFILE_LINKS ? `Maximum of ${MAX_PROFILE_LINKS} links` : 'Add a link'}
         </Button>
       </div>
     </div>

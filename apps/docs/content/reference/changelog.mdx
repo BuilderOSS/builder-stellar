@@ -1,0 +1,44 @@
+Changes that people using Tribe Builder can see, newest first. Changes reach [dev.tribes.build](https://dev.tribes.build) first, and tribes.build when they are promoted. tribes.build includes everything up to 21 November 2026.
+
+## November 2026
+
+- **Release 1 on tribes.build (contracts 0.5.0).** Everything above and below reached tribes.build on 21 November 2026. The Manager was upgraded in place, so every tribe keeps its address, history and link. New tribes get Governor and Metadata 0.5.0. Existing tribes keep working as they are, and can upgrade their Governor by vote from Manage → Contract upgrades. See [Contract addresses](/reference/contract-addresses).
+- **Vote sources.** When creating a tribe, you can choose how votes are counted: by membership tokens, or by a vote source the platform has approved. See [Vote sources](/concepts/vote-sources).
+- **Legal entity export.** Manage → Legal entity export prepares a bundle of the tribe's details for a DAO registrar such as MIDAO. A second version follows MIDAO's published requirements more closely, including beneficial ownership by tokens owned. See [Legal entity export](/guides/legal/export).
+- **Clearer sign-in errors.** If you decline the sign-in request in your wallet, the app now says so, instead of a general error. Connecting again straight after declining no longer stays on "Check wallet".
+- **A calmer voice.** Copy across the app was rewritten to be clear and literal, for readers in any language. The theme menu moved to the top bar.
+- **dev.tribes.build.** A separate site, with its own Manager on testnet, where changes are tried first. See [Contract addresses](/reference/contract-addresses).
+- **These docs.** docs.tribes.build opened, with concepts, guides and reference pages.
+- **Platform page.** `/platform` shows the shared storage, every tribe's renewal state, and the contract registry. It is readable by anyone. See [Running the platform](/guides/platform/operators).
+- **Testnet protocol 30.** The app reads ledgers from Stellar protocol 30.
+
+## October 2026
+
+- **The name Tribe Builder.** The product was renamed, with a new mark and share images for each page. Groups are called tribes, with the DAO term beneath.
+- **Membership models (contracts 0.4.0).** A fresh testnet Manager with:
+  - assurance drives, where a tribe launches only once enough people commit, and everyone can take their payment back if it doesn't ([Assurance drives](/guides/setup/assurance-drives));
+  - claim lists, with an optional price ([Make a claim list](/guides/claims/create));
+  - quick-buy pools in the market ([Marketplace pools](/guides/marketplace/pools));
+  - locked memberships, members-only delegation and DAO recovery, each turned on or off by vote.
+- **Lower storage costs.** Contracts store less data, so renewing a tribe's storage costs less. See [Storage and renewal](/concepts/storage-and-renewal).
+- **Proposal composer.** You write the reason first, then choose actions by what you want to do. Each setting shows its current value. Every action reads as a sentence on the proposal page. See [Write a proposal](/guides/proposals/write).
+- **Modules after launch.** Add and remove auction, market and claims modules from Manage → Membership, by proposal.
+- **Manage pages.** Plain pages for artwork, founder tokens and claim lists, with CSV imports, and Storage renewal in the Manage menu.
+- **Treasury purchases.** The tribe can buy a listed membership through a proposal. See [Treasury purchases](/guides/marketplace/treasury-purchases).
+- **Find a tribe by contract.** Discover finds a tribe from any of its contract addresses.
+- **Comments.** Discussion on proposals, and comments on bids and listings.
+- **Formatted text.** Proposals and proposal comments support Markdown formatting and images.
+- **Tribe links.** Each tribe has a link, and a launched tribe can change its link by vote.
+- **Contract upgrades.** Manage → Contract upgrades lists newer approved releases, and several contracts can be upgraded in one proposal. During setup, upgrades apply directly.
+- **New design.** The Warm Ink and Dusk design: a guided create form that checks each section as you go, launch setup as its own page with real step status, and your tribes in the side rail.
+- **Market.** A marketplace for buying and selling memberships, with a resale fee set by the tribe.
+- **Storage alerts.** The tribe's Manage page warns before artwork or contract code expires.
+
+## September 2026
+
+- **Create a tribe.** A step-by-step creation flow, with loading states and a review step that keeps your checks.
+- **Sign in with your wallet.** Sign a short message to sign in. It's free and moves nothing.
+- **Settings by proposal.** Manage forms for voting rules and auctions prepare proposals, with drafts you can return to and a note on what each change does.
+- **Artwork.** Upload the artwork layers that membership tokens are drawn from, and see token images rendered from them.
+- **Proposal drafts.** Drafts are kept for each tribe, and proposal pages show more context on a phone.
+- **Many tribes on one site.** One app serves every tribe created by the Manager.

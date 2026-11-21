@@ -1,0 +1,70 @@
+{
+  "$comment": "Fixture tribe for walkthrough W09 (one proposal per action group), on the dev Manager. Deployed and launched by e2e-w09-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W09 and W15 fixtures\"). Founders: e2e-w09-founder x6 (enough to pass a proposal alone at 10% quorum), e2e-w09-member-a x2. Auction and marketplace in native XLM; no claims module, so a proposal creates it.",
+  "deployer": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "nonce": 9,
+  "launchAdmin": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+  "slug": "e2e-w09",
+  "token": {
+    "name": "E2E Actions",
+    "symbol": "E2EA"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for proposal actions (W09, testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "10000000",
+    "timeBuffer": 60,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GATWAQMGDOGSOK4EXPXMCKH2QMNFGU5AYYHVQA4PX5BTOBOCG5AJFCOM",
+      "amount": 6
+    },
+    {
+      "address": "GCCPSUJCCJPBIRZCCTWZGMSUWEOMUSXLBYT25HGER3KIQHWNVTVY4CFI",
+      "amount": 2
+    }
+  ],
+  "launch": {
+    "launchAuction": true,
+    "launchMarketplace": true
+  }
+}

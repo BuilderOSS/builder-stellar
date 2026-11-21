@@ -1,4 +1,4 @@
-import { Asset, Keypair } from '@stellar/stellar-sdk';
+import { Asset, Keypair, StrKey } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { getNetworkConfig } from '@/config/networks';
@@ -97,6 +97,34 @@ describe('one current creation configuration', () => {
       proposal_threshold: 7n,
       queue_delay: 300
     });
+  });
+  it('is token-weighted unless an approved vote source is chosen', () => {
+    const config = valid();
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.vote_source).toBeNull();
+    const adapter = StrKey.encodeContract(Buffer.alloc(32, 1));
+    config.governance.voteSource = adapter;
+    expect(createDaoSchema.safeParse(config).success).toBe(true);
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.vote_source).toBe(adapter);
+  });
+  it('scales the threshold, entered in whole votes, by the vote source decimals', () => {
+    const config = valid();
+    config.governance.proposalThreshold = 2;
+    config.governance.voteSourceDecimals = 9;
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.proposal_threshold).toBe(2n);
+    config.governance.voteSource = StrKey.encodeContract(Buffer.alloc(32, 1));
+    expect(formDataToCreationParams(config, wallet, 1n).initial_config.governance.proposal_threshold).toBe(
+      2_000_000_000n
+    );
+  });
+  it.each(['not-an-address', wallet, `C${'A'.repeat(54)}`])('rejects vote source %s', (voteSource) => {
+    const config = valid();
+    config.governance.voteSource = voteSource;
+    expect(createDaoSchema.safeParse(config).success).toBe(false);
+  });
+  it('opens a draft saved before vote sources as token-weighted', () => {
+    const config = valid() as Record<string, any>;
+    delete config.governance.voteSource;
+    expect(draftConfigurationSchema.parse(config).governance.voteSource).toBe('');
   });
   it('rejects unsafe numeric vote counts and non-registry payment assets', () => {
     const config = valid();

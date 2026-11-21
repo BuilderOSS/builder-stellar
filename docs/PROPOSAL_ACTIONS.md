@@ -55,5 +55,5 @@ Sources: the handlers in `apps/web/src/lib/proposal-actions/`, encoding in `apps
 
 ## Known gaps
 
-- The proposal page re-encodes indexed arguments to check the proposal id. `AuthNode.args` is `Vec<Val>` and the indexed form drops its types, so a proposal with `treasury-authorize` cannot be re-encoded there ("Untyped Val argument"). Pinned with `it.fails` in `contract-spec.test.ts`.
+- Treasury purchases (`treasury-authorize`) used to be impossible to re-encode on the proposal page ("Untyped Val argument"). Since ca235cd the page rebuilds the authorize call from the indexed proposal, so queue, execute and cancel work.
 - `analyzeProposalDraft` reads the tribe's indexed state where it has it (auction paused, membership switches, built-in modules). A custom module or a running pool's market pause state is not indexed, so those rules say "unless" rather than block.

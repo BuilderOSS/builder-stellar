@@ -4,6 +4,7 @@ import { css } from 'styled-system/css';
 
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
 import { PlatformUpgrades } from '@/components/admin/platform-upgrades';
+import { useLaunchPlan } from '@/components/launch/launch-setup';
 import { PageSection } from '@/components/page-section';
 import { DraftDock } from '@/components/proposal-actions/draft-dock';
 import { Avatar, Chip, HelpTip, ListRow, Section } from '@/components/ui';
@@ -11,7 +12,9 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
+import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoAdminRoute } from '@/lib/dao-routes';
+import { type ManageAccess, manageSectionAccess } from '@/lib/manage-access';
 import { manageGroups } from '@/lib/manage-sections';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -29,16 +32,19 @@ const accessCard = css({
 const accessTitle = css({ textStyle: 'heading', m: '0' });
 const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 
-type Access = 'direct' | 'vote' | 'read' | 'open';
-
-function AccessChip({ access }: { access: Access }) {
+function AccessChip({ access }: { access: ManageAccess }) {
   if (access === 'direct') return <Chip tone="yours">You can change this</Chip>;
   if (access === 'vote') return <Chip tone="live">Needs a vote</Chip>;
   if (access === 'read') return <Chip>Read only</Chip>;
   return null;
 }
 
-const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : vote ? 'vote' : 'read');
+/** "Required for launch" until the checklist has the step done (BUG-CAP-11); SWR shares the read. */
+function LaunchStepChip({ daoId, config, step }: { daoId: string; config: DaoNetworkConfig; step: string }) {
+  const { plan } = useLaunchPlan(daoId, config);
+  const done = plan.required.some((item) => item.id === step && item.status === 'done');
+  return done ? <Chip tone="success">Done</Chip> : <Chip tone="warning">Required for launch</Chip>;
+}
 
 export default function AdminPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
@@ -68,13 +74,15 @@ export default function AdminPage() {
   );
 
   // Who can change each section; anything not listed is open to read and act on.
-  const accessFor: Partial<Record<string, Access>> = {
-    profile: access(isAdmin, canProposeAdminActions),
-    token: access(hasMintAccess, canProposeMint),
-    governance: access(hasGovernanceAccess, canProposeGovernance),
-    owner: access(isAdmin, canProposeAdminActions),
-    auction: access(isAdmin, canProposeAuction)
-  };
+  const accessFor = manageSectionAccess({
+    isAdmin,
+    hasMintAccess,
+    hasGovernanceAccess,
+    canProposeAdminActions,
+    canProposeMint,
+    canProposeGovernance,
+    canProposeAuction
+  });
   const sections = manageGroups({
     auction: Boolean(config.auctionContractId),
     marketplace: Boolean(config.marketplaceContractId),
@@ -84,7 +92,7 @@ export default function AdminPage() {
     .filter((section) => section.key !== 'overview');
 
   return (
-    <PageSection title="Manage">
+    <PageSection guide="concepts/modules" title="Manage">
       <ContractUpdatesNotice enabled={hasAnyAccess} />
       <PlatformUpgrades enabled={hasAnyAccess} />
       <section className={accessCard} aria-labelledby="access-title">
@@ -136,7 +144,7 @@ export default function AdminPage() {
               trailing={
                 config.status === 'pending' ? (
                   section.requiredForLaunch ? (
-                    <Chip tone="warning">Required for launch</Chip>
+                    <LaunchStepChip daoId={daoId} config={config} step={section.key} />
                   ) : (
                     <Chip>Optional before launch</Chip>
                   )

@@ -1,0 +1,57 @@
+{
+  "$comment": "Fixture tribe for walkthroughs W02 (discover), W13 (treasury) and W17 (renewal), on the dev Manager. Deployed and launched by e2e-w02-founder with scripts/deploy-dao.mjs (docs/qa/WALKTHROUGHS.md, \"The W02 fixture\"). Founders: e2e-w02-founder x2, e2e-w02-member-a x1. No auction or marketplace: governance and the treasury only.",
+  "deployer": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+  "nonce": 2,
+  "launchAdmin": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+  "slug": "e2e-w02",
+  "token": {
+    "name": "E2E Discover",
+    "symbol": "E2ED"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Walkthrough fixture for discovery, the treasury and storage renewal (testnet).",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://tribes.build"
+        }
+      ],
+      "image": "https://tribes.build/images/dao-logo.png"
+    },
+    "rendererBase": "https://tribes.build/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        }
+      ]
+    }
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GCMCXQLZPQIFJYC22VRWDU2ESRPWEQWXGLZOKV6XUVZA6TDZT5ERMAVN",
+      "amount": 2
+    },
+    {
+      "address": "GCXGGFPRL4HRYSE7FZAYSMVQEJALZNJQ3RF4RZWJVRRHTCNJEDAGIVPQ",
+      "amount": 1
+    }
+  ],
+  "launch": {}
+}

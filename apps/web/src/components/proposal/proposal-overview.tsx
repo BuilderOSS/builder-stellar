@@ -104,12 +104,19 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
         subline: hasValidTimestamp(detail.vote_end) ? `Voting closed ${formatDateTime(detail.vote_end)}` : 'Closed.'
       };
     case ProposalState.Canceled:
-      return { label: 'Closed', headline: 'Canceled', subline: 'The proposer withdrew this proposal.' };
+      return { label: 'Closed', headline: 'Cancelled', subline: 'The proposer withdrew this proposal.' };
     case ProposalState.Expired:
+      // The Governor expires a proposal in two ways: passed but never queued (14 days after voting
+      // closed), or queued but never executed (14 days after its execution time). A queued one has an ETA.
       return {
         label: 'Closed',
         headline: 'Expired',
-        subline: 'It passed, but nobody executed it before the deadline.'
+        subline:
+          detail.eta > 0
+            ? 'It was queued, but nobody executed it before the deadline.'
+            : detail.etaSource === 'unavailable'
+              ? 'It passed, but its deadline to be queued or executed has passed.'
+              : 'It passed, but nobody queued it before the deadline.'
       };
     case ProposalState.Executed:
       return {

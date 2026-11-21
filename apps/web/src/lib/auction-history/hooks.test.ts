@@ -14,7 +14,13 @@ vi.mock('@/config/deployments.generated', () => ({ DEPLOYMENT_ID: 'manager:DEPLO
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
-import { auctionQueryKey, fetchAuctionHistory, useAuctionHistory, useBuyerRefund } from './hooks';
+import {
+  AUCTION_HISTORY_REFRESH_MS,
+  auctionQueryKey,
+  fetchAuctionHistory,
+  useAuctionHistory,
+  useBuyerRefund
+} from './hooks';
 
 const config = {
   name: 'testnet',
@@ -97,5 +103,13 @@ describe('buyer query network isolation', () => {
       allowHttp: false
     });
     expect(mocks.pending).toHaveBeenCalledWith({ bidder: 'GONE' });
+  });
+
+  // BUG-W06-4: a settlement confirmed before it was indexed never reached Past auctions without a reload.
+  it('keeps the newest page of past auctions current, and leaves older pages alone', () => {
+    useAuctionHistory(config, 'url', 0);
+    expect(mocks.swr.mock.calls[0][2]).toEqual({ refreshInterval: AUCTION_HISTORY_REFRESH_MS });
+    useAuctionHistory(config, 'url', 1);
+    expect(mocks.swr.mock.calls[1][2]).toEqual({ refreshInterval: 0 });
   });
 });

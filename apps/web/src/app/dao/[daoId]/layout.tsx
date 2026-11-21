@@ -1,10 +1,11 @@
+import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { ProposeActionDialog } from '@/components/proposal/propose-action-dialog';
 import { DaoShell } from '@/components/shell/dao-shell';
 import { DaoProvider } from '@/contexts/dao-context';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
-import { resolveDaoId } from '@/lib/dao-db';
+import { isDaoNotFound, resolveDaoId } from '@/lib/dao-db';
 import { plainSummary } from '@/lib/dao-profile';
 import { SITE_NAME } from '@/lib/site';
 
@@ -37,10 +38,16 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
 
 export default async function DaoLayout({ children, params }: DaoLayoutProps) {
   // The route segment is a token contract id or a slug; everything below uses the canonical id.
-  const daoId = await resolveDaoId((await params).daoId);
-
-  // Load DAO configuration from database
-  const daoConfig = await getDaoNetworkConfigById(daoId);
+  // An id or slug no tribe has is a 404 (BUG-W02-1); a read model that is down stays an error.
+  let daoId: string;
+  let daoConfig: Awaited<ReturnType<typeof getDaoNetworkConfigById>>;
+  try {
+    daoId = await resolveDaoId((await params).daoId);
+    daoConfig = await getDaoNetworkConfigById(daoId);
+  } catch (error) {
+    if (isDaoNotFound(error)) notFound();
+    throw error;
+  }
 
   return (
     <DaoProvider daoId={daoId} daoConfig={daoConfig}>

@@ -1,0 +1,68 @@
+## Overview
+
+Cancelling a listing takes your token off sale and returns it to your wallet, with its vote. If a listing ended without a sale, the market still holds the token until you return it. This guide covers both.
+
+## Before you start
+
+- Connect and sign in with the wallet that listed the token, on the tribe's network. Only the seller can cancel a listing. Testnet is the live network today.
+- Keep a small amount of XLM for the network fee.
+- You can cancel at any time, including while the market is paused.
+
+## Steps
+
+1. **Open Your listings.** Open the tribe's **Market** page. While you are signed in, **Your listings** shows your open listings and the ones that ended without a sale. Each one shows the token, its price and whether it is **For sale** or **Ended**.
+
+   <Shot id="marketplace/cancel/01" alt="The Your listings section with one listing For sale and one marked Ended" />
+
+2. **Choose Cancel listing.** On a listing that is **For sale**, choose **Cancel listing**. You can also choose **Details** on the listing's card, then **Cancel listing**. A dialog called **Cancel your listing** opens. Choose **Check**. The summary says the token comes back to you and no payment is made.
+
+   <Shot id="marketplace/cancel/02" alt="The Cancel your listing dialog with the summary and the network fee" />
+
+3. **Sign and send.** Choose **Sign and send**, then review and sign in your wallet. When it is confirmed, choose **Done**. The listing leaves **Your listings** and **For sale now** at once.
+
+   <Shot id="marketplace/cancel/03" alt="The Market page after the cancellation, with the listing no longer shown" />
+
+### Return a token from an ended listing
+
+A listing that reaches its end time without a sale stops selling, but the token stays with the market. **Your listings** shows "Your listing of token #12 has ended", and the listing is marked **Ended**.
+
+1. **Choose Return my token.** A dialog called **Return the token from an ended listing** opens. Choose **Check**.
+
+   <Shot id="marketplace/cancel/04" alt="The ended listing notice and the Return my token button under Your listings" />
+
+2. **Sign and send.** Sign in your wallet. When it is confirmed, the token is back in your wallet, and you can vote with it or list it again.
+
+   <Shot id="marketplace/cancel/05" alt="The Return the token from an ended listing dialog after confirmation" />
+
+Anyone can return an ended listing's token. Other people see **Return the token to its seller** on the listing. The token always goes back to the seller, never to the person who signs.
+
+To sell at a different price, you don't need to cancel first. Use **Change price**, which cancels and lists again in one guided dialog. See [Sell a token](/guides/marketplace/sell/#change-the-price).
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Cancelling calls `cancel` on the tribe's Marketplace contract with the token and your address. The contract checks that you are the seller, removes the listing, and moves the token back to you. No payment is made, and no resale fee is charged.
+
+  Returning a token from an ended listing calls `expire`. It works only once the end time has passed, and anyone can call it. The contract removes the listing and moves the token to the seller.
+
+  Both calls work while the market is paused. Once the token is back in your wallet, its vote counts for you again (or for your delegate, if you have delegated). Moving the token also ends any permission you gave the market, so listing it again needs a new Allow step.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. Cancellations and returns are public on chain once confirmed. The app's lists read from an index, which can be a few moments behind.
+</Disclosure>
+
+## If something goes wrong
+
+- **There is no Cancel listing button.** Sign in with the wallet that made the listing. A listing still marked **Updating** can be cancelled once the index shows it, usually within a few seconds.
+- **"Only the original seller can cancel this listing."** The connected wallet didn't make this listing. Switch to the seller's wallet.
+- **"This listing is no longer available."** or **"This listing changed or closed."** It sold, was cancelled, or was returned already. Reload the page.
+- **"The listing has not expired yet."** The listing is still for sale. Use **Cancel listing** instead.
+- **"Signing was cancelled. No new transaction was submitted."** You closed or declined the wallet request. Choose **Sign and send** again when you are ready.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Sell a token](/guides/marketplace/sell/)
+- [Buy a token](/guides/marketplace/buy/)
+- [Transfer a token](/guides/members/transfer/)
+- [Votes and delegation](/concepts/votes-and-delegation/)

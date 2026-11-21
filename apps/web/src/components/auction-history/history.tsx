@@ -44,7 +44,7 @@ export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; da
     <Section title="Past auctions">
       {error ? (
         <ErrorState
-          title="Past auctions didn't load"
+          title="Past auctions could not be loaded"
           cause={error.message}
           actions={
             <Button variant="secondary" onClick={() => void mutate()}>
@@ -82,14 +82,14 @@ export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; da
                         item.settledAt ? ` · ${new Date(item.settledAt).toLocaleDateString()}` : ''
                       }`
                     : item.outcome === 'unsold'
-                      ? 'No bids · went to the treasury'
-                      : 'Canceled'
+                      ? 'No bids · token sent to the treasury'
+                      : 'Cancelled'
                 }
                 trailing={
                   item.outcome === 'sold' ? (
                     <Amount value={formatAuctionAmount(item.amount)} unit={asset?.code ?? 'tokens'} />
                   ) : (
-                    <Chip>{item.outcome === 'unsold' ? 'Unsold' : 'Canceled'}</Chip>
+                    <Chip>{item.outcome === 'unsold' ? 'Unsold' : 'Cancelled'}</Chip>
                   )
                 }
               />
@@ -97,7 +97,7 @@ export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; da
           })}
         </div>
       ) : null}
-      {data && !data.items.length ? <p className={note}>No finished auctions here yet.</p> : null}
+      {data && !data.items.length ? <p className={note}>No auctions have finished yet.</p> : null}
       {data?.items.some(
         (item) => item.paymentToken && !getTreasuryAssets(config.name).some((a) => a.contractId === item.paymentToken)
       ) ? (

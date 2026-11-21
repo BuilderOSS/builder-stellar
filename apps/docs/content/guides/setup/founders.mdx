@@ -1,0 +1,66 @@
+## Overview
+
+Founder tokens are the first memberships, minted to the people starting the tribe before it launches. A tribe can't launch with no votes, so you mint at least one founder token. Founder tokens are ordinary voting tokens, the same as any other member's.
+
+## Before you start
+
+- Add the artwork first, so founder tokens get their traits. See [Set up: artwork](/guides/setup/artwork).
+- Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network. Only the launch admin can mint founder tokens, and only before launch.
+- Have each founder's Stellar wallet address ready. It is a public address that starts with G. You can type the addresses, or import a CSV file with an address column and an amount column.
+- Check your voting rules. The votes needed to propose is a number of tokens. If the founders hold fewer tokens than this number, no one can make a proposal until more tokens exist. See [Create a tribe: voting rules](/guides/create/voting).
+
+## Steps
+
+1. In the launch checklist, find step 2, **Mint founder tokens**: "At least one token, so someone can vote once you launch." Select **Mint founder tokens** to open **Founder tokens** in **Manage**.
+
+   <Shot id="setup/founders/01" alt="The launch checklist with artwork done and the Mint founder tokens button on step 2" />
+
+2. Under **Who gets founder tokens**, enter a **Wallet address** and the number of **Tokens** for each founder. Select **Add a founder** for another row. To fill the table from a file, select **Import a CSV**. **Download a sample** shows the format.
+
+   <Shot id="setup/founders/02" alt="The Who gets founder tokens table with two wallet addresses and token amounts" />
+
+3. Check the total at the bottom, for example "3 tokens to 2 wallets". One transaction holds up to 43 tokens for one wallet, or 18 wallets with one token each. If the page says "Too many for one transaction", mint some now and the rest after.
+
+   <Shot id="setup/founders/03" alt="The total line showing the number of tokens and wallets, with the Review button" />
+
+4. Select **Review**. The card changes to **Check before you sign** and lists each wallet and its tokens. To change anything, select **Edit**.
+
+   <Shot id="setup/founders/04" alt="The Check before you sign list with each wallet and its number of tokens" />
+
+   <Callout title="Minting can't be undone" description="Once minted, founder tokens belong to those wallets and carry votes. Check every address and amount before you sign." />
+
+5. Select **Sign and mint**, which shows the number of tokens, and approve it in your wallet. When it confirms, the page shows **Founder tokens minted** with the transaction. To add more founders, select **Mint for more founders**.
+
+   <Shot id="setup/founders/05" alt="The Founder tokens minted message with the transaction and the Mint for more founders button" />
+
+6. Return to the checklist. **Mint founder tokens** is marked done and shows how many tokens are minted. Its button changes to **Mint more**.
+
+   <Shot id="setup/founders/06" alt="The launch checklist with both required steps done" />
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  **Sign and mint** sends one transaction to the tribe's membership token contract. It mints the tokens to each wallet in one batch. As each token is minted, the artwork and profile contract picks its traits from the layers.
+
+  The limit per transaction comes from the network's limit on event data in one transaction. Each token and each wallet adds to it, which is why one transaction holds up to 43 tokens for one wallet or 18 wallets with one token each.
+
+  You pay the Stellar network fee, which your wallet shows before you sign. Once confirmed, anyone can see who holds each token.
+
+  At launch, the factory contract (the Manager) checks that the tribe has at least one vote. Tokens held by the treasury or by a module do not count. After launch, new tokens come from the tribe's modules or from a proposal.
+</Disclosure>
+
+## If something goes wrong
+
+- **"This isn't a Stellar wallet address (G…)."** Check the address. Founder tokens go to wallet addresses that start with G.
+- **"This wallet is already listed above."** Each wallet appears once. Add its tokens to the first row instead.
+- **"Add your artwork first"**. The tribe has no artwork yet. Select **Go to Artwork**. If you continue anyway, you must tick "I understand these tokens will have no traits until someone seeds them."
+- **"A founder mint from this browser hasn't been checked"**. A mint was signed but the page never saw it confirm. Select **Check the saved mint** before minting again, so no one gets tokens twice.
+- **"Connect the launch admin wallet"**. You are signed in with another wallet, or the tribe has launched. After launch, use **Mint tokens** in **Manage**, which works through a proposal.
+- **Some CSV lines were skipped.** The page lists the line numbers and reasons. Fix them in the file and import it again, or add them by hand.
+
+## Related
+
+- [Set up: artwork](/guides/setup/artwork)
+- [Launch your tribe](/guides/setup/launch)
+- [Membership tokens](/concepts/membership-tokens)
+- [Votes and delegation](/concepts/votes-and-delegation)

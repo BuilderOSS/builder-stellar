@@ -1,0 +1,103 @@
+## Overview
+
+Members can sell a membership token they hold on the tribe's market. You choose a price and when the listing ends. The market holds the token until someone buys it, you cancel, or the listing ends. When it sells, you receive the price minus the tribe's resale fee.
+
+## Before you start
+
+- You need a token from this tribe in your wallet. Connect and sign in with that wallet, on the tribe's network. Testnet is the live network today.
+- The tribe must have launched, and its market must be open. The sell options don't appear in a tribe without a market, with its market turned off, or with locked memberships. While the market is paused, or before it opens, the form says "New listings are paused while the market is paused or hasn't opened."
+- Listing usually takes two signatures, so keep a small amount of XLM for two network fees.
+- Prices are in the market's payment asset, XLM or USDC. To sell for USDC, your wallet needs a USDC trustline (a setting that lets your account hold USDC) with room to receive the proceeds. If it doesn't have one, the form shows **Add a USDC trustline**.
+
+## Steps
+
+1. **Open the sell form.** There are four ways in: **Sell** on the **Your token** card of a token's page, **Sell a token** on the **Your membership** card of the tribe's home page, **Sell a token** in the You sheet, or **Sell a token you own** on the tribe's **Market** page. Each one opens the Market page with the form **Sell a token you own** in view. From a token's page, that token is already chosen.
+
+   <Shot id="marketplace/sell/01" alt="The Market page with the Sell a token you own form open below the filters" />
+
+2. **Choose the token and the price.** Choose a token in **Your token**. If you hold many, **More tokens** shows the next page. Enter the **Price** in the market's asset, with up to 7 decimal places. The line under the form shows the **Resale fee** and how much you receive if the token sells.
+
+   <Shot id="marketplace/sell/02" alt="Your token set to Token #3, a price of 50 XLM, and the resale fee line showing what the seller receives" />
+
+3. **Choose when the listing ends.** Under **Listing ends**, choose **1 day**, **7 days** or **30 days** from now, or **Custom** to pick a date and time. **7 days** is chosen by default. The line beneath shows the exact end in your time zone, for example "Ends Wednesday 26 November 2026 at 14:05, your time."
+
+   <Shot id="marketplace/sell/03" alt="The Listing ends control with 7 days chosen and the exact end date shown beneath" />
+
+4. **Read the vote warning.** While the market holds your token, its vote pauses. The form says so before you list: **Its vote pauses while it is listed**, or **This is your last token in this tribe** if it is your only one. The vote comes back to you, or to your delegate, if you cancel or the listing ends. It goes to the buyer if the token sells. Tribes whose votes come from another source don't show this warning.
+
+   <Shot id="marketplace/sell/04" alt="The warning This is your last token in this tribe, explaining that the token's vote pauses while it is listed" />
+
+5. **Choose List for sale.** A dialog called **List your token for sale** opens. It shows two steps: **Allow the market to hold your token**, then **List for sale**. Choose **Check**. The app first checks whether the market already has your permission for this token. If you allowed it in about the last hour, the first step is marked **(already allowed)** and the dialog moves to the List step.
+
+   <Shot id="marketplace/sell/05" alt="The List your token for sale dialog with its two steps and the Check button" />
+
+6. **Sign the Allow step.** The dialog shows what the transaction does and its network fee. This permission covers only this token, lasts about 1 hour, and doesn't list or move anything. Choose **Sign and send**, then review and sign in your wallet. When it is confirmed, the dialog says "Step 1 is confirmed. Next: list for sale." and checks the next step.
+
+   <Shot id="marketplace/sell/06" alt="The Allow step prepared, with its summary, the network fee and the Sign and send button" />
+
+7. **Sign the List step.** The summary states the price, the resale fee, what you receive, and that the token's vote pauses while it is listed. Choose **Sign and send** and sign in your wallet. When it is confirmed, the dialog says "All steps are confirmed." Choose **Done**.
+
+   <Shot id="marketplace/sell/07" alt="The dialog after both steps are confirmed, with the Done button" />
+
+8. **Find your listing.** It appears at once under **Your listings**, and at the top of **For sale now**, marked **Updating** until the market's index has it. This usually takes a few seconds. It then shows **For sale** and its end date.
+
+   <Shot id="marketplace/sell/08" alt="The Your listings section with the new listing marked Updating" />
+
+### Change the price
+
+A listing's price can't be edited. To change it, the app cancels the listing and lists the token again.
+
+1. **Choose Change price.** Under **Your listings**, choose **Change price** on the listing. Enter the **New price**, choose when the new listing ends, then choose **Continue**.
+
+   <Shot id="marketplace/sell/09" alt="The Change the price dialog with the current price, the New price field and the Listing ends control" />
+
+2. **Sign each step.** The **Change the price** dialog has up to three steps: **Cancel the current listing**, **Allow the market to hold your token**, then **List for sale**. The token comes back to you first, because a token can have only one listing at a time. Moving the token ends the earlier permission, so the Allow step is usually needed again.
+
+   <Shot id="marketplace/sell/10" alt="The Change the price dialog showing three steps, with the cancel step in progress" />
+
+If you choose **Stop here** after the cancel step, the token stays in your wallet and is not listed. List it again from the sell form when you are ready. **Change price** is not available while the market is paused, but **Cancel listing** is.
+
+### Remove the market's permission
+
+If you allowed the market and then decide not to list, choose **Remove the market's permission** in the sell form. The button appears once a token is chosen. The permission also ends by itself after about 1 hour.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  **Allow** calls `approve` on the tribe's Token contract. It names the Marketplace contract as the spender for this one token, with an expiry about 720 ledgers ahead (about 1 hour, at one ledger every 5 seconds). Before each step, the app reads `get_approved` and `is_approved_for_all` to see whether a permission is still live, and skips Allow when it is.
+
+  **List** calls `list` on the tribe's Marketplace contract with the token, the price, the end time, and the resale fee and payment asset you reviewed. The contract refuses the listing if the market hasn't launched or is paused, the price isn't above zero, the end time has passed, the token already has a listing, or you no longer hold the token. It also refuses it if the tribe raised the fee or changed the asset after you reviewed them, so a change can't apply to you without your consent. The contract then moves the token into its own care with `transfer_from`.
+
+  The fee and asset in force are stored with the listing. A later change by the tribe doesn't affect a listing that is already open.
+
+  While the Marketplace contract holds the token, it carries no vote and doesn't count towards [quorum](/reference/glossary#quorum). The vote comes back when the token returns to you.
+
+  When the token sells, the buyer pays the price in the listing's asset. In the same transaction, the resale fee goes to the tribe's [Treasury](/reference/glossary#treasury), the rest goes to you, and the token goes to the buyer. The fee is a percentage of the price, at most 25%, rounded down to the smallest unit of the asset. The tribe sets it by vote.
+
+  Each signature pays a Stellar network fee in XLM. Tribe Builder takes no fee. Listings, prices and sales are public on chain as soon as they are confirmed. The app's lists read from an index, which can be a few moments behind.
+</Disclosure>
+
+## If something goes wrong
+
+- **There is no Sell button.** The tribe has no market, its market is turned off, it hasn't launched, or its memberships are locked. In a tribe with locked memberships, tokens can't be listed by members.
+- **"No tokens found."** A token you received recently can take a few seconds to appear. Reload the page. A token you have already listed is held by the market, so it isn't in this list.
+- **"Your permission expired. Allow the market again."** More than about an hour passed between the two steps. The dialog goes back to the Allow step. Sign it again, then sign List.
+- **"We couldn't check the market's permission for your token. Try again."** Choose **Check** again.
+- **"The resale fee increased since you reviewed it."** or **"The marketplace payment asset changed since you reviewed it."** The tribe changed the market's terms. Nothing was listed. Reload the page, review the new terms and list again.
+- **"This token already has a listing."** Reload the Market page. The listing appears under **Your listings**.
+- **"Memberships in this tribe are locked, so tokens cannot be listed for sale."** Members voted to lock memberships. Selling is not available while they are locked.
+- **"Your USDC trustline has insufficient capacity to receive these sale proceeds."** Raise your trustline's limit in your wallet, then list again.
+- **"Signing was cancelled. No new transaction was submitted."** You closed or declined the wallet request. Choose **Sign and send** again when you are ready.
+- **You stopped after the Allow step.** Nothing is listed, and your token stays in your wallet. Choose **List for sale** again. If the permission is still live, the Allow step is skipped.
+- **The listing stays Updating.** The listing is confirmed but the index hasn't caught up. If it hasn't appeared after a few minutes, reload the page and check the transaction from the dialog.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Cancel a listing](/guides/marketplace/cancel/)
+- [Buy a token](/guides/marketplace/buy/)
+- [Manage: marketplace](/guides/manage/marketplace/)
+- [Approvals](/guides/members/approvals/)
+- [Membership tokens](/concepts/membership-tokens/)
+- [Votes and delegation](/concepts/votes-and-delegation/)

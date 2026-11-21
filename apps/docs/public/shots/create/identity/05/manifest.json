@@ -1,0 +1,62 @@
+{
+  "id": "create/identity/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815386,
+  "capturedAt": "2026-11-19T15:02:50.926Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the tribe image preview",
+      "box": {
+        "desktop": {
+          "x": 0.5806,
+          "y": 0.305,
+          "w": 0.0944,
+          "h": 0.1511
+        },
+        "mobile": {
+          "x": 0.616,
+          "y": 0.3192,
+          "w": 0.2987,
+          "h": 0.1379
+        }
+      }
+    },
+    {
+      "n": 2,
+      "label": "the Upload image button",
+      "box": {
+        "desktop": {
+          "x": 0.5806,
+          "y": 0.4783,
+          "w": 0.0944,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.616,
+          "y": 0.4817,
+          "w": 0.3545,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

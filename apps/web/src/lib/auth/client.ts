@@ -83,3 +83,20 @@ export function isSep53UnsupportedError(error: unknown) {
   if (/(reject|denied|declined|cancel)/.test(message)) return false;
   return code === -3 || /(unsupported|not supported|not implemented|method not found|signmessage)/.test(message);
 }
+
+export const WALLET_DECLINED_MESSAGE = "You declined the request in your wallet, so you're not signed in.";
+
+/**
+ * The sign-in error to show. Stellar Wallets Kit modules reject with plain `{ code, message }`
+ * objects, not `Error`s, so reading only `Error#message` dropped every wallet's reason
+ * (docs/qa/BUG_LEDGER.md BUG-003). A refusal (SEP-43 code -4, or a "rejected"/"declined" message)
+ * gets plain words instead of the wallet's own.
+ */
+export function walletErrorMessage(error: unknown, fallback = 'Wallet sign-in failed.') {
+  const candidate = error as { code?: number; message?: unknown; error?: { code?: number; message?: unknown } } | null;
+  const raw = candidate?.message ?? candidate?.error?.message;
+  const message = typeof raw === 'string' ? raw.trim() : '';
+  const code = candidate?.code ?? candidate?.error?.code;
+  if (code === -4 || /(reject|denied|declined|cancel)/i.test(message)) return WALLET_DECLINED_MESSAGE;
+  return message || fallback;
+}

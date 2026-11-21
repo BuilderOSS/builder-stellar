@@ -1,0 +1,44 @@
+{
+  "id": "auctions/settings/03",
+  "appCommit": "bccf91b",
+  "ledger": 5819351,
+  "capturedAt": "2026-11-19T20:33:17.710Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Resume auctions choice",
+      "box": {
+        "desktop": {
+          "x": 0.3444,
+          "y": 0.5564,
+          "w": 0.2611,
+          "h": 0.0697
+        },
+        "mobile": {
+          "x": 0.096,
+          "y": 0.4611,
+          "w": 0.808,
+          "h": 0.0772
+        }
+      }
+    }
+  ]
+}

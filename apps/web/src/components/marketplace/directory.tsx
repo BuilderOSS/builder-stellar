@@ -96,6 +96,7 @@ export function MarketplaceDirectoryView() {
   return (
     <div className={styles.root}>
       <PageSection
+        guide="guides/marketplace/buy"
         title="Market"
         description="Buy a new token to support a tribe's treasury, or trade with another member."
       >
@@ -256,7 +257,7 @@ export function MarketplaceDirectoryView() {
               ) : undefined
             }
           >
-            Tokens show up once a tribe lists new ones by vote, or a member puts one up for sale.
+            Tokens appear here when a tribe votes to sell new ones, or when a member lists one for sale.
           </EmptyState>
         ) : null}
 
@@ -270,8 +271,8 @@ export function MarketplaceDirectoryView() {
           disabled={result.isLoading}
         />
         <p className={note}>
-          Only tribes with something to buy right now show here. Saved tribes and your market view stay on this device.
-          Every trade checks the live chain before you sign, so a listing shown here may already be gone.{' '}
+          Only tribes with tokens for sale now appear here. Saved tribes and your market view stay on this device. Every
+          trade checks the live chain before you sign, so a listing shown here may already be gone.{' '}
           <NextLink href="/discover" className={css({ color: 'signal' })}>
             Discover tribes
           </NextLink>

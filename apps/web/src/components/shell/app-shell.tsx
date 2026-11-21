@@ -12,8 +12,9 @@ import { useDashboardData } from '@/lib/goldsky-queries';
 import { SITE_NAME } from '@/lib/site';
 
 import { BrandLockup } from './brand-mark';
-import { NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
+import { GUIDES_NAV_ITEM, NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
+import { ThemeMenu } from './theme-menu';
 import { WalletButton } from './wallet-button';
 import { useWalletSession } from './wallet-session';
 import { YouSheet } from './you-sheet';
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           label={SITE_NAME}
           items={GLOBAL_NAV}
           activeKey={active}
+          footerItems={[GUIDES_NAV_ITEM]}
           action={{ label: 'Build a tribe', href: '/create', icon: Plus }}
           communities={communities}
           communitiesHref="/#your-tribes"
@@ -58,7 +60,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <BrandLockup />
         </NextLink>
       }
-      topEnd={<WalletButton onOpenYou={() => setYouOpen(true)} />}
+      topEnd={
+        <>
+          <ThemeMenu />
+          <WalletButton onOpenYou={() => setYouOpen(true)} />
+        </>
+      }
       tabBar={
         <TabBar
           label={SITE_NAME}

@@ -25,7 +25,9 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useDirectoryMembers } from '@/lib/member-directory/hooks';
+import { systemHolderName } from '@/lib/member-directory/system-holders';
 import { memberAddress } from '@/lib/member-directory/validation';
+import { useVoteSource } from '@/lib/vote-source';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const finder = css({
@@ -53,21 +55,25 @@ export default function MembersPage() {
 function MemberDirectory({ daoId }: { daoId: string }) {
   const { daoConfig, routeId } = useDaoContext();
   const viewer = useAuthSessionStore((state) => state.address);
-  // Tokens held by these DAO contracts carry no votes and never delegate.
-  const systemHolders: Record<string, string> = {
-    [daoConfig.treasuryContractId]: 'Treasury',
-    [daoConfig.auctionContractId]: 'Auction',
-    [daoConfig.marketplaceContractId]: 'Marketplace'
-  };
   const [page, setPage] = useState(0);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState('');
   const [lookup, setLookup] = useState('');
   const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page, order);
+  // A tribe voting through another source: the directory's token votes and delegation don't apply.
+  const custom = useVoteSource(daoConfig).voteSource?.isToken === false;
 
   return (
-    <PageSection title="Members" daoNote="Each membership is an NFT with one vote.">
+    <PageSection
+      guide="guides/members/find"
+      title="Members"
+      daoNote={
+        custom
+          ? "Each membership is an NFT. Votes come from the tribe's vote source."
+          : 'Each membership is an NFT with one vote.'
+      }
+    >
       <form
         className={finder}
         onSubmit={(event) => {
@@ -173,11 +179,11 @@ function MemberDirectory({ daoId }: { daoId: string }) {
           {data.items.length ? (
             <ul className={css({ listStyle: 'none', m: '0', p: '0' })}>
               {data.items.map((member) => {
-                const system = systemHolders[member.address];
+                const system = systemHolderName(daoConfig, member.address);
                 const isViewer = Boolean(viewer && viewer === member.address);
                 const delegation = system
                   ? 'Held by the tribe, no votes'
-                  : !member.delegated_to
+                  : custom || !member.delegated_to
                     ? ''
                     : member.delegated_to === member.address
                       ? ''
@@ -200,9 +206,11 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                           {formatCount(member.owned_token_count)}{' '}
                           {member.owned_token_count === '1' ? 'token' : 'tokens'}
                         </Chip>
-                        <Chip tone="outline">
-                          {formatCount(member.voting_power)} {member.voting_power === '1' ? 'vote' : 'votes'}
-                        </Chip>
+                        {custom ? null : (
+                          <Chip tone="outline">
+                            {formatCount(member.voting_power)} {member.voting_power === '1' ? 'vote' : 'votes'}
+                          </Chip>
+                        )}
                       </span>
                     }
                   />

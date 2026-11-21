@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as GovernorClient, GovernorError } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { BookOpen, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,7 @@ import {
   Section,
   Skeleton
 } from '@/components/ui';
+import { UnconfirmedTransaction } from '@/components/unconfirmed-transaction';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
@@ -41,7 +42,7 @@ import { reviewGapText, reviewReadiness } from '@/lib/proposal-actions/review-re
 import { useSettingValues } from '@/lib/proposal-actions/use-setting-values';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { proposalIdToRouteId } from '@/lib/proposal-id';
+import { simulatedProposalId } from '@/lib/proposal-id';
 import {
   encodeProposalMetadata,
   PROPOSAL_DESCRIPTION_MAX_BYTES,
@@ -50,7 +51,7 @@ import {
 } from '@/lib/proposal-metadata';
 import { markRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
-import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { isConfirmationUnknown, waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -71,23 +72,30 @@ const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
-const suggestion = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2' });
+// A suggested title can hold an address; let it wrap anywhere so it can't widen the page on phones (BUG-W02-7).
+const suggestion = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '2',
+  minW: '0',
+  '& > *': { minW: '0', overflowWrap: 'anywhere' }
+});
 const wideOnly = css({ display: { base: 'none', md: 'block' } });
 const gap = css({ textStyle: 'caption', color: 'ink.muted', m: '0', textAlign: { md: 'right' } });
-const referenceTrigger = css({
-  display: { base: 'inline-flex', lg: 'none' },
-  position: 'fixed',
-  zIndex: 'bar',
-  right: '4',
-  bottom: 'calc(token(sizes.tabbar) + env(safe-area-inset-bottom) + 16px)',
-  boxShadow: 'float'
-});
+// Below lg the reference rail opens as a sheet. On the review step its trigger sits in the action
+// row: a floating one covered Submit proposal at tablet width (BUG-W07-3).
+const reviewEnd = css({ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '2' });
+const referenceInline = css({ lg: { display: 'none' } });
 
 export default function ProposalCreatePage() {
   const { daoId, routeId } = useDaoContext();
   const router = useRouter();
   const [openingProposal, setOpeningProposal] = useState(false);
   const [confirmedProposalHref, setConfirmedProposalHref] = useState<ReturnType<typeof daoRoute> | null>(null);
+  // Sent, but not confirmed within the wait: a recovery state, not a failure. The draft is kept.
+  const [unconfirmed, setUnconfirmed] = useState<{ hash: string; proposalId: string } | null>(null);
+  const [checkingUnconfirmed, setCheckingUnconfirmed] = useState(false);
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
@@ -150,9 +158,43 @@ export default function ProposalCreatePage() {
     setConfirmDialogOpen(true);
   };
 
+  /** The proposal is confirmed: clear the draft and open it. */
+  const openConfirmedProposal = (proposalId: string, hash: string) => {
+    const href = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
+    setConfirmedProposalHref(href);
+    txFeedback.success('Proposal created', hash);
+    // Keep a loading surface mounted while clearing the draft and navigating.
+    setOpeningProposal(true);
+    if (proposalId) markRecentProposal(daoId, proposalId);
+    reset(session.address, daoId);
+    router.push(href);
+    return href;
+  };
+
+  const checkUnconfirmed = async () => {
+    if (!unconfirmed || checkingUnconfirmed) return;
+    const sent = unconfirmed;
+    setCheckingUnconfirmed(true);
+    try {
+      await waitForConfirmation(sent.hash, config.rpcUrl, { timeout: 15_000 });
+      setUnconfirmed(null);
+      openConfirmedProposal(sent.proposalId, sent.hash);
+    } catch (err) {
+      if (isConfirmationUnknown(err)) txFeedback.unconfirmed(sent.hash);
+      else {
+        setUnconfirmed(null);
+        setOpeningProposal(false);
+        txFeedback.fail(err, 'Proposal failed', 'governor');
+      }
+    } finally {
+      setCheckingUnconfirmed(false);
+    }
+  };
+
   const handleConfirmSubmit = async () => {
     if (!session.address) return;
     let confirmedHref: ReturnType<typeof daoRoute> | null = null;
+    let submitted: { hash: string; proposalId: string } | null = null;
 
     try {
       setTransactionBusy(true);
@@ -207,24 +249,22 @@ export default function ProposalCreatePage() {
         proposer: session.address
       });
 
-      const proposalId = assembled.result ? proposalIdToRouteId(assembled.result) : '';
+      // A proposal the Governor would refuse (already exists, too few votes) fails here, before signing.
+      const proposalId = simulatedProposalId(assembled.result, GovernorError);
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
       txFeedback.submitted('Proposal sent', hash);
+      submitted = { hash, proposalId };
       await waitForConfirmation(hash, config.rpcUrl);
-
-      confirmedHref = proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals');
-      setConfirmedProposalHref(confirmedHref);
-      txFeedback.success('Proposal created', hash);
-
-      // Keep a loading surface mounted while clearing the draft and navigating.
-      setOpeningProposal(true);
-      if (proposalId) markRecentProposal(daoId, proposalId);
-      reset(session.address, daoId);
-      router.push(confirmedHref);
+      confirmedHref = openConfirmedProposal(proposalId, hash);
     } catch (err: any) {
       setOpeningProposal(false);
+      if (submitted && !confirmedHref && isConfirmationUnknown(err)) {
+        setUnconfirmed(submitted);
+        txFeedback.unconfirmed(submitted.hash);
+        return;
+      }
       console.error('Proposal creation error:', err);
       if (!confirmedHref) txFeedback.fail(err, 'Proposal failed', 'governor');
     } finally {
@@ -244,6 +284,28 @@ export default function ProposalCreatePage() {
         <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
         <p>Your proposal is confirmed. Loading its details…</p>
         {confirmedProposalHref ? <ButtonLink href={confirmedProposalHref}>Open proposal</ButtonLink> : null}
+      </div>
+    );
+
+  if (unconfirmed)
+    return (
+      <div className={stack}>
+        <PageHeader title="Your proposal was sent" />
+        <UnconfirmedTransaction
+          network={config.name}
+          pending={{ hash: unconfirmed.hash, subject: 'Your proposal' }}
+          checking={checkingUnconfirmed}
+          onCheck={() => void checkUnconfirmed()}
+        />
+        <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>
+          Your draft is kept on this browser until the proposal is confirmed. Don&apos;t submit it again before you
+          check: the same proposal can only be created once.
+        </p>
+        <div>
+          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost">
+            All proposals
+          </ButtonLink>
+        </div>
       </div>
     );
 
@@ -287,8 +349,9 @@ export default function ProposalCreatePage() {
             }}
           />
           <PageHeader
+            guide="guides/proposals/write"
             title={hasDraft ? 'Your proposal' : 'New proposal'}
-            meta="Say why, add the actions, then sign. Actions you add from Manage, Treasury or Claims land here too. Drafts save on this browser."
+            meta="Explain the reason, add the actions, then sign. Actions you add from Manage, Treasury or Claims are added here too. Drafts are saved on this browser."
           />
           <div className={stack}>
             {session.address && eligibility.loading ? (
@@ -337,7 +400,7 @@ export default function ProposalCreatePage() {
                         required
                         value={metadata.title}
                         onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
-                        placeholder={suggestedTitle || 'Fund the winter tool library'}
+                        placeholder={suggestedTitle || 'Fund a shared tool library'}
                       />
                       {suggestedTitle && metadata.title.trim() !== suggestedTitle ? (
                         <div className={suggestion}>
@@ -368,8 +431,16 @@ export default function ProposalCreatePage() {
                         id="description-budget"
                         tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
                       >
-                        Required. Up to {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes (
-                        {descriptionBytes.toLocaleString()} used).
+                        {/* The budget covers the title and links too, plus fixed framing, so a count on an
+                            empty box read "46 used". The count shows only once it matters. */}
+                        Required. The title, the reason and the links share{' '}
+                        {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
+                        {descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES
+                          ? ` (${(descriptionBytes - PROPOSAL_DESCRIPTION_MAX_BYTES).toLocaleString()} over)`
+                          : descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES * 0.75
+                            ? ` (${(PROPOSAL_DESCRIPTION_MAX_BYTES - descriptionBytes).toLocaleString()} left)`
+                            : ''}
+                        .
                       </FieldHelperText>
                       {queuedActions.length && whatItDoes !== metadata.description ? (
                         <div>
@@ -500,18 +571,30 @@ export default function ProposalCreatePage() {
                       <Button variant="ghost" onClick={() => setStep(session.address, daoId, 1)}>
                         Back
                       </Button>
-                      <Button
-                        onClick={handleOpenConfirmDialog}
-                        disabled={
-                          proposalCreationLocked ||
-                          hasBlockingDraftFindings ||
-                          Boolean(actionCountError) ||
-                          !metadataValidation.valid
-                        }
-                        loading={transactionBusy}
-                      >
-                        {transactionBusy ? 'Submitting' : 'Submit proposal'}
-                      </Button>
+                      <div className={reviewEnd}>
+                        <Button
+                          variant="secondary"
+                          className={referenceInline}
+                          onClick={() => setContextRailOpen(true)}
+                          ref={contextTriggerRef}
+                          aria-haspopup="dialog"
+                        >
+                          <BookOpen aria-hidden="true" />
+                          Reference
+                        </Button>
+                        <Button
+                          onClick={handleOpenConfirmDialog}
+                          disabled={
+                            proposalCreationLocked ||
+                            hasBlockingDraftFindings ||
+                            Boolean(actionCountError) ||
+                            !metadataValidation.valid
+                          }
+                          loading={transactionBusy}
+                        >
+                          {transactionBusy ? 'Submitting' : 'Submit proposal'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -527,18 +610,6 @@ export default function ProposalCreatePage() {
           mobileTriggerRef={contextTriggerRef}
         />
       </div>
-      {step === 1 ? null : (
-        <Button
-          variant="secondary"
-          className={referenceTrigger}
-          onClick={() => setContextRailOpen(true)}
-          ref={contextTriggerRef}
-          aria-haspopup="dialog"
-        >
-          <BookOpen aria-hidden="true" />
-          Reference
-        </Button>
-      )}
 
       <ProposalActionConfirmDialog
         open={confirmDialogOpen}

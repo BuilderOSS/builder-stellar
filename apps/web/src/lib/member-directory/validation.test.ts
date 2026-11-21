@@ -2,13 +2,18 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { directoryKey } from './hooks';
-import { holderTokenId, memberAddress, memberPagination, memberSort } from './validation';
+import { holderTokenId, memberAddress, memberPagination, memberRank, memberSort } from './validation';
 
 describe('directory inputs and cache scope', () => {
   it('accepts only the two supported sort directions', () => {
     expect(memberSort(new URLSearchParams())).toBe('desc');
     expect(memberSort(new URLSearchParams({ order: 'asc' }))).toBe('asc');
     expect(() => memberSort(new URLSearchParams({ order: 'invalid' }))).toThrow();
+  });
+  it('ranks by votes unless asked to rank by tokens owned', () => {
+    expect(memberRank(new URLSearchParams())).toBe('votes');
+    expect(memberRank(new URLSearchParams({ by: 'tokens' }))).toBe('tokens');
+    expect(() => memberRank(new URLSearchParams({ by: 'stake' }))).toThrow();
   });
   it('keeps deployment, DAO, address and pagination in query keys', () => {
     const a = directoryKey('dao-a', 'profile', 'address-a');

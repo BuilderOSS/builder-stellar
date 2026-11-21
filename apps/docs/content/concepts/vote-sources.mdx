@@ -1,0 +1,55 @@
+A vote source decides how much voting power each member has. Most tribes count one vote for each membership token. A tribe can instead use another way of counting, if the platform has approved it. Either way, memberships still come from the tribe's own token.
+
+For crypto natives: the Governor reads voting weights from a vote source contract. By default that is the tribe's Token (token-weighted voting). It can instead be an adapter that the Manager has approved.
+
+## Token-weighted (the default)
+
+One membership, one vote. Members can [delegate](/reference/glossary#delegate) their votes to someone else and keep their tokens. This is how most tribes work, and it is what the create flow selects unless you choose otherwise.
+
+## Approved vote sources
+
+An approved vote source is a separate contract that reports each member's voting power. It could, for example, give weight for reputation or participation instead of for tokens held.
+
+The platform keeps a list of approved sources. A tribe can only be created with a source on that list. In the create flow, approved sources appear under Advanced settings on the Voting step. If none are approved, nothing extra is shown. The test source in the repository is meant for testnet only, never for mainnet.
+
+When a tribe uses a source other than its token:
+
+- Voting power can include fractions. The app shows it with the source's own number of decimal places.
+- The proposal threshold is set in whole votes, and the app converts it to the source's units.
+- Token delegation is hidden, because the source decides voting power itself.
+
+The platform's stated policy is to approve only a source where no single party can rewrite weights, where any upgrade is controlled by the platform or by the tribe itself, and where it is known who keeps its storage alive.
+
+## Neural Quorum Governance (planned)
+
+Neural Quorum Governance (NQG) combines several measures of a member's standing into one voting weight. The create flow shows it as an option, disabled, with "Coming once NQG is available on Stellar." It can't be chosen yet.
+
+## Why a vote source can't change
+
+The vote source is fixed when the tribe is created. It can't be changed later, even by a vote. When you choose an approved source, the create flow warns: "This contract decides every member's voting power."
+
+There are three reasons:
+
+- A majority could switch to a source that gives it permanent control. Members would then lose the chance to leave before a harmful proposal runs.
+- Open proposals were counted with the old source. Switching while they are open would make their results inconsistent.
+- A source is read on every proposal and every vote. A broken source could stop the tribe from passing anything, including a fix.
+
+A tribe that needs a different vote source creates a new tribe.
+
+## What approval does and doesn't cover
+
+Approval names one contract address. Before launch, the launch checks again that the source is still approved and reports at least one vote. If the platform withdraws approval first, the tribe can't launch, and a launch drive ends in refunds. A tribe that has already launched keeps its source.
+
+Approval is a review of an address, not a guarantee about the contract's behaviour.
+
+## Where to see it
+
+Manage → Voting rules has a card, "How votes are counted", marked "Fixed at creation". For a token-weighted tribe it reads "Token-weighted: each membership is one vote, and members can delegate their votes."
+
+## Related
+
+- [Votes and delegation](/concepts/votes-and-delegation)
+- [Create a tribe: voting rules](/guides/create/voting)
+- [Manage: governance](/guides/manage/governance)
+- [Proposals](/concepts/proposals)
+- [Safety and security model](/concepts/safety-and-security)

@@ -16,7 +16,8 @@ import {
   actionAvailability,
   actionHome,
   pickerEntries,
-  TRIBE_PARTS
+  TRIBE_PARTS,
+  valuesAfterDraft
 } from '@/lib/proposal-actions/catalog';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
@@ -141,7 +142,11 @@ export function ActionPickerSheet({
   const editingState = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.editingState ?? null);
   const beginCreate = useProposalComposerStore((s) => s.beginCreate);
   const cancelEdit = useProposalComposerStore((s) => s.cancelEdit);
+  const queued = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.queuedActions);
   const [query, setQuery] = useState('');
+  // What can be added next depends on what the draft already does (pause, then resume), not only on
+  // the live settings; "Now:" still shows the live value.
+  const afterDraft = useMemo(() => valuesAfterDraft(values, queued ?? []), [values, queued]);
 
   const entries = useMemo(() => pickerEntries(), []);
   const elsewhereIntents = useMemo(
@@ -160,7 +165,8 @@ export function ActionPickerSheet({
   const advanced = shown.filter((entry) => entry.meta.section === 'advanced');
 
   function pick(type: ProposalActionType) {
-    const draft = ACTION_CATALOG[type].currentValue?.(values)?.draft;
+    // A switch starts from the opposite of what it will be by then: on, off, on again.
+    const draft = ACTION_CATALOG[type].currentValue?.(afterDraft)?.draft;
     beginCreate(address, daoId, type, draft);
   }
 
@@ -174,7 +180,7 @@ export function ActionPickerSheet({
   }
 
   function settingRow(entry: Entry) {
-    const availability = actionAvailability(entry.handler.type, config, values);
+    const availability = actionAvailability(entry.handler.type, config, afterDraft);
     const current = entry.meta.currentValue?.(values);
     return (
       <li key={entry.handler.type}>
@@ -229,11 +235,11 @@ export function ActionPickerSheet({
           {intentEntries.length || shownElsewhere.length ? (
             <section className={group} aria-labelledby="picker-intents">
               <h3 id="picker-intents" className={groupTitle}>
-                Do something
+                Choose what to do
               </h3>
               <div className={intents}>
                 {intentEntries.map((entry) => {
-                  const availability = actionAvailability(entry.handler.type, config, values);
+                  const availability = actionAvailability(entry.handler.type, config, afterDraft);
                   return (
                     <button
                       key={entry.handler.type}
@@ -251,7 +257,7 @@ export function ActionPickerSheet({
                 })}
                 {shownElsewhere.map((entry) => {
                   const home = actionHome(entry.handler.type);
-                  const availability = actionAvailability(entry.handler.type, config, values);
+                  const availability = actionAvailability(entry.handler.type, config, afterDraft);
                   return availability.available ? (
                     <Link key={entry.handler.type} className={tile} href={daoRoute(routeId, home.href)}>
                       <span className={tileTitle}>{entry.meta.intent}</span>
@@ -282,7 +288,7 @@ export function ActionPickerSheet({
           ) : null}
 
           {!intentEntries.length && !shownElsewhere.length && !parts.length && !advanced.length ? (
-            <p className={empty}>No action matches “{query.trim()}”. Try a plainer word, like “pay” or “quorum”.</p>
+            <p className={empty}>No action matches “{query.trim()}”. Try another word, such as “pay” or “quorum”.</p>
           ) : null}
         </div>
       ) : (

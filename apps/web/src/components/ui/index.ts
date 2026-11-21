@@ -19,6 +19,7 @@ export { DurationInput } from './duration-input';
 export * from './expandable-list';
 export { FallbackImage } from './FallbackImage';
 export { Field, FieldError, FieldHelperText, FieldLabel } from './field';
+export { GuideLink } from './guide-link';
 export * from './help-tip';
 export { IconLinkButton } from './icon-link-button';
 export { Input } from './input';

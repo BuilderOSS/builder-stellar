@@ -8,7 +8,9 @@ import type { ClaimListView, ClaimState } from '@/lib/minter/types';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const state = vi.hoisted(() => ({
   claims: undefined as unknown,
-  config: {} as Record<string, unknown>
+  history: undefined as unknown,
+  config: {} as Record<string, unknown>,
+  canManage: false
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -30,12 +32,13 @@ vi.mock('@/stores/auth-session-store', () => ({
 vi.mock('@/lib/minter/hooks', () => ({
   claimFetch: vi.fn(),
   useCurrentClaims: () => ({ data: state.claims, isLoading: false, error: undefined, mutate: vi.fn() }),
-  useClaimHistory: () => ({ data: undefined, isLoading: false, error: undefined, mutate: vi.fn() })
+  useClaimHistory: () => ({ data: state.history, isLoading: false, error: undefined, mutate: vi.fn() })
 }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
 vi.mock('./allocation-draft', () => ({ ClaimListDraftForm: () => null }));
+vi.mock('@/hooks/use-dao-membership', () => ({ useDaoMembership: () => ({ canManage: state.canManage }) }));
 
 import { Claims } from './claims';
 
@@ -102,5 +105,63 @@ describe('Claims on a failed launch drive', () => {
     state.config = { ...state.config, assuranceDeadline: deadline };
     state.claims = claimsState([{ ...baseList, assurance: null }]);
     expect(render()).not.toContain('Free the link');
+  });
+});
+
+describe('Claims, the way to manage lists', () => {
+  beforeEach(() => {
+    state.claims = claimsState([{ ...baseList, assurance: null }]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, status: 'operational' };
+    state.canManage = false;
+  });
+
+  it('is hidden from visitors who cannot manage', () => {
+    const html = render();
+    expect(html).not.toContain('Manage claim lists');
+    expect(html).not.toContain('Propose a claim list');
+  });
+
+  it('is a proposal for members once the tribe is live', () => {
+    state.canManage = true;
+    const html = render();
+    expect(html).toContain('Propose a claim list');
+    expect(html).toContain('href="/dao/lantern-club/admin/claims"');
+  });
+
+  it('is direct management for the launch admin in Setup', () => {
+    state.canManage = true;
+    state.config = { ...state.config, status: 'pending' };
+    expect(render()).toContain('Manage claim lists');
+  });
+
+  it('always offers the member view from the manage view', () => {
+    expect(render(true)).toContain('See the member view');
+  });
+});
+
+describe('Past claims', () => {
+  beforeEach(() => {
+    state.claims = claimsState([]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, rpcUrl: 'https://rpc.test' };
+  });
+  afterAll(() => {
+    state.history = undefined;
+  });
+
+  // BUG-W06-3: a one-token claim read "1 tokens from Claim list 1".
+  it('counts one token in the singular', () => {
+    const row = { list_id: 0, recipient: null, transaction_hash: null, paid: null, escrowed: false };
+    state.history = {
+      total: 2,
+      hasMore: false,
+      items: [
+        { ...row, claim_id: 'a', amount: '1' },
+        { ...row, claim_id: 'b', amount: '3' }
+      ]
+    };
+    const html = render();
+    expect(html).toContain('1 token from Claim list 1');
+    expect(html).toContain('3 tokens from Claim list 1');
+    expect(html).not.toContain('1 tokens');
   });
 });

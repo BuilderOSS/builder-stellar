@@ -1,0 +1,44 @@
+{
+  "id": "start/build-your-first-tribe/04",
+  "appCommit": "bccf91b",
+  "ledger": 5815533,
+  "capturedAt": "2026-11-19T15:15:10.177Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the New proposal button",
+      "box": {
+        "desktop": {
+          "x": 0.7795,
+          "y": 0.0933,
+          "w": 0.1066,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0533,
+          "y": 0.8424,
+          "w": 0.8933,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

@@ -24,6 +24,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
+import { systemHolderName } from '@/lib/member-directory/system-holders';
 import { getActionMeta } from '@/lib/proposal-actions/catalog';
 import { isRegisteredActionType } from '@/lib/proposal-actions/registry';
 import type { ProposalActionType } from '@/lib/proposal-actions/types';
@@ -154,29 +155,35 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
       <DataState loading={isLoading && !data} error={error} hasData={Boolean(data)}>
         {rows.length ? (
           <div>
-            {rows.slice(0, 12).map((member) => (
-              <ListRow
-                key={member.address}
-                media={<Avatar address={member.address} size="sm" />}
-                title={<span title={member.address}>{shortAddress(member.address)}</span>}
-                meta={
-                  <>
-                    {formatNumber(member.voting_power)} votes
-                    {member.voting_power === '0' ? (
-                      <HelpTip label="Voting power">
-                        {[config.treasuryContractId, config.auctionContractId, config.marketplaceContractId].includes(
-                          member.address
-                        )
-                          ? 'Tokens held by the treasury, auction, and marketplace contracts do not carry votes.'
-                          : member.delegated_to && member.delegated_to !== member.address
-                            ? 'This member delegated their votes to another address.'
-                            : 'No voting power is recorded for this address.'}
-                      </HelpTip>
-                    ) : null}
-                  </>
-                }
-              />
-            ))}
+            {rows.slice(0, 12).map((member) => {
+              // The tribe's own contracts by name, as on the Members page, not as a bare contract id.
+              const system = systemHolderName(config, member.address);
+              return (
+                <ListRow
+                  key={member.address}
+                  media={<Avatar address={member.address} size="sm" />}
+                  title={
+                    <span title={member.address}>
+                      {system ? `${system} (tribe contract)` : shortAddress(member.address)}
+                    </span>
+                  }
+                  meta={
+                    <>
+                      {formatNumber(member.voting_power)} {String(member.voting_power) === '1' ? 'vote' : 'votes'}
+                      {member.voting_power === '0' ? (
+                        <HelpTip label="Voting power">
+                          {system
+                            ? 'Tokens held by the treasury, auction, and marketplace contracts do not carry votes.'
+                            : member.delegated_to && member.delegated_to !== member.address
+                              ? 'This member delegated their votes to another address.'
+                              : 'No voting power is recorded for this address.'}
+                        </HelpTip>
+                      ) : null}
+                    </>
+                  }
+                />
+              );
+            })}
             {rows.length > 12 ? <p className={intro}>Showing the first 12 matches.</p> : null}
           </div>
         ) : (
@@ -213,7 +220,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
             ))}
           </ul>
         ) : (
-          <Text size="sm">No proposals yet. Got an idea for the tribe? Put it to a vote.</Text>
+          <Text size="sm">No proposals yet. A member with enough votes can create the first one.</Text>
         )}
       </DataState>
     </div>

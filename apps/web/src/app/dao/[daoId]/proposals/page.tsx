@@ -81,6 +81,7 @@ export default function ProposalsPage() {
 
   return (
     <PageSection
+      guide="guides/proposals/vote"
       title={
         <>
           Proposals <GlossaryTerm term="proposal" />

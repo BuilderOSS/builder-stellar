@@ -1,0 +1,26 @@
+{
+  "name": "@builder-stellar/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:app": "node scripts/build-app.mjs",
+    "build:capture": "E2E_CAPTURE=1 node scripts/build-app.mjs",
+    "capture": "E2E_CAPTURE=1 E2E_TIMELINE=${E2E_TIMELINE:-show} E2E_APP_PORT=${E2E_APP_PORT:-4545} playwright test --project=capture",
+    "serve:app": "node --experimental-strip-types --no-warnings scripts/serve-app.ts",
+    "preflight": "node --experimental-strip-types --no-warnings src/preflight-cli.ts",
+    "smoke": "playwright test --grep @smoke",
+    "test:e2e": "playwright test",
+    "report": "node scripts/open-report.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@playwright/test": "1.62.1",
+    "@stellar/stellar-sdk": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
+  }
+}

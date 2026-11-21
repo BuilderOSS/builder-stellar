@@ -38,9 +38,18 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(dirname "$SCRIPT_DIR")"
-PIPELINE_FILE="$PACKAGE_DIR/pipelines/builder-stellar-events.yaml"
-
-for env_file in "$PACKAGE_DIR/.env" "$PACKAGE_DIR/.env.local"; do
+# GOLDSKY_ENV_FILE=dev.env selects dev.tribes.build's pipeline (docs/DEV_DEPLOYMENT.md)
+# instead of .env/.env.local, as `pnpm generate` does.
+if [ -n "${GOLDSKY_ENV_FILE:-}" ]; then
+  ENV_FILES=("$PACKAGE_DIR/$GOLDSKY_ENV_FILE")
+  if [ ! -f "${ENV_FILES[0]}" ]; then
+    echo -e "${RED}Error: GOLDSKY_ENV_FILE not found: ${ENV_FILES[0]}${NC}"
+    exit 1
+  fi
+else
+  ENV_FILES=("$PACKAGE_DIR/.env" "$PACKAGE_DIR/.env.local")
+fi
+for env_file in "${ENV_FILES[@]}"; do
   if [ -f "$env_file" ]; then
     set -a
     # shellcheck disable=SC1090
@@ -48,6 +57,8 @@ for env_file in "$PACKAGE_DIR/.env" "$PACKAGE_DIR/.env.local"; do
     set +a
   fi
 done
+
+PIPELINE_FILE="$PACKAGE_DIR/${GOLDSKY_PIPELINE_FILE:-pipelines/builder-stellar-events.yaml}"
 
 if ! command -v goldsky &> /dev/null; then
   echo -e "${RED}Error: goldsky CLI not installed${NC}"

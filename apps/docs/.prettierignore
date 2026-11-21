@@ -1,0 +1,5 @@
+styled-system/
+.next/
+out/
+node_modules/
+public/pagefind/

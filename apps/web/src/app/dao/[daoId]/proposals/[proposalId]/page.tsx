@@ -21,10 +21,12 @@ import { ProposalVotePanel } from '@/components/proposal/proposal-vote-panel';
 import { ProposalVoteSummary } from '@/components/proposal/proposal-vote-summary';
 import type { ProposalDetail, ProposalVoteItem } from '@/components/proposal/types';
 import { Avatar, Button, ButtonLink, Callout, ConfirmAction, Skeleton } from '@/components/ui';
+import { type PendingConfirmation, UnconfirmedTransaction } from '@/components/unconfirmed-transaction';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES } from '@/lib/comments';
+import type { ContractName } from '@/lib/contract-errors';
 import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
 import { usePendingModules } from '@/lib/modules/pending';
@@ -38,8 +40,9 @@ import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { proposalActionMode, ProposalState } from '@/lib/proposal-state';
 import { isRecentProposal } from '@/lib/recent-proposal';
 import { restoreArchivedState } from '@/lib/restore-archived-client';
-import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { isConfirmationUnknown, waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { formatVotes } from '@/lib/vote-source';
 import { useVotingPower } from '@/lib/voting-power';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -50,6 +53,17 @@ type ProposalPageData = {
   votesError: string;
   comments: CommentItem[];
   commentsError: boolean;
+};
+
+type Confirmed = Awaited<ReturnType<typeof waitForConfirmation>>;
+/** A sent action: what it was, the toast once it confirms, and what to refresh then. */
+type SentAction = PendingConfirmation & {
+  success: string;
+  failure: string;
+  contract: ContractName;
+  /** A vote, queue, execute or cancel: no other proposal action is offered until it's checked. */
+  blocking: boolean;
+  after: (confirmed: Confirmed) => Promise<unknown> | void;
 };
 
 const VOTE_FOR = 1;
@@ -144,6 +158,9 @@ const side = css({
 const main = css({ display: 'grid', gap: '8', minW: '0', lg: { gridArea: 'main' } });
 const summaryCard = css({ p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 
+/** How often a just-submitted proposal is looked for while the indexer catches up. */
+const INDEX_POLL_MS = 3000;
+
 export default function ProposalDetailPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
@@ -155,6 +172,9 @@ export default function ProposalDetailPage() {
   const [busy, setBusy] = useState(false);
   const [justVoted, setJustVoted] = useState(false);
   const [commenting, setCommenting] = useState(false);
+  // A sent action the network has not confirmed yet: shown as a recovery state, not a failure.
+  const [unconfirmed, setUnconfirmed] = useState<SentAction | null>(null);
+  const [checkingUnconfirmed, setCheckingUnconfirmed] = useState(false);
   const tx = useTransactionFeedback(config.name);
   const [now, setNow] = useState(() => Date.now());
   const [executionResult, setExecutionResult] = useState<{
@@ -184,6 +204,13 @@ export default function ProposalDetailPage() {
     () => false
   );
   const waitingForIndex = !detail && recentlySubmitted && (!error || error.status === 404);
+  // SWR stops its refresh interval once a fetch has failed, and a proposal the indexer hasn't seen yet
+  // is a 404, so poll by hand until it appears (BUG-W02-4: "Loading your proposal" never went away).
+  useEffect(() => {
+    if (!waitingForIndex) return;
+    const timer = setInterval(() => void mutate(), INDEX_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waitingForIndex, mutate]);
   const receipt =
     (executionResult?.key === receiptKey ? executionResult.receipt : null) ?? detail?.executionReceipt ?? null;
   const receiptError = executionResult?.key === receiptKey ? executionResult.error : '';
@@ -235,7 +262,12 @@ export default function ProposalDetailPage() {
       return error instanceof Error ? error.message : 'Unsupported proposal calls.';
     }
   }, [detail, encodingConfig, pending.loading, pending.error]);
-  const actionsDisabled = !session.address || detail?.stateSource !== 'chain' || !!encodingError || pending.loading;
+  const actionsDisabled =
+    !session.address ||
+    detail?.stateSource !== 'chain' ||
+    !!encodingError ||
+    pending.loading ||
+    Boolean(unconfirmed?.blocking);
   const availability = detail
     ? proposalActionAvailability(detail, now, session.address)
     : { vote: false, cancel: false, queue: false, execute: false };
@@ -305,6 +337,42 @@ export default function ProposalDetailPage() {
     });
   }
 
+  /** Waits for a sent action, then refreshes and says it's done. */
+  async function settle(action: SentAction, timeout?: number) {
+    const confirmed = await waitForConfirmation(action.hash, config.rpcUrl, timeout ? { timeout } : undefined);
+    await action.after(confirmed);
+    tx.success(action.success, action.hash);
+  }
+
+  /** An unknown confirmation keeps the action as a recovery state; anything else is a failure. */
+  function actionFailed(error: unknown, action: SentAction | null, fallback: string, contract: ContractName) {
+    if (action && isConfirmationUnknown(error)) {
+      setUnconfirmed(action);
+      tx.unconfirmed(action.hash);
+      return;
+    }
+    tx.fail(error, fallback, contract);
+  }
+
+  async function checkUnconfirmed() {
+    if (!unconfirmed || checkingUnconfirmed) return;
+    const action = unconfirmed;
+    setCheckingUnconfirmed(true);
+    try {
+      await settle(action, 15_000);
+      setUnconfirmed(null);
+    } catch (error) {
+      if (isConfirmationUnknown(error)) tx.unconfirmed(action.hash);
+      else {
+        setUnconfirmed(null);
+        tx.fail(error, action.failure, action.contract);
+      }
+    } finally {
+      setCheckingUnconfirmed(false);
+      void mutate();
+    }
+  }
+
   async function submitVote(voteType: number) {
     if (!detail) return;
     if (!session.address) {
@@ -324,6 +392,7 @@ export default function ProposalDetailPage() {
     setBusy(true);
     setFormMessage('');
     tx.start('Casting your vote');
+    let sentAction: SentAction | null = null;
 
     try {
       const governor = await requireCurrentState([ProposalState.Active]);
@@ -341,14 +410,23 @@ export default function ProposalDetailPage() {
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
       tx.submitted('Vote sent', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      setVoteReason('');
-      setSelectedVoteType(null);
-      await Promise.all([mutate(), refreshHasVoted()]);
-      setJustVoted(true);
-      tx.success('Vote cast', hash);
+      sentAction = {
+        hash,
+        subject: 'Your vote',
+        success: 'Vote cast',
+        failure: 'Vote failed',
+        contract: 'governor',
+        blocking: true,
+        after: async () => {
+          setVoteReason('');
+          setSelectedVoteType(null);
+          await Promise.all([mutate(), refreshHasVoted()]);
+          setJustVoted(true);
+        }
+      };
+      await settle(sentAction);
     } catch (err) {
-      tx.fail(err, 'Vote failed', 'governor');
+      actionFailed(err, sentAction, 'Vote failed', 'governor');
     } finally {
       setBusy(false);
     }
@@ -359,6 +437,7 @@ export default function ProposalDetailPage() {
     if (!detail) return false;
     setCommenting(true);
     tx.start('Posting your comment');
+    let sentAction: SentAction | null = null;
     try {
       const governor = await getGovernor();
       const assembled = await governor.comment({
@@ -369,12 +448,19 @@ export default function ProposalDetailPage() {
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
       tx.submitted('Comment sent', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      await mutate();
-      tx.success('Comment posted', hash);
+      sentAction = {
+        hash,
+        subject: 'Your comment',
+        success: 'Comment posted',
+        failure: 'Comment failed',
+        contract: 'governor',
+        blocking: false,
+        after: () => mutate()
+      };
+      await settle(sentAction);
       return true;
     } catch (err) {
-      tx.fail(err, 'Comment failed', 'governor');
+      actionFailed(err, sentAction, 'Comment failed', 'governor');
       return false;
     } finally {
       setCommenting(false);
@@ -399,6 +485,7 @@ export default function ProposalDetailPage() {
     setBusy(true);
     setFormMessage('');
     tx.start('Queueing proposal');
+    let sentAction: SentAction | null = null;
 
     try {
       const governor = await requireCurrentState([ProposalState.Succeeded]);
@@ -413,18 +500,25 @@ export default function ProposalDetailPage() {
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
       tx.submitted('Queueing proposal', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      await mutate();
-      tx.success('Proposal queued', hash);
+      sentAction = {
+        hash,
+        subject: 'Your request to queue this proposal',
+        success: 'Proposal queued',
+        failure: 'Queue failed',
+        contract: 'governor',
+        blocking: true,
+        after: () => mutate()
+      };
+      await settle(sentAction);
     } catch (err) {
-      tx.fail(err, 'Queue failed', 'governor');
+      actionFailed(err, sentAction, 'Queue failed', 'governor');
     } finally {
       setBusy(false);
     }
   }
 
   // Execution goes through Treasury.execute (callable by anyone). Governor.execute always fails with
-  // UseTreasuryExecute (1508). If any call fails the whole transaction reverts and the proposal stays
+  // UseTreasuryExecute (7507, contracts/governor/src/error.rs). If any call fails the whole transaction reverts and the proposal stays
   // Queued, so the same action can be retried until the proposal expires.
   async function executeProposal() {
     if (!detail) return;
@@ -444,6 +538,7 @@ export default function ProposalDetailPage() {
     setBusy(true);
     setFormMessage('');
     tx.start('Executing proposal');
+    let sentAction: SentAction | null = null;
 
     try {
       const governor = await requireCurrentState([ProposalState.Queued]);
@@ -473,20 +568,34 @@ export default function ProposalDetailPage() {
 
       tx.submitted('Executing proposal', hash);
 
-      const confirmed = await waitForConfirmation(hash, config.rpcUrl);
-      try {
-        setExecutionResult({ key: receiptKey, receipt: decodeExecutionReceipt(confirmed, config, detail), error: '' });
-      } catch (error) {
-        setExecutionResult({
-          key: receiptKey,
-          receipt: null,
-          error: error instanceof Error ? error.message : 'Receipt unavailable.'
-        });
-      }
-      await mutate();
-      tx.success('Proposal executed', hash);
+      const executed = detail;
+      sentAction = {
+        hash,
+        subject: 'Your request to execute this proposal',
+        success: 'Proposal executed',
+        failure: 'Execute failed',
+        contract: 'treasury',
+        blocking: true,
+        after: async (confirmed) => {
+          try {
+            setExecutionResult({
+              key: receiptKey,
+              receipt: decodeExecutionReceipt(confirmed, config, executed),
+              error: ''
+            });
+          } catch (error) {
+            setExecutionResult({
+              key: receiptKey,
+              receipt: null,
+              error: error instanceof Error ? error.message : 'Receipt unavailable.'
+            });
+          }
+          await mutate();
+        }
+      };
+      await settle(sentAction);
     } catch (err) {
-      tx.fail(err, 'Execute failed', 'treasury');
+      actionFailed(err, sentAction, 'Execute failed', 'treasury');
     } finally {
       setBusy(false);
     }
@@ -495,18 +604,26 @@ export default function ProposalDetailPage() {
   async function cancelProposal() {
     if (!detail || detail.proposer !== session.address) return;
     setBusy(true);
-    tx.start('Canceling proposal');
+    tx.start('Cancelling proposal');
+    let sentAction: SentAction | null = null;
     try {
       const governor = await requireCurrentState([ProposalState.Pending, ProposalState.Active]);
       const payload = await verifiedCallPayload(governor);
       const sent = await (await governor.cancel({ ...payload, operator: session.address })).signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Canceling proposal', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      await mutate();
-      tx.success('Proposal canceled', hash);
+      tx.submitted('Cancelling proposal', hash);
+      sentAction = {
+        hash,
+        subject: 'Your request to cancel this proposal',
+        success: 'Proposal cancelled',
+        failure: 'Cancel failed',
+        contract: 'governor',
+        blocking: true,
+        after: () => mutate()
+      };
+      await settle(sentAction);
     } catch (error) {
-      tx.fail(error, 'Cancel failed', 'governor');
+      actionFailed(error, sentAction, 'Cancel failed', 'governor');
     } finally {
       setBusy(false);
     }
@@ -527,7 +644,7 @@ export default function ProposalDetailPage() {
             : votingPower && votingPower.votes > 0n
               ? ''
               : "You didn't hold any votes when this proposal was made, so you can't vote on it.";
-  const canVote = Boolean(availability.vote && hasVoted === false && !voteUnavailableReason);
+  const canVote = Boolean(availability.vote && hasVoted === false && !voteUnavailableReason && !unconfirmed?.blocking);
 
   function voteLabelForSupport(support: number) {
     if (support === VOTE_FOR) return 'For';
@@ -542,7 +659,7 @@ export default function ProposalDetailPage() {
         busy={busy}
         voteReason={voteReason}
         selectedVoteType={selectedVoteType}
-        votingPower={votingPower?.votes.toString() ?? null}
+        votingPower={votingPower ? formatVotes(votingPower.votes, votingPower.decimals) : null}
         votingPowerLoading={votingPowerLoading}
         votingPowerError={votingPowerError?.message ?? ''}
         unavailableReason={
@@ -633,6 +750,14 @@ export default function ProposalDetailPage() {
           <div className={layout}>
             <aside className={side} aria-label="Status and voting">
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+              {unconfirmed ? (
+                <UnconfirmedTransaction
+                  network={config.name}
+                  pending={unconfirmed}
+                  checking={checkingUnconfirmed}
+                  onCheck={() => void checkUnconfirmed()}
+                />
+              ) : null}
               <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
               <section
                 className={summaryCard}

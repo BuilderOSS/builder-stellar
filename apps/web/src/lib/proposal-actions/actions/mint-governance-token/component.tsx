@@ -62,7 +62,7 @@ export function MintGovernanceTokenForm({
           </FieldHelperText>
         ) : (
           <FieldHelperText id="amount-helper">
-            Single mint action always mints 1 token (use batch mint for multiple)
+            This action mints 1 token. To mint more, use Mint membership tokens.
           </FieldHelperText>
         )}
       </Stack>

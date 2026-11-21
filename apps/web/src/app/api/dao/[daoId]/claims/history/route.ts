@@ -12,7 +12,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     return NextResponse.json(await claimHistory((await params).daoId, Number(value)), { headers });
   } catch {
     return NextResponse.json(
-      { message: 'Indexed claim history is unavailable. History does not establish current-round eligibility.' },
+      { message: "Claim history is unavailable. Past claims don't show whether you can claim in the current round." },
       { status: 503, headers }
     );
   }

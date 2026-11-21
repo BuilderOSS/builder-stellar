@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/pools/07",
+  "appCommit": "bccf91b",
+  "ledger": 5815994,
+  "capturedAt": "2026-11-19T15:53:35.421Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the vote warning",
+      "box": {
+        "desktop": {
+          "x": 0.3806,
+          "y": 0.4675,
+          "w": 0.4778,
+          "h": 0.0653
+        },
+        "mobile": {
+          "x": 0.2133,
+          "y": 0.4156,
+          "w": 0.6587,
+          "h": 0.1689
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+## Overview
+
+The person who made a proposal can withdraw it before voting closes. A cancelled proposal can't be reopened. This guide shows who can cancel, when, and how.
+
+## Before you start
+
+- Only the proposer can cancel. Connect the wallet that made the proposal. Testnet is the live network today.
+- The proposal must be **Voting soon** or **Voting**, and voting must not have closed. Once a proposal has passed, been queued or been executed, it can't be cancelled.
+- Have a small amount of XLM for the network fee.
+- The contract has no other way to cancel. Members can't cancel someone else's proposal. To stop a proposal you didn't make, vote Against it.
+
+## Steps
+
+1. **Open your proposal.** Choose **Proposals** in the tribe's navigation and open the proposal. Under the title it says "You proposed this".
+
+   <Shot id="proposals/cancel/01" alt="A proposal page with You proposed this under the title" />
+
+2. **Choose Cancel proposal.** The **Cancel proposal** button is at the bottom of the side panel. It shows only to the proposer, and only while the proposal can still be cancelled.
+
+   <Shot id="proposals/cancel/02" alt="The side panel with the Cancel proposal button below the results" />
+
+3. **Confirm.** The **Cancel this proposal?** dialog explains what happens. Before voting opens it says the proposal won't go to a vote. During voting it says voting stops. Either way, it can't be reopened, and you would need to propose it again. Choose **Cancel proposal** to continue.
+
+   <Shot id="proposals/cancel/03" alt="The Cancel this proposal? dialog with its Cancel proposal button" />
+
+4. **Sign.** Your wallet opens to show the transaction. Review it, then sign. The page reports **Proposal cancelled** once the network confirms it. The label changes to **Cancelled**, and the side panel says "The proposer withdrew this proposal."
+
+   <Shot id="proposals/cancel/04" alt="A proposal page labelled Cancelled, with The proposer withdrew this proposal in the side panel" />
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Cancelling calls `cancel` on the tribe's Governor contract. The Governor accepts it only from the proposer's wallet, and only while the proposal is pending or active. It then marks the proposal as cancelled for good. Votes already cast stay on record, but the proposal can't pass, be queued or run.
+
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The cancellation is public on chain once confirmed.
+</Disclosure>
+
+## If something goes wrong
+
+- **You don't see Cancel proposal.** You aren't connected with the proposer's wallet, or voting has closed.
+- **The button is disabled.** The app couldn't read the proposal's live state, or voting is about to close. Choose **Refresh** and try again.
+- **"This proposal changed since you opened it. Refresh and try again."** Voting may have closed while the page was open. Nothing was signed.
+- **You want to change a proposal.** A proposal can't be edited after it is submitted. Cancel it, then [write a new one](/guides/proposals/write/).
+- **The transaction was signed but the page shows an error.** Check the transaction in the notification before you try again. If it was confirmed, the label changes to **Cancelled** shortly.
+
+For an error code, see [Error messages](/reference/error-messages/).
+
+## Related
+
+- [Write a proposal](/guides/proposals/write/)
+- [Vote](/guides/proposals/vote/)
+- [Proposals](/concepts/proposals/)

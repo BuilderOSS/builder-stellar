@@ -14,7 +14,7 @@ export function HomeDrafts() {
   return (
     <Section
       title="Your drafts"
-      description="Saved on this browser as you go. Pick up where you left off."
+      description="Saved on this browser automatically. Open a draft to continue."
       action={
         items.length > SHOWN ? (
           <ButtonLink href="/drafts" variant="ghost" size="sm">

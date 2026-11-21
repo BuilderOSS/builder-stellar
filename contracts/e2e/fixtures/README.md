@@ -14,3 +14,20 @@ shasum -a 256 contracts/e2e/fixtures/<module>-<version>.wasm   # must equal <has
 ```
 
 Record each file here with its module, version, hash and source, as the previous table did.
+
+## Production (tribes.build), release 0.5.0
+
+Fetched from testnet on 2026-11-21 for `src/release_0_5_0.rs`, which upgrades them in place the way
+`docs/plans/release-main-1.md` does on the production Manager (`CCLBJAC5…EK72ZD`).
+
+| File | Module | Version | Hash (sha256 = Soroban wasm hash) | Source |
+| --- | --- | --- | --- | --- |
+| `manager-0.4.0-f5b32ab1.wasm` | Manager | 0.4.0 | `f5b32ab19f0817a563606c9a88ab290da05871a8bf21e006fb408406659e69c1` | `deploys/builder-testnet-manager.json`, commit `c20c822` |
+| `governor-0.4.0-41ad48e8.wasm` | Governor | 0.4.0 | `41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd` | same |
+| `metadata-0.4.0-44a0c4b6.wasm` | Metadata | 0.4.0 | `44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb` | same |
+
+Token, Auction, Treasury, Marketplace and ClaimMinter need no fixture: production runs exactly this
+checkout's build of them. `release_build_matches_production_and_dev` checks that hash by hash, together
+with the three 0.5.0 hashes. Bytes depend on the compiler, so that test is ignored by default: run it with
+`--include-ignored` on a build made with rustc 1.95.0 and stellar-cli 28.0.0, the release toolchain.
+

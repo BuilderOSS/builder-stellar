@@ -107,4 +107,9 @@ pub enum ManagerError {
     /// `transfer_agents` names a kind (or names it twice) that `modules`
     /// does not create exactly once
     UnknownAgentKind = 7143,
+    /// The vote source is not one the Manager admin approved
+    VoteSourceNotApproved = 7144,
+    /// The address does not answer the vote source interface
+    /// (`common::clients::VoteSourceApi`)
+    InvalidVoteSource = 7145,
 }

@@ -6,7 +6,7 @@ vi.mock('@stellar/stellar-sdk/rpc', () => ({
     getTransaction = rpc.getTransaction;
   }
 }));
-import { waitForConfirmation } from './transaction-confirmation';
+import { ConfirmationUnknownError, isConfirmationUnknown, waitForConfirmation } from './transaction-confirmation';
 
 describe('transaction confirmation', () => {
   beforeEach(() => {
@@ -37,5 +37,19 @@ describe('transaction confirmation', () => {
     await vi.runAllTimersAsync();
     await result;
     await expect(waitForConfirmation('', 'https://rpc.test')).rejects.toThrow('hash is required');
+  });
+  it('reports a timeout as an unknown confirmation that keeps the hash, never as a failure', async () => {
+    rpc.getTransaction.mockResolvedValue({ status: 'NOT_FOUND' });
+    const result = waitForConfirmation('abc', 'https://rpc.test', { timeout: 20, pollInterval: 10 }).catch(
+      (error: unknown) => error
+    );
+    await vi.runAllTimersAsync();
+    const error = await result;
+    expect(error).toBeInstanceOf(ConfirmationUnknownError);
+    expect(isConfirmationUnknown(error)).toBe(true);
+    expect((error as ConfirmationUnknownError).hash).toBe('abc');
+    rpc.getTransaction.mockResolvedValue({ status: 'FAILED' });
+    const failed = await waitForConfirmation('abc', 'https://rpc.test').catch((e: unknown) => e);
+    expect(isConfirmationUnknown(failed)).toBe(false);
   });
 });

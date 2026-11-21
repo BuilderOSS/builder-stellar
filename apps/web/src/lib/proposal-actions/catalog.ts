@@ -25,7 +25,8 @@ export type SettingValues = {
   governor?: GovernorSettings;
   auction?: AuctionStatus & { assetCode?: string };
   membership?: MembershipState;
-  marketplace?: MarketplaceConfig | null;
+  /** The market's config, with its payment asset's code ("XLM") when it is a known asset. */
+  marketplace?: (MarketplaceConfig & { assetCode?: string }) | null;
 };
 
 /** Where an action sits in the picker. "Elsewhere" actions are prepared on their own page and never picked. */
@@ -41,7 +42,7 @@ export type CurrentValue<TData = unknown> = { draft: TData; text: string };
 export type ActionMeta = {
   section: PickerSection;
   part: TribePart;
-  /** "Do something" tiles: what the member wants, in their words. */
+  /** "Choose what to do" tiles: what the member wants, in their words. */
   intent?: string;
   /** The live value, when it can be read. */
   currentValue?: (values: SettingValues) => CurrentValue | null;
@@ -87,7 +88,7 @@ const pausedText = (paused: boolean | undefined) => (paused === undefined ? null
 
 /** Picker metadata for every registered action, keyed by type. Handlers keep their call logic; this says where they go. */
 export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
-  // Do something
+  // Choose what to do
   'transfer-sac-token': {
     section: 'intent',
     part: 'Treasury',
@@ -190,7 +191,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     Form: wholeNumberSettingForm({
       id: 'setting-proposal-threshold',
       label: 'Votes needed to propose',
-      helper: 'How many votes someone needs to make a proposal. At least 1; higher numbers cut down on spam.'
+      helper: 'How many votes someone needs to make a proposal. At least 1. A higher number reduces spam proposals.'
     }),
     keywords: 'threshold propose'
   },
@@ -259,7 +260,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     Form: durationSettingForm({
       id: 'setting-auction-time-buffer',
       label: 'A late bid adds',
-      helper: 'Up to 1 day. Bids near the end extend the auction so everyone gets a fair chance.'
+      helper: 'Up to 1 day. A bid near the end extends the auction, so other bidders have time to respond.'
     }),
     keywords: 'time buffer extension'
   },
@@ -284,7 +285,11 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
     part: 'Selling',
     currentValue: (values) =>
       values.marketplace
-        ? { draft: { paymentToken: values.marketplace.paymentAsset }, text: values.marketplace.paymentAsset }
+        ? {
+            draft: { paymentToken: values.marketplace.paymentAsset },
+            // BUG-W09-1: the asset's code, never its raw contract id, when the asset is a known one.
+            text: values.marketplace.assetCode ?? values.marketplace.paymentAsset
+          }
         : null,
     keywords: 'market asset'
   },
@@ -408,6 +413,38 @@ export function actionAvailability(
   if (type === 'unpause-marketplace' && values.marketplace && !values.marketplace.paused)
     return { available: false, reason: 'The market is already open.' };
   return { available: true };
+}
+
+/** The draft fields `valuesAfterDraft` reads: a queued action's type and, for a switch, its value. */
+type DraftStep = { type: ProposalActionType; enabled?: unknown };
+
+const SWITCHES: Partial<Record<ProposalActionType, keyof MembershipState['settings']>> = {
+  'set-transfers-locked': 'transfersLocked',
+  'set-members-only-delegation': 'membersOnlyDelegation',
+  'set-dao-recovery': 'daoRecovery'
+};
+
+/**
+ * The tribe's settings as they will be when the draft's actions have run, in order, for deciding what
+ * can be added next (BUG-W09-3). "Turn DAO recovery on" earlier in the draft makes "Recover a
+ * membership" available, and "Pause auctions" makes "Resume auctions" available, as the copy says ("in
+ * this proposal or an earlier one"). The live values stay what the picker shows as "Now:".
+ */
+export function valuesAfterDraft(values: SettingValues, draft: readonly DraftStep[]): SettingValues {
+  let next = values;
+  for (const step of draft) {
+    const key = SWITCHES[step.type];
+    if (key && next.membership && typeof step.enabled === 'boolean')
+      next = {
+        ...next,
+        membership: { ...next.membership, settings: { ...next.membership.settings, [key]: step.enabled } }
+      };
+    if ((step.type === 'pause-auction' || step.type === 'unpause-auction') && next.auction)
+      next = { ...next, auction: { ...next.auction, paused: step.type === 'pause-auction' } };
+    if ((step.type === 'pause-marketplace' || step.type === 'unpause-marketplace') && next.marketplace)
+      next = { ...next, marketplace: { ...next.marketplace, paused: step.type === 'pause-marketplace' } };
+  }
+  return next;
 }
 
 /** Every pickable action, in its picker section and tribe part. */

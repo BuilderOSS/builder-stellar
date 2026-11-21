@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   assurance: vi.fn(),
   claims: vi.fn(),
   auction: vi.fn(),
-  marketplace: vi.fn()
+  marketplace: vi.fn(),
+  threshold: vi.fn(),
+  voteSource: vi.fn()
 }));
 vi.mock('@builder-stellar/manager-bindings', () => ({
   Client: class {
@@ -26,6 +28,12 @@ vi.mock('@builder-stellar/token-bindings', () => ({
     total_supply = mocks.supply;
     admin = mocks.admin;
     is_live = mocks.live;
+  }
+}));
+vi.mock('@builder-stellar/governor-bindings', () => ({
+  Client: class {
+    proposal_threshold = mocks.threshold;
+    vote_source = mocks.voteSource;
   }
 }));
 vi.mock('@builder-stellar/auction-bindings', () => ({
@@ -65,6 +73,7 @@ const ready = (): LaunchReadiness => ({
     slug: 'test-dao'
   },
   supply: 1n,
+  proposalThreshold: 1n,
   admin: 'wallet-A',
   live: false,
   paymentAssetsMatch: true,
@@ -81,6 +90,8 @@ beforeEach(() => {
   mocks.claims.mockResolvedValue({ result: 'xlm' });
   mocks.auction.mockResolvedValue({ result: { payment_token: 'xlm' } });
   mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'usdc' } });
+  mocks.threshold.mockResolvedValue({ result: 2n });
+  mocks.voteSource.mockResolvedValue({ result: 'dao-A' });
 });
 describe('live launch readiness', () => {
   it('does not require indexed auctionEnabled (null in Setup); an assurance drive launches by itself', async () => {
@@ -107,8 +118,24 @@ describe('live launch readiness', () => {
   });
   it('requires nonzero actual supply, even with auction launch selected', () => {
     expect(launchReadinessIssues({ ...ready(), supply: 0n }, 'wallet-A')).toContain(
-      'Mint at least one founder token before launch.'
+      'Mint at least one founder token to a member (not the treasury) before launch.'
     );
+  });
+  it('reads the voting supply (total_supply leaves out treasury and module holdings) and the proposal threshold', async () => {
+    mocks.supply.mockResolvedValue({ result: 1n });
+    const result = await readLaunchReadiness('dao-A', config);
+    expect(result).toMatchObject({ supply: 1n, proposalThreshold: 2n });
+    // Below the threshold is a warning for the plan, never a launch blocker.
+    expect(launchReadinessIssues(result, 'wallet-A')).toEqual([]);
+  });
+  it('drops the threshold when the tribe votes through another source, or it cannot be read', async () => {
+    mocks.voteSource.mockResolvedValueOnce({ result: 'adapter-A' });
+    expect((await readLaunchReadiness('dao-A', config)).proposalThreshold).toBeNull();
+    mocks.threshold.mockRejectedValueOnce(new Error('RPC unavailable'));
+    expect((await readLaunchReadiness('dao-A', config)).proposalThreshold).toBeNull();
+    // Governor 0.4.0 has no vote_source: it votes with the token.
+    mocks.voteSource.mockRejectedValueOnce(new Error('missing function'));
+    expect((await readLaunchReadiness('dao-A', config)).proposalThreshold).toBe(2n);
   });
   it('requires every module’s payment asset to match, even one not launched', async () => {
     mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'changed' } });

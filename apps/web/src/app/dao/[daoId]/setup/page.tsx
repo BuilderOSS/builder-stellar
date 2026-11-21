@@ -31,6 +31,7 @@ export default function SetupPage() {
         {config.tokenName || 'Tribe'}
       </ButtonLink>
       <PageHeader
+        guide="guides/setup/launch"
         title="Set up and launch"
         meta="Finish the required steps, check what you chose, then launch to open it to members."
       />

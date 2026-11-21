@@ -6,6 +6,7 @@ import { css } from 'styled-system/css';
 
 import { Callout, Field, FieldHelperText, FieldLabel, Input, Select, Switch } from '@/components/ui';
 import { useOptionalDaoContext } from '@/contexts/dao-context';
+import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { isValidStellarAddress } from '@/lib/validation';
 
 import type { ActionFormProps, ActionHandler, ProposalActionType, ValidationResult } from './types';
@@ -40,6 +41,17 @@ function tokenId(value: string): ValidationResult | null {
 // --- Mint allowances ---------------------------------------------------------------------
 
 export type MintAllowanceDraft = { module: string; amount: string; direction: 'increase' | 'decrease' };
+
+type ModuleIds = Partial<Pick<DaoNetworkConfig, 'auctionContractId' | 'marketplaceContractId' | 'claimsContractId'>>;
+
+/** "the market" for the tribe's own marketplace contract; undefined for any other contract. */
+export function knownModuleName(module: string, config: ModuleIds | undefined): string | undefined {
+  if (!module || !config) return undefined;
+  if (module === config.auctionContractId) return 'the auction';
+  if (module === config.marketplaceContractId) return 'the market';
+  if (module === config.claimsContractId) return 'the claim lists';
+  return undefined;
+}
 
 function MintAllowanceForm({ value, onChange, disabled, validationErrors }: ActionFormProps<MintAllowanceDraft>) {
   // The community's own modules by name; anything else (custom code) by its contract.
@@ -131,14 +143,20 @@ export const changeMintAllowanceHandler: ActionHandler<MintAllowanceDraft> = {
       return invalid('amount', 'Enter a whole number of tokens.');
     return { valid: true };
   },
-  serialize: (data) => ({
-    id: crypto.randomUUID(),
-    type: 'change-mint-allowance',
-    recipient: data.module.trim(),
-    amount: data.amount.trim(),
-    module: data.module.trim(),
-    direction: data.direction
-  }),
+  serialize: (data, context) => {
+    const contract = data.module.trim();
+    const moduleName = knownModuleName(contract, context?.config);
+    return {
+      id: crypto.randomUUID(),
+      type: 'change-mint-allowance',
+      recipient: contract,
+      amount: data.amount.trim(),
+      module: contract,
+      direction: data.direction,
+      // The summary names the tribe's own modules ("the market") rather than a contract id.
+      ...(moduleName ? { moduleName } : {})
+    };
+  },
   deserialize: (action) => ({
     module: action.module || action.recipient || '',
     amount: action.amount || '',
@@ -207,10 +225,10 @@ export const setTransfersLockedHandler = switchHandler({
   label: 'Lock memberships',
   description: 'Choose whether members can sell or give their tokens to anyone',
   fn: 'set_transfers_locked',
-  on: 'Tokens move only by sale from the tribe, by giving them back to the DAO, or by a DAO vote.',
+  on: 'Tokens move only by a sale from the tribe, by being given back to the tribe, or by a vote.',
   off: 'Members can transfer and sell their tokens freely.',
   warning:
-    'Locking takes away every member’s way out by sale: after it, a member can only give their token back to the DAO or ask for a vote.'
+    'After locking, members can no longer sell their tokens. A member can only give their token back to the tribe or ask for a vote.'
 });
 
 export const setMembersOnlyDelegationHandler = switchHandler({
@@ -400,7 +418,7 @@ function ApprovedTransferForm({ value, onChange, disabled, validationErrors }: A
         <ErrorText result={validationErrors} field="to" />
         <FieldHelperText>
           The holder first approves the tribe for this token, from the token’s page (Approve the tribe). The transfer
-          happens when the proposal runs, and fails if that approval has run out.
+          happens when the proposal runs, and fails if that approval has expired.
         </FieldHelperText>
       </Field>
     </div>

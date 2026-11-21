@@ -124,6 +124,7 @@ export function MembershipSettings() {
   if (state.isLoading || !state.data)
     return (
       <PageSection
+        guide="concepts/membership-tokens"
         title="Membership"
         description="How tokens move, who members can delegate to, and what modules may mint."
       >
@@ -261,6 +262,7 @@ export function MembershipSettings() {
   return (
     <>
       <PageSection
+        guide="concepts/membership-tokens"
         title="Membership"
         eyebrow={<Chip tone={data.live ? 'live' : 'yours'}>{data.live ? 'Needs a vote' : 'Setup'}</Chip>}
       >
@@ -268,14 +270,16 @@ export function MembershipSettings() {
           {frozen ? (
             <Callout
               variant="info"
-              title="Locked in for the launch drive"
+              title="Fixed during the launch drive"
               description="The tribe belongs to its treasury until it launches. After launch, changes go through proposals."
             />
           ) : !canAct ? (
             <Callout
               variant="warning"
               title={
-                data.live ? 'Connect a wallet to draft proposals' : 'Connect the launch admin wallet to change these'
+                data.live
+                  ? 'Connect a wallet to draft proposals.'
+                  : 'Connect the launch admin wallet to change these settings.'
               }
             />
           ) : null}
@@ -359,7 +363,6 @@ export function MembershipSettings() {
             busy={busy}
             message={message?.where === 'modules' ? message.text : null}
             propose={proposeAction}
-            onMessage={(text) => setMessage({ where: 'modules', text })}
             onChanged={() => void state.mutate()}
             onChangeAllowance={changeAllowance}
             onProposeOpen={proposeOpen}

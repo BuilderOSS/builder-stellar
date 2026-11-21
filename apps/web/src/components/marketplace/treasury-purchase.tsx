@@ -65,7 +65,7 @@ export function TreasuryPurchase({
       const checked = await treasury.check_authorization({
         nodes: nodes.map(authNodeSpecValue) as unknown as AuthNode[]
       });
-      if (checked.result !== nodes.length) throw new Error('The Treasury rejected this authorization tree.');
+      if (checked.result !== nodes.length) throw new Error('The Treasury rejected this authorisation tree.');
 
       const context = { config, session: { address: null, kit: null } };
       const authorize = getActionHandler('treasury-authorize');
@@ -79,7 +79,7 @@ export function TreasuryPurchase({
         ],
         bundle: planBundle(`Treasury buys listed token #${tokenId}`, 2),
         source: ACTION_SOURCES.marketplace,
-        note: `The treasury pays for and buys token #${tokenId} for at most ${amount}, the listing price. Authorized calls: ${describeAuthNodes(nodes).join('; ')}. The purchase fails if the price rises or the listing closes before it runs.`
+        note: `The treasury pays for and buys token #${tokenId} for at most ${amount}, the listing price. Authorised calls: ${describeAuthNodes(nodes).join('; ')}. The purchase fails if the price rises or the listing closes before it runs.`
       });
       if (result.outcome === 'invalid') setMessage(result.message);
     } catch (error) {
@@ -95,7 +95,7 @@ export function TreasuryPurchase({
         <h2>Propose a Treasury purchase</h2>
         <p>
           The Treasury can buy an escrowed secondary listing through governance. The proposal gets two actions: an
-          authorization for exactly the listing&apos;s payment transfers, then the purchase at no more than the current
+          authorisation for exactly the listing&apos;s payment transfers, then the purchase at no more than the current
           price.
         </p>
         <Field>

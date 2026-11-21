@@ -13,10 +13,21 @@ export const defaultScriptPath = join(packageRoot, 'src', 'activity-feed.script.
 export const defaultOutputPath = join(packageRoot, 'pipelines', 'builder-stellar-events.yaml');
 export const defaultEnvPaths = [join(packageRoot, '.env'), join(packageRoot, '.env.local')];
 
-export function loadPackageEnv(env = process.env, envPaths = defaultEnvPaths) {
+/**
+ * GOLDSKY_ENV_FILE (relative to this package) replaces .env/.env.local, so one checkout can generate
+ * and deploy a second pipeline: `GOLDSKY_ENV_FILE=dev.env pnpm generate` for dev.tribes.build
+ * (docs/DEV_DEPLOYMENT.md).
+ */
+export function selectedEnvPaths(env = process.env) {
+  const file = env.GOLDSKY_ENV_FILE?.trim();
+  return file ? [resolve(packageRoot, file)] : defaultEnvPaths;
+}
+
+export function loadPackageEnv(env = process.env, envPaths = selectedEnvPaths(env)) {
   const fileEnv = {};
   for (const envPath of envPaths) {
     if (!existsSync(envPath)) {
+      if (!defaultEnvPaths.includes(envPath)) throw new Error(`GOLDSKY_ENV_FILE not found: ${envPath}`);
       continue;
     }
     Object.assign(fileEnv, parseDotEnv(readFileSync(envPath, 'utf8')));
@@ -84,6 +95,12 @@ export function resolvePipelineName(deployment, env = process.env) {
   return `builder-stellar-${deployment.network}`;
 }
 
+/** Where `pnpm generate` writes and `scripts/deploy.sh` applies: GOLDSKY_PIPELINE_FILE, relative to this package. */
+export function resolvePipelineOutputPath(env = process.env) {
+  const merged = loadPackageEnv(env);
+  return merged.GOLDSKY_PIPELINE_FILE ? resolve(packageRoot, merged.GOLDSKY_PIPELINE_FILE) : defaultOutputPath;
+}
+
 export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource, startAt, pipelineName }) {
   const template = templateSource ?? readFileSync(defaultTemplatePath, 'utf8');
   const rawScript = readFileSync(defaultRawScriptPath, 'utf8');
@@ -110,8 +127,9 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   });
 }
 
-export function writeGoldskyPipeline({ env = process.env, outputPath = defaultOutputPath } = {}) {
+export function writeGoldskyPipeline({ env = process.env, outputPath } = {}) {
   const mergedEnv = loadPackageEnv(env);
+  outputPath ??= resolvePipelineOutputPath(mergedEnv);
   const selection = resolveDeploymentSelection(mergedEnv);
   const deployment = loadDeploymentArtifact(selection);
   const secretName = resolvePostgresSecretName(mergedEnv);

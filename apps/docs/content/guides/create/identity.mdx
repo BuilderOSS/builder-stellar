@@ -1,0 +1,72 @@
+## Overview
+
+Identity is the first of four sections on the **Build a tribe** page. Here you give your tribe its name, a short symbol, a link people can share, an image, and a description. This is how people find and recognise your tribe.
+
+## Before you start
+
+- You can fill in the whole form without a wallet. The page saves your draft in this browser as you go, and the header shows "Saved on this browser as you go" with the network name. Today that network is testnet.
+- A saved draft is a **local draft**. It is not deployed, shared, or approved. Other people can't see it, and it stays only in this browser.
+- To upload your own image, connect a Stellar wallet and sign in. To create the tribe at the end, you need the same wallet. See [Wallets and Stellar basics](/concepts/wallets-and-stellar).
+- If you want your own image, have a square PNG, JPEG, or WebP file ready.
+
+## Steps
+
+1. Open **Build a tribe**. The form opens at section 1, **Identity**. Later sections open one at a time as you continue.
+
+   <Shot id="create/identity/01" alt="The Build a tribe page with the empty Identity section and the section outline beside it" />
+
+2. Type the **Tribe name**. Use 2 to 40 characters, without quotation marks, backslashes, or line breaks. As you type, the app fills in **Symbol** and **Link** from the name.
+
+   <Shot id="create/identity/02" alt="The Identity section with a tribe name entered and the symbol and link filled in from it" />
+
+3. Check the **Symbol**. It is a short code for the membership token, like a ticker: up to 10 capital letters or numbers. To choose your own, type over it. After that, the name no longer changes it.
+
+   <Shot id="create/identity/03" alt="The Symbol field with a custom symbol and its hint text" />
+
+4. Check the **Link**. This is the address people share, such as `/dao/lantern-club`. Use 4 to 63 lowercase letters, numbers, and single hyphens, with no hyphen at the start or end. The app tells you if the link is available, and if other tribes in setup have asked for it too. The link is not reserved yet: it becomes yours only when the tribe launches. See [Set up: your link](/guides/setup/slug).
+
+   <Shot id="create/identity/04" alt="The Link field with a message saying the link is available and is reserved only at launch" />
+
+5. Choose the image. Select **Choose tribe image** and pick a square PNG, JPEG, or WebP file, from 128 to 4,000 pixels on each side and up to 5 MB. The image shows as **Local preview**. Select **Upload image** to store it, or **Use saved image** to keep the one you had. You must upload or discard a preview before you can continue. **Reset image** returns to the default Tribe Builder image.
+
+   <Shot id="create/identity/05" alt="The tribe image with a local preview and the Upload image and Use saved image buttons" />
+
+6. Write the **Description**: what your tribe is about, in at least 12 characters. Markdown works. The hint under the field counts the bytes used. The description, links, and image together must fit in 4,096 bytes.
+
+   <Shot id="create/identity/06" alt="The Description field with Markdown text and the byte count below it" />
+
+7. Add **Links** if you want them, such as a website or a chat group. You can add up to 8. Each needs a label of up to 32 characters and an address that starts with `https://`, `http://`, `mailto:`, or `ipfs://`.
+
+   <Shot id="create/identity/07" alt="The Links editor with two labelled links" />
+
+8. Select **Continue to Membership**. The app checks every field in this section and that no launched tribe already uses your link. If something needs a change, it says how many things need attention and moves you to the first one.
+
+   <Shot id="create/identity/08" alt="The Membership section opening below a completed Identity section" />
+
+You can change all of these later. Before launch, the [launch admin](/reference/glossary#launch-admin) changes them directly in **Manage**, under **Tribe profile**. After launch, a change needs a [proposal](/reference/glossary#proposal) that members vote on.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Nothing in this section is sent to the network. Your draft stays in this browser until you create the tribe.
+
+  **Upload image** stores the image on IPFS through Tribe Builder's upload service. That is not a blockchain transaction, and it costs nothing. The image address is saved in your draft.
+
+  When you create the tribe, the name and symbol go into the membership token contract. The description, links, and image are published together as the tribe profile. The profile appears in a public event, and the artwork and profile contract keeps a fingerprint of it (a hash). The link is recorded as a request in the Tribe Builder factory contract (the Manager). Anyone can read all of this once the tribe is created.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Upload your image, or keep the default, before continuing."** You have a local preview that is not uploaded. Select **Upload image** or **Use saved image**.
+- **"Connect and sign in to upload."** Image upload needs a connected, signed-in wallet. Connect it, or keep the default image for now.
+- **The image is refused.** Check that it is square, PNG, JPEG, or WebP, at least 128 pixels wide, and no larger than 4,000 pixels or 5 MB.
+- **"A launched tribe already uses this link. Pick another."** Change the **Link**. Only launched tribes hold a link, so a link another tribe has only asked for can still be used.
+- **The description is over the limit.** Shorten the description, or remove a link. The limit counts the description, links, and image address together.
+- **Your draft is missing.** Drafts live in the browser where you made them. Open **Drafts** in that same browser, on the same network.
+
+## Related
+
+- [Create a tribe: membership](/guides/create/membership)
+- [Set up: your link](/guides/setup/slug)
+- [Tribes and DAOs](/concepts/tribes-and-daos)
+- [Manage: profile](/guides/manage/profile)

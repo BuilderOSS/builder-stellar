@@ -6,8 +6,10 @@ import { Avatar, ButtonLink, Chip, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
-import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
+import { canSellOnMarket, hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
+import { sellHref } from '@/lib/marketplace/sell';
+import { formatVotes } from '@/lib/vote-source';
 
 const card = sva({
   slots: ['root', 'head', 'title', 'stats', 'stat', 'value', 'label', 'body'],
@@ -72,7 +74,7 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
           Join {config.tokenName}
         </h2>
         <p className={classes.body}>
-          Members hold a token. Each token is a vote on how the tribe and its treasury move.
+          Members hold a token. Each token is one vote on what the tribe does and how it uses its treasury.
         </p>
         {way ? (
           <ButtonLink href={daoRoute(routeId, way === 'auction' ? 'auctions' : 'marketplace')} variant="secondary">
@@ -83,9 +85,9 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
     );
   }
 
-  const delegated = Boolean(
-    membership.member.delegated_to && membership.member.delegated_to !== membership.member.address
-  );
+  const delegated =
+    !membership.customVoteSource &&
+    Boolean(membership.member.delegated_to && membership.member.delegated_to !== membership.member.address);
 
   return (
     <section className={classes.root} aria-labelledby="membership-title">
@@ -101,7 +103,7 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
           <span className={classes.label}>{membership.tokenCount === 1n ? 'Token' : 'Tokens'}</span>
         </div>
         <div className={classes.stat}>
-          <span className={classes.value}>{membership.votingPower.toString()}</span>
+          <span className={classes.value}>{formatVotes(membership.votingPower, membership.voteDecimals)}</span>
           <span className={classes.label}>Votes</span>
         </div>
       </div>
@@ -113,6 +115,11 @@ export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
       <ButtonLink href={daoRoute(routeId, `members/${membership.address}`)} variant="secondary">
         Your profile
       </ButtonLink>
+      {canSellOnMarket(config) ? (
+        <ButtonLink href={sellHref(routeId)} variant="secondary">
+          Sell a token
+        </ButtonLink>
+      ) : null}
       <ButtonLink href={daoRoute(routeId, 'members')} variant="ghost">
         All members
       </ButtonLink>

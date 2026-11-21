@@ -1,0 +1,60 @@
+## Overview
+
+A tribe's membership token is an NFT on Stellar: each token is one membership with one vote. This guide covers minting new tokens in **Manage → Mint tokens**, and where the other token settings live after launch.
+
+## Before you start
+
+- **During setup**, the [launch admin](/reference/glossary#launch-admin) mints directly. Connect the launch admin wallet. Each mint is a direct transaction.
+- **After launch**, minting requires DAO governance. Any connected wallet can add a mint to a proposal draft. The tokens are created only if members vote for it. To submit the proposal, you need enough votes. See [Write a proposal](/guides/proposals/write/).
+- Connect your wallet on the tribe's network. Testnet is the live network today.
+- Have the recipients' Stellar addresses ready. An address starts with G (a wallet) or C (a contract).
+- Upload the tribe's artwork first. Each token's traits are drawn from the artwork when it is minted.
+
+## Steps
+
+1. **Open Mint tokens.** Choose **Manage** in the tribe's navigation, then **Mint tokens**. A label above **Mint membership tokens** says what this wallet can do: **You can mint** during setup, **Mint by vote** after launch, or **Read only**.
+
+   <Shot id="manage/token/01" alt="The Mint tokens page with the Mint by vote label above the mint form" />
+
+2. **Add the recipients.** Enter an address in **Recipient 1** and the number of tokens in **Tokens**. Choose **Add recipient** for each further wallet. One transaction fits up to 43 tokens to one recipient, or 18 recipients with one token each. More recipients means fewer tokens in total. To mint more, use several transactions or several actions.
+
+   <Shot id="manage/token/02" alt="The mint form with two recipients and a token count for each" />
+
+3. **Mint or add to a proposal.** During setup, the button names the result, for example **Mint 5 tokens**. Your wallet opens to show the transaction. Review it, then sign. After launch, choose **Add to proposal**. The mint joins your proposal draft, and nothing is signed yet. The line under the button says which applies: "Setup: you apply this directly as the launch admin." or "Requires DAO governance: it runs only if members vote for it."
+
+   <Shot id="manage/token/03" alt="The Add to proposal button with the Requires DAO governance line beneath it" />
+
+### Other token settings
+
+- **Name and symbol.** These are changed in **Manage → Tribe profile**. See [Manage: profile](/guides/manage/profile/).
+- **How memberships move.** **Manage → Membership** has three settings: **Lock memberships**, **Members-only delegation** and **DAO recovery**. During setup each one is a switch the launch admin changes directly. After launch each shows **On** or **Off**, with a **Turn on in proposal** or **Turn off in proposal** button.
+- **Module allowances.** Modules such as the auction, the market and claim lists mint tokens within an allowance set by the tribe. Choose **Module allowances** on the Mint tokens page to see and change them in **Manage → Membership**.
+
+## What happens on chain
+
+<Disclosure title="Contracts, fees and waits">
+  Minting calls `batch_mint` on the tribe's Token contract. Only the token's admin can mint this way: the launch admin during setup, and the tribe's Treasury after launch. After launch the mint runs when the proposal is executed, with the Treasury as the minter.
+
+  Each new token held by a member adds one vote to the voting supply. Tokens held by the tribe's Treasury, Auction and Marketplace don't count. Quorum is a share of that supply, so minting raises the votes needed for proposals made afterwards. Proposals already made keep the quorum they were created with.
+
+  Each transaction has a limit on the contract events it can write, which is why one mint fits up to 43 tokens to one recipient, or 18 recipients with one token each.
+
+  Each transaction costs a Stellar network fee in XLM. Tribe Builder takes no fee. Minted tokens and their owners are public on chain once confirmed.
+</Disclosure>
+
+## If something goes wrong
+
+- **"Upload the artwork first."** The tribe has no artwork yet. Tokens minted now have no traits until they are seeded from Manage. Upload the artwork in **Manage → Artwork**, or tick "I understand these tokens will be minted without traits." to continue.
+- **"Locked for the launch drive."** An open launch drive has frozen minting. New tokens come only from its claim list until the tribe launches. See [Assurance drives](/guides/setup/assurance-drives/).
+- **"Read only."** This wallet can't mint. During setup, connect the launch admin wallet. After launch, connect any wallet to build a proposal.
+- **"Mint amount must be between 1 and 43 per transaction."** Split the mint into several transactions or actions.
+- **"Switch your wallet to this tribe's network before minting."** Change your wallet's network, then try again.
+- **The mint was signed but the page shows an error.** Check the transaction in the notification before you try again, so you don't mint twice.
+
+## Related
+
+- [Set up: founders](/guides/setup/founders/)
+- [Set up: artwork](/guides/setup/artwork/)
+- [Membership tokens](/concepts/membership-tokens/)
+- [Modules](/concepts/modules/)
+- [Choose actions](/guides/proposals/actions/)

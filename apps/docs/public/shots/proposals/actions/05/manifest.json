@@ -1,0 +1,44 @@
+{
+  "id": "proposals/actions/05",
+  "appCommit": "bccf91b",
+  "ledger": 5815536,
+  "capturedAt": "2026-11-19T15:15:23.852Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the move buttons",
+      "box": {
+        "desktop": {
+          "x": 0.4519,
+          "y": 0.5286,
+          "w": 0.025,
+          "h": 0.04
+        },
+        "mobile": {
+          "x": 0.224,
+          "y": 0.5287,
+          "w": 0.096,
+          "h": 0.0443
+        }
+      }
+    }
+  ]
+}

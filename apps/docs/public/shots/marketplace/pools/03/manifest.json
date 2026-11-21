@@ -1,0 +1,44 @@
+{
+  "id": "marketplace/pools/03",
+  "appCommit": "bccf91b",
+  "ledger": 5816886,
+  "capturedAt": "2026-11-19T17:07:53.427Z",
+  "variants": {
+    "desktop": {
+      "width": 2880,
+      "height": 1800,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "mobile": {
+      "width": 750,
+      "height": 1624,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      }
+    }
+  },
+  "markers": [
+    {
+      "n": 1,
+      "label": "the Stock this pool button",
+      "box": {
+        "desktop": {
+          "x": 0.175,
+          "y": 0.5386,
+          "w": 0.2111,
+          "h": 0.0489
+        },
+        "mobile": {
+          "x": 0.0853,
+          "y": 0.4725,
+          "w": 0.8293,
+          "h": 0.0542
+        }
+      }
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import { shortAddress } from '@/lib/activity-feed';
 import { plainSummary } from '@/lib/dao-profile';
 import { daoRoute } from '@/lib/dao-routes';
 import { directoryFetch } from '@/lib/member-directory/hooks';
+import { systemHolderName } from '@/lib/member-directory/system-holders';
 import { validHolderAddress } from '@/lib/token-holder/read';
 import type { HolderDetail } from '@/lib/token-holder/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -124,7 +125,13 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
                   <NextLink href={daoRoute(routeId, `members/${owner}`)} className={ownerRow} title={owner}>
                     <Avatar address={owner} size="lg" yours={owner === viewer} />
                     <div>
-                      <p className={ownerName}>{owner === viewer ? 'You' : shortAddress(owner)}</p>
+                      <p className={ownerName}>
+                        {owner === viewer
+                          ? 'You'
+                          : systemHolderName(config, owner)
+                            ? `${systemHolderName(config, owner)} (tribe contract)`
+                            : shortAddress(owner)}
+                      </p>
                       <p className={muted}>
                         {data?.ownerSource === 'onchain'
                           ? 'Read live from the token contract'
@@ -134,7 +141,7 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
                     {owner === viewer ? <Chip tone="yours">Yours</Chip> : null}
                   </NextLink>
                   {indexedOwner && indexedOwner !== owner ? (
-                    <p className={muted}>The indexer is still catching up with this ownership change.</p>
+                    <p className={muted}>The indexer has not recorded this ownership change yet.</p>
                   ) : null}
                 </>
               ) : (

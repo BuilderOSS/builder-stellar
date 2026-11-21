@@ -56,12 +56,17 @@ const sheetTitle = css({ textStyle: 'micro', color: 'ink.faint', m: '0' });
 export function ManageNav({
   routeId,
   inSetup = false,
-  modules = { auction: true, marketplace: true, claims: true }
+  modules = { auction: true, marketplace: true, claims: true },
+  doneKeys = []
 }: {
   routeId: string;
   inSetup?: boolean;
   modules?: ManageModules;
+  /** Required launch steps already done (`artwork`, `founders`): they stop saying Required. */
+  doneKeys?: readonly string[];
 }) {
+  const required = (item: { key: string; requiredForLaunch?: boolean }) =>
+    inSetup && Boolean(item.requiredForLaunch) && !doneKeys.includes(item.key);
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useCloseOnNavigate(() => setOpen(false));
@@ -101,7 +106,7 @@ export function ManageNav({
                     aria-current={active?.key === item.key ? 'page' : undefined}
                   >
                     {item.label}
-                    {inSetup && item.requiredForLaunch ? <span className={requiredTag}>Required</span> : null}
+                    {required(item) ? <span className={requiredTag}>Required</span> : null}
                   </NextLink>
                 </li>
               ))}
@@ -140,7 +145,7 @@ export function ManageNav({
                   as="li"
                   href={daoAdminRoute(routeId, item.section)}
                   title={item.label}
-                  meta={inSetup && item.requiredForLaunch ? `Required for launch · ${item.meta}` : item.meta}
+                  meta={required(item) ? `Required for launch · ${item.meta}` : item.meta}
                 />
               ))}
             </ul>
