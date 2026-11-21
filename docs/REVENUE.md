@@ -5,8 +5,8 @@ Status: PROPOSED (2026-10-13). Nothing here is implemented. Builds on
 [savings-circle](designs/savings-circle.md) and [locked-tokens](designs/locked-tokens.md). Testnet rent figures come
 from [STORAGE_COSTS](STORAGE_COSTS.md) and [TTL_ECONOMICS](TTL_ECONOMICS.md); mainnet figures are measured below.
 
-Builder cannot be free. The platform keeps every contract's code alive on Stellar for every DAO, and it runs the
-indexer, database and web app that make DAOs discoverable. This page says what that costs today, how Builder earns
+Tribe Builder cannot be free. The platform keeps every contract's code alive on Stellar for every DAO, and it runs the
+indexer, database and web app that make DAOs discoverable. This page says what that costs today, how Tribe Builder earns
 it without taking back power over launched DAOs, and in what order to build it.
 
 ## Decisions
@@ -56,7 +56,7 @@ protocol 29, so re-read the settings with a current CLI before quoting a price.
 | **Total** | | | **~$2,300–2,500 today** (~$4,600 if mainnet rent climbs) |
 
 **Goldsky is about half of the bill, Vercel about a third, Stellar rent about 15%.** Goldsky is also the line that
-grows with communities: more DAOs means more events indexed. The question that decides whether Builder pays for
+grows with communities: more DAOs means more events indexed. The question that decides whether Tribe Builder pays for
 itself at scale is whether the indexer's cost per community stays below the fees a community brings (see Unit
 economics).
 
@@ -69,7 +69,7 @@ economics).
 | Circle with 1,000 members | ~130 KB | ~67 XLM ($13) |
 | A member | their own records, renewed when they act | a fraction of a cent |
 
-On testnet multiply by 6.8. Rent is not a reason for a DAO to avoid Builder.
+On testnet multiply by 6.8. Rent is not a reason for a DAO to avoid Tribe Builder.
 
 ## Revenue lines
 
@@ -88,7 +88,7 @@ On testnet multiply by 6.8. Rent is not a reason for a DAO to avoid Builder.
 
 The assurance drive is the Kickstarter model: a community pays only if it launches.
 
-A DAO can avoid the fee by registering its own sale module by vote. That is intended: Builder is an open protocol.
+A DAO can avoid the fee by registering its own sale module by vote. That is intended: Tribe Builder is an open protocol.
 The fee is the price of using maintained, renewable, indexed modules, and should stay low enough that writing your
 own is not worth it.
 
@@ -118,7 +118,7 @@ policy that keeps the number of live versions, and so the bill, bounded if rent 
 
 ### 5. Grants
 
-The Stellar Community Fund (Builder already has an SCF project) and financial-inclusion funders for the Circle. Not
+The Stellar Community Fund (Tribe Builder already has an SCF project) and financial-inclusion funders for the Circle. Not
 revenue, but the realistic way the first year is paid for while lines 1–3 grow. The Circle, which takes no fee
 (RV-2), is the strongest grant story: savings and credit for people banks do not serve.
 
@@ -155,7 +155,7 @@ asset each DAO prices in, so XLM-priced fees buy less of it when XLM falls.
 | **2.5% (RV-1)** | **$120,000** | **~82** | **~33** | **~8** |
 | 5% (Nouns Builder total) | $60,000 | ~41 | ~16 | ~4 |
 
-Read it this way: on the protocol fee alone, Builder covers today's bill at about 33 active auction communities
+Read it this way: on the protocol fee alone, Tribe Builder covers today's bill at about 33 active auction communities
 selling a $10 token a day, or about 8 selling a $40 one. Creation fees (~$10 each) and managed renewal (~$20 a year
 each) add a little.
 
@@ -168,7 +168,7 @@ community:
 | $10 (50 XLM) | ~$91 |
 | $40 (200 XLM) | ~$365 |
 
-As long as indexing, hosting and storage cost less per community than that, each new auction community moves Builder
+As long as indexing, hosting and storage cost less per community than that, each new auction community moves Tribe Builder
 further past break-even. A Circle or a free-claims community brings no protocol fee, so it is covered by the creation
 fee, managed renewal and grants. For example, if Goldsky reached $500 a month at 100 communities, the bill would be
 about $7,500 a year, covered at 2.5% by about 82 communities at $10 a day.
@@ -182,7 +182,7 @@ So two things matter more than the exact fee rate:
 
 ## Positioning
 
-> For communities on Stellar that own and decide things together, Builder is an open membership protocol where you
+> For communities on Stellar that own and decide things together, Tribe Builder is an open membership protocol where you
 > pay the chain's rent plus a small share of what members pay to join, and nothing for saving together. Unlike hosted
 > DAO tools, there is no subscription and no platform power over your DAO: the fee is part of the code version your
 > community voted for.
