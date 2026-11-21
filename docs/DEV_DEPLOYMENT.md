@@ -11,7 +11,7 @@ Manager and is not touched by anything here.
 | Manager artifact | `deploys/builder-testnet-manager.json` | `deploys/dev-testnet-manager.json` |
 | Database | Neon `stellar-builder-testnet`, branch `production` | same project, branch `dev` |
 | Goldsky secret | `BUILDER_POSTGRES_SECRET` | `BUILDER_DEV_POSTGRES_SECRET` |
-| Pipeline | `builder-stellar-testnet` | `builder-stellar-testnet-dev` (`packages/goldsky/dev.env`) |
+| Pipeline | `builder-stellar-testnet` (`packages/goldsky/prod.env`) | `builder-stellar-testnet-dev` (`packages/goldsky/dev.env`) |
 | Vercel project | `builder-stellar-web` (production branch `main`) | `builder-stellar-dev` (production branch `dev`) |
 | Docs | `builder-stellar-docs` (production branch `dev`), docs.tribes.build, one site for both | |
 

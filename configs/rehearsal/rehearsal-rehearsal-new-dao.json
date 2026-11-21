@@ -1,0 +1,65 @@
+{
+  "deployer": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+  "nonce": 3,
+  "launchAdmin": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+  "slug": "rehearsal-new",
+  "token": {
+    "name": "Rehearsal New",
+    "symbol": "RHN"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Testnet end-to-end rehearsal DAO (disposable)",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://builder-stellar-web.vercel.app"
+        }
+      ],
+      "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+    },
+    "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "10000000",
+    "timeBuffer": 60,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GBUNJTZ3Z2I2IH36JBYNY2BHO2XXAU6SXOLBGTZDX6VEB4DU7GLE4HTM",
+      "amount": 3
+    }
+  ],
+  "launch": {
+    "launchAuction": true,
+    "launchMarketplace": true
+  }
+}

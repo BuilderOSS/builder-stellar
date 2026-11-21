@@ -1,6 +1,7 @@
 # Release plan: promote `dev` to `main` (release 1)
 
-Status: **phase 1 done** (2026-11-21); the decisions below were taken as recommended. Nothing on chain has run. Every step marked **(approval)** is outward-facing
+Status: **phases 1 and 2 done** (2026-11-21); the decisions below were taken as recommended. Nothing has run
+on the production Manager, database or pipeline. Phases 3 to 6 each need a go-ahead at the time they run. Every step marked **(approval)** is outward-facing
 and waits for an explicit go-ahead at the time it runs; the `testnet-admin` key signs only those.
 
 ## What ships
@@ -65,24 +66,50 @@ so no `migrate()` step.
 5. Docs in the same PR: `docs/CONTRACT_UPGRADES.md` (this release as the worked example), the upgrades
    concept page and release notes on docs.tribes.build, `TODOS.md`.
 
-## Phase 2: rehearse on a copy of production (no testnet-admin needed)
+## Phase 2: rehearse on a copy of production (done 2026-11-21, e2e keys only)
 
-The dev Manager already runs the release code, so it can't rehearse the upgrade. Instead, deploy a
-throwaway Manager on testnet **from production's own code** (the three fixtures plus the five unchanged
-modules), with an e2e key as its admin and a 1-ledger notice, and run phases 5 and 6 against it with the
-real scripts:
+The dev Manager already runs the release code, so the rehearsal ran on a throwaway copy of production:
 
-1. `deploy-manager.mjs` with a rehearsal config (`configs/testnet-rehearsal-manager.json`, label
-   `rehearsal`) pointing at the fixture WASMs; create, set up and launch one tribe on it, and leave one
-   in setup.
-2. Run phase 5 exactly as written, with `DEPLOY_IDENTITY` set to the rehearsal admin.
-3. Point a local walkthrough build at it (`E2E_MANAGER_ARTIFACT=deploys/rehearsal-testnet-manager.json`)
-   and run W16 (the live tribe upgrades by proposal), W03 and W04 (a new tribe) and W07 (proposals on the
-   new Governor).
+1. **Production's build reproduces.** A worktree at production's source commit (`c20c822`), built with
+   rustc 1.95.0 and stellar-cli 28.0.0, gives all eight hashes production runs.
+2. **A rehearsal Manager from that commit.** `deploy-manager.mjs` from `c20c822`, with
+   `configs/rehearsal/testnet-rehearsal-manager.json` (admin `e2e-rehearsal-admin`, a 60-ledger notice instead of
+   720), deployed `CBOGG6KM…BQJX4` (`deploys/rehearsal/rehearsal-testnet-manager.json`). On it, that commit's
+   `deploy-dao.mjs` created `rehearsal-live` (launched, with auction and market) and `rehearsal-pending`
+   (left in setup).
+3. **Phase 5 exactly as written below,** from `dev`, with `DEPLOY_IDENTITY=e2e-rehearsal-admin`:
+   - while paused, `create_dao` was refused with `FactoryPaused` (7111);
+   - the Manager moved to 0.5.0 after its notice, and its tribes and slugs still resolved;
+   - Governor and Metadata 0.5.0 were registered and approved, Governor announced, current hashes set.
+4. **Phase 6's chain steps.**
+   - After `unpause_factory`, `rehearsal-pending` launched on its 0.4.0 Governor.
+   - `rehearsal-new` was created and launched with `dev`'s `deploy-dao.mjs` and runs Governor and
+     Metadata 0.5.0.
+   - `rehearsal-live` upgraded Governor and Metadata in **one proposal**, voted by its founder and executed
+     through the Treasury (proposal `94a7f852…`, 11:12 to 11:27 UTC). After it, both read 0.5.0 at
+     `8bc3a922…` and `a378c228…`. The token's traits were unchanged, and the Governor still votes with
+     the tribe's own token.
+   - A second proposal on the new Governor raised the quorum from 1,000 to 1,500 bps (`4e6fbcfe…`, executed
+     11:43 UTC): the upgraded tribe governs as before.
 
-The rehearsal Manager is never indexed by a shared pipeline; the walkthroughs read chain state directly
-where the read model would be needed, or a scratch Neon branch holds its read model. Anything found is
-fixed on `dev` and phase 2 repeats.
+**What it changed in the plan.** All of these are folded into phase 5 below:
+- the Manager script needs `LEGACY_MANAGER_VERSION=0.4.0` (it skips registering when the record exists);
+- the module script must get a **launched** tribe's config (it upgrades a tribe in setup directly), and
+  one whose nonce has a deploy artifact (`configs/testnet-builder-dao-1.json`);
+- the script doesn't move latest or current pointers;
+- the Manager has no paused getter, so a refused `create_dao` simulation is the check.
+
+## Production checks (done 2026-11-21, read-only)
+
+Production runs its own deployment, separate from dev.tribes.build, so each piece was checked on its own:
+
+| Piece | Production today | Release impact |
+|---|---|---|
+| Contracts | All 8 hashes rebuild from `c20c822` | Only Manager, Governor and Metadata change |
+| Tribes | 9; all on Governor `41ad48e8…` and Metadata `44a0c4b6…` (`manager.module_versions`) | The two approvals in phase 5 cover every tribe |
+| Vercel `builder-stellar-web` (team Nouns Builder) | Builds `main` from `apps/web` | The only new variables `dev` reads: `MANAGER_DEPLOYMENT_FILE` (now set), `NEXT_PUBLIC_DOCS_URL` (defaults to docs.tribes.build), and two walkthrough-only ones that must stay unset there. `NEXT_PUBLIC_SITE_URL` falls back to `https://tribes.build`, as today |
+| Database (Neon `production`) | Migrations 0001 to 0010 | The ten files on `dev` match production's recorded checksums byte for byte, so `migrate.sh` applies 0011 only |
+| Goldsky `builder-stellar-testnet` | Settings existed only in a local `.env.local` | Now `packages/goldsky/prod.env`. Generated from `dev`, the pipeline equals `dev`'s committed `builder-stellar-events.yaml` and differs from `main`'s only by the `VoteSourceApproved` event: no replay |
 
 ## Phase 3: freeze window opens
 
@@ -95,8 +122,8 @@ fixed on `dev` and phase 2 repeats.
 
 1. Apply 0011 and refresh grants on the production branch **(approval)**:
    `./db/migrate.sh "$ADMIN_DATABASE_URL"`, then `./db/grant-permissions.sh "$ADMIN_DATABASE_URL"`.
-2. Apply `dev`'s pipeline to `builder-stellar-testnet` in place (`./scripts/deploy.sh deploy`, prod env)
-   **(approval)**. It only adds an event, so no replay.
+2. Apply the pipeline in place **(approval)**, from `packages/goldsky`:
+   `GOLDSKY_ENV_FILE=prod.env ./scripts/deploy.sh deploy`. It only adds an event, so no replay.
 3. Check `/api/health` on www.tribes.build stays healthy (the current `main` app ignores the new column).
 
 ## Phase 5: contracts on the production Manager (testnet-admin, each **approval**)
@@ -105,21 +132,33 @@ fixed on `dev` and phase 2 repeats.
    then `cargo test -p dao-e2e release_0_5_0 -- --include-ignored`. The ignored test checks that the three
    released contracts are exactly the hashes dev has run, and the other five exactly production's. Another
    compiler gives other bytes (CI uses the latest stable Rust), so never upload a build that fails it.
-1. `pause_factory`: new tribes wait; existing tribes work normally.
-2. Manager 0.5.0: `upgrade-contract.mjs manager configs/testnet-manager.json f5b32ab1…` (registers the old
-   hash as 0.4.0 if needed, approves, announces). Wait 720 ledgers, rerun to `upgrade_manager`.
-3. Governor 0.5.0 and Metadata 0.5.0: upload, `register_implementation`, `approve_upgrade` from each hash a
-   production tribe runs (`41ad48e8…`, `44a0c4b6…`, and any other found in phase 3). Then
-   `set_latest_implementation` for **Governor only**: Metadata stays unannounced (decision 1).
-4. `set_current_implementations` with the two new hashes and the five unchanged ones.
-5. Verify read-only: `version`, `wasm_hash` on the Manager; the registry rows; `current_implementations`.
+1. Pause: `stellar contract invoke --id $MGR --network testnet --source-account testnet-admin -- pause_factory`.
+   Check: simulating `create_dao` (`deploy-dao.mjs create_dao` with any new config) fails with 7111.
+   Existing tribes keep working.
+2. Manager 0.5.0, run twice, the second time after 720 ledgers (the first run prints the ledger):
+   `LEGACY_MANAGER_VERSION=0.4.0 DEPLOY_IDENTITY=testnet-admin node scripts/upgrade-contract.mjs manager configs/testnet-manager.json f5b32ab19f0817a563606c9a88ab290da05871a8bf21e006fb408406659e69c1`.
+   Check: the Manager's `version` is `0.5.0` and `wasm_hash` is `ab1d0d17…`.
+3. Governor and Metadata 0.5.0, each with a **launched** tribe's config: `configs/testnet-builder-dao-1.json`
+   (`builder-auctions`, extracted from its deploy artifact; the older `configs/testnet-builder-dao.json` has
+   nonce 0, which no artifact matches, so the script would stop with "DAO artifact not found").
+   The script uploads, registers, approves, and writes a proposal payload, but sends nothing to the tribe:
+   `DEPLOY_IDENTITY=testnet-admin node scripts/upgrade-contract.mjs governor configs/testnet-builder-dao-1.json configs/testnet-manager.json 41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd`,
+   and the same for `metadata` from `44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb`.
+   Approve any other `from` hash found in phase 3 with `approve_upgrade`.
+4. Announce Governor only: `set_latest_implementation --name Governor --wasm_hash 8bc3a922…` (Metadata
+   stays unannounced, decision 1).
+5. New tribes: `set_current_implementations` with Governor `8bc3a922…`, Metadata `a378c228…` and the five
+   unchanged hashes (Token `3f36abc9…`, Auction `8130c851…`, Treasury `597a9e04…`, Marketplace
+   `f28ebc99…`, ClaimMinter `e1c18db9…`).
+6. Verify read-only: the Manager's `version` and `wasm_hash`; `latest_pointer --name Governor`;
+   `current_implementations`; `get_dao_by_slug` for a few production tribes.
 
 ## Phase 6: promote the web app, then reopen
 
 1. Open the `dev` → `main` PR (the only PR ever opened into `main`) **(approval to merge)**. Vercel deploys
    www.tribes.build from `main`.
 2. Smoke test on www.tribes.build: sign in, a tribe page, a proposal page, Market, Manage → Contract upgrades
-   showing "Governor and Metadata 0.5.0 available" on a production tribe.
+   showing "Governor 0.5.0 available" on a production tribe (Metadata isn't announced).
 3. `unpause_factory`, then create one tribe on production to prove the new `create_dao`.
 4. Release check (`docs/qa/WALKTHROUGHS.md`): Freighter on a real device, sign in, vote, sign out.
 5. Upgrade one of our own `builder-testnet-dao-*` tribes by proposal, the first production proof of the

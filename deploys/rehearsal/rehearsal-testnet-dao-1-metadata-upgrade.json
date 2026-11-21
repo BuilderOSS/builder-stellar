@@ -1,0 +1,32 @@
+{
+  "network": "testnet",
+  "manager": "CBOGG6KM33NV7KJLLSUOG63KCZKAUFBZIDUEVJW5S4SAMMM3H2LBQJX4",
+  "module": "metadata",
+  "target": "CBN3GDTEQ7JR5BYDK6SILVINB7CNEA6DUORBLK6GIQ3MKQUJQN7CIAYL",
+  "fromHash": "44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb",
+  "toHash": "a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da",
+  "version": "0.5.0",
+  "managerApproval": "submitted",
+  "governor": "CA2P4LOUJ6M4HXEO2LXBZWUFN6646OYKTDA3E74RTPVPH24EE6QOOM34",
+  "treasury": "CBTMG46W6G57SA5H2ELHO7SZGVXUIN5FOLZWLEJDVJA47Z6Z73FL356J",
+  "proposal": {
+    "targets": [
+      "CBN3GDTEQ7JR5BYDK6SILVINB7CNEA6DUORBLK6GIQ3MKQUJQN7CIAYL"
+    ],
+    "functions": [
+      "upgrade"
+    ],
+    "args": [
+      [
+        {
+          "bytes": "44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb"
+        },
+        {
+          "bytes": "a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da"
+        }
+      ]
+    ],
+    "description": "Upgrade metadata to 0.5.0 (a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da)",
+    "description_hash": "995c10599d5620de26343d5a61ad1387a455a33978f52d6a9077e48788a4cf36"
+  }
+}
