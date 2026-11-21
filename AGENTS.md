@@ -9,6 +9,12 @@ and the Oxford comma in authored English prose.
 `dev` and open every pull request against `dev`. Never commit, push, merge, or open
 a pull request into `main`. See `docs/AGENT_WORKFLOW.md`.
 
+## Docs ship with the change
+
+A code change and the documentation it affects merge in the same pull request, never
+later. Every PR description has a **Docs** line: the pages updated, or "None affected"
+with the reason. See `docs/AGENT_WORKFLOW.md`.
+
 ## Documentation placeholders before production
 
 When the user mentions production, prod, rollout, release, go-live, launch

@@ -9,6 +9,13 @@ and open every pull request against `dev` (`gh pr create --base dev`). Never com
 push, merge, or open a pull request into `main`, and never rebase `dev` onto it. See
 `docs/AGENT_WORKFLOW.md`.
 
+## Docs ship with the change
+
+Every code change merges with the documentation it affects, in the same pull request: the
+guides and reference in `apps/docs/content`, the runbooks in `docs/`, `DESIGN.md`, `TODOS.md` and
+the QA docs. Every PR description has a **Docs** line naming the pages updated, or "None affected"
+with the reason. See "Docs ship with the change" in `docs/AGENT_WORKFLOW.md`.
+
 ## Design System
 
 Read `DESIGN.md` before visual or UI work: it defines the fonts, colors, spacing, navigation, density rules and voice. Build UI only from `apps/web/src/components/ui` primitives and Panda tokens. No raw hex values, inline `style={{}}`, CSS modules, `<style jsx>` or new global classes in components. Ask before departing from it. When reviewing or QA-ing UI, flag code that doesn't match `DESIGN.md`.

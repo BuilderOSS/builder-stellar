@@ -70,6 +70,29 @@ a separate Build Web job, which also builds the docs site and checks every docs 
 both themes. It caches node_modules and uses Node 23. Configuration
 changes belong to implementation owners, not docs-steward.
 
+## Docs ship with the change
+
+A change and the documentation it affects land in the same pull request. Docs never trail
+code into a later PR, because a merged change with stale docs is what users read the moment
+`dev` deploys.
+
+Before opening a PR, check each surface the change can touch and update it in the same branch:
+
+| Change | Update |
+| --- | --- |
+| What a user sees or does: copy, a flow, a button, an error | The guide and reference pages in `apps/docs/content` that describe it. Search for the old wording |
+| A visible screen in a captured flow | Retake the affected shots (`docs/qa/SHOWCASE_TRIBE.md`), or name them under "Docs" in the PR if testnet can't take them now |
+| Contract interface, limits, errors or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md` and so on) |
+| API routes, views, indexer or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
+| A walkthrough, fixture or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
+| Design primitives or tokens | `DESIGN.md` |
+| Finished or new work items | `TODOS.md` |
+
+Every PR description has a **Docs** line: the pages updated, or "None affected" with the reason
+(for example, a test-only change). A reviewer treats a missing or unexplained Docs line as a
+blocking finding. When a change makes a doc wrong and you can't fix it in the same PR, don't
+merge it: fix the doc first.
+
 ## Documentation handoff and acceptance
 
 After an accepted interface change, send docs-steward: changed behavior, source
