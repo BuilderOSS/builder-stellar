@@ -2,12 +2,13 @@
 
 The product is Tribe Builder (tribes.build). In user-facing copy a DAO is a tribe, with the DAO term one line beneath; code identifiers such as `CommunityCard` keep their names. See the Brand and Logo and Voice sections of `DESIGN.md`.
 
-## Branches: `main` is frozen
+## Branches: work on `dev`, `main` moves by release
 
-`main` is frozen until the team decides to promote `dev` to `main`. Branch from `dev`
-and open every pull request against `dev` (`gh pr create --base dev`). Never commit,
-push, merge, or open a pull request into `main`, and never rebase `dev` onto it. See
-`docs/AGENT_WORKFLOW.md`.
+Branch from `dev` and open every pull request against `dev` (`gh pr create --base dev`).
+`main` is what tribes.build runs and moves only by a release promotion: one `dev` → `main`
+pull request, run from a release plan when the user asks for a release. Never commit or push
+to `main`, never rebase `dev` onto it, and never open any other pull request into it. See
+"Branches" and "Release promotion" in `docs/AGENT_WORKFLOW.md`.
 
 ## Docs ship with the change
 
