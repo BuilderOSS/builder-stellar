@@ -52,6 +52,21 @@ const PROD_UNCHANGED: [(&str, &str); 5] = [
         "e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa",
     ),
 ];
+/// Release 0.5.0: the code the dev Manager (`CDZOPJBW…`) has run since 2026-11-19.
+const RELEASE_HASHES: [(&str, &str); 3] = [
+    (
+        "manager",
+        "ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853",
+    ),
+    (
+        "governor",
+        "8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807",
+    ),
+    (
+        "metadata",
+        "a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da",
+    ),
+];
 /// The production Manager's upgrade notice, in ledgers.
 const PROD_UPGRADE_DELAY: u32 = 720;
 
@@ -167,16 +182,34 @@ fn pass_and_execute(
 }
 
 #[test]
-fn fixtures_are_production_code_and_the_other_five_modules_are_unchanged() {
+fn fixtures_are_production_code() {
     let e = Env::default();
     assert_eq!(hex(&upload(&e, prod_manager::WASM)), PROD_MANAGER_HASH);
     assert_eq!(hex(&upload(&e, PROD_GOVERNOR)), PROD_GOVERNOR_HASH);
     assert_eq!(hex(&upload(&e, PROD_METADATA)), PROD_METADATA_HASH);
+}
+
+/// Byte identity depends on the compiler: production and the dev Manager were built with rustc 1.95.0
+/// and stellar-cli 28.0.0, while CI builds with the latest stable Rust. Run on the release machine,
+/// after `pnpm contracts:build`, before any upload (docs/plans/release-main-1.md, phase 5):
+/// `cargo test -p dao-e2e release_0_5_0 -- --include-ignored`.
+#[test]
+#[ignore = "needs the release toolchain (rustc 1.95.0, stellar-cli 28.0.0); run with --include-ignored"]
+fn release_build_matches_production_and_dev() {
+    let e = Env::default();
     for (name, hash) in PROD_UNCHANGED {
         assert_eq!(
             hex(&upload(&e, &built(name))),
             hash,
             "{name} must be byte-identical to production: this release does not upgrade it"
+        );
+    }
+    // The three released contracts must be exactly what dev.tribes.build has run and been tested on.
+    for (name, hash) in RELEASE_HASHES {
+        assert_eq!(
+            hex(&upload(&e, &built(name))),
+            hash,
+            "{name} 0.5.0 is not the build dev runs"
         );
     }
 }

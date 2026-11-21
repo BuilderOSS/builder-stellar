@@ -99,6 +99,10 @@ fixed on `dev` and phase 2 repeats.
 
 ## Phase 5: contracts on the production Manager (testnet-admin, each **approval**)
 
+0. Build on the release machine with **rustc 1.95.0 and stellar-cli 28.0.0** (`pnpm contracts:build`),
+   then `cargo test -p dao-e2e release_0_5_0 -- --include-ignored`. The ignored test checks that the three
+   released contracts are exactly the hashes dev has run, and the other five exactly production's. Another
+   compiler gives other bytes (CI uses the latest stable Rust), so never upload a build that fails it.
 1. `pause_factory`: new tribes wait; existing tribes work normally.
 2. Manager 0.5.0: `upgrade-contract.mjs manager configs/testnet-manager.json f5b32ab1…` (registers the old
    hash as 0.4.0 if needed, approves, announces). Wait 720 ledgers, rerun to `upgrade_manager`.

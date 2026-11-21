@@ -27,6 +27,7 @@ Fetched from testnet on 2026-11-21 for `src/release_0_5_0.rs`, which upgrades th
 | `metadata-0.4.0-44a0c4b6.wasm` | Metadata | 0.4.0 | `44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb` | same |
 
 Token, Auction, Treasury, Marketplace and ClaimMinter need no fixture: production runs exactly this
-checkout's build of them, which `fixtures_are_production_code_and_the_other_five_modules_are_unchanged`
-checks hash by hash.
+checkout's build of them. `release_build_matches_production_and_dev` checks that hash by hash, together
+with the three 0.5.0 hashes. Bytes depend on the compiler, so that test is ignored by default: run it with
+`--include-ignored` on a build made with rustc 1.95.0 and stellar-cli 28.0.0, the release toolchain.
 
