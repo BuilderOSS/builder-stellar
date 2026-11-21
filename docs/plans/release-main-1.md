@@ -1,7 +1,7 @@
 # Release plan: promote `dev` to `main` (release 1)
 
-Status: **phases 1 and 2 done** (2026-11-21); the decisions below were taken as recommended. Nothing has run
-on the production Manager, database or pipeline. Phases 3 to 6 each need a go-ahead at the time they run. Every step marked **(approval)** is outward-facing
+Status: **released 2026-11-21.** www.tribes.build runs `dev` @ `f1b07fb` on the upgraded production Manager.
+Records: `deploys/release-1/pre-release-state.json` and `post-release-state.json`. Every step marked **(approval)** is outward-facing
 and waits for an explicit go-ahead at the time it runs; the `testnet-admin` key signs only those.
 
 ## What ships
@@ -33,8 +33,11 @@ so no `migrate()` step.
    five stay 0.4.0. A version is a registry label, not part of the build (`version()` reads the Manager's
    registry), so 0.5.0 is byte for byte the code dev runs today. The dev Manager keeps its own records,
    which label the same hashes 0.4.0; records are write-once and dev is a test environment, so that stays.
-   **Metadata 0.5.0 changes nothing for members** (a refactor), so production registers it for new tribes
-   but doesn't announce it as latest: existing tribes are never asked to vote on it.
+   **Metadata 0.5.0 changes nothing for members** (a refactor). The plan was to register it for new tribes
+   without announcing it. In production that made every tribe on 0.5.0 (new tribes, and `builder-auctions`)
+   read "Newer release not approved", because the app compares a tribe's version with the announced
+   latest. So Metadata 0.5.0 was announced too (`53f4e0c3…`). Tribes still on 0.4.0 see it as an optional
+   upgrade, with its "Maintenance only" note, in the same vote as the Governor.
 2. **Migration 0011 on the production database.** It was held back on purpose. The release needs it:
    confirm it may now be applied (phase 4).
 3. **Existing production tribes.** Each of the 9 tribes upgrades its Governor and Metadata by its own vote,
@@ -174,6 +177,24 @@ Done 2026-11-21:
 4. Release check (`docs/qa/WALKTHROUGHS.md`): Freighter on a real device, sign in, vote, sign out.
 5. Upgrade one of our own `builder-testnet-dao-*` tribes by proposal, the first production proof of the
    module upgrade.
+
+## Release record (2026-11-21)
+
+| Step | Result |
+|---|---|
+| 5.0 | The release-toolchain check passed (3 tests) |
+| 5.1 | Factory paused, `39c25e30…` |
+| 5.2 | Manager 0.5.0 (`ab1d0d17…`) after its 720-ledger notice; tribes and slugs resolved |
+| 5.3 to 5.5 | Governor and Metadata 0.5.0 registered and approved from `41ad48e8…` and `44a0c4b6…`; Governor announced; current hashes set |
+| 6.1 | `dev` → `main` (#114) merged by an admin, as `main` requires one review; Vercel `dpl_5er9v1Jv…` logged "Web deployment set to manager:CCLBJAC5… (builder-testnet-manager.json)", with the test wallet absent |
+| 6.2 | Smoke test: health, every tribe page and Manage → Contract upgrades answer; the indexer had each event within about 2 seconds |
+| 6.3 | Factory unpaused, `12ea377d…`. `create_dao` was proven by **simulation** with `dev`'s parameters (`DaoCreated`), so no permanent test tribe sits on production |
+| 6.4 | Freighter release check on a real device: **to do by hand** |
+| 6.5 | `builder-auctions` upgraded Governor and Metadata by proposal `2967c11f…`, executed 13:27 UTC through its Treasury (same art, same vote source) |
+| Follow-up | Metadata 0.5.0 announced, `53f4e0c3…` (see decision 1) |
+
+Not reversed or cleaned up: the Neon snapshot branch `pre-release-1-2026-11-21` (no compute, kept as the
+rollback point) and the rehearsal Manager on testnet (kept for reference).
 
 ## Rollback
 

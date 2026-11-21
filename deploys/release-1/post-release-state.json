@@ -1,0 +1,70 @@
+{
+  "recordedAt": "2026-11-21T13:50:17Z",
+  "manager": "CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD",
+  "version": "0.5.0",
+  "wasm_hash": "ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853",
+  "admin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "upgrade_delay": 720,
+  "current_implementations": {
+    "auction": "8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff",
+    "claims": "e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa",
+    "governor": "8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807",
+    "marketplace": "f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4",
+    "metadata": "a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da",
+    "token": "3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d",
+    "treasury": "597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d"
+  },
+  "latest": {
+    "Manager": {
+      "set_ledger": 5847845,
+      "wasm_hash": "ab1d0d172f65f47cdcb2e11391e34745a65ec9635f735df9e9a06289ffb7d853"
+    },
+    "Token": {
+      "set_ledger": 5174247,
+      "wasm_hash": "3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d"
+    },
+    "Metadata": {
+      "set_ledger": 5849091,
+      "wasm_hash": "a378c2282e883327a3a919e70280033cc87e0279b6be5c924ccbd035a57370da"
+    },
+    "Auction": {
+      "set_ledger": 5174255,
+      "wasm_hash": "8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff"
+    },
+    "Governor": {
+      "set_ledger": 5848597,
+      "wasm_hash": "8bc3a9223bb083f4d91bd342becd89f9b35acec40da76e7def89deac44465807"
+    },
+    "Treasury": {
+      "set_ledger": 5174263,
+      "wasm_hash": "597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d"
+    },
+    "Marketplace": {
+      "set_ledger": 5174267,
+      "wasm_hash": "f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4"
+    },
+    "ClaimMinter": {
+      "set_ledger": 5174271,
+      "wasm_hash": "e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa"
+    }
+  },
+  "transactions": {
+    "pause_factory": "39c25e30e2442ac2d2263ec53424218547290d6c8503a91b21debf29b39dbfa5",
+    "unpause_factory": "12ea377dfcad81b7f933004284a9f2dc1789fa9b67067060c449fde02745e503",
+    "set_latest_metadata": "53f4e0c3baf9076cf74e494cd4d4e0a97d3adc40e128166445b95d7ed893abe4"
+  },
+  "web": {
+    "main_merge": "f1b07fb10beefa4e7a55a57feb2465dbdb60eb83",
+    "vercel_deployment": "dpl_5er9v1JviRjGjYFNfFAnCYAtKcs4"
+  },
+  "database": {
+    "snapshot_branch": "pre-release-1-2026-11-21 (br-falling-shadow-b5zt02o1)",
+    "applied": "0011_vote_sources"
+  },
+  "builder_auctions_upgrade": {
+    "proposal": "2967c11ff2fa\u2026",
+    "executed": "2026-11-21T13:27:06Z",
+    "governor": "0.5.0",
+    "metadata": "0.5.0"
+  }
+}
