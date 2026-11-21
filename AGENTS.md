@@ -3,11 +3,12 @@
 Follow `CLAUDE.md`, `DESIGN.md`, and `docs/AGENT_WORKFLOW.md`. Use British English
 and the Oxford comma in authored English prose.
 
-## Branches: `main` is frozen
+## Branches: work on `dev`, `main` moves by release
 
-`main` is frozen until the team decides to promote `dev` to `main`. Branch from
-`dev` and open every pull request against `dev`. Never commit, push, merge, or open
-a pull request into `main`. See `docs/AGENT_WORKFLOW.md`.
+Branch from `dev` and open every pull request against `dev`. `main` is what
+tribes.build runs and moves only by a release promotion (one `dev` → `main` pull
+request, from a release plan, when the user asks). Never commit or push to `main`,
+and never open any other pull request into it. See `docs/AGENT_WORKFLOW.md`.
 
 ## Docs ship with the change
 

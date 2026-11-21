@@ -8,15 +8,33 @@ as the product data: contract event to indexer to read model to API to UI.
 
 ## Branches
 
-`main` is frozen. It holds the last promoted release and changes only when the team
-decides to promote `dev` to `main`; no agent makes that call.
+`dev` is where all work lands, and it deploys to dev.tribes.build. `main` is what tribes.build
+runs: it holds the last promoted release and moves only by a **release promotion**. Release 1
+(2026-11-21, #114) was the first.
 
 - Start work from an up-to-date `dev`: `git fetch origin && git switch -c <branch> origin/dev`.
 - Open every pull request against `dev`: `gh pr create --base dev`. Stacked pull
   requests target the branch below them, with the bottom of the stack on `dev`.
-- Never commit, push, merge, or open a pull request into `main`, and never rebase
-  `dev` onto `main`. If a tool defaults to `main`, change the base to `dev`.
+- Never commit or push to `main`, never rebase `dev` onto `main`, and never open a pull
+  request into `main` except a release promotion. If a tool defaults to `main`, change the
+  base to `dev`.
+- A fix that tribes.build needs lands on `dev` first and reaches `main` with the next
+  promotion. There are no pull requests from other branches into `main`.
 - When this section changes, update the matching notes in `CLAUDE.md` and `AGENTS.md`.
+
+### Release promotion
+
+Only when the user asks for a release, and only from a written plan
+(`docs/plans/release-main-<n>.md`; release 1 is the worked example):
+
+1. Plan what ships: contract releases (`docs/CONTRACT_UPGRADES.md`), database migrations,
+   the pipeline (`packages/goldsky/prod.env`), and Vercel variables on `builder-stellar-web`.
+2. Rehearse contract upgrades on a copy of production, then run the production steps in the
+   plan's order. Each outward-facing step needs the user's go-ahead when it runs.
+3. Open one pull request from `dev` into `main`. `main` requires one approving review, so it
+   is merged by a reviewer or by the user's admin merge, never by an agent alone.
+4. Verify the production build's log ("Web deployment set to manager:CCLBJAC5…"), smoke-test
+   www.tribes.build, and record the release in the plan and `deploys/release-<n>/`.
 
 ## Roles
 

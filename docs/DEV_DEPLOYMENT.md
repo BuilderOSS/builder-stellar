@@ -1,12 +1,12 @@
 # dev.tribes.build: the `dev` deployment
 
-`main` is frozen, so `dev` gets its own deployment: its own Manager, database, pipeline and
-hostname. Production (tribes.build) keeps running from `main` against the original testnet
-Manager and is not touched by anything here.
+`dev` gets its own deployment: its own Manager, database, pipeline and hostname. Production
+(tribes.build) runs `main`, which moves only by a release promotion (`docs/AGENT_WORKFLOW.md`),
+against the original testnet Manager, and nothing here touches it.
 
 | Piece | Production (tribes.build) | Dev (dev.tribes.build) |
 |---|---|---|
-| Git branch | `main` (frozen) | `dev` |
+| Git branch | `main` (release promotions only) | `dev` |
 | Manager config | `configs/testnet-manager.json` (label `builder`) | `configs/testnet-dev-manager.json` (label `dev`) |
 | Manager artifact | `deploys/builder-testnet-manager.json` | `deploys/dev-testnet-manager.json` |
 | Database | Neon `stellar-builder-testnet`, branch `production` | same project, branch `dev` |
