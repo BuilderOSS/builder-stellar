@@ -27,6 +27,7 @@ Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tr
 - [Monitor the application](MONITORING.md)
 - [Who pays for storage, role by role](STORAGE_COSTS.md)
 - [Storage, TTL and rent reference](TTL_ECONOMICS.md)
+- [Revenue: paying for the platform (proposed)](REVENUE.md)
 - [Configure artwork during Setup](ARTWORK_SETUP.md)
 
 ## Reference and explanation

@@ -104,6 +104,32 @@
 **Priority:** P1 (SCF Tranche 2)
 **Depends on:** a maintained NQG testnet contract (nqg-compatibility.md §8, Q1)
 
+## Savings Circle
+
+### Automatic dues collection (`collect`)
+
+**What:** `circle.collect(member)`, callable by anyone, pulls a member's dues for the current cycle from a SEP-41 allowance the member granted the Circle; the web offers "Approve six months" with the allowance's expiry date shown and a reminder before it lapses.
+
+**Why:** Members who forget to pay miss stamps. Deferred from v1 in the CEO review (RD-1, 2026-10-13) because allowances expire silently (`expiration_ledger`) and overwrite on re-approve, which needs UI, reminders and tests.
+
+**Context:** `docs/designs/savings-circle.md` (Premise 5, entry points, CEO Review RD-1). Allowance semantics: SEP-41 `approve` overwrites; an expired allowance reads as 0.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Circle v1 (`pay_dues`) on testnet
+
+### Guarantor pledges
+
+**What:** `pledge(guarantor, borrower, stamps)` / `withdraw_pledge`, per-member `pledges_in` / `locks_out` lists (at most 8, tagged with their period), locked stamps added to the borrower's cap, and guarantor forfeit when the borrower defaults.
+
+**Why:** Lets a new member with few stamps borrow more with a neighbour's backing, the social collateral real circles use. Deferred from v1 in the CEO review (RD-2, 2026-10-13): the most intricate rules in the design (two lock lists, expiry, guarantor forfeit).
+
+**Context:** `docs/designs/savings-circle.md` Pledges section (kept as the spec) and CEO Review RD-2. v1 cap is `k x own open-period stamps x dues - outstanding`.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Circle v1 on testnet with the forfeit path tested
+
 ## Completed
 
 ### Governance adapter: vote source interface and configuration (2026-11-18)
