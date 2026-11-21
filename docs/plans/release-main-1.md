@@ -57,9 +57,11 @@ so no `migrate()` step.
    one proposal through the Treasury (same art, stale `from` refused) and then passes a quorum change on
    the new code. Production already records its Manager as 0.4.0, so the upgrade script needs no
    `LEGACY_MANAGER_VERSION`.
-4. Production pin: add `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` to the
-   `builder-stellar-web` Production environment **(approval, Vercel)**. Without it, the promoted build
-   picks the newer dev Manager artifact (`docs/DEV_DEPLOYMENT.md`).
+4. Done (2026-11-21): `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` is set on
+   `builder-stellar-web` (team Nouns Builder), Production only. It's a sensitive variable, so it can't
+   be read back; check it after promotion: the build log says "Web deployment set to manager:CCLBJAC5… (builder-testnet-manager.json)". Without it, the
+   promoted build would pick the newer dev Manager artifact (`docs/DEV_DEPLOYMENT.md`).
+   `builder-stellar-dev` pins `deploys/dev-testnet-manager.json`.
 5. Docs in the same PR: `docs/CONTRACT_UPGRADES.md` (this release as the worked example), the upgrades
    concept page and release notes on docs.tribes.build, `TODOS.md`.
 
