@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { getPinataService, PinataError } from '@/lib/pinata-service';
+import { verifyPinToken } from '@/lib/pinata-upload-auth';
+import { limitUploads, requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
 
@@ -10,8 +12,10 @@ import { uploadsEnabled } from '@/lib/uploads-enabled';
  * Request validation schema
  */
 const PinCidRequestSchema = z.object({
-  cid: z.string().min(1),
-  name: z.string().optional()
+  cid: z.string().min(1).max(128),
+  name: z.string().max(128).optional(),
+  /** From the generate-jwt call whose key uploaded this directory. */
+  pinToken: z.string().min(1).max(512)
 });
 
 type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
@@ -26,6 +30,7 @@ type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
  * {
  *   cid: string (IPFS content identifier)
  *   name?: string (optional name for the pin)
+ *   pinToken: string (returned by /api/pinata/generate-jwt to this account)
  * }
  *
  * Response:
@@ -36,7 +41,9 @@ type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
  *
  * Error responses:
  * - 401: Unauthenticated
+ * - 403: Unfunded account, or no valid pin token for this account
  * - 422: Invalid input
+ * - 429: Too many pins from this account
  * - 500: Service error
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -46,8 +53,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The deployment's upload switch covers directory uploads too.
     if (!uploadsEnabled()) return uploadsDisabledResponse();
 
-    // Check authentication
-    await requireAuthenticatedSession();
+    const session = await requireUploadAccount();
+    const limited = limitUploads('pin-cid', session.address);
+    if (limited) return limited;
 
     // Parse and validate request body
     body = await request.json().catch(() => ({}));
@@ -67,7 +75,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { cid, name } = validationResult.data;
+    const { cid, name, pinToken } = validationResult.data;
+    if (!verifyPinToken(pinToken, session.address)) {
+      return NextResponse.json(
+        { error: 'This pin was not authorized for this account. Upload the folder again.', code: 'PIN_NOT_AUTHORIZED' },
+        { status: 403 }
+      );
+    }
 
     // Pin CID to IPFS for redundancy
     const pinataService = getPinataService();
@@ -83,6 +97,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthError) {
       return authErrorResponse(error);
+    }
+
+    if (error instanceof UploadAccessError) {
+      return uploadAccessErrorResponse(error);
     }
 
     if (error instanceof SyntaxError) {

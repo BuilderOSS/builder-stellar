@@ -262,6 +262,19 @@ acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
 nonce cannot be silently changed after freezing. Unknown acceptance is not proof
 of failure. Missing older envelopes cannot be safely rebroadcast.
 
+Uploads to IPFS go through the operator's Pinata account, so they cost the operator.
+Every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`,
+`/api/uploads/pinata-url`, `/api/uploads/complete`) requires a session for an account
+that exists on the session's network (canonical Horizon; a failed lookup refuses, it
+never passes) and limits each account per route per 10 minutes. A key costs nothing,
+but a funded account holds the base reserve; on testnet Friendbot funds accounts for
+free, so there the per-account limit is the main bound. Upload tokens name the account
+they were issued to and only that account completes them; `pin-cid` pins only with the
+pin token `generate-jwt` returned to the same account within an hour. Upload tokens are
+signed with a key derived from `IRON_PASSWORD` under its own label, not with the
+session key. The funded check and the limits are per server instance. Each
+`generate-jwt` key is a Pinata key with one use and no expiry of its own.
+
 Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
 browser storage, not encrypted shared permissions or on-chain rights. Scope filters
 avoid mixing workspaces but do not secure data from another user of the same browser.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { BackendFailedError, getPinataService, NotFoundError, PinataError } from '@/lib/pinata-service';
 import {
   cidToUrls,
@@ -9,6 +9,7 @@ import {
   validateUploadCompletion
 } from '@/lib/pinata-upload';
 import { getAuthorization } from '@/lib/pinata-upload-auth';
+import { limitUploads, requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 
 /**
  * POST /api/uploads/complete
@@ -49,8 +50,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' }, { status: 404 });
     }
 
-    // Check authentication
-    await requireAuthenticatedSession();
+    const session = await requireUploadAccount();
+    const limited = limitUploads('complete', session.address);
+    if (limited) return limited;
 
     // Parse and validate request body
     const body = await request.json().catch(() => ({}));
@@ -72,8 +74,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const completion = validationResult.data;
 
-    // Look up the authorization
-    const authorization = getAuthorization(completion.uploadId);
+    // Look up the authorization: only the account it was issued to can complete it.
+    const authorization = getAuthorization(completion.uploadId, session.address);
 
     if (!authorization) {
       console.warn(`[/api/uploads/complete] Authorization not found for upload ${completion.uploadId}`);
@@ -156,6 +158,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthError) {
       return authErrorResponse(error);
+    }
+
+    if (error instanceof UploadAccessError) {
+      return uploadAccessErrorResponse(error);
     }
 
     if (error instanceof SyntaxError) {

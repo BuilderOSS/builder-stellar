@@ -49,7 +49,9 @@ export function ArtworkDirectoryUpload({
       const authorization = await uploadResponseJson(
         await fetch('/api/pinata/generate-jwt', { method: 'POST', signal: AbortSignal.timeout(30_000) })
       );
-      if (typeof authorization.jwt !== 'string') throw new Error('Upload authorization is unavailable');
+      if (typeof authorization.jwt !== 'string' || typeof authorization.pinToken !== 'string') {
+        throw new Error('Upload authorization is unavailable');
+      }
       const form = new FormData();
       files.forEach((file, index) => form.append('file', file, `artwork/${inspected.paths[index]}`));
       form.append('pinataMetadata', JSON.stringify({ name: 'DAO artwork' }));
@@ -66,7 +68,7 @@ export function ArtworkDirectoryUpload({
         await fetch('/api/pinata/pin-cid', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cid: uploaded.IpfsHash, name: 'DAO artwork' }),
+          body: JSON.stringify({ cid: uploaded.IpfsHash, name: 'DAO artwork', pinToken: authorization.pinToken }),
           signal: AbortSignal.timeout(30_000)
         })
       );
