@@ -5,7 +5,7 @@ import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { AuthenticationError, getPinataService, PinataError, RateLimitError } from '@/lib/pinata-service';
 import { createUploadAuthorization, isValidUploadType, validateFileSize, validateMimeType } from '@/lib/pinata-upload';
 import { storeAuthorization } from '@/lib/pinata-upload-auth';
-import { limitUploads, requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 
 /**
  * Request validation schema for signed URL generation
@@ -79,9 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // A funded account, with a limit per account: each signed URL is a paid upload.
-    const session = await requireUploadAccount();
-    const limited = limitUploads('pinata-url', session.address);
-    if (limited) return limited;
+    const session = await requireUploadAccount('pinata-url');
 
     // Parse and validate request body
     body = await request.json().catch(() => ({}));

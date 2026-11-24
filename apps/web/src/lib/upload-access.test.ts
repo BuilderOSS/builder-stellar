@@ -9,7 +9,7 @@ vi.mock('@/lib/auth/server', async (importOriginal) => ({
 }));
 
 import {
-  limitUploads,
+  countUpload,
   requireUploadAccount,
   resetUploadAccessForTests,
   UPLOAD_LIMITS,
@@ -17,55 +17,87 @@ import {
   UploadAccessError
 } from './upload-access';
 
+const horizonNotFound = () =>
+  new NotFoundError('not found', { status: 404, type: 'https://stellar.org/horizon-errors/not_found' });
+
 beforeEach(() => {
   resetUploadAccessForTests();
+  vi.stubEnv('NEXT_PUBLIC_NETWORK', 'testnet');
   session.address = 'GALICE';
+  session.network = 'testnet';
 });
 
 describe('requireUploadAccount', () => {
   it('lets a funded account upload and remembers it', async () => {
     const lookup = vi.fn(async () => ({}));
-    await expect(requireUploadAccount(lookup)).resolves.toEqual(session);
-    await requireUploadAccount(lookup);
+    await expect(requireUploadAccount('pinata-url', lookup)).resolves.toEqual(session);
+    await requireUploadAccount('pinata-url', lookup);
     expect(lookup).toHaveBeenCalledTimes(1);
     expect(lookup).toHaveBeenCalledWith('https://horizon-testnet.stellar.org', 'GALICE');
   });
 
-  it('refuses an account the network has never funded', async () => {
+  it('refuses an account the network has never funded, and remembers that briefly', async () => {
     const lookup = vi.fn(async () => {
-      throw new NotFoundError('not found', {});
+      throw horizonNotFound();
     });
-    await expect(requireUploadAccount(lookup)).rejects.toMatchObject({
-      status: 403,
-      code: 'UPLOAD_ACCOUNT_UNFUNDED'
-    });
+    for (let i = 0; i < 2; i += 1) {
+      await expect(requireUploadAccount('complete', lookup)).rejects.toMatchObject({
+        status: 403,
+        code: 'UPLOAD_ACCOUNT_UNFUNDED'
+      });
+    }
+    expect(lookup).toHaveBeenCalledTimes(1);
   });
 
-  it('treats a failed lookup as unavailable, never as funded', async () => {
-    const lookup = vi.fn(async () => {
-      throw new Error('Horizon is down');
-    });
-    const error = await requireUploadAccount(lookup).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(UploadAccessError);
-    expect(error).toMatchObject({ status: 503, code: 'UPLOAD_ACCOUNT_LOOKUP_FAILED' });
+  it('treats a failed lookup, or a 404 that is not Horizon’s, as unavailable, never as funded', async () => {
+    for (const failure of [new Error('Horizon is down'), new NotFoundError('proxy', { status: 404 })]) {
+      resetUploadAccessForTests();
+      const error = await requireUploadAccount('complete', async () => {
+        throw failure;
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(UploadAccessError);
+      expect(error).toMatchObject({ status: 503, code: 'UPLOAD_ACCOUNT_LOOKUP_FAILED' });
+    }
     // Nothing was remembered: the next request looks again.
-    await requireUploadAccount(vi.fn(async () => ({})));
+    await requireUploadAccount(
+      'complete',
+      vi.fn(async () => ({}))
+    );
+  });
+
+  it('refuses a session from another network', async () => {
+    session.network = 'public';
+    await expect(requireUploadAccount('pinata-url', vi.fn())).rejects.toMatchObject({ code: 'NETWORK_MISMATCH' });
+  });
+
+  it('applies the route limit before looking the account up', async () => {
+    const lookup = vi.fn(async () => {
+      throw horizonNotFound();
+    });
+    for (let i = 0; i < UPLOAD_LIMITS['pin-cid']; i += 1) {
+      await requireUploadAccount('pin-cid', lookup).catch(() => undefined);
+    }
+    await expect(requireUploadAccount('pin-cid', lookup)).rejects.toMatchObject({ status: 429 });
+    expect(lookup).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('limitUploads', () => {
-  it('allows a route its limit per account per window, then answers 429', async () => {
+describe('countUpload', () => {
+  it('allows a route its limit per account per window, then refuses with Retry-After', () => {
     const now = 5_000;
-    for (let i = 0; i < UPLOAD_LIMITS['pin-cid']; i += 1) {
-      expect(limitUploads('pin-cid', 'GALICE', now)).toBeNull();
-    }
-    const refused = limitUploads('pin-cid', 'GALICE', now);
-    expect(refused?.status).toBe(429);
-    expect(refused?.headers.get('Retry-After')).toBe(String(UPLOAD_WINDOW_MS / 1000));
+    for (let i = 0; i < UPLOAD_LIMITS['pin-cid']; i += 1) countUpload('pin-cid', 'GALICE', now);
+    const refused = (() => {
+      try {
+        countUpload('pin-cid', 'GALICE', now);
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(refused).toMatchObject({ status: 429, retryAfter: UPLOAD_WINDOW_MS / 1000 });
     // Another account, and another route, have their own counts.
-    expect(limitUploads('pin-cid', 'GBOB', now)).toBeNull();
-    expect(limitUploads('complete', 'GALICE', now)).toBeNull();
+    expect(() => countUpload('pin-cid', 'GBOB', now)).not.toThrow();
+    expect(() => countUpload('complete', 'GALICE', now)).not.toThrow();
     // A new window starts afresh.
-    expect(limitUploads('pin-cid', 'GALICE', now + UPLOAD_WINDOW_MS)).toBeNull();
+    expect(() => countUpload('pin-cid', 'GALICE', now + UPLOAD_WINDOW_MS)).not.toThrow();
   });
 });

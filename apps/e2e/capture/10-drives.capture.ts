@@ -293,7 +293,15 @@ test.describe.serial('Lamplight sibling tribes: launch drives', () => {
         await waitForVisible(page.getByRole('button', { name: 'Choose a folder' }), 'artwork page');
         const artCid = showcaseState().artCid as string;
         await page.route('**/api/pinata/generate-jwt', (route) =>
-          route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jwt: 'capture' }) })
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ jwt: 'capture', pinToken: 'capture' })
+          })
+        );
+        // No real pin token exists here, so the server's check of the folder is answered too.
+        await page.route('**/api/pinata/pin-cid', (route) =>
+          route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, cid: artCid }) })
         );
         await page.route('https://api.pinata.cloud/pinning/pinFileToIPFS', (route) =>
           route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ IpfsHash: artCid }) })

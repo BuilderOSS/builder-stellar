@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { getPinataService, PinataError } from '@/lib/pinata-service';
 import { verifyPinToken } from '@/lib/pinata-upload-auth';
-import { limitUploads, requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
 
@@ -23,13 +23,14 @@ type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
 /**
  * POST /api/pinata/pin-cid
  *
- * Pins a CID to Pinata for redundancy. This is called asynchronously
- * after a successful directory upload to ensure content is replicated.
+ * Confirms a directory upload: the CID must be a file in the operator's Pinata account, which
+ * the upload key pinned. It reads only; it never pins the CID it is given. The name is kept
+ * for older clients and ignored.
  *
  * Request body:
  * {
  *   cid: string (IPFS content identifier)
- *   name?: string (optional name for the pin)
+ *   name?: string (ignored)
  *   pinToken: string (returned by /api/pinata/generate-jwt to this account)
  * }
  *
@@ -53,9 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The deployment's upload switch covers directory uploads too.
     if (!uploadsEnabled()) return uploadsDisabledResponse();
 
-    const session = await requireUploadAccount();
-    const limited = limitUploads('pin-cid', session.address);
-    if (limited) return limited;
+    const session = await requireUploadAccount('pin-cid');
 
     // Parse and validate request body
     body = await request.json().catch(() => ({}));
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { cid, name, pinToken } = validationResult.data;
+    const { cid, pinToken } = validationResult.data;
     if (!verifyPinToken(pinToken, session.address)) {
       return NextResponse.json(
         { error: 'This pin was not authorized for this account. Upload the folder again.', code: 'PIN_NOT_AUTHORIZED' },
@@ -83,9 +82,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Pin CID to IPFS for redundancy
+    // The upload key pinned the folder already: confirm it is in the operator's account (a read,
+    // never a pin of a client-chosen CID).
     const pinataService = getPinataService();
-    await pinataService.pinCidToIPFS(cid, name);
+    await pinataService.verifyCid(cid);
 
     return NextResponse.json(
       {

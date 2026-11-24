@@ -1,24 +1,26 @@
-import { Horizon, NotFoundError } from '@stellar/stellar-sdk';
+import { Horizon } from '@stellar/stellar-sdk';
 import { NextResponse } from 'next/server';
 
-import { getNetworkConfig, type NetworkName } from '@/config/networks';
-import { sep10HorizonUrl } from '@/lib/auth/sep10-account';
-import { requireAuthenticatedSession } from '@/lib/auth/server';
+import { accountNotFound, sep10HorizonUrl } from '@/lib/auth/sep10-account';
+import { AuthError, getConfiguredNetwork, requireAuthenticatedSession } from '@/lib/auth/server';
 
 /**
  * Who may upload to IPFS through the operator's Pinata account.
  *
- * A session proves only that the caller holds a key, and keys cost nothing to make. Uploads and
- * pins cost the operator money, so each upload route also requires that the signed-in account
- * exists on the network (it was funded with at least the base reserve) and limits how often one
- * account may upload. Both checks are per server instance: a warm instance remembers a funded
- * account for FUNDED_TTL_MS and counts uploads in memory.
+ * A session proves only that the caller holds a key, and keys cost nothing to make. Uploads cost
+ * the operator money, so each upload route limits how often one account may call it, then
+ * requires that the account exists on the deployment's network (it was funded with at least the
+ * base reserve). On testnet Friendbot funds accounts for free, so there the funded check costs an
+ * abuser only a Friendbot call per key. Both checks are per server instance: a warm instance
+ * remembers an account's result and counts calls in memory.
  */
 
 export const FUNDED_TTL_MS = 10 * 60 * 1000;
+export const UNFUNDED_TTL_MS = 60 * 1000;
 export const UPLOAD_WINDOW_MS = 10 * 60 * 1000;
+export const HORIZON_LOOKUP_TIMEOUT_MS = 8_000;
 
-/** Uploads one account may make per route in UPLOAD_WINDOW_MS. */
+/** Calls one account may make to each upload route in UPLOAD_WINDOW_MS. */
 export const UPLOAD_LIMITS = {
   'generate-jwt': 10,
   'pin-cid': 10,
@@ -31,15 +33,20 @@ export type UploadRoute = keyof typeof UPLOAD_LIMITS;
 export class UploadAccessError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'UPLOAD_ACCOUNT_UNFUNDED' | 'UPLOAD_ACCOUNT_LOOKUP_FAILED',
-    message: string
+    public readonly code: 'UPLOAD_ACCOUNT_UNFUNDED' | 'UPLOAD_ACCOUNT_LOOKUP_FAILED' | 'RATE_LIMIT_EXCEEDED',
+    message: string,
+    public readonly retryAfter?: number
   ) {
     super(message);
     this.name = 'UploadAccessError';
   }
 }
 
-const fundedUntil = new Map<string, number>();
+const UNFUNDED_MESSAGE = 'Uploads need a funded Stellar account. Add funds to this account, then try again.';
+const LOOKUP_FAILED_MESSAGE = 'The account could not be checked. Try again later.';
+
+/** Remembered lookups: until when an account counts as funded (true) or unfunded (false). */
+const accountStatus = new Map<string, { funded: boolean; until: number }>();
 const uploadWindows = new Map<string, { count: number; resetAt: number }>();
 
 function prune<T>(map: Map<string, T>, expired: (value: T) => boolean) {
@@ -53,80 +60,92 @@ export type AccountLookup = (horizonUrl: string, address: string) => Promise<unk
 const horizonLookup: AccountLookup = (horizonUrl, address) =>
   new Horizon.Server(horizonUrl, { allowHttp: horizonUrl.startsWith('http://') }).loadAccount(address);
 
-/**
- * The signed-in account, if it may upload: it must exist on the session's network. Throws an
- * AuthError without a session and an UploadAccessError when the account is unfunded or the
- * lookup fails (never treating a failed lookup as funded).
- */
-export async function requireUploadAccount(lookup: AccountLookup = horizonLookup) {
-  const session = await requireAuthenticatedSession();
-  const key = `${session.network}:${session.address}`;
-  const now = Date.now();
-  prune(fundedUntil, (until) => until <= now);
-  if ((fundedUntil.get(key) ?? 0) > now) return session;
-
-  let horizonUrl: string;
-  try {
-    horizonUrl = sep10HorizonUrl(getNetworkConfig(session.network as NetworkName));
-  } catch {
-    throw new UploadAccessError(
-      503,
-      'UPLOAD_ACCOUNT_LOOKUP_FAILED',
-      'The account could not be checked. Try again later.'
-    );
-  }
-
-  try {
-    await lookup(horizonUrl, session.address);
-  } catch (error) {
-    if (error instanceof NotFoundError) {
-      throw new UploadAccessError(
-        403,
-        'UPLOAD_ACCOUNT_UNFUNDED',
-        'Uploads need a funded Stellar account. Add funds to this account, then try again.'
-      );
-    }
-    throw new UploadAccessError(
-      503,
-      'UPLOAD_ACCOUNT_LOOKUP_FAILED',
-      'The account could not be checked. Try again later.'
-    );
-  }
-
-  fundedUntil.set(key, now + FUNDED_TTL_MS);
-  return session;
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Horizon lookup timed out')), ms);
+    })
+  ]).finally(() => clearTimeout(timer));
 }
 
-/** A 429 response when `address` has used up `route`'s uploads for this window, else null. */
-export function limitUploads(route: UploadRoute, address: string, now = Date.now()): NextResponse | null {
+/** Count one call by `address` to `route`; throws a 429 UploadAccessError past the limit. */
+export function countUpload(route: UploadRoute, address: string, now = Date.now()) {
   prune(uploadWindows, (entry) => entry.resetAt <= now);
   const key = `${route}:${address}`;
   const current = uploadWindows.get(key);
   if (!current || current.resetAt <= now) {
     uploadWindows.set(key, { count: 1, resetAt: now + UPLOAD_WINDOW_MS });
-    return null;
+    return;
   }
   if (current.count >= UPLOAD_LIMITS[route]) {
-    const retryAfter = Math.ceil((current.resetAt - now) / 1000);
-    return NextResponse.json(
-      {
-        error: 'Too many uploads from this account. Try again in a few minutes.',
-        code: 'RATE_LIMIT_EXCEEDED',
-        retryAfter
-      },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    throw new UploadAccessError(
+      429,
+      'RATE_LIMIT_EXCEEDED',
+      'Too many uploads from this account. Try again in a few minutes.',
+      Math.ceil((current.resetAt - now) / 1000)
     );
   }
   current.count += 1;
-  return null;
+}
+
+/**
+ * The signed-in account, if it may call this upload route now. In order: a session on this
+ * deployment's network (AuthError otherwise), within the route's limit for the account (429), and
+ * an account that exists on that network (403 when Horizon says it doesn't, 503 when the lookup
+ * fails: a failed lookup never counts as funded).
+ */
+export async function requireUploadAccount(route: UploadRoute, lookup: AccountLookup = horizonLookup) {
+  const session = await requireAuthenticatedSession();
+  const network = getConfiguredNetwork();
+  if (session.network !== network.name) {
+    throw new AuthError('NETWORK_MISMATCH', 'Sign in on this deployment’s network to upload.');
+  }
+  countUpload(route, session.address);
+
+  const key = `${network.name}:${session.address}`;
+  const now = Date.now();
+  prune(accountStatus, (status) => status.until <= now);
+  const known = accountStatus.get(key);
+  if (known && known.until > now) {
+    if (known.funded) return session;
+    throw new UploadAccessError(403, 'UPLOAD_ACCOUNT_UNFUNDED', UNFUNDED_MESSAGE);
+  }
+
+  let horizonUrl: string;
+  try {
+    horizonUrl = sep10HorizonUrl(network);
+  } catch {
+    throw new UploadAccessError(503, 'UPLOAD_ACCOUNT_LOOKUP_FAILED', LOOKUP_FAILED_MESSAGE);
+  }
+
+  try {
+    await withTimeout(lookup(horizonUrl, session.address), HORIZON_LOOKUP_TIMEOUT_MS);
+  } catch (error) {
+    if (accountNotFound(error)) {
+      accountStatus.set(key, { funded: false, until: now + UNFUNDED_TTL_MS });
+      throw new UploadAccessError(403, 'UPLOAD_ACCOUNT_UNFUNDED', UNFUNDED_MESSAGE);
+    }
+    throw new UploadAccessError(503, 'UPLOAD_ACCOUNT_LOOKUP_FAILED', LOOKUP_FAILED_MESSAGE);
+  }
+
+  accountStatus.set(key, { funded: true, until: now + FUNDED_TTL_MS });
+  return session;
 }
 
 export function uploadAccessErrorResponse(error: UploadAccessError): NextResponse {
-  return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+  return NextResponse.json(
+    { error: error.message, code: error.code, ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}) },
+    {
+      status: error.status,
+      ...(error.retryAfter ? { headers: { 'Retry-After': String(error.retryAfter) } } : {})
+    }
+  );
 }
 
 /** Test hook: forget remembered accounts and upload counts. */
 export function resetUploadAccessForTests() {
-  fundedUntil.clear();
+  accountStatus.clear();
   uploadWindows.clear();
 }

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { AuthenticationError, getPinataService, PinataError } from '@/lib/pinata-service';
 import { issuePinToken } from '@/lib/pinata-upload-auth';
-import { limitUploads, requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
 
@@ -30,9 +30,7 @@ export async function POST(_request: NextRequest): Promise<NextResponse> {
     if (!uploadsEnabled()) return uploadsDisabledResponse();
 
     // A funded account, and a few keys per account at a time: each key is a paid upload.
-    const session = await requireUploadAccount();
-    const limited = limitUploads('generate-jwt', session.address);
-    if (limited) return limited;
+    const session = await requireUploadAccount('generate-jwt');
 
     // Generate JWT from Pinata service
     const pinataService = getPinataService();
