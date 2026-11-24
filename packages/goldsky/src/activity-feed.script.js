@@ -120,7 +120,8 @@ function invoke(data) {
     PoolOpened: true, PoolPurchased: true, PoolClosed: true,
     // The ClaimMinter's own rows tell the story of a claim; the token's MintBatchWithMinter in the
     // same call stays admin so a mint is not announced twice. Refunds are per-claimer side effects.
-    ListOpened: true, Claimed: true, EscrowReleased: true,
+    // Closing a list by proposal ends its claims early: news, like a pool closing.
+    ListOpened: true, ListClosed: true, Claimed: true, EscrowReleased: true,
     // An assurance drive opening, and its slug coming back when it fails.
     AssuranceOpened: true, SlugReleased: true,
     // A module joining or leaving changes who can mint and whose tokens vote: public.
@@ -222,6 +223,7 @@ function invoke(data) {
     ProfileUpdated: 'metadata.profile_updated',
     RendererBaseUpdated: 'metadata.renderer_base_updated',
     ListOpened: 'claims.list_opened',
+    ListClosed: 'claims.list_closed',
     Claimed: 'claims.claimed',
     EscrowReleased: 'claims.escrow_released',
     Refunded: 'claims.refunded',
@@ -328,6 +330,7 @@ function invoke(data) {
     ProfileUpdated: 'Community profile updated',
     RendererBaseUpdated: 'Renderer base updated',
     ListOpened: 'Claim list opened',
+    ListClosed: 'Claim list closed',
     Claimed: 'Tokens claimed',
     EscrowReleased: 'Assurance escrow released',
     Refunded: 'Claim refunded',
@@ -547,6 +550,10 @@ function invoke(data) {
       var assurance = pick(data, ['assurance']);
       return 'Claim list ' + (listId || '?') + ' opened: ' + (pick(data, ['total']) || '?') + ' tokens' +
         (Number(amount) > 0 ? ' at ' + amount + ' each' : ', free') + (assurance && assurance !== 'null' ? ', as an assurance drive' : '');
+    },
+    ListClosed: function() {
+      return 'Claim list ' + (listId || '?') + ' closed: ' + (pick(data, ['minted']) || '0') + ' of ' +
+        (pick(data, ['total']) || '?') + ' tokens claimed';
     },
     Claimed: function() {
       var count = pick(data, ['amount']);
