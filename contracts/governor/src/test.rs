@@ -230,6 +230,7 @@ fn threshold_above_the_voting_supply_is_capped_at_the_supply() {
     let description = String::from_str(&e, "Supply 3, threshold 5");
 
     // The cap is the whole voting supply (3): two votes are not enough.
+    assert_eq!(governor.votes_needed_to_propose(), 3);
     assert_eq!(
         governor.try_propose(&targets, &functions, &args, &description, &alice),
         Err(Ok(
@@ -263,6 +264,7 @@ fn threshold_below_the_voting_supply_is_unchanged() {
     let functions = vec![&e, symbol_short!("set_value")];
     let args = proposal_args(&e);
     let description = String::from_str(&e, "Supply 4, threshold 2");
+    assert_eq!(governor.votes_needed_to_propose(), 2);
 
     assert_eq!(
         governor.try_propose(&targets, &functions, &args, &description, &bob),

@@ -360,6 +360,15 @@ impl DaoGovernorContract {
     /// `get_token_contract()` returns the same address; for an adapter DAO it
     /// is the adapter, not the membership NFT (find that through the Treasury
     /// or the Manager).
+    /// The votes a proposal made now needs: `proposal_threshold`, capped at
+    /// the voting supply at the previous ledger and never below 1 (the rule
+    /// `propose` applies). Front ends read this rather than recomputing it,
+    /// so a Governor without the cap (which lacks this view) is told apart.
+    pub fn votes_needed_to_propose(e: &Env) -> u128 {
+        let voting_supply = Self::votes(e).voting_supply_at_previous_ledger();
+        Self::threshold_for_supply(e, voting_supply)
+    }
+
     pub fn vote_source(e: &Env) -> Address {
         governor::get_token_contract(e)
     }

@@ -12,7 +12,7 @@ describe('proposalThresholdWarning', () => {
 
   it('counts the mint being prepared and says how many more tokens are needed', () => {
     expect(proposalThresholdWarning({ supply: 0n, threshold: 4n, adding: 1n })).toBe(
-      'A proposal needs 4 votes. After this mint, members hold 1 vote, so a proposal would need every vote, held by or delegated to one wallet. Mint 3 more founder tokens, or lower the proposal threshold in Voting rules.'
+      'A proposal needs 4 votes. After this mint, members hold 1 vote, so no one could propose after launch. Mint 3 more founder tokens, or lower the proposal threshold in Voting rules.'
     );
   });
 });

@@ -1,25 +1,29 @@
 'use client';
 
-import { Client as TokenClient } from '@builder-stellar/token-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import useSWR from 'swr';
 
 import { useGovernorSettings } from '@/lib/admin-queries';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
-import { votesNeededToPropose } from '@/lib/governance-limits';
-import { formatVotes, useVoteSource } from '@/lib/vote-source';
+import { formatVotes, isMissingFunction } from '@/lib/vote-source';
 import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
 
-type VotingSupplyKey = readonly ['voting-supply-previous-ledger', string, string, string];
+type VotesNeededKey = readonly ['votes-needed-to-propose', string, string, string];
 
 /**
- * The vote source's voting supply at the previous ledger, the supply `propose` caps the threshold
- * at. Every vote source implements `voting_supply_at_previous_ledger` (common::clients::VoteSourceApi),
- * so the token's client reads an adapter too.
+ * The votes a proposal made now needs, from the Governor's `votes_needed_to_propose` (the
+ * threshold capped at the voting supply). Null for a Governor without the view, which has no cap:
+ * its plain `proposal_threshold` applies.
  */
-async function fetchVotingSupply([, sourceContractId, rpcUrl, passphrase]: VotingSupplyKey) {
-  const source = new TokenClient({ contractId: sourceContractId, rpcUrl, networkPassphrase: passphrase });
-  return (await source.voting_supply_at_previous_ledger()).result;
+async function fetchVotesNeeded([, governor, rpcUrl, passphrase]: VotesNeededKey): Promise<bigint | null> {
+  try {
+    const client = new GovernorClient({ contractId: governor, rpcUrl, networkPassphrase: passphrase });
+    return (await client.votes_needed_to_propose()).result;
+  } catch (error) {
+    if (isMissingFunction(error)) return null;
+    throw error;
+  }
 }
 
 function isMember(member: ReturnType<typeof useGoldskyMember>['data']) {
@@ -64,19 +68,21 @@ export function useProposalEligibility(config: DaoNetworkConfig, address: string
     enabled ? address || undefined : undefined
   );
 
-  const { voteSource } = useVoteSource(enabled ? config : { ...config, tokenContractId: '' });
-  // The cap only matters when the supply is below the threshold; if this read fails, the
-  // threshold itself is the requirement shown.
-  const { data: votingSupply } = useSWR(
-    enabled && address && voteSource
-      ? (['voting-supply-previous-ledger', voteSource.address, config.rpcUrl, config.passphrase] as const)
+  const {
+    data: votesNeededNow,
+    error: votesNeededError,
+    isLoading: votesNeededLoading
+  } = useSWR(
+    enabled && address && config.governorContractId
+      ? (['votes-needed-to-propose', config.governorContractId, config.rpcUrl, config.passphrase] as const)
       : null,
-    fetchVotingSupply
+    fetchVotesNeeded
   );
-  const votesNeeded = settings ? votesNeededToPropose(settings.proposalThreshold, votingSupply) : undefined;
+  const votesNeeded = votesNeededNow ?? settings?.proposalThreshold;
 
-  const loading = enabled && Boolean(address) && (memberLoading || votingPowerLoading || settingsLoading);
-  const error = enabled ? memberError || votingPowerError || settingsError : undefined;
+  const loading =
+    enabled && Boolean(address) && (memberLoading || votingPowerLoading || settingsLoading || votesNeededLoading);
+  const error = enabled ? memberError || votingPowerError || settingsError || votesNeededError : undefined;
   const memberFound = isMember(member);
   const hasEnoughVotes = Boolean(votingPower && votesNeeded !== undefined && votingPower.votes >= votesNeeded);
   const eligible = Boolean(enabled && address && !loading && !error && memberFound && hasEnoughVotes);
