@@ -210,6 +210,70 @@ fn propose_fails_below_threshold() {
 }
 
 #[test]
+fn threshold_above_the_voting_supply_is_capped_at_the_supply() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    // Set while the supply is zero, as a launch admin can before minting.
+    governor.set_proposal_threshold(&5);
+    assert_eq!(governor.proposal_threshold(), 5);
+
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    token.mint(&owner, &alice);
+    token.mint(&owner, &alice);
+    token.mint(&owner, &bob);
+
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "Supply 3, threshold 5");
+
+    // The cap is the whole voting supply (3): two votes are not enough.
+    assert_eq!(
+        governor.try_propose(&targets, &functions, &args, &description, &alice),
+        Err(Ok(
+            stellar_governance::governor::GovernorError::InsufficientProposerVotes.into()
+        ))
+    );
+
+    // Once every vote is with one account, that account can propose.
+    token.delegate(&bob, &alice);
+    e.ledger().set_sequence_number(201);
+    let id = governor.propose(&targets, &functions, &args, &description, &alice);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Pending);
+    // The configured threshold is unchanged.
+    assert_eq!(governor.proposal_threshold(), 5);
+}
+
+#[test]
+fn threshold_below_the_voting_supply_is_unchanged() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    for _ in 0..3 {
+        token.mint(&owner, &alice);
+    }
+    token.mint(&owner, &bob);
+    governor.set_proposal_threshold(&2);
+
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "Supply 4, threshold 2");
+
+    assert_eq!(
+        governor.try_propose(&targets, &functions, &args, &description, &bob),
+        Err(Ok(
+            stellar_governance::governor::GovernorError::InsufficientProposerVotes.into()
+        ))
+    );
+    governor.propose(&targets, &functions, &args, &description, &alice);
+}
+
+#[test]
 fn execute_accepts_direct_target_calls() {
     let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);

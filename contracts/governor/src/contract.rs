@@ -379,16 +379,14 @@ impl DaoGovernorContract {
         governor::get_quorum(e, e.ledger().sequence()) as u32
     }
 
-    /// The quorum a proposal created now needs: `ceil(voting_supply *
-    /// quorum_bps / 10_000)` from the voting supply **at the previous
-    /// ledger** (the ledger votes are snapshotted at) and the current rate.
-    /// Using this ledger's supply instead would let a holder escrow tokens
-    /// in the Marketplace in the proposing ledger (lowering the supply) while
-    /// still voting with them (contract review H1). Both reads touch only
-    /// the latest checkpoints, never archived history.
-    fn quorum_now(e: &Env) -> u128 {
-        let supply = Self::votes(e).voting_supply_at_previous_ledger();
-        Self::quorum_of(e, supply, Self::quorum_bps(e) as u128)
+    /// The votes `propose` requires from a proposer, given the voting supply
+    /// at the snapshot ledger: the configured threshold, capped at that
+    /// supply and never below 1. The cap matters only when the supply is
+    /// below the threshold; then a proposer must hold (or be delegated)
+    /// every vote, which a DAO can always reach, instead of a number no one
+    /// can reach. The configured value (`proposal_threshold`) is unchanged.
+    fn threshold_for_supply(e: &Env, voting_supply: u128) -> u128 {
+        Self::proposal_threshold(e).min(voting_supply).max(1)
     }
 
     fn quorum_of(e: &Env, total_supply: u128, quorum_bps: u128) -> u128 {
@@ -693,7 +691,18 @@ impl Governor for DaoGovernorContract {
         common::lifecycle::require_live(e);
         proposer.require_auth();
 
-        let proposal_threshold = Self::proposal_threshold(e);
+        // Votes and the voting supply are both read at the previous ledger
+        // (the snapshot). Using this ledger's supply instead would let a
+        // holder escrow tokens in the Marketplace in the proposing ledger
+        // (lowering the supply) while still voting with them. Both reads
+        // touch only the latest checkpoints, never archived history.
+        //
+        // The supply fixes the quorum, `ceil(voting_supply * quorum_bps /
+        // 10_000)`, and caps the threshold, so a DAO whose voting supply is
+        // below its threshold (set before founder tokens were minted, or
+        // after members gave tokens back) can still propose.
+        let voting_supply = Self::votes(e).voting_supply_at_previous_ledger();
+        let proposal_threshold = Self::threshold_for_supply(e, voting_supply);
         let current_ledger = e.ledger().sequence();
         let snapshot_ledger = current_ledger.saturating_sub(1);
         let proposer_votes = Self::votes(e).get_votes_at_checkpoint(&proposer, &snapshot_ledger);
@@ -742,7 +751,7 @@ impl Governor for DaoGovernorContract {
             eta: 0,
             state: ProposalState::Pending,
             seq,
-            quorum: Self::quorum_now(e),
+            quorum: Self::quorum_of(e, voting_supply, Self::quorum_bps(e) as u128),
         };
 
         // The id list entry first: set_proposal renews both.

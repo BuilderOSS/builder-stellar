@@ -6,7 +6,8 @@ import {
   validateProposalThreshold,
   validateQuorumBps,
   validateVotingDelay,
-  validateVotingPeriod
+  validateVotingPeriod,
+  votesNeededToPropose
 } from './governance-limits';
 
 describe('governance limits', () => {
@@ -42,5 +43,13 @@ describe('governance limits', () => {
   it('caps proposals at 20 actions', () => {
     expect(validateProposalActionCount(20)).toBeNull();
     expect(validateProposalActionCount(21)).not.toBeNull();
+  });
+
+  it('caps the votes needed to propose at the voting supply, like the Governor', () => {
+    expect(votesNeededToPropose(5n, 3n)).toBe(3n);
+    expect(votesNeededToPropose(2n, 10n)).toBe(2n);
+    expect(votesNeededToPropose(5n, 0n)).toBe(1n);
+    expect(votesNeededToPropose(5n, undefined)).toBe(5n);
+    expect(votesNeededToPropose(5n, null)).toBe(5n);
   });
 });

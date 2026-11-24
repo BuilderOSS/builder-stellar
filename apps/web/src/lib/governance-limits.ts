@@ -15,6 +15,17 @@ export const MIN_PROPOSAL_THRESHOLD_VOTES = 1n;
 /** Governor MAX_PROPOSAL_ACTIONS */
 export const MAX_PROPOSAL_ACTIONS = 20;
 
+/**
+ * The votes the Governor's `propose` requires: the threshold, capped at the voting supply at the
+ * snapshot ledger and never below 1 (contracts/governor `threshold_for_supply`). With the supply
+ * unknown, the threshold itself.
+ */
+export function votesNeededToPropose(threshold: bigint, votingSupply?: bigint | null): bigint {
+  if (votingSupply === undefined || votingSupply === null) return threshold;
+  const capped = threshold < votingSupply ? threshold : votingSupply;
+  return capped < MIN_PROPOSAL_THRESHOLD_VOTES ? MIN_PROPOSAL_THRESHOLD_VOTES : capped;
+}
+
 function formatLimit(seconds: number) {
   if (seconds % 86_400 === 0) return `${seconds / 86_400} day${seconds === 86_400 ? '' : 's'}`;
   if (seconds % 60 === 0) return `${seconds / 60} minutes`;

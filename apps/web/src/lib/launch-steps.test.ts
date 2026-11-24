@@ -59,7 +59,7 @@ describe('buildLaunchPlan', () => {
     });
     expect(plan.required[1].status).toBe('done');
     expect(plan.proposalWarning).toBe(
-      'A proposal needs 2 votes. Members hold 1 vote, so no one could propose after launch. Mint 1 more founder token, or lower the proposal threshold in Voting rules.'
+      'A proposal needs 2 votes. Members hold 1 vote, so a proposal would need every vote, held by or delegated to one wallet. Mint 1 more founder token, or lower the proposal threshold in Voting rules.'
     );
     expect(plan.required[1].caution).toBe(plan.proposalWarning);
     expect(plan.canLaunch).toBe(true);
