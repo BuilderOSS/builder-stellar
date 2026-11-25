@@ -1,6 +1,6 @@
 # Known issues
 
-These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
+These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where `SECURITY_MODEL.md` documents closely related accepted behaviour in another section, the entry adds it under **Also documented**, with a link to that section. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
 
 This page was checked against `dev` at `f51d301`, which includes pull requests 118 to 130. IDs are stable, so a new entry takes the next number. An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders, or front ends should check.
 
@@ -96,6 +96,8 @@ This page was checked against `dev` at `f51d301`, which includes pull requests 1
 
 **Guidance.** DAOs should price auctions, listings, pools, and claim lists in plain assets.
 
+**Also documented** ([Lifecycle](../SECURITY_MODEL.md#lifecycle-setup-window-and-launch)). Launch checks that each module's payment asset equals the one recorded at `create_dao` or `create_module`; it does not check again that the asset is a Stellar Asset Contract. A DAO created before the Manager's check keeps the asset it recorded.
+
 **Code.** `require_stellar_asset` in [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs), [`auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs), and [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs); the payment paths in those modules and in [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs).
 
 ## KI-11: Manager admin trust
@@ -114,7 +116,11 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 **Behaviour.** A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs. The threshold counts addresses, not people.
 
-**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`.
+**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). The ClaimMinter a drive opens on runs the code its launch admin chose in Setup: any registered, non-revoked hash that approved upgrades reach from the one it was created with. `open_assurance` checks only that the code is registered and not revoked.
+
+**Guidance.** Members should check the ClaimMinter's hash against the published releases before paying in.
+
+**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`; [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `open_assurance`.
 
 ## KI-13: Issuer-controlled payment assets
 

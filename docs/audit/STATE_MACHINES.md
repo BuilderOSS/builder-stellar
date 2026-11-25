@@ -55,7 +55,7 @@ In Setup, only the admin and the ClaimMinter can mint: the Token refuses every o
 
 After launch, the Manager holds no authority over the DAO's contracts. It still deploys a module the Treasury asks for, but only the Treasury can register it. The Treasury may also register a contract the Manager never deployed; such a module has its own lifecycle and is never launched by the Manager.
 
-In the HandedOff state, one contract can still change: after a failed drive, `manager.recover_claims` upgrades the ClaimMinter, under the notice rules in [Assurance drive](#assurance-drive-and-claim-lists).
+In the HandedOff state, one contract can still change: after a failed drive, the launch admin can upgrade the ClaimMinter with `manager.recover_claims`. The Manager's upgrade-notice rule applies to it: only to the hash announced as latest for its name, and only once the notice has passed since the approval, since the announcement, and since the drive's deadline, with a seven-day floor ([Assurance drive](#assurance-drive-and-claim-lists)).
 
 ## Proposal
 
