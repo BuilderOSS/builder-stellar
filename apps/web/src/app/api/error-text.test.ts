@@ -9,7 +9,10 @@ const mocks = vi.hoisted(() => ({
   activity: vi.fn(),
   bids: vi.fn(),
   scope: vi.fn(),
-  slug: vi.fn()
+  slug: vi.fn(),
+  history: vi.fn(),
+  dashboard: vi.fn(),
+  session: vi.fn()
 }));
 vi.mock('@/lib/prisma', () => ({ prisma: { managerDao: { findFirst: mocks.slug, count: mocks.slug } } }));
 vi.mock('@/lib/dao-db', async (importOriginal) => ({
@@ -23,7 +26,16 @@ vi.mock('@/lib/dao-config', async (importOriginal) => ({
 vi.mock('@/lib/goldsky', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/goldsky')>()),
   getGoldskyActivityFeed: mocks.activity,
-  getGoldskyAuctionBids: mocks.bids
+  getGoldskyAuctionBids: mocks.bids,
+  getDashboardData: mocks.dashboard
+}));
+vi.mock('@/lib/auction-history/query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auction-history/query')>()),
+  readAuctionHistory: mocks.history
+}));
+vi.mock('@/lib/auth/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/server')>()),
+  requireAuthenticatedSession: mocks.session
 }));
 vi.mock('@/lib/member-directory/query', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/member-directory/query')>()),
@@ -36,11 +48,15 @@ import { clearServerCache } from '@/lib/server-cache';
 
 import { GET as activityFeed } from './dao/[daoId]/activity-feed/route';
 import { GET as auctionBids } from './dao/[daoId]/auctions/bids/route';
+import { GET as auctionHistory } from './dao/[daoId]/auctions/history/route';
+import { GET as auction } from './dao/[daoId]/auctions/route';
 import { GET as governanceSettings } from './dao/[daoId]/governance/settings/route';
+import { GET as proposal } from './dao/[daoId]/proposals/[proposalId]/route';
 import { GET as proposals } from './dao/[daoId]/proposals/route';
 import { GET as dao } from './dao/[daoId]/route';
 import { GET as tokenJson } from './dao/[daoId]/token/[tokenId]/route';
 import { GET as unseeded } from './dao/[daoId]/tokens/unseeded/route';
+import { GET as dashboard } from './dashboard/route';
 import { GET as slug } from './slugs/[slug]/route';
 
 const request = (path: string) => new Request(`https://tribes.build${path}`);
@@ -91,6 +107,22 @@ describe('API error text', () => {
       '/api/slugs/garden',
       () => slug(request('/api/slugs/garden'), { params: Promise.resolve({ slug: 'garden' }) }),
       'Name availability could not be checked. Try again.'
+    ],
+    [
+      '/api/dao/garden/proposals/1',
+      () =>
+        proposal(request('/api/dao/garden/proposals/1'), {
+          params: Promise.resolve({ daoId: 'garden', proposalId: '1' })
+        }),
+      'The proposal is unavailable. Try again.'
+    ],
+    [
+      '/api/dashboard',
+      () => {
+        mocks.session.mockResolvedValue({ address: 'GABC', network: 'testnet' });
+        return dashboard(request('/api/dashboard'));
+      },
+      'Your tribes and activity are unavailable. Try again.'
     ]
   ])('%s answers in words and logs the detail', async (_path, call, message) => {
     const response = await call();
@@ -99,6 +131,19 @@ describe('API error text', () => {
     expect(JSON.parse(text).message).toBe(message);
     expect(text).not.toContain('10.0.0.5');
     expect(text).not.toContain('prisma');
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  // These two answered 500 before and still do; only the text changed.
+  it.each([
+    ['/api/dao/garden/auctions', () => auction(request('/api/dao/garden/auctions'), daoParams)],
+    ['/api/dao/garden/auctions/history', () => auctionHistory(request('/api/dao/garden/auctions/history'), daoParams)]
+  ])('%s answers 500 in words and logs the detail', async (_path, call) => {
+    const response = await call();
+    const text = await response.text();
+    expect(response.status).toBe(500);
+    expect(JSON.parse(text).message).toMatch(/^(The auction|Auction history) is unavailable\. Try again\.$/);
+    expect(text).not.toContain('10.0.0.5');
     expect(console.error).toHaveBeenCalled();
   });
 

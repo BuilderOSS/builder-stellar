@@ -48,6 +48,14 @@ describe('Markdown', () => {
     expect(render('![](http://tracker.example/p.gif)')).toContain('Image link');
   });
 
+  it('never nests a link: a linked remote image becomes the link text', () => {
+    const html = render('[![build passing](https://badges.example/b.svg)](https://ci.example/run)');
+    expect(html.match(/<a\b/g)).toHaveLength(1);
+    expect(html).toContain('href="https://ci.example/run"');
+    expect(html).toContain('build passing');
+    expect(html).not.toContain('badges.example');
+  });
+
   it('loads a gateway image through the app gateways, not the host in the address', () => {
     const html = render(`![a](https://tracker.example/ipfs/${CID})`);
     expect(html).toContain('<img');

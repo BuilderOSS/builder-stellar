@@ -100,7 +100,8 @@ Protection (team login), and lifting that would make every PR preview public too
 `CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is report-only
 (see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). Set it to
 `enforce` and redeploy once the `[csp-report]` lines in the function logs show no unexpected
-violations. It is read at build time, so a change needs a new deployment.
+violations. `next.config.mjs` reads it at build time and the middleware on each request, so
+change it only with a new deployment.
 
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).

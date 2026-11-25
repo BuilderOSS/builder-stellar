@@ -274,7 +274,7 @@ their own boundaries. See [web reference](../apps/web/README.md).
 
 Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: strict-origin-when-cross-origin`, and a `Permissions-Policy` that turns off
-the camera, microphone, location, payment, screen capture and motion sensors. WebUSB and WebHID
+the camera, microphone, location, payment, screen capture, and motion sensors. WebUSB and WebHID
 stay available for hardware wallets. Vercel sends `Strict-Transport-Security` on every
 deployment; a production build that runs elsewhere sends the same value itself. API responses
 add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The rules are in
@@ -283,9 +283,11 @@ add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The r
 Pages get a Content-Security-Policy from `apps/web/src/middleware.ts`, with a fresh nonce for
 each response. Scripts run only with that nonce (`'strict-dynamic'` lets them load the app's
 chunks), so markup injected into a page can't run script. The policy also lists the hosts the
-app and the wallet kit use for images, connections, and frames: the IPFS gateways, Stellar RPC
-and Horizon, Pinata uploads, WalletConnect, Albedo, Trezor, and HOT. Reading the nonce makes
-every page render per request.
+app and the wallet kit use for images, connections, and frames: the IPFS gateways, the site and
+its old host, Stellar RPC and Horizon, Pinata uploads, the wallet icons, WalletConnect, the
+frames Albedo, Trezor, and HOT open, and HOT's request relay. Reading the nonce makes every page
+render per request. Since no page may be framed, the app can't run inside another site's frame,
+including a wallet that opens apps in one (HOT inside Telegram).
 
 The page policy is report-only for now, because several wallets (WalletConnect, Albedo, Trezor,
 HOT, and Ledger) can't be tried on a local server and may need hosts the list lacks. Browsers
@@ -294,13 +296,16 @@ stores nothing. While the policy is report-only, pages enforce `frame-ancestors 
 object-src 'none'; base-uri 'self'; form-action 'self'`. Setting `CSP_MODE=enforce` and
 redeploying enforces the whole policy; do that once the log shows no unexpected violations.
 The Vercel toolbar on preview deployments loads a script without the nonce, so an enforced
-policy blocks it there.
+policy blocks it there. A tribe's image, and a token image from a renderer other than this site,
+can be any `https:` address the tribe chose; the policy reports those, and enforcing it hides
+them, so decide whether to allow such hosts before enforcing.
 
 ### Member-written content
 
-Markdown (proposal descriptions, comments, and tribe profiles) shows images only from IPFS,
+Markdown (proposal descriptions, comments, and tribe descriptions) shows images only from IPFS,
 through the app's gateways. An image at any other address would tell its author who read the
-text and when, so it is shown as a link the reader can choose to open. A gateway address on
+text and when, so it is shown as a link the reader can choose to open, or as plain text when it
+already sits inside a link. A gateway address on
 another host is read as its IPFS path, so that host is never contacted. The app does not proxy
 remote images: a proxy would fetch any address from the server and cost the operator on every
 view, while the editor already uploads images to IPFS.
@@ -324,17 +329,20 @@ sign-in (`apps/web/src/lib/api-rate-limit.ts`):
 
 | Routes | Limit |
 | --- | --- |
-| Artwork rendering (`/api/render`) | 120 a minute |
-| Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 30 a minute, shared |
-| Claim state and claim history | 60 a minute |
+| Artwork rendering (`/api/render`) | 300 a minute |
+| Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
+| Claim state and claim history | 120 a minute, shared |
 | `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
 | `POST /api/csp-report` | 30 a minute |
 
-Over the limit, a route answers 429 with `Retry-After`. A request without a client address is
-not counted: Vercel always supplies one, and a client that can reach the server directly could
-also forge the forwarded-for header. The limits stop one client from hammering a route; they
-don't stop a distributed flood, which needs the platform's own protection. Each health route
-also reuses one result for 10 seconds.
+Over the limit, a route answers 429 with `Retry-After`. The limits leave room for a group that
+shares one network address, such as people claiming at an event. Requests from the server's own
+machine (local development and the walkthrough suite, where Next fills in the loopback address)
+and requests without a client address are not counted. On Vercel neither happens, since Vercel
+always supplies `x-vercel-forwarded-for`; elsewhere the proxy in front of the app must set the
+forwarded-for header, or a client can forge it. The limits stop one client from hammering a
+route; they don't stop a distributed flood, which needs the platform's own protection. Each
+health route also reuses one result for 10 seconds.
 
 ### Server-side fetches
 

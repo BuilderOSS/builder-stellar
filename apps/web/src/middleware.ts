@@ -36,9 +36,10 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Pages only: not API routes, build assets, public files or generated images.
+      // Pages only: not API routes, build assets or public files. Every exclusion is anchored at
+      // the root, so no tribe slug in a path can match one. Share images do pass through.
       source:
-        '/((?!api/|_next/static|_next/image|images/|assets/|samples/|pwa-icons/|favicon\\.ico|icon\\.svg|apple-icon|manifest\\.webmanifest|.*opengraph-image).*)',
+        '/((?!api/|_next/static|_next/image|images/|assets/|samples/|pwa-icons/|favicon\\.ico|icon\\.svg|apple-icon|manifest\\.webmanifest).*)',
       // Prefetches return no HTML of their own.
       missing: [
         { type: 'header', key: 'next-router-prefetch' },

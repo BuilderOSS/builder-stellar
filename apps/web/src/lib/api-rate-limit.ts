@@ -9,12 +9,12 @@ import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
  * not a distributed flood.
  */
 export const API_RATE_LIMITS = {
-  /** Artwork composition: a gallery page loads one image per token. CDN hits never count. */
-  render: { limit: 120, windowMs: 60_000 },
-  /** Transaction preparation (claims, marketplace, tokens, treasury): one simulation each. */
-  prepare: { limit: 30, windowMs: 60_000 },
+  /** Artwork composition: a gallery page loads one image per token, and crawlers read token images. CDN hits never count. */
+  render: { limit: 300, windowMs: 60_000 },
+  /** Transaction preparation (claims, marketplace, tokens, treasury): one simulation each. Room for a group on one network. */
+  prepare: { limit: 60, windowMs: 60_000 },
   /** Claim state and history: chain reads and the claim list from IPFS. */
-  claims: { limit: 60, windowMs: 60_000 },
+  claims: { limit: 120, windowMs: 60_000 },
   /** Health checks; the result is also cached for a few seconds. */
   health: { limit: 30, windowMs: 60_000 },
   /** Content-Security-Policy violation reports. */
@@ -25,16 +25,31 @@ export type LimitedRoute = keyof typeof API_RATE_LIMITS;
 
 export const RATE_LIMITED_MESSAGE = 'Too many requests. Wait a minute, then try again.';
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * A request from the server's own machine: `next dev` and `next start` set x-forwarded-for from
+ * the socket when no proxy did, so local development and the walkthrough suite arrive as loopback.
+ * Vercel always sends x-vercel-forwarded-for, which this never treats as local.
+ */
+function fromThisMachine(request: Request) {
+  if (request.headers.get('x-vercel-forwarded-for')?.trim()) return false;
+  const first = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return first !== undefined && LOOPBACK.has(first);
+}
+
 /**
  * Count one request to `route`. Returns the response to send when the client is over its limit
  * (429 with Retry-After), or null to continue. The sign-in limiter's own 429 text is replaced,
  * since it speaks of sign-in.
  *
- * A request with no client address is let through uncounted, where sign-in fails closed. Vercel
- * always sends the address; a client that can reach the server without the platform can also
- * forge the forwarded-for header, so refusing it would only stop direct health probes and tests.
+ * Requests from this machine, and requests with no client address, are let through uncounted
+ * (sign-in refuses the latter). On Vercel neither happens. Elsewhere the forwarded-for header
+ * comes from the client unless a proxy sets it, so a client could forge either case anyway; the
+ * deployment's proxy has to supply the address for these limits to hold there.
  */
 export async function limitApiRequest(request: Request, route: LimitedRoute): Promise<Response | null> {
+  if (fromThisMachine(request)) return null;
   const { limit, windowMs } = API_RATE_LIMITS[route];
   const blocked = await enforceAuthRateLimit(request, `api:${route}`, limit, windowMs);
   if (!blocked || blocked.status !== 429) return null;

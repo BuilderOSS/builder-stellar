@@ -45,6 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
         : error instanceof ZodError
           ? 'Check the action, address, token ID and expiry ledger.'
           : 'Simulation could not complete. Check ownership, network and XLM for fees, then try again. Nothing was signed or submitted.';
+    // Anything else is an unexpected simulation or RPC failure: its detail stays in the log.
+    if (status === 422) console.error('[api:holder-prepare]', error);
     return NextResponse.json({ message }, { status, headers });
   }
 }

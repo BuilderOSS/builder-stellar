@@ -68,7 +68,9 @@ export async function fetchPublicUrl<T>(
       }
       return await read(response);
     } finally {
-      await dispatcher.close();
+      // Destroy, not close: close waits for a body nobody reads (a redirect's, or one `read`
+      // rejected), which would hold the fetch until the signal aborts.
+      await dispatcher.destroy();
     }
   }
   throw new Error('Too many redirects');

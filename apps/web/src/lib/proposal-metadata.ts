@@ -196,7 +196,7 @@ export function validateProposalMetadataDraft(metadata: ProposalMetadataDraft): 
 
   const url = normalizeUrl(metadata.url);
   if (metadata.url?.trim() && !url) {
-    return { valid: false, message: 'Links must start with https://, http:// or ipfs://.' };
+    return { valid: false, message: 'Links must start with https://, http://, or ipfs://.' };
   }
   if (url) {
     try {

@@ -33,7 +33,7 @@ Sources: [health route](../apps/web/src/app/api/health/route.ts), [Goldsky route
 
 ## Application logs
 
-API routes log the detail of a failure they don't pass to the client as `[api:<route>]` (for example `[api:proposals]`); the client sees only a short message. Content-Security-Policy violations arrive as `[csp-report]` lines with the directive, the blocked address (origin and path), and the page. While the page policy is report-only, check these before setting `CSP_MODE=enforce` (see [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)).
+When an API route fails for a reason the client can't act on, the client sees a short message and the detail goes to the server log: as `[api:<route>]` (for example `[api:proposals]`), or `[marketplace]`, `[marketplace preparation]`, and `[treasury]` for those services. Sign-in and upload routes keep their own logging. Content-Security-Policy violations arrive as `[csp-report]` lines with the directive, the blocked address (origin and path), and the page. While the page policy is report-only, check these before setting `CSP_MODE=enforce` (see [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)).
 
 ## Database/event checks
 

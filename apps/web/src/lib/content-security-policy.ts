@@ -26,15 +26,16 @@ const HORIZON: Partial<Record<NetworkName, string>> = {
   public: 'https://horizon.stellar.org'
 };
 
-// Hosts the wallet kit and its wallets use: icons, the WalletConnect relay and modal, and the
-// frames Albedo, Trezor and HOT open.
+// Hosts the wallet kit and its wallets use: icons, the WalletConnect relay and modal, the frames
+// Albedo, Trezor and HOT open, and HOT's request relay.
 const WALLET_KIT_IMAGES = [
   'https://stellar.creit.tech',
   'https://scopuly.com',
   'https://storage.herewallet.app',
   'https://uni.onekey-asset.com'
 ];
-const WALLET_FRAMES = ['https://albedo.link', 'https://connect.trezor.io', 'https://*.herewallet.app'];
+const WALLET_FRAMES = ['https://albedo.link', 'https://connect.trezor.io', 'https://hot-labs.org'];
+const WALLET_CONNECTIONS = ['https://h4n.app'];
 const WALLETCONNECT = {
   connect: [
     'https://*.walletconnect.com',
@@ -107,7 +108,8 @@ export function buildContentSecurityPolicy({
     // The wallet kit and its modal inject style elements at runtime.
     ['style-src', ["'self'", "'unsafe-inline'"]],
     // Member-written Markdown loads images only from IPFS (components/ui/markdown.tsx). Tribe
-    // images and artwork may also sit on the public site or its old host (next.config.mjs images).
+    // images and artwork may also sit on the public site (which redirects to its www host) or its
+    // old host (next.config.mjs images).
     [
       'img-src',
       [
@@ -115,6 +117,7 @@ export function buildContentSecurityPolicy({
         'data:',
         'blob:',
         siteUrl().origin,
+        `https://*.${siteUrl().host}`,
         LEGACY_SITE_ORIGIN,
         ...gateways,
         ...WALLET_KIT_IMAGES,
@@ -130,6 +133,7 @@ export function buildContentSecurityPolicy({
         ...origin(HORIZON[config.name]),
         ...gateways,
         ...PINATA_UPLOADS,
+        ...WALLET_CONNECTIONS,
         ...wc.connect,
         // The HMR socket and local dev tools (the Agentation toolbar).
         ...(dev ? ['ws:', 'http://localhost:*', 'ws://localhost:*'] : [])

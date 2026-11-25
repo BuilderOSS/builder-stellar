@@ -116,7 +116,10 @@ describe('page Content-Security-Policy (middleware)', () => {
     expect(matches('/api/health')).toBe(false);
     expect(matches('/_next/static/chunks/main.js')).toBe(false);
     expect(matches('/images/logo.png')).toBe(false);
-    expect(matches('/dao/abc/opengraph-image')).toBe(false);
+    // A tribe slug can contain an excluded word; every exclusion is anchored at the root.
+    expect(matches('/dao/my-opengraph-image/proposals/3')).toBe(true);
+    expect(matches('/dao/api/proposals')).toBe(true);
+    expect(matches('/dao/images-of-us')).toBe(true);
     expect(matches('/dao/abc', { 'next-router-prefetch': '1' })).toBe(false);
   });
 });
@@ -148,6 +151,8 @@ describe('buildContentSecurityPolicy', () => {
     // Tribe images saved before the rename point at the old host.
     expect(images).toContain('https://builder-stellar-web.vercel.app');
     expect(images).toContain('https://tribes.build');
+    // tribes.build redirects to www.tribes.build, and the policy applies to the redirect too.
+    expect(images).toContain('https://*.tribes.build');
   });
 
   it("connects to the network's RPC and Horizon", () => {
@@ -155,6 +160,13 @@ describe('buildContentSecurityPolicy', () => {
     expect(directive(build(), 'connect-src')).toContain('https://horizon-testnet.stellar.org');
     expect(directive(build({ network: 'public' }), 'connect-src')).toContain('https://soroban-mainnet.stellar.org');
     expect(directive(build({ network: 'local' }), 'connect-src')).toContain('http://localhost:8000');
+  });
+
+  it("allows the frames and relay the wallet kit's wallets open", () => {
+    expect(directive(build(), 'frame-src')).toBe(
+      'frame-src https://albedo.link https://connect.trezor.io https://hot-labs.org'
+    );
+    expect(directive(build(), 'connect-src')).toContain('https://h4n.app');
   });
 
   it('allows WalletConnect hosts only when WalletConnect is configured', () => {

@@ -42,7 +42,7 @@ describe('proposal links', () => {
     expect(JSON.parse(encodeProposalMetadata(draft('javascript:alert(1)'))).url).toBe('');
     expect(validateProposalMetadataDraft(draft('javascript:alert(1)'))).toEqual({
       valid: false,
-      message: 'Links must start with https://, http:// or ipfs://.'
+      message: 'Links must start with https://, http://, or ipfs://.'
     });
     expect(validateProposalMetadataDraft(draft('https://forum.example')).valid).toBe(true);
     expect(validateProposalMetadataDraft(draft('')).valid).toBe(true);

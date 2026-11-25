@@ -4,12 +4,13 @@ const mocks = vi.hoisted(() => ({ feed: vi.fn(), daoCount: vi.fn(), pipeline: vi
 vi.mock('@/lib/prisma', () => ({
   prisma: { appFeedStatus: { findFirst: mocks.feed }, managerDao: { count: mocks.daoCount } }
 }));
-vi.mock('@/lib/pipeline-health', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/pipeline-health')>()),
-  fetchPipelineReport: mocks.pipeline
-}));
+vi.mock('@/lib/pipeline-health', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/pipeline-health')>();
+  return { ...original, fetchPipelineReport: mocks.pipeline, assessPipeline: vi.fn(original.assessPipeline) };
+});
 
 import { API_RATE_LIMITS } from '@/lib/api-rate-limit';
+import { assessPipeline } from '@/lib/pipeline-health';
 import { clearServerCache } from '@/lib/server-cache';
 
 import { GET } from './route';
@@ -51,6 +52,18 @@ describe('GET /api/health', () => {
     expect(mocks.feed).toHaveBeenCalledTimes(1);
     expect(mocks.pipeline).toHaveBeenCalledTimes(1);
     expect((await get('203.0.113.13')).headers.get('Cache-Control')).toBe('public, max-age=0, s-maxage=10');
+  });
+
+  it('answers an unexpected failure in words and logs it', async () => {
+    vi.mocked(assessPipeline).mockImplementationOnce(() => {
+      throw new Error(SECRET_ERROR);
+    });
+    const response = await get('203.0.113.30');
+    const text = await response.text();
+    expect(response.status).toBe(500);
+    expect(JSON.parse(text)).toMatchObject({ status: 'error', message: 'Health check unavailable' });
+    expect(text).not.toContain('hunter2');
+    expect(console.error).toHaveBeenCalledWith('[api:health]', expect.any(Error));
   });
 
   it('is rate limited per client', async () => {

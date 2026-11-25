@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { limitApiRequest } from '@/lib/api-rate-limit';
 import { claimHistory } from '@/lib/minter/service';
 
@@ -13,10 +14,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     return NextResponse.json({ message: 'Invalid history offset.' }, { status: 400, headers });
   try {
     return NextResponse.json(await claimHistory((await params).daoId, Number(value)), { headers });
-  } catch {
-    return NextResponse.json(
+  } catch (error) {
+    return internalErrorResponse(
+      'claim-history',
+      error,
       { message: "Claim history is unavailable. Past claims don't show whether you can claim in the current round." },
-      { status: 503, headers }
+      { headers }
     );
   }
 }

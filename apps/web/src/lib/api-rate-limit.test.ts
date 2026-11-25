@@ -30,6 +30,24 @@ describe('limitApiRequest', () => {
     expect(await limitApiRequest(client()(), 'health')).toBeNull();
   });
 
+  it('does not count requests from this machine (next dev, next start, the walkthrough suite)', async () => {
+    for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+      const local = () => new Request('http://localhost:4242/api/health', { headers: { 'x-forwarded-for': address } });
+      for (let i = 0; i <= API_RATE_LIMITS.health.limit; i += 1) {
+        expect(await limitApiRequest(local(), 'health'), address).toBeNull();
+      }
+    }
+  });
+
+  it('never treats a Vercel request as local', async () => {
+    const forged = () =>
+      new Request('https://tribes.build/api/health', {
+        headers: { 'x-vercel-forwarded-for': '198.51.100.250', 'x-forwarded-for': '127.0.0.1' }
+      });
+    for (let i = 0; i < API_RATE_LIMITS.health.limit; i += 1) await limitApiRequest(forged(), 'health');
+    expect((await limitApiRequest(forged(), 'health'))?.status).toBe(429);
+  });
+
   it('lets a request with no client address through uncounted', async () => {
     const anonymous = () => new Request('https://tribes.build/api/health');
     for (let i = 0; i <= API_RATE_LIMITS.health.limit; i += 1) {
