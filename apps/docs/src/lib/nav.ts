@@ -155,7 +155,12 @@ export const NAV: DocSection[] = [
       guide('marketplace', 'treasury-purchases', 'Treasury purchases', 'The tribe buys through a proposal.'),
       guide('claims', 'create', 'Make a claim list', 'Who can claim, and how much.'),
       guide('claims', 'claim', 'Claim', 'Receive what a claim list holds for you.'),
-      guide('claims', 'refund', 'Claim refunds', 'Take back a payment from a failed launch drive, and what happens to unclaimed tokens.'),
+      guide(
+        'claims',
+        'refund',
+        'Claim refunds',
+        'Take back a payment from a failed launch drive, and what happens to unclaimed tokens.'
+      ),
       guide('members', 'find', 'Find members', 'The member directory and profiles.'),
       guide('members', 'delegate', 'Delegate your votes', 'Let someone else vote with your tokens.'),
       guide('members', 'transfer', 'Transfer a token', 'Send a membership to another wallet.'),
@@ -164,7 +169,12 @@ export const NAV: DocSection[] = [
       guide('manage', 'token', 'Manage: token', 'Mint new tokens, and where the other token settings are.'),
       guide('manage', 'governance', 'Manage: governance', 'Voting rules: directly in setup, by vote after launch.'),
       guide('manage', 'auction', 'Manage: auction', 'Auction settings: directly in setup, by vote after launch.'),
-      guide('manage', 'marketplace', 'Manage: marketplace', 'Payment asset, resale fee, pausing, and pools, changed by vote.'),
+      guide(
+        'manage',
+        'marketplace',
+        'Manage: marketplace',
+        'Payment asset, resale fee, pausing, and pools, changed by vote.'
+      ),
       guide('legal', 'export', 'Legal entity export', 'Prepare a bundle for MIDAO.'),
       guide('platform', 'operators', 'Running the platform', 'The platform page, for operators.')
     ]
