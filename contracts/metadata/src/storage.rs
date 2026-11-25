@@ -375,45 +375,77 @@ fn attributes_key(env: &Env, page: u32) -> (soroban_sdk::Symbol, DataKey) {
     common::ns(env, DataKey::AttributesPage(page))
 }
 
-fn decode_page(bytes: &Bytes) -> AttributesPage {
-    let len = bytes.len() as usize;
-    assert!(len <= MAX_ATTRIBUTE_PAGE_BYTES, "attributes page too large");
-    let mut buf = [0u8; MAX_ATTRIBUTE_PAGE_BYTES];
-    bytes.copy_into_slice(&mut buf[..len]);
+/// Why stored bytes are not a page this code wrote.
+#[derive(Debug, PartialEq)]
+enum PageError {
+    /// Longer than `MAX_ATTRIBUTE_PAGE_BYTES`.
+    TooLarge,
+    /// A record claims more than `MAX_PROPERTIES` indexes, runs past the
+    /// end, or the page holds more than `TOKENS_PER_ATTRIBUTE_PAGE` records.
+    Corrupt,
+}
+
+/// Parse a stored page. Every index read is bounds-checked against `bytes`
+/// first, so malformed input is refused, never read out of range.
+fn parse_page(bytes: &[u8]) -> Result<AttributesPage, PageError> {
+    let len = bytes.len();
+    if len > MAX_ATTRIBUTE_PAGE_BYTES {
+        return Err(PageError::TooLarge);
+    }
     let mut page = AttributesPage {
         count: 0,
         records: [EMPTY_RECORD; TOKENS_PER_ATTRIBUTE_PAGE as usize],
     };
     let mut at = 0;
     while at < len {
-        let wide = buf[at] & WIDE != 0;
-        let n = (buf[at] & !WIDE) as usize;
+        let wide = bytes[at] & WIDE != 0;
+        let n = (bytes[at] & !WIDE) as usize;
         let width = if wide { 2 } else { 1 };
-        assert!(
-            n <= MAX_PROPERTIES as usize && at + 1 + width * n <= len,
-            "corrupt attributes page"
-        );
-        assert!(
-            page.count < TOKENS_PER_ATTRIBUTE_PAGE as usize,
-            "corrupt attributes page"
-        );
+        if n > MAX_PROPERTIES as usize
+            || at + 1 + width * n > len
+            || page.count >= TOKENS_PER_ATTRIBUTE_PAGE as usize
+        {
+            return Err(PageError::Corrupt);
+        }
         let record = &mut page.records[page.count];
         record.len = n as u8;
         for k in 0..n {
             record.items[k] = if wide {
-                ((buf[at + 1 + 2 * k] as u16) << 8) | buf[at + 2 + 2 * k] as u16
+                ((bytes[at + 1 + 2 * k] as u16) << 8) | bytes[at + 2 + 2 * k] as u16
             } else {
-                buf[at + 1 + k] as u16
+                bytes[at + 1 + k] as u16
             };
         }
         page.count += 1;
         at += 1 + width * n;
     }
-    page
+    Ok(page)
+}
+
+/// Decode a stored page, panicking on bytes this code did not write (only
+/// this contract writes `AttributesPage`, so that is corrupt state).
+fn decode_page(bytes: &Bytes) -> AttributesPage {
+    let len = bytes.len() as usize;
+    assert!(len <= MAX_ATTRIBUTE_PAGE_BYTES, "attributes page too large");
+    let mut buf = [0u8; MAX_ATTRIBUTE_PAGE_BYTES];
+    bytes.copy_into_slice(&mut buf[..len]);
+    match parse_page(&buf[..len]) {
+        Ok(page) => page,
+        Err(PageError::TooLarge) => panic!("attributes page too large"),
+        Err(PageError::Corrupt) => panic!("corrupt attributes page"),
+    }
 }
 
 fn encode_page(env: &Env, page: &AttributesPage) -> Bytes {
     let mut buf = [0u8; MAX_ATTRIBUTE_PAGE_BYTES];
+    let at = write_page(page, &mut buf);
+    Bytes::from_slice(env, &buf[..at])
+}
+
+/// Write `page`'s records into `buf` and return the bytes used. A record is
+/// narrow (one byte per index) unless an index is above 255. Fits: at most
+/// `TOKENS_PER_ATTRIBUTE_PAGE` records of at most `MAX_RECORD_BYTES` each.
+fn write_page(page: &AttributesPage, buf: &mut [u8; MAX_ATTRIBUTE_PAGE_BYTES]) -> usize {
     let mut at = 0;
     for record in page.records.iter().take(page.count) {
         let n = record.len as usize;
@@ -431,7 +463,7 @@ fn encode_page(env: &Env, page: &AttributesPage) -> Bytes {
         }
         at += 1 + if wide { 2 * n } else { n };
     }
-    Bytes::from_slice(env, &buf[..at])
+    at
 }
 
 /// `[n, index_0, .., index_{n-1}]` (the public `get_attributes` form) to a record.
@@ -572,3 +604,6 @@ pub(crate) mod key_samples {
         keys.into_iter().map(|k| k.into_val(e)).collect()
     }
 }
+
+#[cfg(test)]
+mod page_properties;
