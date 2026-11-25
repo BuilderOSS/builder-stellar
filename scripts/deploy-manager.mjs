@@ -5,6 +5,7 @@ import {
   assertNetworkPassphrase,
   checkBuildInputs,
   confirmMainnet,
+  publishedBuildRequired,
   resolveIdentity,
   uncommittedBuildInputs,
   upgradeDelayFor
@@ -18,13 +19,18 @@ import {
   run,
   runQuiet
 } from './lib.mjs';
+import { assertUploadProvenance } from './wasm-build.mjs';
 
+const USAGE = 'Usage: node scripts/deploy-manager.mjs <config.json> [--force] [--allow-unpublished]';
 const args = process.argv.slice(2);
 const force = args.includes('--force');
-const configPath = args.find((arg) => arg !== '--force');
+// A testnet rehearsal Manager may run code that is not a published release (refused on mainnet).
+const allowUnpublished = args.includes('--allow-unpublished');
+const unknownFlag = args.find((arg) => arg.startsWith('--') && !['--force', '--allow-unpublished'].includes(arg));
+const configPath = args.find((arg) => !arg.startsWith('--'));
 
-if (!configPath) {
-  throw new Error('Usage: node scripts/deploy-manager.mjs <config.json> [--force]');
+if (!configPath || unknownFlag) {
+  throw new Error(USAGE);
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -59,7 +65,10 @@ const adminAddress = config.adminAddress;
 const rpcUrl = config.rpcUrl;
 const networkPassphrase = config.networkPassphrase;
 const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
-const contractBuildDir = 'target/wasm32v1-none/release';
+// WASM_DIR uploads files built elsewhere (the container build of a release, node scripts/build-wasm.mjs)
+// instead of building here.
+const wasmDir = process.env.WASM_DIR?.trim() || '';
+const contractBuildDir = wasmDir || 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
 // Platform upgrade notice: ledgers between a Manager approval and the earliest upgrade of the Manager
 // itself. Every DAO depends on it (registry, factory), so the notice is what lets a DAO react before a
@@ -69,8 +78,12 @@ const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`
 // ClaimMinter included, are upgraded only by their own DAO's proposals.
 const upgradeDelay = upgradeDelayFor(networkName, config.upgradeDelayLedgers);
 assertNetworkPassphrase(networkName, networkPassphrase);
+// Testnet and mainnet upload only the published build of a pushed release tag (preflight).
+const provenanceRequired = publishedBuildRequired(networkName, allowUnpublished);
 const sourceCommitResult = runQuiet('git', ['rev-parse', 'HEAD']);
-const sourceCommit = sourceCommitResult.ok ? sourceCommitResult.stdout.trim() : null;
+let sourceCommit = sourceCommitResult.ok ? sourceCommitResult.stdout.trim() : null;
+// Set by preflight when the published-build check ran: { commit, tag, hashes: { crate: sha256 } }.
+let provenance = null;
 
 async function confirmOverwrite(filePath) {
   if (force || !existsSync(filePath)) {
@@ -109,11 +122,46 @@ function fundIdentity() {
   }
 }
 
-// Before anything is built or sent: uncommitted build inputs (refused on mainnet) and, on mainnet, a typed
-// confirmation of what is about to be deployed.
+// Builds the contracts here, unless WASM_DIR names files built elsewhere.
+function buildContracts() {
+  if (wasmDir) {
+    console.log(`Uploading the WASM in ${wasmDir} (WASM_DIR); not building.`);
+    return;
+  }
+  run('stellar', ['contract', 'build', '--locked']);
+}
+
+// The published-build check for every crate (assertUploadProvenance: a pushed release tag at HEAD, committed
+// build inputs, hashes written after the last contract change, and each file's sha256 exactly the published
+// one). Runs before any network call; where it is not required, uncommitted build inputs print a warning.
+function checkProvenance() {
+  const missing = contractNames.map(wasmPath).filter((path) => !existsSync(path));
+  if (missing.length > 0) {
+    throw new Error(`Missing ${missing.join(', ')}. Build the contracts, or set WASM_DIR to the release's wasm/ folder.`);
+  }
+  if (!provenanceRequired) {
+    const warning = checkBuildInputs(networkName, uncommittedBuildInputs());
+    if (warning) console.warn(warning);
+    if (networkName !== 'local') {
+      console.warn('WARNING: --allow-unpublished: this rehearsal Manager runs code that is not checked against releases/hashes.json.');
+    }
+    return;
+  }
+  const results = contractNames.map((crate) => [crate, assertUploadProvenance({ crate, wasmPath: wasmPath(crate) })]);
+  const [, first] = results[0];
+  provenance = {
+    commit: first.commit,
+    tag: first.tag,
+    hashes: Object.fromEntries(results.map(([crate, result]) => [crate, result.sha256]))
+  };
+  sourceCommit = provenance.commit;
+  console.log(`All ${contractNames.length} contracts are the published build of ${provenance.tag} (${provenance.commit.slice(0, 12)}).`);
+}
+
+// Before anything is sent: the published-build check and, on mainnet, a typed confirmation of what is about
+// to be deployed.
 async function preflight() {
-  const warning = checkBuildInputs(networkName, uncommittedBuildInputs());
-  if (warning) console.warn(warning);
+  checkProvenance();
   if (networkName !== 'mainnet') return;
   const summary = [
     'MAINNET MANAGER DEPLOY',
@@ -122,6 +170,7 @@ async function preflight() {
     `  admin:          ${adminAddress} (identity ${identityName})`,
     `  upgrade notice: ${upgradeDelay} ledgers (about ${(upgradeDelay / LEDGERS_PER_DAY).toFixed(1)} days)`,
     `  source commit:  ${sourceCommit ?? 'unknown'}`,
+    `  release tag:    ${provenance?.tag ?? 'none'}`,
     `  versions:       ${contractNames.map((name) => `${name} ${versions[name]}`).join(', ')}`
   ];
   await confirmMainnet({
@@ -147,6 +196,16 @@ function wasmHash(packageName) {
   return createHash('sha256')
     .update(readFileSync(wasmPath(packageName)))
     .digest('hex');
+}
+
+// The file is read again for each upload: refuse if it changed since the provenance check.
+function uploadHash(packageName) {
+  const hash = wasmHash(packageName);
+  const checked = provenance?.hashes[packageName];
+  if (checked && checked !== hash) {
+    throw new Error(`${wasmPath(packageName)} changed after its provenance check (${checked} -> ${hash}); rerun.`);
+  }
+  return hash;
 }
 
 function saltFor(packageName) {
@@ -220,7 +279,7 @@ function deployIfMissing(packageName, alias, initArgs) {
 
 function installWasm(packageName) {
   const wasmFile = wasmPath(packageName);
-  const hash = wasmHash(packageName);
+  const hash = uploadHash(packageName);
 
   console.log(`Installing ${packageName} WASM (hash: ${hash})...`);
 
@@ -527,6 +586,8 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata) 
     implementations,
     versions,
     sourceCommit,
+    // The release tag whose published hashes every contract matched; null for a local or rehearsal deploy.
+    releaseTag: provenance?.tag ?? null,
     deployedAt: new Date().toISOString()
   };
 
@@ -540,7 +601,8 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata) 
 }
 
 async function main() {
-  // Sequence: identity and preflight checks (deploy-guards.mjs) -> build -> deploy Manager(admin, current_hash, version) -> upload + register all module
+  // Sequence: identity check -> build (unless WASM_DIR) -> preflight (published-build check of every crate,
+  // mainnet confirmation; deploy-guards.mjs, wasm-build.mjs) -> deploy Manager(admin, current_hash, version) -> upload + register all module
   // implementations (the ClaimMinter as "ClaimMinter") -> extend all code to 170 days ->
   // set_current_implementations. There is no platform Minter: every DAO gets its own ClaimMinter from
   // create_dao / create_module. Each step is idempotent, so re-running resumes.
@@ -549,15 +611,15 @@ async function main() {
   // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
   // contract_max_size_bytes, so they cannot even be uploaded. Same command as `pnpm contracts:build`.
   ensureIdentity();
+  buildContracts();
   await preflight();
-  run('stellar', ['contract', 'build']);
 
   ensureNetwork();
   fundIdentity();
 
   // Deploy Manager contract
   console.log('\n=== Deploying Manager Contract ===\n');
-  const managerWasmHash = wasmHash('manager');
+  const managerWasmHash = uploadHash('manager');
   const managerDeploy = deployIfMissing('manager', `dao-manager-${networkName}`, [
     '--admin',
     adminAddress,

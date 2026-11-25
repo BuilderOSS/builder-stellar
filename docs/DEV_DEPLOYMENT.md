@@ -36,16 +36,18 @@ newer, so:
 ## 1. Manager
 
 ```bash
-SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk \
-  pnpm deploy:manager configs/testnet-dev-manager.json
+git checkout <release tag>
+node scripts/build-wasm.mjs
+WASM_DIR=target/wasm-build/<commit>/wasm pnpm deploy:manager configs/testnet-dev-manager.json
 ```
 
-This builds the contracts from the checkout, uploads and registers all eight, sets the current
-implementations and writes `deploys/dev-testnet-manager.json` (commit it to `dev`). It builds natively
-with the pinned compiler (`rust-toolchain.toml`) and whichever `stellar` is on the `PATH` (install
-28.0.0, as the README describes), so the hashes it registers are this machine's build: on macOS they differ from the published release hashes, which come from the
-container build ([reproducible builds](REPRODUCIBLE_BUILDS.md)). It does not yet check them against
-`releases/hashes.json`; `scripts/upgrade-contract.mjs` does. Redeploying
+This uploads and registers the eight contracts of a published release, sets the current
+implementations and writes `deploys/dev-testnet-manager.json` (commit it to `dev`). On testnet the
+script refuses code that is not the published build of a pushed release tag, for each contract, before
+any network call ([reproducible builds](REPRODUCIBLE_BUILDS.md#what-the-upload-script-checks)), and
+records the tag as `releaseTag`. A native build on macOS gives other bytes than the container build,
+so it is refused. Only a throwaway rehearsal Manager may run unpublished code, with
+`--allow-unpublished`; the dev Manager is not one. Redeploying
 after contract changes: see [Manager deployment](MANAGER_DEPLOYMENT.md), including
 `DEPLOY_SALT_SUFFIX` for a genuinely fresh Manager and the redeploy checklist (which also means
 steps 2 and 3 again). Renew code TTLs with
