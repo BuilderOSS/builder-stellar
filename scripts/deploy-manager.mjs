@@ -2,6 +2,14 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
 import {
+  assertNetworkPassphrase,
+  checkBuildInputs,
+  confirmMainnet,
+  resolveIdentity,
+  uncommittedBuildInputs,
+  upgradeDelayFor
+} from './deploy-guards.mjs';
+import {
   DEFAULT_CODE_TTL_DAYS,
   LEDGERS_PER_DAY,
   enrichTransactionMetadata,
@@ -55,14 +63,12 @@ const contractBuildDir = 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
 // Platform upgrade notice: ledgers between a Manager approval and the earliest upgrade of the Manager
 // itself. Every DAO depends on it (registry, factory), so the notice is what lets a DAO react before a
-// hostile upgrade lands. 7 days (120,960 ledgers) on a public network; `upgradeDelayLedgers` in the
-// network config shortens it for testnet. The admin can change it later with set_upgrade_delay (a
-// reduction waits out the notice in force). DAO modules, the ClaimMinter included, are upgraded only by
-// their own DAO's proposals.
-const upgradeDelay = Number(config.upgradeDelayLedgers ?? 7 * LEDGERS_PER_DAY);
-if (!Number.isInteger(upgradeDelay) || upgradeDelay < 0) {
-  throw new Error(`upgradeDelayLedgers must be a non-negative integer, got ${config.upgradeDelayLedgers}`);
-}
+// hostile upgrade lands. 7 days (120,960 ledgers) by default and at least that on mainnet
+// (deploy-guards.mjs); `upgradeDelayLedgers` in the network config shortens it for testnet. The admin can
+// change it later with set_upgrade_delay (a reduction waits out the notice in force). DAO modules, the
+// ClaimMinter included, are upgraded only by their own DAO's proposals.
+const upgradeDelay = upgradeDelayFor(networkName, config.upgradeDelayLedgers);
+assertNetworkPassphrase(networkName, networkPassphrase);
 const sourceCommitResult = runQuiet('git', ['rev-parse', 'HEAD']);
 const sourceCommit = sourceCommitResult.ok ? sourceCommitResult.stdout.trim() : null;
 
@@ -90,9 +96,47 @@ function ensureNetwork() {
   run('stellar', ['network', 'use', networkName]);
 }
 
+// The identity must already exist and be the config's adminAddress; the script never creates a key.
+// Checked offline, before anything is built or sent.
 function ensureIdentity() {
-  runQuiet('stellar', ['keys', 'generate', identityName]);
-  runQuiet('stellar', ['keys', 'fund', identityName, '--network', networkName]);
+  resolveIdentity({ identityName, adminAddress });
+}
+
+// Friendbot funds the identity on local and testnet; a mainnet admin is funded by hand.
+function fundIdentity() {
+  if (networkName !== 'mainnet') {
+    runQuiet('stellar', ['keys', 'fund', identityName, '--network', networkName]);
+  }
+}
+
+// Before anything is built or sent: uncommitted build inputs (refused on mainnet) and, on mainnet, a typed
+// confirmation of what is about to be deployed.
+async function preflight() {
+  const warning = checkBuildInputs(networkName, uncommittedBuildInputs());
+  if (warning) console.warn(warning);
+  if (networkName !== 'mainnet') return;
+  const summary = [
+    'MAINNET MANAGER DEPLOY',
+    `  label:          ${config.label}`,
+    `  RPC:            ${rpcUrl}`,
+    `  admin:          ${adminAddress} (identity ${identityName})`,
+    `  upgrade notice: ${upgradeDelay} ledgers (about ${(upgradeDelay / LEDGERS_PER_DAY).toFixed(1)} days)`,
+    `  source commit:  ${sourceCommit ?? 'unknown'}`,
+    `  versions:       ${contractNames.map((name) => `${name} ${versions[name]}`).join(', ')}`
+  ];
+  await confirmMainnet({
+    label: config.label,
+    summary,
+    isTTY: Boolean(process.stdin.isTTY),
+    ask: async (question) => {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        return await rl.question(question);
+      } finally {
+        rl.close();
+      }
+    }
+  });
 }
 
 function wasmPath(packageName) {
@@ -496,7 +540,7 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata) 
 }
 
 async function main() {
-  // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
+  // Sequence: identity and preflight checks (deploy-guards.mjs) -> build -> deploy Manager(admin, current_hash, version) -> upload + register all module
   // implementations (the ClaimMinter as "ClaimMinter") -> extend all code to 170 days ->
   // set_current_implementations. There is no platform Minter: every DAO gets its own ClaimMinter from
   // create_dao / create_module. Each step is idempotent, so re-running resumes.
@@ -504,10 +548,12 @@ async function main() {
   // The legacy SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every unused
   // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
   // contract_max_size_bytes, so they cannot even be uploaded. Same command as `pnpm contracts:build`.
+  ensureIdentity();
+  await preflight();
   run('stellar', ['contract', 'build']);
 
   ensureNetwork();
-  ensureIdentity();
+  fundIdentity();
 
   // Deploy Manager contract
   console.log('\n=== Deploying Manager Contract ===\n');

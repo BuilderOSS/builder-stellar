@@ -1,185 +1,94 @@
 #!/bin/bash
 #
-# Database Role Setup for Goldsky
+# Create the database roles the pipeline and the app log in as:
+#   goldsky_writer  the Goldsky pipeline (landing tables, streamling allowlists)
+#   app_server      the web app (read-only views)
 #
-# Creates the necessary database roles with appropriate permissions:
-# - goldsky_writer: For Goldsky pipeline to write events
-# - app_server: For Next.js app to read data (read-only)
+#   DATABASE_URL=postgres://<owner>@host/db ./db/setup-roles.sh
+#       Create the missing roles and ask for each new role's password.
+#   DATABASE_URL=postgres://<owner>@host/db ./db/setup-roles.sh --rotate <role>
+#       Set a new password for an existing role (docs/KEY_CUSTODY.md).
 #
-# Usage:
-#   ./db/setup-roles.sh [database_url]
-#   DATABASE_URL=postgres://... ./db/setup-roles.sh
+# Each password is typed at psql's own prompt (\password). psql hashes it
+# (SCRAM-SHA-256) before it leaves this machine, so the plain password is never
+# in a shell variable, on a command line, in SQL text the server could log, or
+# in this script's output. Store it where docs/KEY_CUSTODY.md says.
 #
+# Run as the database owner. Then ./db/migrate.sh and ./db/grant-permissions.sh.
+#
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-set -e  # Exit on error
-
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+ROLES=(goldsky_writer app_server)
 
-# Get database URL from argument or environment
-DATABASE_URL="${1:-$DATABASE_URL}"
+usage() {
+  echo "Usage: DATABASE_URL=postgres://... $0 [--rotate goldsky_writer|app_server]" >&2
+  exit 1
+}
 
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}Error: DATABASE_URL not provided${NC}"
-  echo ""
-  echo "Usage:"
-  echo "  ./db/setup-roles.sh postgres://user:pass@host:5432/dbname"
-  echo "  DATABASE_URL=postgres://... ./db/setup-roles.sh"
+rotate=""
+case "${1:-}" in
+  "") ;;
+  --rotate)
+    rotate="${2:-}"
+    [[ " ${ROLES[*]} " == *" $rotate "* ]] || usage ;;
+  *) usage ;;
+esac
+
+require_database
+if [ ! -t 0 ]; then
+  echo -e "${RED}Error: run this from a terminal: psql asks for each password${NC}" >&2
   exit 1
 fi
+echo -e "${BLUE}Database roles on $DB_TARGET${NC}"
 
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Goldsky Database Role Setup${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
+# psql prompts twice on the terminal and sends only the SCRAM verifier.
+set_password() {
+  echo -e "${CYAN}New password for $1 (typed twice; nothing is shown or saved):${NC}"
+  psql -v ON_ERROR_STOP=1 -q -c "\\password $1"
+}
 
-# Check if psql is installed
-if ! command -v psql &> /dev/null; then
-  echo -e "${RED}Error: psql is not installed${NC}"
-  echo "Please install PostgreSQL client"
-  exit 1
+role_state() {
+  psql -Atc "SELECT CASE WHEN rolcanlogin THEN 'login' ELSE 'nologin' END FROM pg_roles WHERE rolname = '$1'"
+}
+
+if [ -n "$rotate" ]; then
+  [ -n "$(role_state "$rotate")" ] || { echo -e "${RED}✗ role $rotate does not exist${NC}" >&2; exit 1; }
+  set_password "$rotate"
+  echo -e "${GREEN}✓ New password set for $rotate${NC}"
+  echo "Next: update the secret that holds it (docs/KEY_CUSTODY.md), then check the pipeline or app reconnects."
+  exit 0
 fi
 
-# Test database connection
-echo -e "${YELLOW}→ Testing database connection...${NC}"
-if ! psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
-  echo -e "${RED}✗ Failed to connect to database${NC}"
-  echo "Please check your DATABASE_URL"
-  exit 1
-fi
-echo -e "${GREEN}✓ Database connection successful${NC}"
-echo ""
-
-# Check current roles
-echo -e "${YELLOW}→ Checking existing roles...${NC}"
-echo ""
-
-EXISTING_ROLES=$(psql "$DATABASE_URL" -t -c "SELECT rolname FROM pg_roles WHERE rolname IN ('goldsky_writer', 'app_server')" | tr -d ' ')
-
-if echo "$EXISTING_ROLES" | grep -q "goldsky_writer"; then
-  echo -e "${BLUE}  goldsky_writer role already exists${NC}"
-  GOLDSKY_EXISTS=true
-else
-  echo -e "${YELLOW}  goldsky_writer role does not exist${NC}"
-  GOLDSKY_EXISTS=false
-fi
-
-if echo "$EXISTING_ROLES" | grep -q "app_server"; then
-  echo -e "${BLUE}  app_server role already exists${NC}"
-  APP_EXISTS=true
-else
-  echo -e "${YELLOW}  app_server role does not exist${NC}"
-  APP_EXISTS=false
-fi
-
-echo ""
-
-# Prompt for passwords
-if [ "$GOLDSKY_EXISTS" = false ]; then
-  echo -e "${CYAN}Enter password for goldsky_writer role:${NC}"
-  read -s GOLDSKY_PASSWORD
-  echo ""
-
-  if [ -z "$GOLDSKY_PASSWORD" ]; then
-    echo -e "${RED}Error: Password cannot be empty${NC}"
-    exit 1
+for role in "${ROLES[@]}"; do
+  state="$(role_state "$role")"
+  if [ "$state" = "login" ]; then
+    echo -e "  ${BLUE}$role exists${NC} (to set a new password: $0 --rotate $role)"
+    continue
   fi
-fi
-
-if [ "$APP_EXISTS" = false ]; then
-  echo -e "${CYAN}Enter password for app_server role:${NC}"
-  read -s APP_PASSWORD
-  echo ""
-
-  if [ -z "$APP_PASSWORD" ]; then
-    echo -e "${RED}Error: Password cannot be empty${NC}"
-    exit 1
+  if [ -z "$state" ]; then
+    # Created without LOGIN, so the role can't be used until its password is set.
+    psql -v ON_ERROR_STOP=1 -q -c "CREATE ROLE $role NOLOGIN"
   fi
-fi
+  set_password "$role"
+  psql -v ON_ERROR_STOP=1 -q -c "ALTER ROLE $role LOGIN"
+  echo -e "  ${GREEN}✓ $role created${NC}"
+done
 
-# Create roles
-echo -e "${BLUE}Creating roles...${NC}"
+# Database grants, on every run. goldsky_writer's CREATE on the database is what
+# the Goldsky sink needs for CREATE SCHEMA IF NOT EXISTS; grant-permissions.sh
+# installs the guard that limits it to the streamling schema.
+psql -v ON_ERROR_STOP=1 -q <<'SQL'
+SELECT format('GRANT CONNECT ON DATABASE %I TO goldsky_writer, app_server', current_database()) \gexec
+SELECT format('GRANT CREATE ON DATABASE %I TO goldsky_writer', current_database()) \gexec
+SQL
+
+host="$(sed -n 's/^host=//p' "$PGSERVICEFILE")"
+port="$(sed -n 's/^port=//p' "$PGSERVICEFILE")"
 echo ""
-
-if [ "$GOLDSKY_EXISTS" = false ]; then
-  echo -e "${YELLOW}→ Creating goldsky_writer role...${NC}"
-
-  psql "$DATABASE_URL" << EOF
--- Create goldsky_writer role
-CREATE ROLE goldsky_writer WITH LOGIN PASSWORD '$GOLDSKY_PASSWORD';
-
--- Grant connect permission
-GRANT CONNECT ON DATABASE $(psql "$DATABASE_URL" -t -c "SELECT current_database()" | tr -d ' ') TO goldsky_writer;
-
--- Grant create permission (needed to create tables)
-GRANT CREATE ON DATABASE $(psql "$DATABASE_URL" -t -c "SELECT current_database()" | tr -d ' ') TO goldsky_writer;
-EOF
-
-  echo -e "${GREEN}✓ goldsky_writer role created${NC}"
-  echo ""
-else
-  echo -e "${BLUE}→ Skipping goldsky_writer creation (already exists)${NC}"
-  echo ""
-fi
-
-if [ "$APP_EXISTS" = false ]; then
-  echo -e "${YELLOW}→ Creating app_server role...${NC}"
-
-  psql "$DATABASE_URL" << EOF
--- Create app_server role (read-only)
-CREATE ROLE app_server WITH LOGIN PASSWORD '$APP_PASSWORD';
-
--- Grant connect permission
-GRANT CONNECT ON DATABASE $(psql "$DATABASE_URL" -t -c "SELECT current_database()" | tr -d ' ') TO app_server;
-EOF
-
-  echo -e "${GREEN}✓ app_server role created${NC}"
-  echo ""
-else
-  echo -e "${BLUE}→ Skipping app_server creation (already exists)${NC}"
-  echo ""
-fi
-
-# Show connection strings
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✓ Role setup complete!${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+echo -e "${CYAN}Connection settings (fill in each password from where you stored it):${NC}"
+echo "  goldsky_writer: host ${host:-localhost}, port ${port:-5432}, database $DB_NAME"
+echo "  app_server:     postgres://app_server:<password>@${host:-localhost}${port:+:$port}/$DB_NAME?sslmode=require"
 echo ""
-
-# Extract host, port, and database from DATABASE_URL
-# Format: postgres://user:pass@host:port/database
-DB_INFO=$(echo "$DATABASE_URL" | sed -E 's|postgres://[^:]+:[^@]+@([^/]+)/(.+)|\1 \2|')
-HOST_PORT=$(echo "$DB_INFO" | cut -d' ' -f1)
-DATABASE=$(echo "$DB_INFO" | cut -d' ' -f2)
-
-echo -e "${CYAN}Connection strings for .env:${NC}"
-echo ""
-
-if [ "$GOLDSKY_EXISTS" = false ]; then
-  echo -e "${YELLOW}# Goldsky writer connection${NC}"
-  echo "GOLDSKY_SECRET_NEON_HOST=\"$(echo $HOST_PORT | cut -d: -f1)\""
-  echo "GOLDSKY_SECRET_NEON_PORT=\"$(echo $HOST_PORT | cut -d: -f2)\""
-  echo "GOLDSKY_SECRET_NEON_DATABASE=\"$DATABASE\""
-  echo "GOLDSKY_SECRET_NEON_USER=\"goldsky_writer\""
-  echo "GOLDSKY_SECRET_NEON_PASSWORD=\"$GOLDSKY_PASSWORD\""
-  echo ""
-fi
-
-if [ "$APP_EXISTS" = false ]; then
-  echo -e "${YELLOW}# App server connection (read-only)${NC}"
-  echo "APP_DATABASE_URL=\"postgres://app_server:$APP_PASSWORD@$HOST_PORT/$DATABASE\""
-  echo ""
-fi
-
-echo -e "${CYAN}Next steps:${NC}"
-echo "  1. Run migrations to create schemas and tables:"
-echo "     ./db/migrate.sh"
-echo ""
-echo "  2. After migrations, grant permissions:"
-echo "     ./db/grant-permissions.sh"
-echo ""
+echo "Next: ./db/migrate.sh, then ./db/grant-permissions.sh"

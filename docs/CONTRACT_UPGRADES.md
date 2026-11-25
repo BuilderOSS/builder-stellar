@@ -104,6 +104,8 @@ DAOs keep their addresses and history only through upgrades.
    TEST_DATABASE_URL="postgres://$(whoami)@localhost:5432/builder_migration_test" ./db/test-migrations.sh
    dropdb -h localhost builder_migration_test
    ```
+   The role in the URL must be a superuser: the run creates roles and the writer's event trigger
+   ([db operations](../db/README.md#verifying-changes)).
 
 Commit all of the above before touching the network.
 
@@ -114,8 +116,8 @@ then each DAO.
 
 1. **Database**: apply the migration and refresh grants.
    ```sh
-   ./db/migrate.sh "$ADMIN_DATABASE_URL"
-   ./db/grant-permissions.sh "$ADMIN_DATABASE_URL"
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/migrate.sh
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/grant-permissions.sh
    ```
 2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`, the name `pnpm generate`
    writes into `packages/goldsky/pipelines/builder-stellar-events.yaml`): apply it **in place**
@@ -185,7 +187,7 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
-- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
+- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file, after you type the database name.
 - Registry records cannot be edited or deleted; a mistaken version string needs a new build (new hash).
 
 ## Manager upgrades

@@ -113,6 +113,9 @@ A DAO's state lives for a paid stretch of time. Anyone can renew everything the 
 node scripts/renew-dao.mjs --network testnet --token <Token contract address> --days 90 --source <identity> [--dry-run]
 ```
 
+Without `--source`, the payer is `RENEW_IDENTITY`, else `<network>-renewer`, a low-value key that is not the
+Manager admin ([key custody](KEY_CUSTODY.md#renewal-payer)). The stellar CLI signs, so no seed is loaded into Node.
+
 The web app offers the same under Manage → Storage renewal, with expiry dates and a simulated price. Shared contract code is the platform's to renew. Costs and the full key list are in [TTL_ECONOMICS](TTL_ECONOMICS.md).
 
 ## Tests and testnet rehearsal

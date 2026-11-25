@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  assertNetworkPassphrase,
+  checkBuildInputs,
+  confirmMainnet,
+  MAINNET_MIN_UPGRADE_DELAY_LEDGERS,
+  PUBLIC_NETWORK_PASSPHRASE,
+  resolveIdentity,
+  uncommittedBuildInputs,
+  upgradeDelayFor
+} from './deploy-guards.mjs';
+
+const ADMIN = 'GADMINADDRESS';
+
+// A fake command runner: `keys` maps identity names to addresses.
+function fakeStellar(keys = {}) {
+  const calls = [];
+  const run = (command, args) => {
+    calls.push([command, ...args]);
+    if (command === 'stellar' && args[0] === 'keys' && args[1] === 'address') {
+      return keys[args[2]] ? { ok: true, stdout: `${keys[args[2]]}\n`, stderr: '' } : { ok: false, stdout: '', stderr: 'not found' };
+    }
+    throw new Error(`unexpected call ${command} ${args.join(' ')}`);
+  };
+  return { run, calls };
+}
+
+test('mainnet refuses an upgrade notice under 7 days; other networks may shorten it', () => {
+  assert.equal(MAINNET_MIN_UPGRADE_DELAY_LEDGERS, 120_960);
+  assert.equal(upgradeDelayFor('mainnet', undefined), 120_960);
+  assert.equal(upgradeDelayFor('mainnet', 200_000), 200_000);
+  assert.throws(() => upgradeDelayFor('mainnet', 720), /below the mainnet minimum/);
+  assert.throws(() => upgradeDelayFor('mainnet', 120_959), /below the mainnet minimum/);
+  assert.equal(upgradeDelayFor('testnet', 720), 720);
+  assert.equal(upgradeDelayFor('local', 0), 0);
+  assert.throws(() => upgradeDelayFor('testnet', -1), /non-negative integer/);
+  assert.throws(() => upgradeDelayFor('testnet', '1.5'), /non-negative integer/);
+});
+
+test('a mainnet config must carry the public network passphrase', () => {
+  assert.doesNotThrow(() => assertNetworkPassphrase('mainnet', PUBLIC_NETWORK_PASSPHRASE));
+  assert.throws(() => assertNetworkPassphrase('mainnet', 'Test SDF Network ; September 2015'), /must use the network passphrase/);
+  assert.doesNotThrow(() => assertNetworkPassphrase('testnet', 'Test SDF Network ; September 2015'));
+});
+
+test('uncommitted build inputs stop a mainnet deploy and warn elsewhere', () => {
+  const run = () => ({ ok: true, stdout: ' M contracts/manager/src/contract.rs\n?? releases/new.json\n', stderr: '' });
+  const dirty = uncommittedBuildInputs(run);
+  assert.deepEqual(dirty, [' M contracts/manager/src/contract.rs', '?? releases/new.json']);
+  assert.throws(() => checkBuildInputs('mainnet', dirty), /uncommitted build inputs/);
+  assert.match(checkBuildInputs('testnet', dirty), /^WARNING/);
+  assert.equal(checkBuildInputs('mainnet', []), null);
+  assert.throws(() => uncommittedBuildInputs(() => ({ ok: false, stdout: '', stderr: 'not a git repository' })), /can't be checked/);
+});
+
+test('a missing deploy key is an error, and the script never generates one', () => {
+  const { run, calls } = fakeStellar();
+  assert.throws(() => resolveIdentity({ identityName: 'x-admin', adminAddress: ADMIN }, run), /No stellar key named x-admin.*never creates one/);
+  assert.deepEqual(calls, [['stellar', 'keys', 'address', 'x-admin']], 'only the address was read');
+});
+
+test('the deploy key must be the config admin', () => {
+  const { run } = fakeStellar({ 'testnet-admin': 'GSOMEONEELSE' });
+  assert.throws(
+    () => resolveIdentity({ identityName: 'testnet-admin', adminAddress: ADMIN }, run),
+    /must be the same key/
+  );
+  const ok = fakeStellar({ 'testnet-admin': ADMIN });
+  assert.equal(resolveIdentity({ identityName: 'testnet-admin', adminAddress: ADMIN }, ok.run), ADMIN);
+});
+
+test('a mainnet deploy needs "mainnet <label>" typed at a terminal', async () => {
+  const summary = ['MAINNET MANAGER DEPLOY'];
+  const answer = (text) => async () => text;
+  await assert.rejects(confirmMainnet({ label: 'builder', summary, isTTY: false, ask: answer('mainnet builder') }), /without a terminal/);
+  await assert.rejects(confirmMainnet({ label: 'builder', summary, isTTY: true, ask: answer('yes') }), /cancelled/);
+  await assert.rejects(confirmMainnet({ label: 'builder', summary, isTTY: true, ask: answer('mainnet dev') }), /cancelled/);
+  await assert.doesNotReject(confirmMainnet({ label: 'builder', summary, isTTY: true, ask: answer(' mainnet builder\n') }));
+});
