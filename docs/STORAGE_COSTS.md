@@ -1,6 +1,6 @@
 # Who pays for storage
 
-Builder DAOs live on Stellar, where every stored entry pays rent for the time it stays on the ledger. This page
+Tribe Builder DAOs live on Stellar, where every stored entry pays rent for the time it stays on the ledger. This page
 answers, role by role, what you write, what you pay, what you have to renew, and what happens if you do not.
 The full key-by-key reference is [TTL_ECONOMICS.md](TTL_ECONOMICS.md); the design is [STORAGE_DIET.md](STORAGE_DIET.md).
 
@@ -13,8 +13,8 @@ per transaction). Mainnet rates differ; the Renewal tab and `renew-code-ttl.mjs 
 | Contract code | ~0.05 XLM per KB per day (514 stroops per byte-day), about five times data |
 | Longest lifetime one renewal can buy | 180 days (`max_entry_ttl`) |
 
-Rent is linear in time: renewing for 180 days twice costs the same as renewing for 30 days twelve times, minus
-eleven transactions. Longer is never dearer per year.
+Rent is linear in time: renewing for 180 days twice costs the same as renewing for 30 days twelve times, with ten
+fewer transactions. A longer renewal never costs more per year ([rent](TTL_ECONOMICS.md#rent)).
 
 ## The short version
 
@@ -53,12 +53,12 @@ node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170 
 node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170             # pay
 ```
 
-It finds every hash from chain (current, latest, running on the Manager, and running on every known
-DAO), simulates each extension, and splits any that would exceed 300 XLM in one transaction. New code is extended
-to 170 days at upload by `deploy-manager.mjs` and `upgrade-contract.mjs`.
+It finds every running hash from chain and splits any extension that would exceed 300 XLM. New code is extended
+to 170 days at upload by `deploy-manager.mjs` and `upgrade-contract.mjs`. The `/platform` dashboard does the same
+from the browser. How the hashes are found and paid for: [the platform's renewal](TTL_ECONOMICS.md#who-renews-what).
 
 **If you lapse.** Contracts bump their own code only from 2 to 4 days, so a member's transaction pays at most a
-few days of code rent (about 4 XLM for a 37 KB module) instead of the 300 XLM that used to be the trap. A
+few days of code rent (about 4 XLM for a 37 KB module) instead of the 300 XLM a caller could once be charged. A
 transaction that touches several contracts pays several bumps: `launch_dao` touches all seven, so during a lapse
 a launch can cost tens of XLM and can trip the app's 50 XLM guard until the platform renews. If no transaction
 lands in those days the code archives, and every DAO on it stops until someone submits a `RestoreFootprint` for
@@ -95,11 +95,11 @@ it while the DAO has no link), so a setup that takes longer than 180 days is ren
 latest supply and quorum checkpoints, live proposals, open listings, the link, the claim round, and the tokens and
 funds the Treasury, Auction and Marketplace hold. Members' own records are not the DAO's (see below).
 
-**How.** Manage → Storage renewal shows each class with its earliest expiry, quotes 30, 90 or 180 days (the
-default) by simulation, shows what a year costs at that rate, and renews everything in **one transaction with one
-signature**. Archived entries are restored first, in the same flow. Anyone may renew; the wallet that signs pays.
-A DAO that wants to reimburse the renewer does so by proposal (the Treasury cannot submit a renewal itself, since
-the extension is a transaction-level operation, not a contract call). The same runs from the command line:
+**How.** Manage → Storage renewal quotes 30, 90 or 180 days (the default) by simulation and renews everything in
+**one transaction with one signature**, restoring archived entries first in the same flow (the full flow is in
+[Who renews what](TTL_ECONOMICS.md#who-renews-what)). Anyone may renew; the wallet that signs pays. A DAO that
+wants to reimburse the renewer does so by proposal (the Treasury cannot submit a renewal itself, since the
+extension is a transaction-level operation, not a contract call). The same runs from the command line:
 
 ```bash
 node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <identity> --dry-run
@@ -173,8 +173,8 @@ token's traits (~17 B).
 ## Claimers
 
 A merkle claim writes your claim marker (~200 B) for 180 days: about 0.35 XLM, paid with the claim. The DAO pays
-for the claim round itself (root and `tree_uri`, ~1 XLM, by proposal). An archived marker is not a second chance:
-archived entries are restored, not deleted, so a claim in the same round still fails once it is back.
+for the claim round itself (root and `tree_uri`, ~1 XLM, by proposal). Archiving a marker does not allow a second
+claim: archived entries are restored, not deleted, so a claim in the same round still fails once it is back.
 
 ## Questions
 
