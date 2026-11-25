@@ -149,6 +149,38 @@ The full rules are in [`SECURITY_MODEL.md`](../SECURITY_MODEL.md#response-header
 - **API errors.** An unexpected failure (the database, the indexer, RPC, or IPFS) answers with a short message and logs the detail on the server ([`lib/api-error.ts`](../../apps/web/src/lib/api-error.ts)); `/api/health` returns a count of pipeline errors, not their text. Sign-in and upload routes keep their own handling.
 - **Server-side fetches.** The server fetches remote content in two places, artwork layers and claim lists, both through `fetchPublicUrl` ([`lib/safe-remote-fetch.ts`](../../apps/web/src/lib/safe-remote-fetch.ts)). Every hop, redirects included, must use HTTPS and resolve only to public addresses; the connection is pinned to the checked address; at most three redirects are followed; and the body is size-capped.
 
+## 8. What the wallet shows
+
+Every value-bearing action ends in a wallet signature, so the wallet's screen is the member's last check. For a transaction the server prepared (the `claims`, `marketplace`, `tokens`, and `treasury` `prepare` routes), it is the only check independent of the server. Before the wallet sees such a transaction, the browser checks four things: the source is the connected account, the transaction has not expired, the network matches, and the fee is within the guard ([`lib/marketplace/transaction.ts`](../../apps/web/src/lib/marketplace/transaction.ts), [`lib/wallet-sign.ts`](../../apps/web/src/lib/wallet-sign.ts)). After signing, it checks that the wallet returned the same envelope. It does not decode the call and compare it with the review screen: the check of a marketplace purchase's authorizations runs on the server ([`lib/marketplace/purchase-authorization.ts`](../../apps/web/src/lib/marketplace/purchase-authorization.ts)).
+
+**What the app asks a wallet to sign,** through Stellar Wallets Kit 2.6.0, which passes the wallet only the transaction XDR or the message, with no description:
+
+- **Contract calls:** one `invokeHostFunction` operation, simulated and assembled. The member is the transaction source, so the transaction signature is their authorization (source-account credentials). Anything the call does for them, such as a token `transfer` from their account, is in the transaction's authorization entries.
+- **Other operations:** renewals (`extendFootprintTtl`, `restoreFootprint`), and a `changeTrust` before a purchase that needs a trustline.
+- **Sign-in:** a SEP-53 message naming the domain, address, network, nonce, times, and the server's key and signature ([`lib/auth/message.ts`](../../apps/web/src/lib/auth/message.ts)), or a SEP-10 challenge of `manageData` operations.
+
+**What the wallets show** for a contract call. This was read from each wallet's source code or documentation on 2026-11-25, without signing anything; screens change between versions.
+
+| Wallet | Shown |
+| --- | --- |
+| Freighter, renamed Varial in 5.50.0 (extension 5.53.0, and mobile through WalletConnect) | First screen: the requesting site's domain (taken from the browser, not the app), the network, account, total fee, and memo. On mainnet only, a Blockaid scan and the balance changes from its simulation; the transaction and site address go to Freighter's server for these. Behind "Transaction details": "Invoke Contract", the contract ID, the function name, and the parameters, named from the contract's own interface since 5.49.0. Values are raw: an `i128` as digits without decimals, a `Vec` or `Map` entry by entry. "Authorizations" lists the authorization tree, collapsed by function name. It refuses a transaction for another network. For a SEP-53 message: the domain and the message text |
+| xBull (public source 1.40.0) | The requester, network, account, fee, and memo. The call appears only as the tree of its authorization entries, with arguments as JSON. Balance changes from its own simulation, for XLM and trustline assets only |
+| Albedo | The requesting origin, the network, and each call as `function(arguments)` beside the contract address, with the asset's name when the contract is a Stellar asset contract |
+| Ledger (Stellar app 6.1.0) | The contract ID, function, positional arguments, and the authorization tree; transfers of known tokens in plain terms. Every contract call needs the device's blind-signing setting, which is off by default. Freighter sends the device the whole transaction unless the member turned on hash signing |
+| LOBSTR, Hana, and the kit's other wallets | Not confirmed from public sources |
+
+Sources: Freighter's [releases](https://github.com/stellar/freighter/releases) and [signing view](https://github.com/stellar/freighter/blob/5.53.0/extension/src/popup/views/SignTransaction/index.tsx); [xBull](https://github.com/Creit-Tech/xBull-Wallet); [Albedo](https://github.com/stellar-expert/albedo); the [Ledger Stellar app's release notes](https://github.com/LedgerHQ/app-stellar/blob/master/release-notes.md); Stellar's guide to [signing Soroban invocations](https://developers.stellar.org/docs/build/guides/transactions/signing-soroban-invocations).
+
+**What no wallet shows:**
+
+- What the call means for the tribe. For example, that a `propose` call's vectors move 500 tokens out of the Treasury, or which tribe a contract belongs to. Contract addresses appear as strkeys without names, and no wallet checks that a contract is the platform's. Freighter's parameter names are the contract author's own labels.
+- Amounts with their decimals, apart from known tokens on Ledger and Albedo and Freighter's balance changes on mainnet.
+- Nested arguments in a readable form: a proposal's targets, functions, and argument vectors appear as raw structure.
+- The storage footprint, or the resource fee as a separate figure.
+- With source-account authorization, which is what the app uses, a token transfer the call makes for the member appears only in the authorization tree. In Freighter that tree is collapsed on the second screen.
+
+So the app's review screen carries the meaning, and the wallet confirms the contract, the function, the raw arguments, and the fee. If the server were compromised, it could prepare a call that differs from the review screen, and the member would see the difference only in those wallet fields. A browser-side check that decodes a prepared transaction's call and authorization tree and compares them with the reviewed terms would close that gap. The server already makes this check for marketplace purchases; the browser does not.
+
 ## Questions for the review
 
 1. Can a session, a prepared transaction, or any server route cause a wallet to sign something other than what the person was shown?
