@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { AuthError, authErrorResponse } from '@/lib/auth/server';
-import { AuthenticationError, getPinataService, PinataError } from '@/lib/pinata-service';
+import { AuthenticationError, getPinataService, PinataError, type UploadKey } from '@/lib/pinata-service';
 import { issuePinToken } from '@/lib/pinata-upload-auth';
+import { sweepExpiredUploadKeys } from '@/lib/pinata-upload-keys';
 import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
@@ -10,13 +11,15 @@ import { uploadsEnabled } from '@/lib/uploads-enabled';
 /**
  * POST /api/pinata/generate-jwt
  *
- * Generates a single-use JWT for directory uploads to Pinata's legacy endpoint.
- * The JWT has restricted permissions (pinFileToIPFS only) and expires after one use.
+ * Creates a Pinata key for one directory upload to Pinata's legacy endpoint: pinFileToIPFS
+ * only, one use. pin-cid revokes it when it confirms the upload; a key whose upload never got
+ * that far is revoked by the sweep after its deadline (`expiresAt`, 15 minutes).
  *
  * Response:
  * {
  *   jwt: string (JWT token for Pinata API)
- *   expiresAt: ISO8601 timestamp
+ *   pinToken: string (for pin-cid; names this key so pin-cid can revoke it)
+ *   expiresAt: ISO8601 timestamp (the key's deadline)
  * }
  *
  * Error responses:
@@ -32,11 +35,12 @@ export async function POST(_request: NextRequest): Promise<NextResponse> {
     // A funded account, and a few keys per account at a time: each key is a paid upload.
     const session = await requireUploadAccount('generate-jwt');
 
-    // Generate JWT from Pinata service
     const pinataService = getPinataService();
-    let jwt: string;
+    // Revoke the keys abandoned uploads left behind (at most every few minutes on an instance).
+    await sweepExpiredUploadKeys(pinataService);
+    let key: UploadKey;
     try {
-      jwt = await pinataService.generateUploadJwt();
+      key = await pinataService.generateUploadKey();
     } catch (jwtError) {
       console.error('[/api/pinata/generate-jwt] Failed to generate JWT:', jwtError);
       if (jwtError instanceof AuthenticationError) {
@@ -52,20 +56,13 @@ export async function POST(_request: NextRequest): Promise<NextResponse> {
       throw jwtError;
     }
 
-    if (!jwt) {
-      throw new Error('JWT generation returned empty token');
-    }
-
-    // JWT typically expires after one use or within a reasonable time window
-    // Set expiry to 1 hour from now as a safety margin
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
     return NextResponse.json(
       {
-        jwt,
-        // pin-cid pins the uploaded directory only with this token, for this account.
-        pinToken: issuePinToken(session.address),
-        expiresAt: expiresAt.toISOString()
+        jwt: key.jwt,
+        // pin-cid confirms the uploaded directory only with this token, for this account, and
+        // revokes the key it names.
+        pinToken: issuePinToken(session.address, Date.now(), key.keyId),
+        expiresAt: key.expiresAt.toISOString()
       },
       { status: 200 }
     );

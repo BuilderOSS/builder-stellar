@@ -19,7 +19,45 @@ models in `apps/web/prisma/schema.prisma` map onto the views marked **Prisma**.
    A u64 field with no upper bound on chain (an expiry, a pool period, an
    assurance deadline) is cast with `chain.u64_bigint`: a value past the bigint
    range reads as 9223372036854775807, still later than any ledger time, and
-   the exact value is on chain (migration 0013).
+   the exact value is on chain (migration 0013). A cast in a condition reads
+   only the view's own rows ([Casts in conditions](#casts-in-conditions),
+   migration 0016).
+
+### Casts in conditions
+
+PostgreSQL does not promise an order for the parts of a `WHERE`, `JOIN ... ON` or
+`LATERAL` condition. A cast there could meet a row the view's role condition is
+meant to exclude, such as an outside module's `refunded` with a word for
+`list_id`, and the error would stop the read for every reader. What the planner
+does: a condition on one relation runs at that relation's scan, before any join;
+the conditions of one scan run cheapest first, and a text equality costs less
+than any expression with a cast; an aggregate reads only the rows that pass its
+query's `WHERE`; and a condition on columns outside a `DISTINCT ON` key, an
+aggregate's output or a `LIMIT` subquery is never moved below it. So a cast can
+meet another contract's row only when the relation it reads has no condition of
+its own that excludes that row. Every cast of an event field in a view condition:
+
+| View | Cast | Rows that reach it | Status |
+| --- | --- | --- | --- |
+| `governance.proposals` | `proposal_scheduled`'s `vote_start`, `vote_end` and `quorum_votes` (select list; a reader's filter on those columns moves to that scan) | before 0016, every `proposal_scheduled` of the deployment on a hash or merge join: the join was its only contract condition | Fixed in 0016: its own `contract_role = 'governor'`, and `chain.u64_bigint` / `chain.try_numeric` |
+| `claims.claimers` | refund lookup, `list_id` in `WHERE` | the ClaimMinter's own `refunded` rows (role and contract conditions on the same scan) | 0016 reads it through `chain.u64_bigint`, so no order can raise |
+| `token.approvals`, `token.operator_approvals`, `token.transfer_agents`, `manager.vote_sources` | `WHERE` on `live_until_ledger`, `enabled`, `approved` | the rows of the `DISTINCT ON` subquery: the latest event per key, of the view's own role | Safe: the condition names a column outside the `DISTINCT ON` key, so it is never moved below it |
+| `token.approvals` | `NOT EXISTS (... x.token_id = (ap.t ->> 'token_id')::bigint)` | `ap`: above the `DISTINCT ON`; `x`: `token.transfers`, role `token` on its own scan | Safe |
+| `governance.proposals` (tallies, `eta`), `claims.lists`, `marketplace.pools`, `token.delegate_state`, `auction.auction_state()` | aggregate arguments and `FILTER (WHERE ...)` | the rows that pass the subquery's `WHERE`: one contract of the view's role | Safe: an aggregate reads only rows that pass `WHERE` |
+| `manager.daos` | the profile's `ORDER BY (t ->> 'seq')::bigint` | the Metadata contract's `profile_updated` rows | Safe: sort keys are computed for the rows the scan returns |
+| `marketplace.pool_stock`, `metadata.token_seeds` | `generate_series` and `LATERAL` casts per restock or seed event | the outer event row, after its role condition | Safe: a lateral call runs once per outer row returned |
+| `app.activity_feed` | `topics::jsonb` in two `JOIN` conditions | Manager rows | Safe for any row: the activity script writes `topics` only after `JSON.parse` accepts it (else `{}`), and the decoder replaces NUL in every string, so jsonb reads every row's `topics` |
+
+A reader's filter on a cast column of the select list (`token_id = 3` on
+`token.inventory`, a `pool_id`, a `list_id`) becomes a condition on the event row
+the column is cast from, on the same scan as the view's role condition. Those
+reads rely on the planner running a scan's cheapest condition first. PostgreSQL
+does this in every release, but the manual does not promise it. The integration
+test "a malformed value under another role leaves filtered reads readable on
+every plan" lands outside-module events with a word for every number, under the
+names and fields of the domain events. It checks those reads on the default and
+sequential-scan plans, the `governance.proposals` reads on hash and merge joins
+too, and every view in full.
 
 All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
 by `dao_id` (the DAO token contract address).
@@ -102,7 +140,7 @@ in `inventory` and `members` (with `voting_power` 0) but never emit
 | View | Reads | Notes |
 | --- | --- | --- |
 | `proposal_votes` **Prisma** | `vote_cast` | `support` 0 against, 1 for, 2 abstain |
-| `proposals` | `proposal_created` + `proposal_scheduled` + `proposal_queued`/`executed`/`cancelled` + votes | `vote_start_seconds`, `vote_end_seconds`, `quorum_votes`, `eta_seconds` (kept after execution), `state` (mirrors `Governor.proposal_state` from the clock, see below), `for_votes`/`against_votes`/`abstain_votes` |
+| `proposals` | `proposal_created` + `proposal_scheduled` + `proposal_queued`/`executed`/`cancelled` + votes | `vote_start_seconds`, `vote_end_seconds`, `quorum_votes` (from the Governor's own `proposal_scheduled`, read through `chain.u64_bigint` and `chain.try_numeric`, migration 0016), `eta_seconds` (kept after execution), `state` (mirrors `Governor.proposal_state` from the clock, see below), `for_votes`/`against_votes`/`abstain_votes` |
 | `settings` **Prisma** | `governor_initialized` + the five `*_changed` setters + `admin_changed` | current Governor configuration per DAO: `admin`, `voting_delay_seconds`, `voting_period_seconds`, `queue_delay_seconds`, `proposal_threshold`, `quorum_bps`, `updated_ledger`, `vote_source` (the Governor's vote source from `governor_initialized.token_contract`; equals `dao_id` when token-weighted, migration 0011) |
 | `proposal_comments` **Prisma** | `proposal_commented` | event-only threads |
 

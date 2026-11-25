@@ -296,7 +296,10 @@ passes the fee guard, which also refuses a transaction whose fee it can't read.
 Challenge replay bookkeeping and the sign-in rate limits are kept in each server
 instance's memory. There is no shared store: another instance doesn't see a used
 challenge or a client's count, so the limits slow a client down rather than cap the
-deployment. Sign-in deletes the challenge from the cookie it returns, so a replay needs
+deployment. Every in-process store is bounded: the rate limits and upload counts at about
+10,000 entries, the read cache at 2,000 entries and an estimated 128 MB, and challenge
+replay by the challenge's 5-minute expiry (see
+[the threat model](audit/THREAT_MODEL.md#5-replay-and-rate-limit-state-per-instance)). Sign-in deletes the challenge from the cookie it returns, so a replay needs
 the older cookie, within the challenge's 5 minutes, on another instance. The limits
 count per client address, read from one trusted header: `x-vercel-forwarded-for` on
 Vercel, or the header named in `TRUSTED_CLIENT_IP_HEADER` behind another proxy. The
@@ -371,8 +374,13 @@ the CID must be a file already in the operator's account (Pinata's file list), a
 `complete` checks its size against the token's limit; neither pins a CID the client
 names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
 within an hour. Each `generate-jwt` key is a Pinata key for one legacy
-`pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
-limit is checked in the browser). Upload and pin tokens are signed with
+`pinFileToIPFS` upload (`maxUses: 1`) with no size cap of its own (the 100 MB folder
+limit is checked in the browser). Pinata keys have no expiry, and Pinata states no limit
+on how many an account holds, so the app bounds their lifetime: the pin token names its
+key, `pin-cid` revokes that key once it has checked the upload, and the upload routes
+revoke any of this app's keys still live 15 minutes after they were made (at most every
+5 minutes per instance). There is no scheduled sweep, so an abandoned upload's key stays
+usable for one upload until the next upload call. Upload and pin tokens are signed with
 `UPLOAD_TOKEN_SECRET` when it is set, so either secret can rotate without the other.
 When it is unset they use a key derived from the current (highest-numbered)
 `IRON_PASSWORD` under its own label, never the session key itself. Changing the secret
