@@ -1,4 +1,4 @@
-These are the limits the contracts enforce. The app checks the same limits before you sign, so a value outside them is caught in the form. Each table ends with a note naming the source.
+The contracts enforce most of these limits. The app checks the same limits before you sign, so a value outside them is caught in the form. The app sets the limits under "Fees and sign-in" itself. Each section ends with a note naming its source.
 
 Times on Stellar are counted in ledgers. A ledger closes about every 5 seconds, so a day is about 17,280 ledgers. Amounts are in the payment asset's smallest unit: 1 XLM is 10,000,000 stroops.
 
@@ -29,7 +29,7 @@ Source: `contracts/common/src/lib.rs` (`MIN_GOVERNANCE_DELAY`, `MAX_GOVERNANCE_D
 | Time to execute a queued proposal | 14 days after its safety delay ends, then it expires |
 | When voting power is counted | At the ledger before the proposal is made |
 | Who can cancel | Only the person who made it, before voting ends |
-| Minting in one proposal | One 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
+| Minting in one proposal | Limited by event data. For example, one 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
 
 Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay, and 14 days to execute.
 
@@ -83,7 +83,7 @@ Source: `contracts/common/src/lib.rs` (`MAX_BATCH_MINT`, `MAX_BATCH_RECIPIENTS`)
 
 | Limit | Value |
 |---|---|
-| Tribe name | At most 40 characters |
+| Tribe name | At most 40 bytes. Accented letters and emoji count as more than one byte. |
 | Token symbol | At most 10 characters |
 | Link | 4 to 63 lowercase letters, numbers or single hyphens, not at the start or end |
 | Profile (description, links and image) | 1 to 4,096 bytes |

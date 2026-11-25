@@ -1,4 +1,4 @@
-A proposal is a list of actions. If members vote for it, the actions run in order, exactly as written. This page lists every action the app can add to a proposal, grouped the way the Manage page groups a tribe's parts.
+A proposal is a list of actions. If it passes and is executed, its actions run in order, exactly as written. This page lists every action the app can add to a proposal, grouped the way the Manage page groups a tribe's parts.
 
 ## Who can do what
 
@@ -11,7 +11,7 @@ A proposal is a list of actions. If members vote for it, the actions run in orde
 
 After launch, the tribe's Treasury is the admin of every tribe contract. When a proposal runs, the Treasury makes each action's contract call itself, in order, in one transaction. No person signs those calls.
 
-If any action fails, the whole proposal reverts and nothing changes. The proposal stays queued, and anyone can try again until it expires, 14 days after its safety delay ends. A proposal holds at most 20 actions.
+If any action fails, the whole proposal reverts and nothing changes. The proposal stays queued, and any wallet can try again until it expires, 14 days after its safety delay ends. A proposal holds at most 20 actions.
 
 ## Where actions are added
 
@@ -29,8 +29,8 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 |---|---|---|
 | Send treasury funds ("Pay someone") | Sends XLM or another asset from the Treasury to an address. | The Treasury must hold enough of the asset when the proposal runs. |
 | Give a treasury token | Sends a membership token the Treasury holds to an address. | The Treasury must still hold the token. |
-| Buy a listing for the treasury | The Treasury buys a membership listed in the market, at no more than a set price. | Prepared in Manage → Market. The app adds "Authorize the next action (Treasury)" directly before it. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
-| Authorize the next action (Treasury) | Lets the Treasury approve the payment that the next action makes. | Added by the app only. It must come directly before the action it approves. |
+| Buy a listing for the treasury | The Treasury buys a membership listed in the market, at no more than a set price. | Prepared in Manage → Market. The app adds "Authorise the next action (Treasury)" directly before it. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
+| Authorise the next action (Treasury) | Lets the Treasury approve the payment that the next action makes. | Added by the app only. It must come directly before the action it approves. |
 
 ## Membership
 
@@ -38,7 +38,7 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 |---|---|---|
 | Mint membership tokens ("Add members") | Creates new membership tokens for one or more addresses. | At most 43 tokens to one address, or 18 addresses with one token each, in one action. |
 | Mint a membership token ("Add one member") | Creates one new membership token for an address. | |
-| Recover a membership | Moves a membership from one wallet to another, for example when a member loses access to their wallet. | DAO recovery must be on, in this proposal or an earlier one. A token held by a module, such as one in an auction, can't be moved. |
+| Recover a membership | Moves a membership from one wallet to another, for example when a member loses access to their wallet. | DAO recovery must already be on, or be turned on earlier in this proposal. A token held by a module, such as one in an auction, can't be moved. |
 | Lock memberships | Turns locked memberships on or off. When locked, tokens move only by sale, by being given to the tribe, or by a vote. | The new value must differ from the current one. |
 | Members-only delegation | Turns on or off the rule that votes can be delegated only to members. | The new value must differ from the current one. |
 | DAO recovery | Turns on or off the tribe's power to move any membership by vote. | The new value must differ from the current one. |
@@ -46,7 +46,7 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 | Approve a membership transfer | Moves a membership that its holder has approved the Treasury to move. | Advanced. The holder's approval must still be valid. |
 | Change a transfer agent | Lets a module move memberships while they are locked, or stops it. | Advanced. The module must be registered. |
 | Open a claim list | Opens a list of people who can claim tokens, with an optional price and an end date. | Prepared in Manage → Claim lists. Raise the claims module's mint allowance first, or every claim fails. See [Make a claim list](/guides/claims/create). |
-| Close a claim list | Stops claims on one of the tribe's open claim lists. Tokens already claimed stay with their holders. The rest can no longer be minted from that list. | Choose the list in the composer, or choose **Close in proposal** on its card in Manage → Claim lists. Offered only when the tribe's claims module has `close_list`: an earlier release must be upgraded first in Manage → Contract upgrades. The action fails if the list has already ended when the proposal runs. See [Close a list early](/guides/claims/create#close-a-list-early). |
+| Close a claim list | Stops claims on one of the tribe's open claim lists. Tokens already claimed stay with their holders. The rest can no longer be minted from that list. | Choose the list in the composer, or choose **Close in proposal** on its card in Manage → Claim lists. Offered only when the tribe's claims module has `close_list`. A module on an earlier release must be upgraded first in Manage → Contract upgrades. The action fails if the list has already ended when the proposal runs. See [Close a list early](/guides/claims/create#close-a-list-early). |
 | Add artwork layers | Adds artwork layers and items that new tokens are drawn from. | Prepared in Manage → Artwork. At most 16 layers and 30 items in one action. |
 | Change the artwork renderer | Changes where token images are drawn from. Existing token images can change too. | Prepared in Manage → Artwork. |
 | Seed traits for a token | Gives artwork traits to a token minted before the artwork was added. | Prepared in Manage → Artwork. |

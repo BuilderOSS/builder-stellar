@@ -37,7 +37,7 @@ export const GLOSSARY = {
     term: 'Quorum',
     plain:
       'How many For and Abstain votes a proposal needs before it can pass, so a few people can’t decide for everyone.',
-    dao: 'The governor’s quorum, a share of all votes. After launch it changes only by vote.',
+    dao: 'The Governor’s quorum, a share of all votes. After launch it changes only by vote.',
     slug: 'quorum'
   },
   'launch-admin': {
@@ -50,7 +50,7 @@ export const GLOSSARY = {
   'safety-delay': {
     term: 'Safety delay',
     plain: 'The wait between a vote passing and the proposal running, so members can review what will happen.',
-    dao: 'The governor’s queue delay, a timelock.',
+    dao: 'The Governor’s queue delay, a timelock.',
     slug: 'safety-delay'
   }
 } as const satisfies Record<string, GlossaryEntry>;
