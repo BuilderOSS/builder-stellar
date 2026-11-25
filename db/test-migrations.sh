@@ -65,6 +65,9 @@ for view in $(psql "$scratch_url" -Atc "SELECT schemaname || '.' || viewname FRO
     || { echo "app_server cannot read $view" >&2; exit 1; }
 done
 
-echo "→ read-model integration test"
-(cd "$DB_DIR/../packages/goldsky" && TEST_DATABASE_URL="$scratch_url" node --test test/read-model.integration.test.mjs)
+echo "→ read-model integration tests"
+# One after the other: each test file lands its own events and reads the views.
+for test_file in read-model.integration.test.mjs module-roles.integration.test.mjs; do
+  (cd "$DB_DIR/../packages/goldsky" && TEST_DATABASE_URL="$scratch_url" node --test "test/$test_file")
+done
 echo "✓ database checks passed"

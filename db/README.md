@@ -41,10 +41,12 @@ and the contract event each view reads.
   Token's `ModuleRegistered` with its `ModuleUnregistered`, and an event counts
   for a DAO only between them (position `[ledger, tx, op, evt]`; a window opens at
   `[ledger, tx, -1, -1]` so the registering transaction's own events count).
-  A known role means the Manager deployed the module (`manager.manager_modules`);
-  any other registered contract is role `module` whatever kind it was registered
-  under, as in the pipeline. The same address registered by two DAOs is
-  attributed per window.
+  A known role means the Manager deployed the module for this DAO
+  (`manager.created_modules`, migration 0015); any other registered contract,
+  another DAO's Manager-built module included, is role `module` whatever kind it
+  was registered under. The same address registered by two DAOs is attributed per
+  window, and only the DAO it was created for gets its events: they keep the role
+  the pipeline gave them, and `manager.module_events` matches roles exactly.
 - The pipeline's allowlists (`streamling.dao_*`) only decide what is indexed; the
   views decide whose it is.
 
@@ -68,6 +70,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | `0011_vote_sources` | vote sources (`manager.vote_sources`), `governance.settings.vote_source` |
 | `0012_outside_module_casts` | `chain.try_int` (text to integer, NULL for anything else); `manager.module_versions` and `manager.module_launches` take upgrades, storage migrations and launch events only from the contracts the Manager deployed, so the views ignore malformed values from outside modules |
 | `0013_u64_view_casts` | `chain.u64_bigint` (text to bigint, values past the bigint range read as its maximum); `marketplace.pools` (`expires_at`, `period_secs`), `marketplace.secondary_listings` (`expires_at`) and `claims.lists` (`expires_at`, `deadline`) read through it, so a far expiry chosen on chain no longer stops the views |
+| `0015_known_role_owner` | `manager.created_modules` (every module the Manager created, with the DAO it created it for); `manager.manager_modules` reads it; `manager.module_registrations` gives a known role only when the registering DAO is the one the module was created for, so a DAO that registers another DAO's module sees it as role `module` |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,
