@@ -736,7 +736,7 @@ export function render(data) {
   }
   p(
     data.ozPinDoc
-      ? '[`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records what the contracts use from this OpenZeppelin revision, how it differs from the nearby tags, why the project keeps it, and which OpenZeppelin audits cover it.'
+      ? '[`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records what the contracts use from this OpenZeppelin revision, how it differs from the nearest tags, why the project keeps it, and which OpenZeppelin audits cover it.'
       : 'TODO: `docs/OPENZEPPELIN_PIN.md` will record why the project uses this OpenZeppelin revision and how it differs from the nearest release. It does not exist at this commit.'
   );
   p();
@@ -902,7 +902,9 @@ export function render(data) {
     );
   }
   p(
-    '| The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. Whether the modules used are in scope is agreed in the scope letter. | |'
+    `| The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. They are pinned at the revision above, and the project relies on OpenZeppelin's published audits for them${
+      data.ozPinDoc ? ' ([pin record](../OPENZEPPELIN_PIN.md))' : ''
+    }. The contracts' use of them is in scope. | |`
   );
   p('| `soroban-sdk` and the Soroban host | Platform code, trusted as released. | |');
   p(

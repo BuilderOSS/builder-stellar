@@ -31,7 +31,7 @@ The treasury contract has no function that pays out on request. It acts only by 
 
 From launch onwards, the treasury is also the admin of every contract the tribe runs. So changing a voting rule, an auction setting, or a module is also a treasury action, and it also needs a passed proposal. Before launch the treasury cannot run anything.
 
-Tokens the treasury holds carry no votes. The treasury can't vote with them, and they don't count toward quorum. They regain a vote only when a proposal sends them to someone.
+Tokens the treasury holds carry no votes. The treasury can't vote with them, and they don't count towards quorum. They regain a vote only when a proposal sends them to someone.
 
 ### In practice
 
@@ -41,7 +41,7 @@ Amara proposes paying 2,400 XLM to Kenji for design work. The proposal passes. A
 
 - **A majority vote.** A proposal that passes can spend anything the treasury holds. The protection is that members can read every action, and that the safety delay gives time to review it.
 - **No veto after queueing.** Once a proposal is queued, only expiry stops it.
-- **The asset's own issuer.** Some Stellar assets let their issuer freeze or reclaim balances. Funds held in such an asset depend on that issuer. Tribes should use plain assets for prices and payments.
+- **The asset's own issuer.** Some Stellar assets let their issuer freeze or reclaim balances. Funds held in such an asset depend on that issuer. Tribes should set prices and make payments in assets without these powers, such as XLM.
 
 ## Related
 

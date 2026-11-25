@@ -11,7 +11,7 @@ A Stellar account has a public address and a secret key.
 - The **address** starts with G, such as `GABC…WXYZ`. You can share it. Others use it to send you tokens or to delegate votes to you.
 - The **secret key** stays in your wallet. Your wallet uses it to approve actions. Most wallets also give you a recovery phrase. Anyone with the key or the phrase can control the account, so keep them private.
 
-Contracts have addresses too. A contract address starts with C. Each tribe's token, treasury, and other contracts each have one.
+Contracts have addresses too. A contract address starts with C. Each of a tribe's contracts, such as its token and its treasury, has one.
 
 Wallets that work with Tribe Builder include Freighter, xBull, LOBSTR, Albedo, and Hana in a browser. On a phone, a wallet that supports WalletConnect, such as Freighter Mobile, works when the app offers it.
 
@@ -24,7 +24,7 @@ XLM is the Stellar network's own currency. You need some XLM for two reasons:
 
 Some actions also pay for storage. A contract keeps its data on the network for a set time, and storing new data costs more than an ordinary fee. Creating a tribe stores several new contracts, so it costs more than other actions: about 10 XLM on testnet so far. See [Storage and renewal](/concepts/storage-and-renewal).
 
-As a safeguard, the app refuses to ask you to sign any transaction with a fee above 50 XLM, and explains why.
+As a safeguard, the app refuses to ask you to sign any transaction with a fee above 50 XLM, and explains why. The one exception is a storage renewal, which you sign at the price the renewal screen quoted.
 
 Auctions and markets can be priced in XLM or in another Stellar asset, such as USDC. To hold an asset other than XLM, your account needs a trustline for it: a one-time setting that says your account accepts that asset. On the Market, the app offers to add a USDC trustline when a purchase needs one.
 

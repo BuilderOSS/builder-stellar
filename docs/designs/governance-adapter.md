@@ -50,7 +50,7 @@ The first three methods are OpenZeppelin's `Votes` reads, with the same names an
 
 **Storage.** The source sits in the Governor's existing OpenZeppelin token-contract slot. The Manager passes `vote_source.unwrap_or(token)` as the constructor's `token_contract` argument. That gives three properties:
 
-- No new key, no constructor change and no event change, and default tribes store nothing extra (`docs/STORAGE_DIET.md` rule 2).
+- No new key, no constructor change, and no event change, and default tribes store nothing extra (`docs/STORAGE_DIET.md` rule 2).
 - OZ's `set_token_contract` refuses a second write, so the source is permanent at no cost.
 - Governors already on testnet (0.4.0) hold their token in that slot, so upgraded ones behave exactly as before. There is no storage-version bump and no `migrate` step.
 
@@ -128,7 +128,7 @@ cast_vote ─► votes(e).get_votes_at_checkpoint(voter, snapshot) > 0
 
 - **Create flow, Voting step.** "How are votes counted?" offers **Token-weighted** (the default) and **Neural Quorum Governance (NQG)**, which is shown but disabled with "Coming once NQG is available on Stellar." When the Manager has approved sources, Advanced settings lists them. The list comes from the indexer's `manager.vote_sources` and is re-checked with `is_vote_source_approved`; when nothing is approved, nothing is shown. Choosing a source shows that it is permanent, and Review names it. The `create_dao` simulation re-checks approval before signing.
 - **Governance page.** A "How votes are counted" card reads `governor.vote_source()`.
-- **Voting power.** `useVoteSource` feeds voting power, proposal eligibility, the vote panel, the you sheet, the membership card and the member pages. They read the source and format by its `decimals()`, and token delegation is hidden for adapter tribes. Only a Governor without `vote_source()` counts as token-weighted: any other read failure is an error, and delegation stays hidden until the source is known. The create flow takes the proposal threshold in whole votes and scales it by the chosen source's `decimals()`. The NQG spec adds two constraints for later: offer NQG only on locked Tokens, and show the epoch's age.
+- **Voting power.** `useVoteSource` feeds voting power, proposal eligibility, the vote panel, the you sheet, the membership card, and the member pages. They read the source and format by its `decimals()`, and token delegation is hidden for adapter tribes. Only a Governor without `vote_source()` counts as token-weighted: any other read failure is an error, and delegation stays hidden until the source is known. The create flow takes the proposal threshold in whole votes and scales it by the chosen source's `decimals()`. The NQG spec adds two constraints for later: offer NQG only on locked Tokens, and show the epoch's age.
 
 ## 9. Rollout (testnet; get sign-off first)
 

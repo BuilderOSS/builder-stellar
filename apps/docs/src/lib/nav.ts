@@ -38,7 +38,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'start/first-10-minutes',
         title: 'Your first 10 minutes',
-        summary: 'Get a wallet, connect, and join a tribe.'
+        summary: 'Get a wallet, connect, join a tribe, and vote.'
       },
       {
         slug: 'start/build-your-first-tribe',
@@ -70,12 +70,12 @@ export const NAV: DocSection[] = [
       {
         slug: 'concepts/votes-and-delegation',
         title: 'Votes and delegation',
-        summary: 'Snapshots, and why voting power is counted at a fixed point in time.'
+        summary: 'How votes are counted and delegated, and why voting power is fixed when a proposal is made.'
       },
       {
         slug: 'concepts/proposals',
         title: 'Proposals',
-        summary: 'The lifecycle, threshold, quorum, voting period and safety delay.'
+        summary: 'The lifecycle, threshold, quorum, voting period, and safety delay.'
       },
       {
         slug: 'concepts/treasury',
@@ -85,7 +85,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'concepts/modules',
         title: 'Modules',
-        summary: 'Auctions, the marketplace, and claims, and how modules are added.'
+        summary: 'Auctions, the market, and claims: how modules are added, removed, and capped.'
       },
       {
         slug: 'concepts/setup-and-launch',
@@ -110,7 +110,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'concepts/safety-and-security',
         title: 'Safety and security model',
-        summary: 'What the platform can and can’t do.'
+        summary: 'What the contracts enforce, what the platform can and can’t do, and what to check.'
       }
     ]
   },

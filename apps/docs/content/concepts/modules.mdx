@@ -1,4 +1,4 @@
-A module is an add-on that gives a tribe a way to sell, auction, or hand out memberships. Every tribe has the same four core parts: its membership token, its artwork, its voting rules, and its treasury. Modules sit beside them, and each tribe chooses which ones it has.
+A module is an add-on that gives a tribe a way to sell, auction, or give out memberships. Every tribe has the same four core parts: its membership token, its artwork, its voting rules, and its treasury. Modules are added to these, and each tribe chooses which ones it has.
 
 For crypto natives: a module is a separate contract registered on the tribe's Token contract. Each module belongs to that tribe alone. It is not shared with other tribes.
 
@@ -19,32 +19,32 @@ The create flow asks how people join. Each answer sets the modules the tribe sta
 - **Fixed-price sales**: the market.
 - **Invite only**: invite lists.
 
-A tribe can add or remove modules later. All of this happens on one card: Manage → Membership → Modules.
+A tribe can add or remove modules later. Both happen in one place: Manage → Membership → Modules.
 
 ## Mint allowances
 
 A module that creates new memberships needs a mint allowance: the number of tokens it may still mint. This caps what any module can do. The auction gets an allowance with no limit, because it mints one token per auction. The market gets an allowance for each pool the tribe opens. "Change allowance" on the module's row raises or lowers it: directly by the launch admin during setup, and by vote after launch.
 
-The largest allowance the contract stores (4,294,967,295) means no limit. Raising an allowance adds to it, and a raise that would pass the largest value stops there, so the module then has no limit. Lowering the allowance by any amount above zero sets a limit again.
+The largest allowance the contract stores (4,294,967,295) means no limit. Raising an allowance adds to it, and a raise that would pass the largest value stops there, so the module then has no limit. Lowering an unlimited allowance by any amount above zero sets a limit again.
 
 If a vote lowers the auction's allowance to zero while an auction is running, that auction still ends and settles as usual. The auction then pauses instead of starting the next one. A later vote can raise the allowance and then resume auctions.
 
-Some modules hold memberships without votes. Tokens waiting in the auction or in the market show "Holds tokens without votes", so they never count toward quorum.
+Some modules hold memberships without votes. The auction and the market are marked "Holds tokens without votes", and the tokens they hold never count towards quorum.
 
 ## Adding a module
 
 Choose "Add a module", pick a tile, fill in its settings, and review the steps.
 
-- **After launch**, adding a module is a proposal. The steps run together when it executes: create the module, register it on the token, and, where needed, grant its allowance and open it. "Open it when this passes" is on by default for an auction or a market. The review shows the address the module will have, and checks the plan against the chain before you add it.
+- **After launch**, adding a module is a proposal. The steps run together when it executes: create the module, register it on the token, and, where needed, grant its allowance and open it. The switch that opens it, "Start the first auction when this passes" for an auction or "Open it when this passes" for a market, is on by default. The review shows the address the module will have, and checks the plan against the chain before you add it.
 - **During setup**, the [launch admin](/reference/glossary#launch-admin) adds it directly, with one signed transaction.
 
 A tribe can have one module of each built-in kind and at most 16 modules in total. During a launch drive, modules can't be changed.
 
 ## Removing a module
 
-Only a vote can remove a module, so removal works after launch. Before you add the removal to a proposal, the app checks what the module still holds: memberships, open listings, a running auction, or open invite lists. It warns about each one and offers clean-up steps for the same proposal, such as closing a pool and sending its memberships back to the treasury.
+Only a vote can remove a module, so a module can be removed only after launch. Before you add the removal to a proposal, the app checks what the module still holds: memberships, open listings, a running auction, or open invite lists. It warns about each one and offers clean-up steps for the same proposal, such as closing a pool and sending its memberships back to the treasury.
 
-A module that holds memberships without votes, such as the auction or the market, can be removed only once it holds none. Otherwise the proposal fails when it runs. Removing it earlier would leave those memberships stuck in a tribe with locked memberships. Before the removal, the same proposal can:
+A module that holds memberships without votes, such as the auction or the market, can be removed only once it holds none. Otherwise the proposal fails when it runs. Removing it while it holds them would leave those memberships unable to move in a tribe with locked memberships. Before the removal, the same proposal can:
 
 - **Auction:** pause auctions and cancel the running one, which refunds the top bid and sends the token to the treasury.
 - **Market:** close and sweep each pool, which sends unsold memberships to the treasury. Before the proposal runs, each open resale listing must be cancelled by its seller, or must end and be cleared (anyone can clear an ended listing, which returns the token to its seller). The market contract can also return a listing to its seller, and send the treasury a membership that someone transferred to it directly before such transfers were refused, by vote while the market is paused. The app doesn't offer these two steps.
@@ -59,7 +59,7 @@ Removal ends the module's allowance and any right it had to move memberships. A 
 
 After launch, the contracts let a tribe register another contract as a module by proposal. The "Add a module" sheet offers only the three built-in modules. A module that Tribe Builder did not deploy shows "Not deployed by Tribe Builder". Tribe Builder can't check its code, and its records are not covered by one-click [storage renewal](/concepts/storage-and-renewal). Its mint allowance still caps what it can mint.
 
-Any deployed contract can be registered this way, including a member's smart-contract wallet. A plain Stellar account (a G-address) can't. The wallet doesn't have to agree. If a vote registers a contract wallet as a module that holds memberships without votes, its memberships stop counting as votes straight away, for the wallet and for anyone it delegated to. The tribe can't recover those memberships by vote, and the wallet can still move them out, even while memberships are locked. The member gets the votes back by moving the memberships to another wallet. While the wallet is registered, nobody else can send it memberships. Before voting for a "Register a module" proposal, check what the address is.
+Any deployed contract can be registered this way, including a member's smart-contract wallet. A plain Stellar account (a G-address) can't. The wallet doesn't have to agree. If a vote registers a contract wallet as a module that holds memberships without votes, its memberships stop counting as votes at once, for the wallet and for anyone it delegated to. The tribe can't recover those memberships by vote, and the wallet can still move them out, even while memberships are locked. The member gets the votes back by moving the memberships to another wallet. While the wallet is registered, nobody else can send it memberships. Before voting for a "Register a module" proposal, check what the address is.
 
 ## Related
 
