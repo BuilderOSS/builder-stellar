@@ -11,8 +11,8 @@ audits cover it. Checked on 25 November 2026 by reading the diffs between `fbfde
 
 | Crate | Module | Used by | What is used |
 | --- | --- | --- | --- |
-| `stellar-governance` | `governor` | Governor | `ProposalState`, `GovernorError` codes, `MAX_DESCRIPTION_LENGTH`, `GovernorStorageKey::ProposalVote` and the module's storage functions |
-| `stellar-governance` | `votes` | Token | `delegate`, `get_voting_units`, `VotesStorageKey` and the checkpoint functions |
+| `stellar-governance` | `governor` | Governor | `ProposalState`, `GovernorError` codes, `MAX_DESCRIPTION_LENGTH`, `GovernorStorageKey::ProposalVote`, and the module's storage functions |
+| `stellar-governance` | `votes` | Token | `delegate`, `get_voting_units`, `VotesStorageKey`, and the checkpoint functions |
 | `stellar-tokens` | `non_fungible` | Token | `Base::name`, `Base::symbol`, `Base::sequential_mint`, `Base::approve_for_all`, `NFTStorageKey::Owner`, `MAX_NAME_LEN`, `NonFungibleTokenError::NonExistentToken` |
 | `stellar-contract-utils` | `pausable` | Auction | `Pausable` |
 | `stellar-macros` | `when_paused`, `when_not_paused` | Auction | the two attribute macros |
@@ -55,7 +55,7 @@ No tag both works with soroban-sdk 27 and matches `fbfde38` in the modules used.
 - `v0.7.1` to `v0.7.3` and `v0.8.0-rc.3` require an older soroban-sdk major version, and lack the
   voting-period check; the `v0.7.x` tags also lack the `approve_for_all` fix.
 - `v0.8.0` requires soroban-sdk 28. It renames the mint call the Token makes and renumbers the
-  Governor's error codes, which the Governor tests, the generated bindings and the code ranges in
+  Governor's error codes, which the Governor tests, the generated bindings, and the code ranges in
   `contracts/common/src/error.rs` rely on.
 
 Either move changes every contract hash and needs its own release. The pin therefore stays at

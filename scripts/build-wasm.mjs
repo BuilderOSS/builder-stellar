@@ -6,6 +6,7 @@ import {
   WASM_INPUTS,
   buildInContainer,
   formatHashes,
+  parseArgs,
   resolveCommit,
   uncommittedChanges
 } from './wasm-build.mjs';
@@ -22,21 +23,15 @@ import {
  */
 
 const USAGE = 'Usage: node scripts/build-wasm.mjs [<ref>] [--out <dir>] [--write-hashes]';
-const args = process.argv.slice(2);
-let ref = 'HEAD';
-let outDir;
-let writeHashes = false;
-for (let i = 0; i < args.length; i += 1) {
-  const arg = args[i];
-  if (arg === '--out') outDir = args[++i];
-  else if (arg === '--write-hashes') writeHashes = true;
-  else if (arg === '--help' || arg === '-h') {
-    console.log(USAGE);
-    process.exit(0);
-  } else if (!arg.startsWith('--') && ref === 'HEAD') ref = arg;
-  else throw new Error(USAGE);
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(USAGE);
+  process.exit(0);
 }
-if (args.includes('--out') && !outDir) throw new Error(USAGE);
+const { options, positionals } = parseArgs(process.argv.slice(2), { values: ['--out'], flags: ['--write-hashes'], usage: USAGE });
+if (positionals.length > 1) throw new Error(USAGE);
+const ref = positionals[0] ?? 'HEAD';
+const outDir = options.out;
+const writeHashes = options['write-hashes'] === true;
 
 const commit = resolveCommit(ref);
 if (writeHashes) {

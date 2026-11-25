@@ -6,6 +6,7 @@ import {
   buildInContainer,
   compareHashes,
   hashesDocument,
+  parseArgs,
   printComparison,
   publishedHashesAt,
   resolveCommit,
@@ -20,27 +21,28 @@ import {
  *   node scripts/verify-wasm.mjs <tag> --wasm-dir <dir>  check existing <crate>.wasm files instead,
  *                                                        for example a native build or downloaded files
  *
- * Exits 0 only when every published contract matches byte for byte. Anyone can run it from a fresh
+ * Exits 0 only when every published contract matches byte for byte, 1 when any differs, and 2 for a
+ * usage error or a tag with nothing to verify. Anyone can run it from a fresh
  * clone with Docker and git; it needs no keys and sends nothing to a network beyond fetching the
  * image, the Stellar CLI and the crates.
  */
 
 const USAGE = 'Usage: node scripts/verify-wasm.mjs <tag> [--out <dir> | --wasm-dir <dir>]';
-const args = process.argv.slice(2);
-const option = (name) => {
-  const i = args.indexOf(name);
-  if (i < 0) return undefined;
-  if (!args[i + 1] || args[i + 1].startsWith('--')) usage();
-  return args[i + 1];
-};
+let parsed;
+try {
+  parsed = parseArgs(process.argv.slice(2), { values: ['--out', '--wasm-dir'], usage: USAGE });
+} catch {
+  usage();
+}
 function usage() {
   console.error(USAGE);
   process.exit(2);
 }
-const tag = args.find((arg, i) => !arg.startsWith('--') && !['--out', '--wasm-dir'].includes(args[i - 1]));
-const outOption = option('--out');
-const wasmDir = option('--wasm-dir');
-if (!tag || (outOption && wasmDir)) usage();
+const { options, positionals } = parsed;
+const tag = positionals[0];
+const outOption = options.out;
+const wasmDir = options['wasm-dir'];
+if (!tag || positionals.length > 1 || (outOption && wasmDir)) usage();
 
 let commit;
 try {

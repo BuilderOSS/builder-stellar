@@ -1,6 +1,6 @@
 # Contract test coverage
 
-Line, region and function coverage of the contract crates, measured with
+Line, region, and function coverage of the contract crates, measured with
 [`cargo llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov) over the whole Cargo test suite. The
 output is meant for the audit package.
 
@@ -22,7 +22,7 @@ every test with instrumentation, and writes to `coverage/contracts/` (ignored by
 | `README.txt` | The commit, the toolchain, and what the report leaves out |
 
 The report covers contract source only. It leaves out the e2e harness, the test-only vote adapter
-mock, each crate's test modules (`src/test.rs`) and `common/src/testutils.rs`. Dependencies,
+mock, each crate's test modules (`src/test.rs`), and `common/src/testutils.rs`. Dependencies,
 OpenZeppelin's crates included, are outside the workspace and never counted.
 
 Code that runs inside the Soroban VM is not instrumented: the e2e tests that drive the built WASM add

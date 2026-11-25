@@ -85,7 +85,7 @@ function patchGeneratedBindings(packageName, outputDir) {
 // unused library type (e.g. OpenZeppelin RWA/Governor enums) in the spec, which
 // makes the generator emit duplicate/colliding types and bindings that do not
 // match the deployed contract spec.
-run('stellar', ['contract', 'build']);
+run('stellar', ['contract', 'build', '--locked']);
 
 for (const contract of contracts) {
   mkdirSync(contract.outputDir, { recursive: true });

@@ -11,6 +11,7 @@ import {
   compareHashes,
   formatHashes,
   hashesDocument,
+  parseArgs,
   parseToolchain,
   sha256Hex
 } from './wasm-build.mjs';
@@ -36,11 +37,14 @@ function write(dir, path, content) {
   writeFileSync(join(dir, path), content);
 }
 
-/** A committed checkout whose releases/hashes.json publishes `publishedToken` for the token crate. */
-function checkout(publishedToken = sha256Hex(WASM)) {
+/**
+ * A committed checkout whose releases/hashes.json publishes `publishedToken` for the token crate,
+ * with HEAD tagged `release-test` and the tag pushed to a local bare `origin`.
+ */
+function checkout(publishedToken = sha256Hex(WASM), { tag = 'release-test', push = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'wasm-provenance-'));
   git(dir, 'init', '-q');
-  write(dir, '.gitignore', 'target\n');
+  write(dir, '.gitignore', 'target\norigin.git\nfake-bin\nstellar-calls.log\n');
   write(dir, 'contracts/token/src/lib.rs', '// token\n');
   write(dir, 'Cargo.lock', '# lock\n');
   write(dir, 'releases/contracts.json', JSON.stringify({ token: '0.4.0' }));
@@ -49,7 +53,21 @@ function checkout(publishedToken = sha256Hex(WASM)) {
   write(dir, 'target/wasm32v1-none/release/token.wasm', WASM);
   git(dir, 'add', '.');
   git(dir, 'commit', '-q', '-m', 'release');
+  git(dir, 'init', '-q', '--bare', 'origin.git');
+  git(dir, 'remote', 'add', 'origin', join(dir, 'origin.git'));
+  if (tag) {
+    git(dir, 'tag', tag);
+    if (push) git(dir, 'push', '-q', 'origin', `refs/tags/${tag}`);
+  }
   return dir;
+}
+
+/** Commit `paths` (default: everything) and move the release tag to the new HEAD, on origin too. */
+function retag(dir, message, paths = ['-A']) {
+  git(dir, 'add', ...paths);
+  git(dir, 'commit', '-q', '-m', message);
+  git(dir, 'tag', '-f', 'release-test');
+  git(dir, 'push', '-q', '-f', 'origin', 'refs/tags/release-test');
 }
 
 test('the pinned toolchain parses from rust-toolchain.toml and the build image', () => {
@@ -159,7 +177,7 @@ test('an upload whose hash is not the published one, or is not published, is ref
   try {
     assert.throws(
       () => assertUploadProvenance({ crate: 'token', wasmPath: 'target/wasm32v1-none/release/token.wasm', cwd: dir }),
-      new RegExp(`its sha256 is ${sha256Hex(WASM)}, but releases/hashes\\.json at [0-9a-f]{12} publishes 0{64} for token`)
+      new RegExp(`its sha256 is ${sha256Hex(WASM)}, but releases/hashes\\.json at release-test publishes 0{64} for token`)
     );
     assert.throws(
       () => assertUploadProvenance({ crate: 'auction', wasmPath: 'target/wasm32v1-none/release/token.wasm', cwd: dir }),
@@ -180,6 +198,59 @@ test('the published build of a clean checkout passes, with its commit', () => {
   }
 });
 
+test('an upload from a commit without a release tag, or with a tag origin lacks, is refused', () => {
+  const wasmPath = 'target/wasm32v1-none/release/token.wasm';
+  const untagged = checkout(undefined, { tag: null });
+  const unpushed = checkout(undefined, { push: false });
+  try {
+    assert.throws(() => assertUploadProvenance({ crate: 'token', wasmPath, cwd: untagged }), /carries no release tag/);
+    assert.throws(() => assertUploadProvenance({ crate: 'token', wasmPath, cwd: unpushed }), /origin does not have tag release-test/);
+    // A pushed tag that has since moved locally does not count either.
+    git(unpushed, 'push', '-q', 'origin', 'refs/tags/release-test');
+    write(unpushed, 'apps/web/page.ts', '// later\n');
+    git(unpushed, 'add', '-A');
+    git(unpushed, 'commit', '-q', '-m', 'later');
+    git(unpushed, 'tag', '-f', 'release-test');
+    assert.throws(() => assertUploadProvenance({ crate: 'token', wasmPath, cwd: unpushed }), /origin does not have tag release-test at/);
+  } finally {
+    rmSync(untagged, { recursive: true });
+    rmSync(unpushed, { recursive: true });
+  }
+});
+
+test('an upload is refused when the contracts changed after the hashes were written', () => {
+  const dir = checkout();
+  try {
+    write(dir, 'contracts/token/src/lib.rs', '// changed after the release\n');
+    retag(dir, 'contract change');
+    assert.throws(
+      () => assertUploadProvenance({ crate: 'token', wasmPath: 'target/wasm32v1-none/release/token.wasm', cwd: dir }),
+      /was written before these contract changes:\n {2}contracts\/token\/src\/lib\.rs/
+    );
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('an absolute WASM path is read as given', () => {
+  const dir = checkout();
+  try {
+    const wasmPath = join(dir, 'target/wasm32v1-none/release/token.wasm');
+    assert.equal(assertUploadProvenance({ crate: 'token', wasmPath, cwd: dir }).sha256, sha256Hex(WASM));
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('arguments: pnpm\'s bare --, values, flags, and refused unknown or missing ones', () => {
+  const spec = { values: ['--out'], flags: ['--write-hashes'], usage: 'usage' };
+  assert.deepEqual(parseArgs(['--', '--write-hashes', 'v1'], spec), { options: { 'write-hashes': true }, positionals: ['v1'] });
+  assert.deepEqual(parseArgs(['--out', 'dir'], spec).options, { out: 'dir' });
+  assert.throws(() => parseArgs(['--out', '--write-hashes'], spec), /usage/);
+  assert.throws(() => parseArgs(['--out'], spec), /usage/);
+  assert.throws(() => parseArgs(['--wasmdir', 'x'], spec), /usage/);
+});
+
 /** Run upgrade-contract.mjs in a checkout with a fake `stellar` that logs every call and fails. */
 function runUpgrade(dir) {
   for (const file of ['upgrade-contract.mjs', 'lib.mjs', 'wasm-build.mjs']) {
@@ -189,8 +260,7 @@ function runUpgrade(dir) {
   write(dir, 'configs/testnet-manager.json', JSON.stringify({ label: 'test', network: 'testnet' }));
   write(dir, 'configs/testnet-test-dao.json', JSON.stringify({ nonce: 1 }));
   write(dir, 'deploys/test-testnet-manager.json', JSON.stringify({ manager: 'CMANAGER' }));
-  git(dir, 'add', 'scripts', 'configs', 'deploys');
-  git(dir, 'commit', '-q', '-m', 'scripts');
+  retag(dir, 'scripts', ['scripts', 'configs', 'deploys']);
   const bin = join(dir, 'fake-bin');
   const log = join(dir, 'stellar-calls.log');
   write(dir, 'fake-bin/stellar', `#!/bin/sh\necho "$@" >> "${log}"\nexit 1\n`);

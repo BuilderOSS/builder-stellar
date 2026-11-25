@@ -50,7 +50,7 @@ You need:
   ```
 
 - **Docker**, only for release builds and for verifying a release ([reproducible builds](docs/REPRODUCIBLE_BUILDS.md)).
-- **gitleaks**, optional: the pre-commit hook uses it to scan staged changes for secrets when it is installed (`brew install gitleaks`). CI scans every push.
+- **gitleaks** 8.25 or later, optional: the pre-commit hook uses it to scan staged changes for secrets when it is installed (`brew install gitleaks`). CI scans every push.
 
 `.env` and `.env.*` files are ignored by git; only the `.env.example` templates are tracked.
 
@@ -73,7 +73,7 @@ Run from the repository root unless noted. Deployment and generation commands ha
 | Command | Purpose |
 | --- | --- |
 | `pnpm contracts:build` | Build contract WASMs with `stellar contract build --locked`, for development and tests |
-| `pnpm contracts:build:release` | Build the checked-out commit in the pinned container; `-- --write-hashes` records `releases/hashes.json` |
+| `pnpm contracts:build:release` | Build the checked-out commit in the pinned container; `--write-hashes` records `releases/hashes.json` |
 | `pnpm contracts:verify <tag>` | Rebuild a release tag and compare it with the hashes it publishes |
 | `pnpm contracts:bindings` | Regenerate eight TypeScript binding packages |
 | `pnpm contracts:test` | Run Cargo workspace tests, including in-memory integration tests |
@@ -97,7 +97,7 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 - [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
 - [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
 - [Bindings regeneration](docs/BINDINGS_GENERATION.md)
-- [Reproducible contract builds](docs/REPRODUCIBLE_BUILDS.md), [dependencies and advisories](docs/DEPENDENCIES.md) and the [OpenZeppelin pin](docs/OPENZEPPELIN_PIN.md)
+- [Reproducible contract builds](docs/REPRODUCIBLE_BUILDS.md), [dependencies and advisories](docs/DEPENDENCIES.md), and the [OpenZeppelin pin](docs/OPENZEPPELIN_PIN.md)
 - [Brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), [press kit](docs/brand/README.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
 
 ## Technology and license

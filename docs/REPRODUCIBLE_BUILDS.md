@@ -1,6 +1,6 @@
 # Reproducible contract builds
 
-Anyone with git, Node and Docker can rebuild a tagged release and get the same contract WASM, byte
+Anyone with git, Node, and Docker can rebuild a tagged release and get the same contract WASM, byte
 for byte. The hashes the Manager registers, and the `to_hash` members approve in an upgrade proposal,
 can therefore be checked against source. This page covers what is pinned, how a release is built and
 published, how to verify one, and what has been checked so far.
@@ -30,7 +30,7 @@ stellar contract info meta --wasm target/wasm32v1-none/release/token.wasm
 
 Cargo mixes the compiler's host triple (the `host:` line of `rustc -vV`) into the metadata hash of
 every crate it builds. Those hashes become part of symbol names, and the linked WASM orders its
-functions by them. The same source, compiler and CLI therefore give different bytes on different
+functions by them. The same source, compiler, and CLI therefore give different bytes on different
 build hosts. Checked on 25 November 2026 with the contracts of `8cf1ac5`:
 
 | Build host | Result |
@@ -40,8 +40,9 @@ build hosts. Checked on 25 November 2026 with the contracts of `8cf1ac5`:
 | Linux amd64 container | Different bytes again. This is the canonical build |
 | Linux container with another source directory and Cargo home | Identical to the same platform's build: paths do not change the bytes |
 
-The release build is fixed to `linux/amd64`, which is also what GitHub's runners use. Docker on Apple
-silicon runs it under emulation; a build takes about three minutes there.
+The release build is fixed to `linux/amd64`, which is also what GitHub's runners use. Docker runs it
+under emulation on other hosts: Docker Desktop does this on Apple silicon, and a Linux arm64 host
+needs QEMU registered for `binfmt_misc` first. A build takes about three minutes on Apple silicon.
 
 Any change to `Cargo.lock` inside the contracts' dependency graph also changes every contract's
 bytes, even for a crate used only at compile time. Updating `serde_with` from 3.20.0 to 3.21.0, a
@@ -51,19 +52,20 @@ release ([dependencies](DEPENDENCIES.md)).
 ## Build and publish a release
 
 1. Commit the contract changes and the version bumps in `releases/contracts.json`
-   ([contract upgrades](CONTRACT_UPGRADES.md), step 1).
+   ([contract upgrades](CONTRACT_UPGRADES.md), step 1). A release built this way registers new hashes,
+   so give each changed contract a new version.
 2. Build the checked-out commit in the container and record its hashes:
 
    ```bash
-   node scripts/build-wasm.mjs --write-hashes
+   pnpm contracts:build:release --write-hashes   # or: node scripts/build-wasm.mjs --write-hashes
    ```
 
    The script builds a `git archive` of the commit, so uncommitted files never reach the build. It
-   writes `target/wasm-build/<commit>/` (`wasm/<crate>.wasm`, `SHA256SUMS` and `hashes.json`) and
+   writes `target/wasm-build/<commit>/` (`wasm/<crate>.wasm`, `SHA256SUMS`, and `hashes.json`) and
    `releases/hashes.json`. It refuses `--write-hashes` while the build inputs have uncommitted changes.
-3. Commit `releases/hashes.json` and tag that commit: `release-<n>`, `contracts-<name>` or
+3. Commit `releases/hashes.json` and tag that commit: `release-<n>`, `contracts-<name>`, or
    `audit-<n>-freeze`. The hash file does not affect the WASM, so the tag rebuilds to the same hashes.
-4. Pushing the tag (an outward-facing step: get sign-off first) runs the
+4. Push the tag (an outward-facing step: get sign-off first). This runs the
    [Contract release build](../.github/workflows/contracts-release.yml) workflow. It rebuilds the tag
    in the container and, separately, natively on the runner with the pinned compiler and CLI, and fails
    unless both match the published hashes. The container build's WASM files get a signed build
@@ -94,25 +96,29 @@ release ([dependencies](DEPENDENCIES.md)).
 }
 ```
 
-The file describes the last release. On `dev` it can trail the contracts: a contract change merged
-since the release builds to new hashes, and the upload script refuses those until a new release
-publishes them.
+The file records the container build of the commit it was written for. A release tag publishes it.
+On `dev` it can trail the contracts: once a contract change is merged, the file no longer describes
+`HEAD`, and the upload script refuses to upload until a new release publishes new hashes.
 
 ## What the upload script checks
 
 Before any network call, [`scripts/upgrade-contract.mjs`](../scripts/upgrade-contract.mjs) refuses:
 
 - uncommitted or untracked changes in the build inputs: `contracts/`, `Cargo.toml`, `Cargo.lock`,
-  `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/` and `releases/`;
-- a WASM whose sha256 is not the one `releases/hashes.json` publishes for that contract at `HEAD`.
+  `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/`, and `releases/`;
+- a `HEAD` without a release tag (`release-*`, `contracts-*`, or `audit-*`) that `origin` has at the
+  same commit;
+- contract changes made after `releases/hashes.json` was last written;
+- a WASM whose sha256 is not the one `releases/hashes.json` publishes for that contract.
 
-The upgrade plan it writes for a live tribe records the source commit. `scripts/deploy-manager.mjs`
-does not run these checks yet.
+It checks the file's hash again just before the upload, and the upgrade plan it writes for a live
+tribe records the source commit and the release tag. `scripts/deploy-manager.mjs` does not run these
+checks yet.
 
 ## Verify a release
 
 Members checking an upgrade proposal and auditors checking a frozen tag run the same command. It needs
-git, Node 24 and Docker, and no keys:
+git, Node 24, and Docker, and no keys:
 
 ```bash
 git clone https://github.com/BuilderOSS/builder-stellar.git
@@ -121,8 +127,8 @@ node scripts/verify-wasm.mjs <tag>
 ```
 
 It rebuilds the tag with the toolchain the tag pins, prints each contract's published and rebuilt
-hash, and exits with status 0 only when every contract matches. A proposal's `to_hash` should appear
-in that table.
+hash, and exits with status 0 only when every contract matches (1 when one differs, 2 for a usage
+error or a tag without hashes). A proposal's `to_hash` should appear in that table.
 
 To check files you already have, such as a workflow artifact or code fetched from the network, put
 them in one folder as `<crate>.wasm` and pass `--wasm-dir`:
@@ -133,10 +139,13 @@ stellar contract fetch --wasm-hash <to_hash> --network testnet --out-file fetche
 node scripts/verify-wasm.mjs <tag> --wasm-dir fetched
 ```
 
-A file from the release workflow can also be checked against its attestation:
+A file from the release workflow can also be checked against its attestation. Name the tag and the
+workflow, so an attestation from any other run in the repository does not count:
 
 ```bash
-gh attestation verify token.wasm --repo BuilderOSS/builder-stellar
+gh attestation verify token.wasm --repo BuilderOSS/builder-stellar \
+  --source-ref refs/tags/<tag> \
+  --signer-workflow BuilderOSS/builder-stellar/.github/workflows/contracts-release.yml
 ```
 
 ## The deployed code (release 0.5.0)
@@ -151,8 +160,10 @@ cargo test -p dao-e2e release_0_5_0 -- --include-ignored
 ```
 
 `release_build_matches_production_and_dev` compares all eight builds with the deployed hashes.
-`releases/hashes.json` publishes the canonical container build of the same source, which no network
-runs yet. The next contract release is the first to deploy container-built code.
+`releases/hashes.json` records the canonical container build of the same source, which no network
+runs. Do not register those hashes under the 0.5.0 version labels: the registry would then hold two
+hashes for one version. The next contract release, with new version numbers, is the first to deploy
+container-built code.
 
 ## Verification record
 
@@ -173,7 +184,7 @@ Change these together, in one pull request, and publish a release with new hashe
 2. The `FROM` line in `docker/wasm-build/Dockerfile`: the tag and its index digest, from
    `docker buildx imagetools inspect rust:<version>-slim-trixie`.
 3. For a new Stellar CLI, the archive URL and sha256 in the Dockerfile and in `ci.yml`. GitHub lists
-   each release archive's sha256 in the release's assets.
+   each release archive's sha256 with the release's assets.
 
 `node --test scripts/wasm-build.test.mjs` checks that the files agree. Dependabot does not update the
 build image, because its Rust version must move with `rust-toolchain.toml`.

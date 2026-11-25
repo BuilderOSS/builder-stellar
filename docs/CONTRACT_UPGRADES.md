@@ -136,10 +136,12 @@ then each DAO.
       ```sh
       node scripts/upgrade-contract.mjs <module> configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
       ```
-      Run it from the tagged release commit with `WASM_DIR=target/wasm-build/<built-commit>/wasm` (default
-      `target/wasm32v1-none/release`). Before it sends anything, it refuses uncommitted changes to the build
-      inputs (`contracts/`, `Cargo.*`, `rust-toolchain.toml`, `docker/wasm-build/`, `releases/`) and a WASM
-      whose sha256 is not the one `releases/hashes.json` publishes for the module.
+      Run it from the pushed release tag with `WASM_DIR=target/wasm-build/<built-commit>/wasm` (default
+      `target/wasm32v1-none/release`). Before it sends anything, it refuses a checkout without a release tag
+      that `origin` has, uncommitted changes to the build inputs (`contracts/`, `Cargo.*`,
+      `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/`, and `releases/`), contract changes made after
+      `releases/hashes.json` was written, and a WASM whose sha256 is not the one that file publishes for the
+      module ([reproducible builds](REPRODUCIBLE_BUILDS.md#what-the-upload-script-checks)).
       Argument order for DAO modules is **DAO config, then network config**. The DAO config's `nonce` must
       have an artifact (`deploys/<label>-<network>-dao-<nonce>.json`; each artifact's `.config` is the config
       it was deployed with). For a platform release, pass a **launched** DAO: a DAO still in setup is

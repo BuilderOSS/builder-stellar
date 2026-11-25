@@ -26,11 +26,11 @@ pre-commit:
 
     # Scan staged changes for secrets with the rules CI uses (.gitleaks.toml). Without gitleaks
     # installed the hook says so and lets the commit through; CI scans every push either way.
-    # Install: brew install gitleaks (or a release from github.com/gitleaks/gitleaks).
+    # Install gitleaks 8.25 or later: brew install gitleaks (or a release from github.com/gitleaks/gitleaks).
     secrets:
       run: |
         if command -v gitleaks >/dev/null 2>&1; then
-          gitleaks git --pre-commit --staged --redact --no-banner .
+          gitleaks git --pre-commit --staged --redact --no-banner --verbose .
         else
           echo "gitleaks is not installed: staged changes were not scanned for secrets (CI still scans). Install it with: brew install gitleaks"
         fi

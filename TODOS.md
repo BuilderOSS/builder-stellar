@@ -139,18 +139,18 @@
 **Why:** `fbfde38` is an untagged commit. `v0.8.0` contains it and is a tagged, audited release (`docs/OPENZEPPELIN_PIN.md`).
 
 **Context:**
-- `v0.8.0` renames `Base::sequential_mint` (the Token's mint call) and renumbers the Governor error codes from 5000–5023 to 4200–4223; the Governor tests, the governor bindings and the error ranges in `contracts/common/src/error.rs` follow.
+- `v0.8.0` renames `Base::sequential_mint` (the Token's mint call) and renumbers the Governor error codes from 5000–5023 to 4200–4223; the Governor tests, the governor bindings, and the error ranges in `contracts/common/src/error.rs` follow.
 - Every contract hash changes, so it ships as a contract release with new `releases/hashes.json` (`docs/REPRODUCIBLE_BUILDS.md`). The same release can take the Rust dependency updates held back for that reason (`docs/DEPENDENCIES.md`).
 
 **Effort:** M
 **Priority:** P2
 **Depends on:** the external audit, unless the audit is rescoped to `v0.8.0`
 
-### Vitest 4 in the web, docs and walkthrough packages
+### Vitest 4 in the web, docs, and walkthrough packages
 
-**What:** Move `apps/web`, `apps/docs` and `apps/e2e` from Vitest 3 to Vitest 4.
+**What:** Move `apps/web`, `apps/docs`, and `apps/e2e` from Vitest 3 to Vitest 4.
 
-**Why:** Vitest 3 and its `tinypool` and `@vitest/mocker` have advisories fixed only in Vitest 4 (`docs/DEPENDENCIES.md`). They run only in local and CI test runs.
+**Why:** Vitest 3, `tinypool`, and `@vitest/mocker` have advisories fixed only in Vitest 4 (`docs/DEPENDENCIES.md`). They run only in local and CI test runs.
 
 **Effort:** S
 **Priority:** P3

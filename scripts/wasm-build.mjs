@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 /**
  * Reproducible contract builds and their published hashes (docs/REPRODUCIBLE_BUILDS.md).
@@ -9,9 +9,9 @@ import { join } from 'node:path';
  * - `buildInContainer` builds one commit's contracts in the pinned image (docker/wasm-build) from a
  *   `git archive` of that commit, so the working tree, the host's toolchain and its caches never
  *   reach the build.
- * - `releases/hashes.json` publishes the sha256 of each deployable contract for the commit it is
- *   committed in. A release tag carries it, and `scripts/verify-wasm.mjs <tag>` rebuilds the tag and
- *   compares.
+ * - `releases/hashes.json` records the sha256 of each deployable contract as built from the commit
+ *   it was written for. A release tag publishes it, and `scripts/verify-wasm.mjs <tag>` rebuilds the
+ *   tag and compares.
  * - `assertUploadProvenance` is what the upload scripts call before sending code to a network.
  */
 
@@ -24,6 +24,8 @@ export const TOOLCHAIN_PATH = 'rust-toolchain.toml';
 export const WASM_INPUTS = ['contracts', 'Cargo.toml', 'Cargo.lock', TOOLCHAIN_PATH, '.cargo', DOCKER_DIR];
 /** What an upload must have committed: the WASM inputs plus the release labels and published hashes. */
 export const UPLOAD_INPUTS = [...WASM_INPUTS, 'releases'];
+/** Tags that publish a release's hashes; pushing one runs the Contract release build workflow. */
+export const RELEASE_TAG_PATTERNS = ['release-*', 'contracts-*', 'audit-*'];
 
 export function sha256Hex(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -130,18 +132,31 @@ export function uncommittedChanges(paths, { cwd } = {}) {
   return output ? output.split('\n') : [];
 }
 
+/** The commit id `ref` names on `remote`, or null when the remote does not have it. */
+function remoteTagCommit(tag, { cwd, remote = 'origin' } = {}) {
+  const output = git(['ls-remote', '--tags', remote, `refs/tags/${tag}`, `refs/tags/${tag}^{}`], { cwd });
+  const lines = output ? output.split('\n').map((line) => line.split('\t')) : [];
+  // An annotated tag lists the commit it points to on its `^{}` line.
+  const peeled = lines.find(([, name]) => name === `refs/tags/${tag}^{}`) ?? lines.find(([, name]) => name === `refs/tags/${tag}`);
+  return peeled ? peeled[0] : null;
+}
+
 /**
- * Refuse an upload whose code is not the published build of the checked-out commit. Called before
- * any network call by the scripts that upload contract code.
+ * Refuse an upload whose code is not the published build of a release. Called before any network
+ * call by the scripts that upload contract code. Each check exists so that the hash the Manager
+ * approves, and members vote on, is one anyone can rebuild from a public tag:
  *
  * - The build inputs, release labels and published hashes must be committed: otherwise the code
- *   cannot be traced to a commit anyone else can rebuild.
- * - The file's sha256 must be the one releases/hashes.json publishes for its crate at HEAD:
- *   otherwise voters approving the hash have nothing to rebuild it from.
+ *   cannot be traced to a commit.
+ * - HEAD must carry a release tag that origin has at the same commit: a local commit or tag is not
+ *   something anyone else can rebuild.
+ * - The WASM inputs must be unchanged since releases/hashes.json was last written: otherwise the
+ *   file describes older code than the commit being uploaded from.
+ * - The file's sha256 must be the one releases/hashes.json publishes for its crate.
  *
- * Returns the commit and hash on success.
+ * Returns the commit, the tag and the hash on success.
  */
-export function assertUploadProvenance({ crate, wasmPath, cwd = process.cwd() }) {
+export function assertUploadProvenance({ crate, wasmPath, cwd = process.cwd(), remote = 'origin' }) {
   let head;
   try {
     head = resolveCommit('HEAD', { cwd });
@@ -155,25 +170,45 @@ export function assertUploadProvenance({ crate, wasmPath, cwd = process.cwd() })
         'Commit or discard them first: uploaded code must be the published build of a commit.'
     );
   }
+  const tags = git(['tag', '--points-at', 'HEAD', '--list', ...RELEASE_TAG_PATTERNS], { cwd });
+  const tag = tags ? tags.split('\n').sort()[0] : null;
+  if (!tag) {
+    throw new Error(
+      `Refusing to upload: ${head.slice(0, 12)} carries no release tag (${RELEASE_TAG_PATTERNS.join(', ')}). ` +
+        'Check out a release tag, or publish a release first (docs/REPRODUCIBLE_BUILDS.md).'
+    );
+  }
+  if (remoteTagCommit(tag, { cwd, remote }) !== head) {
+    throw new Error(`Refusing to upload: ${remote} does not have tag ${tag} at ${head.slice(0, 12)}. Push the tag first.`);
+  }
+  const hashesCommit = git(['log', '-1', '--format=%H', 'HEAD', '--', HASHES_PATH], { cwd });
+  const changedSince = hashesCommit ? git(['diff', '--name-only', hashesCommit, 'HEAD', '--', ...WASM_INPUTS], { cwd }) : '';
+  if (!hashesCommit || changedSince) {
+    throw new Error(
+      `Refusing to upload: ${HASHES_PATH} was written before these contract changes:\n` +
+        `${changedSince.split('\n').filter(Boolean).map((line) => `  ${line}`).join('\n')}\n` +
+        'Publish new hashes for this code first (node scripts/build-wasm.mjs --write-hashes).'
+    );
+  }
   const published = publishedHashesAt(head, { cwd });
   const expected = published?.contracts?.[crate]?.sha256;
   if (!expected) {
     throw new Error(
-      `Refusing to upload: ${HASHES_PATH} at ${head.slice(0, 12)} publishes no hash for ${crate}. ` +
+      `Refusing to upload: ${HASHES_PATH} at ${tag} publishes no hash for ${crate}. ` +
         'Publish the release hashes first (node scripts/build-wasm.mjs --write-hashes).'
     );
   }
-  const actual = sha256Hex(readFileSync(join(cwd, wasmPath)));
+  const actual = sha256Hex(readFileSync(resolve(cwd, wasmPath)));
   if (actual !== expected) {
     throw new Error(
-      `Refusing to upload ${wasmPath}: its sha256 is ${actual}, but ${HASHES_PATH} at ${head.slice(0, 12)} ` +
+      `Refusing to upload ${wasmPath}: its sha256 is ${actual}, but ${HASHES_PATH} at ${tag} ` +
         `publishes ${expected} for ${crate}.\n` +
-        'Build with the pinned toolchain (rust-toolchain.toml and stellar-cli ' +
-        `${published.toolchain?.stellarCli ?? '?'}), or in the container (node scripts/build-wasm.mjs), ` +
-        'and publish new hashes before an upgrade (docs/REPRODUCIBLE_BUILDS.md).'
+        'Upload the container build of the release (WASM_DIR=target/wasm-build/<commit>/wasm, from ' +
+        'node scripts/build-wasm.mjs); a native build on another platform gives other bytes ' +
+        '(docs/REPRODUCIBLE_BUILDS.md).'
     );
   }
-  return { commit: head, sha256: actual };
+  return { commit: head, tag, sha256: actual };
 }
 
 function docker(args, { input, cwd } = {}) {
@@ -207,12 +242,19 @@ export function buildInContainer({ ref = 'HEAD', outDir, cwd = process.cwd() }) 
   console.error(
     `Building image ${image} (Rust ${toolchain.rustc}, Stellar CLI ${toolchain.stellarCli}, ${toolchain.platform})`
   );
-  docker(['build', ...platformArgs, '--tag', image, '-'], { input: gitRaw(['archive', '--format=tar', `${commit}:${DOCKER_DIR}`], { cwd }), cwd });
+  docker(['build', '--load', ...platformArgs, '--tag', image, '-'], {
+    input: gitRaw(['archive', '--format=tar', `${commit}:${DOCKER_DIR}`], { cwd }),
+    cwd
+  });
 
   console.error(`Building contracts at ${commit}`);
   const source = gitRaw(['archive', '--format=tar', commit], { cwd });
-  const artifacts = docker(['run', '--rm', '--interactive', ...platformArgs, image], { input: source, cwd });
+  const artifacts = docker(['run', '--rm', '--interactive', '--pull=never', ...platformArgs, image], { input: source, cwd });
 
+  // Replace only an earlier build's output: never delete a directory this script did not write.
+  if (existsSync(outDir) && readdirSync(outDir).length > 0 && !existsSync(join(outDir, 'SHA256SUMS'))) {
+    throw new Error(`${outDir} is not empty and holds no earlier build output: choose another --out`);
+  }
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   const unpack = spawnSync('tar', ['-x', '-f', '-', '-C', outDir], { input: artifacts });
@@ -232,8 +274,38 @@ export function buildInContainer({ ref = 'HEAD', outDir, cwd = process.cwd() }) 
       throw new Error(`SHA256SUMS from the container does not list ${crate} as ${sha256}`);
     }
   }
+  // Keep only the deployable contracts, so test-only builds are never published or attested.
+  for (const file of readdirSync(join(outDir, 'wasm'))) {
+    if (!crates.includes(file.replace(/\.wasm$/, ''))) rmSync(join(outDir, 'wasm', file));
+  }
+  writeFileSync(
+    join(outDir, 'SHA256SUMS'),
+    Object.entries(document.contracts).map(([crate, { sha256 }]) => `${sha256}  wasm/${crate}.wasm\n`).join('')
+  );
   writeFileSync(join(outDir, 'hashes.json'), formatHashes(document));
   return { commit, document };
+}
+
+/**
+ * Parse `args` for the given value options and boolean flags. A bare `--` (which `pnpm run` passes
+ * through) is skipped; an unknown flag, a missing value or a flag given as a value throws `usage`.
+ */
+export function parseArgs(args, { values = [], flags = [], usage }) {
+  const options = {};
+  const positionals = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--') continue;
+    if (values.includes(arg)) {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith('--')) throw new Error(usage);
+      options[arg.slice(2)] = value;
+      i += 1;
+    } else if (flags.includes(arg)) options[arg.slice(2)] = true;
+    else if (arg.startsWith('-')) throw new Error(usage);
+    else positionals.push(arg);
+  }
+  return { options, positionals };
 }
 
 /** Print a hash comparison as a table and return whether every row matched. */
