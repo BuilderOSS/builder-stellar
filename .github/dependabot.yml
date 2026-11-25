@@ -1,0 +1,44 @@
+# Version updates, opened against dev (the branch every pull request targets; docs/AGENT_WORKFLOW.md).
+# Minor and patch updates are grouped per ecosystem to keep the number of pull requests small.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The Soroban SDK and the OpenZeppelin crates move together and by hand: a new version changes
+      # every contract hash and needs a release (docs/OPENZEPPELIN_PIN.md, docs/REPRODUCIBLE_BUILDS.md).
+      - dependency-name: soroban-sdk
+      - dependency-name: stellar-*
+
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Next majors change the app's runtime and build; they are planned, not automatic.
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+
+# The contract build image (docker/wasm-build) is left out on purpose: its Rust version must match
+# rust-toolchain.toml and changes the WASM bytes, so it is updated by hand with a release.

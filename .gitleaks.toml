@@ -1,0 +1,32 @@
+# Secret scanning for CI (.github/workflows/ci.yml) and the pre-commit hook (lefthook.yml).
+# The default gitleaks rules, plus Stellar secret seeds, minus public Stellar addresses.
+
+[extend]
+useDefault = true
+
+# A Stellar secret seed (S..., 56 characters) signs for an account. The default rules do not know
+# the format.
+[[rules]]
+id = "stellar-secret-seed"
+description = "Stellar secret seed"
+regex = '''\bS[A-Z2-7]{55}\b'''
+
+# Account (G...), contract (C...) and muxed (M...) addresses are public by design, but a value next to
+# a key such as "token" looks like an API key to the generic rule.
+[[allowlists]]
+description = "Public Stellar addresses"
+regexTarget = "secret"
+regexes = [
+  '''^[GC][A-Z2-7]{55}$''',
+  '''^M[A-Z2-7]{68}$''',
+]
+
+# Deployment records list each contract's WASM hash under its name ("token": "<sha256>"). Hashes of
+# public code, so only 64-hex values under deploys/ are allowed; the rest of the tree is scanned as
+# usual.
+[[allowlists]]
+description = "Contract WASM hashes in deployment records"
+condition = "AND"
+paths = ['''^deploys/''']
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{64}$''']
