@@ -29,7 +29,7 @@ repository's scripts and the intended practice; it does not record who holds whi
 | `GOLDSKY_API_TOKEN` | Read the pipeline's status (Viewer role) | Vercel, per project | `/api/health` |
 | Goldsky CLI login | Deploy, stop and delete pipelines; manage Goldsky secrets | the operator's machine (`goldsky login`) | `packages/goldsky/scripts/deploy.sh` |
 | Database owner (`neondb_owner`) | Everything in the database: migrations, grants, resets | Neon; the operator's password manager | `db/*.sh` |
-| `goldsky_writer` | Insert into the three landing tables; create the `streamling` allowlist tables | Goldsky secret (`BUILDER_POSTGRES_SECRET`, `BUILDER_DEV_POSTGRES_SECRET`) | the pipeline |
+| `goldsky_writer` | Insert into the three landing tables; create tables in `chain`, `app` and `streamling` (the sink's startup needs it); create no schema but `streamling` | Goldsky secret (`BUILDER_POSTGRES_SECRET`, `BUILDER_DEV_POSTGRES_SECRET`) | the pipeline |
 | `app_server` | Read the app-facing views | Vercel (`APP_DATABASE_URL`) | the web app |
 
 ## Manager admin keys
@@ -41,8 +41,8 @@ The production testnet Manager and the dev Manager have the same admin, the stel
 config file. A leak of that file gives the holder both Managers.
 
 The deploy script signs every admin call with one identity and refuses one that is not the config's
-`adminAddress`. It never creates an admin key on mainnet, and on local and testnet only with
-`--generate-identity` ([Manager deployment](MANAGER_DEPLOYMENT.md)).
+`adminAddress`. It never creates a key ([Manager deployment](MANAGER_DEPLOYMENT.md)); `scripts/local-up.mjs`
+makes the local network's admin.
 
 ### Where an admin key is kept
 
@@ -140,8 +140,8 @@ tribe is created on it.
 
 Extending a TTL needs no admin rights, so renewals are paid by a separate low-value key. Both renewal
 scripts default to the identity `<network>-renewer` (`RENEW_IDENTITY` or `--source` / `--identity`
-override it), sign through the stellar CLI and never read the seed into Node. They warn when the payer is the
-Manager admin.
+override it), sign through the stellar CLI and never read the seed into Node. They refuse the Manager admin as
+payer unless `--allow-admin-payer` is passed.
 
 ```bash
 stellar keys generate testnet-renewer --fund     # testnet: Friendbot funds it
@@ -162,9 +162,11 @@ only to new deployments.
   issued upload token ends at once: everyone signs in again.
 - **`STELLAR_WEB_AUTH_SECRET`** is the SEP-10 server key (`dev-web-auth` on dev). A holder can issue
   challenges the server accepts as its own; signing in as an account still needs that account's signature.
-  Generate a new key (`stellar keys generate <name> --secure-store`, then read its secret once with
-  `stellar keys show <name>` to paste into Vercel), fund it as the old one was, set it and redeploy.
-  Challenges issued before the change fail, and wallets ask again.
+  Vercel needs the secret itself, so this key can't live in the OS secure store (the CLI doesn't reveal a
+  secure-store secret). On a trusted machine, generate it (`stellar keys generate <name>`), read the secret
+  once with `stellar keys show <name>` to paste into Vercel, then remove it there with `stellar keys rm <name>`.
+  Fund it as the old one was, set it and redeploy. Challenges issued before the change fail, and wallets ask
+  again.
 - **`PINATA_JWT`**: production and dev each get their own scoped key ([DEV_DEPLOYMENT.md](DEV_DEPLOYMENT.md)).
   To replace one, create a new key in the Pinata dashboard with the same scopes, set it, redeploy, upload one
   image to check it, then revoke the old key in Pinata.
@@ -179,8 +181,9 @@ Neon roles are per branch, so production (`production`) and dev (`dev`) have sep
 - **Owner (`neondb_owner`)** runs migrations, grants and resets from an operator's machine. It is never set in
   Vercel or Goldsky. Replace its password in the Neon console.
 - **`goldsky_writer`** writes the landing tables. A holder can insert fabricated landing rows (the tables are
-  append-only, so existing rows can't be changed) and can create only the `streamling` schema
-  (`grant-permissions.sh` installs the guard).
+  append-only, so existing rows can't be changed), create its own tables and functions in `chain` and `app`
+  (the sink's `CREATE TABLE IF NOT EXISTS` needs CREATE there; the migration-owned tables stay out of its
+  reach), and create no schema but `streamling` (`grant-permissions.sh` installs the guard).
 - **`app_server`** reads the app-facing views only; it has no access to `chain.*`.
 
 To replace the writer's or the app's password:

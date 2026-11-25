@@ -94,8 +94,8 @@ db_conn_files() {
   fi
 
   # host[:port] entries, comma-separated (libpq multi-host), IPv6 in brackets.
-  IFS=',' read -r -a entries <<< "$hosts"
-  for entry in "${entries[@]}"; do
+  [ -n "$hosts" ] && IFS=',' read -r -a entries <<< "$hosts"
+  for entry in ${entries[@]+"${entries[@]}"}; do
     h="$entry"; p=""
     if [[ "$entry" == \[* ]]; then
       h="${entry%%]*}"; h="${h#\[}"
@@ -103,31 +103,52 @@ db_conn_files() {
     elif [[ "$entry" == *:* ]]; then
       h="${entry%%:*}"; p="${entry#*:}"
     fi
-    host_list+="$(url_decode "$h"),"
+    host_list+="$h,"
     port_list+="$p,"
   done
+
+  # Each setting appears once: libpq lets a repeated URL parameter win, a service
+  # file keeps the first line, so a repeat (?port=, ?dbname=) could send the
+  # connection somewhere the displayed target doesn't show. hostaddr, service and
+  # passfile would do the same, and a decoded control character could add lines.
+  local lines="" seen=" "
+  add_setting() {
+    if [[ "$2" == *[[:cntrl:]]* ]]; then
+      echo -e "${RED}Error: DATABASE_URL has a control character in its $1${NC}" >&2; return 1
+    fi
+    case "$1" in
+      hostaddr | service | servicefile | passfile)
+        echo -e "${RED}Error: DATABASE_URL may not set $1${NC}" >&2; return 1 ;;
+    esac
+    if [[ "$seen" == *" $1 "* ]]; then
+      echo -e "${RED}Error: DATABASE_URL sets $1 more than once${NC}" >&2; return 1
+    fi
+    seen+="$1 "
+    lines+="$1=$2"$'\n'
+  }
+  if [ -n "${host_list//,/}" ]; then add_setting host "$(url_decode "${host_list%,}")" || return 1; fi
+  if [ -n "${port_list//,/}" ]; then add_setting port "${port_list%,}" || return 1; fi
+  if [ -n "$path" ]; then add_setting dbname "$(url_decode "$path")" || return 1; fi
+  if [ -n "$user" ]; then add_setting user "$user" || return 1; fi
+  if [[ "$pass" == *[[:cntrl:]]* ]]; then
+    echo -e "${RED}Error: DATABASE_URL has a control character in its password${NC}" >&2; return 1
+  fi
+  if [ -n "$query" ]; then
+    IFS='&' read -r -a pairs <<< "$query"
+    for pair in ${pairs[@]+"${pairs[@]}"}; do
+      [ -n "$pair" ] || continue
+      k="$(url_decode "${pair%%=*}")"
+      v=""
+      [[ "$pair" == *=* ]] && v="$(url_decode "${pair#*=}")"
+      add_setting "$k" "$v" || return 1
+    done
+  fi
 
   dir="$(mktemp -d "$base/conn.XXXXXX")"
   chmod 700 "$dir"
   (
     umask 077
-    {
-      echo "[db]"
-      [ -n "${host_list//,/}" ] && echo "host=${host_list%,}"
-      [ -n "${port_list//,/}" ] && echo "port=${port_list%,}"
-      [ -n "$path" ] && echo "dbname=$(url_decode "$path")"
-      [ -n "$user" ] && echo "user=$user"
-      if [ -n "$query" ]; then
-        IFS='&' read -r -a pairs <<< "$query"
-        for pair in "${pairs[@]}"; do
-          [ -n "$pair" ] || continue
-          k="$(url_decode "${pair%%=*}")"
-          v=""
-          [[ "$pair" == *=* ]] && v="$(url_decode "${pair#*=}")"
-          echo "$k=$v"
-        done
-      fi
-    } > "$dir/service"
+    printf '[db]\n%s' "$lines" > "$dir/service"
     if [ -n "$pass" ]; then
       printf '*:*:*:*:%s\n' "$(pgpass_escape "$pass")" > "$dir/pass"
     fi
@@ -135,10 +156,14 @@ db_conn_files() {
   echo "$dir"
 }
 
+# libpq variables that choose where a connection goes. use_database_url clears
+# them, so only the URL decides the target.
+PG_TARGET_VARS=(PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGPASSWORD PGSERVICE PGSERVICEFILE PGPASSFILE PGREQUIRESSL PGTARGETSESSIONATTRS)
+
 # Point every later psql call in this shell at a URL: PGSERVICEFILE and
 # PGSERVICE select the service file, PGPASSFILE the password (when the URL has
-# one). The service file's settings take precedence over PGHOST and the other
-# libpq variables, so a stray variable cannot redirect a script.
+# one). The other libpq target variables are cleared first, so a stray PGHOSTADDR
+# or PGPORT can't send a script somewhere the URL doesn't name.
 use_database_url() {
   local dir
   if [ -z "$DB_CONN_DIR" ]; then
@@ -146,11 +171,22 @@ use_database_url() {
     chmod 700 "$DB_CONN_DIR"
   fi
   dir="$(db_conn_files "$1" "$DB_CONN_DIR")" || return 1
+  unset "${PG_TARGET_VARS[@]}"
   export PGSERVICEFILE="$dir/service" PGSERVICE=db
-  if [ -f "$dir/pass" ]; then
-    export PGPASSFILE="$dir/pass"
-    unset PGPASSWORD
-  fi
+  if [ -f "$dir/pass" ]; then export PGPASSFILE="$dir/pass"; fi
+}
+
+# What the destructive scripts ask for: the database name and the host's first
+# label (a Neon endpoint ID, say), joined by @. Dev and production branches of one
+# Neon project share the database name neondb, so the name alone can't tell them
+# apart. An IP address or a socket path is used whole.
+confirm_target_name() {
+  local host
+  host="$(sed -n 's/^host=//p' "$PGSERVICEFILE" | head -n 1)"
+  host="${host%%,*}"
+  if [ -z "$host" ]; then host="localhost"
+  elif [[ "$host" != */* && ! "$host" =~ ^[0-9.]+$ && "$host" != *:* ]]; then host="${host%%.*}"; fi
+  echo "$1@$host"
 }
 
 # Resolve the target from DATABASE_URL, point psql at it and verify the
@@ -188,31 +224,32 @@ redact_url() {
   echo "$scheme://$rest$(echo "$query" | sed -E 's#(password=)[^&]*#\1<redacted>#g')"
 }
 
-# Destructive scripts (rollback, reset) ask for the database name, typed in
-# full: a --yes flag or a habit of typing "yes" doesn't show which database the
-# operator is about to change. --confirm-database <name> is the non-interactive
-# form and must name the database the URL connects to.
+# Destructive scripts (rollback, reset) ask for the database name and host label,
+# typed in full: a --yes flag or a habit of typing "yes" doesn't show which
+# database the operator is about to change. --confirm-database <database>@<host>
+# is the non-interactive form and must name the database the URL connects to.
 confirm_database() {
-  local confirmed="$1" action="$2" typed deployments
+  local confirmed="$1" action="$2" typed deployments expected
   echo "Target: $DB_TARGET"
   echo "Database: $DB_NAME"
   # Which deployments' events this database holds, so dev and prod can be told apart.
   deployments="$(psql -Atc "SELECT string_agg(deployment_id || ' (' || n || ' events)', ', ' ORDER BY deployment_id)
     FROM (SELECT deployment_id, count(*) AS n FROM chain.raw_events GROUP BY deployment_id) d" 2>/dev/null || true)"
   echo "Indexed deployments: ${deployments:-none}"
+  expected="$(confirm_target_name "$DB_NAME")"
   if [ -n "$confirmed" ]; then
-    if [ "$confirmed" != "$DB_NAME" ]; then
-      echo -e "${RED}✗ --confirm-database '$confirmed' does not match the connected database '$DB_NAME'${NC}" >&2
+    if [ "$confirmed" != "$expected" ]; then
+      echo -e "${RED}✗ --confirm-database '$confirmed' does not name the connected database and host${NC}" >&2
       exit 1
     fi
     return 0
   fi
   if [ ! -t 0 ]; then
-    echo -e "${RED}✗ Refusing to $action without a terminal: pass --confirm-database $DB_NAME${NC}" >&2
+    echo -e "${RED}✗ Refusing to $action without a terminal: pass --confirm-database <database>@<host label>${NC}" >&2
     exit 1
   fi
-  read -r -p "Type the database name ($DB_NAME) to $action: " typed
-  [ "$typed" = "$DB_NAME" ] || { echo "Cancelled: '$typed' is not '$DB_NAME'"; exit 1; }
+  read -r -p "Type $expected (database@host) to $action: " typed
+  [ "$typed" = "$expected" ] || { echo "Cancelled: '$typed' is not '$expected'"; exit 1; }
 }
 
 migration_checksum() {

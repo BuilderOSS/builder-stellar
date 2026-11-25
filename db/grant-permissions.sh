@@ -39,6 +39,20 @@ GRANT USAGE, CREATE ON SCHEMA chain, app TO goldsky_writer;
 GRANT SELECT, INSERT, UPDATE ON chain.raw_events, chain.decoded_events, app.activity_feed_events TO goldsky_writer;
 
 -- ---------------------------------------------------------------------------
+-- app_server: read-only. Views read chain.* with their owner's privileges, so
+-- the app never needs (and never gets) access to the raw landing payloads.
+-- ---------------------------------------------------------------------------
+REVOKE ALL ON ALL TABLES IN SCHEMA $all_schema_csv FROM app_server;
+REVOKE ALL ON SCHEMA $all_schema_csv FROM app_server;
+GRANT USAGE ON SCHEMA $app_schema_csv TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA $app_schema_csv TO app_server;
+-- The landing table behind app.activity_feed is not an app read surface either.
+REVOKE SELECT ON app.activity_feed_events FROM app_server;
+
+-- Views created by future migrations are readable without another grant run.
+ALTER DEFAULT PRIVILEGES IN SCHEMA $app_schema_csv GRANT SELECT ON TABLES TO app_server;
+
+-- ---------------------------------------------------------------------------
 -- goldsky_writer's database-level CREATE (setup-roles.sh) stays: the sink and
 -- the dynamic tables issue CREATE SCHEMA IF NOT EXISTS, which PostgreSQL
 -- authorises against the database before it checks that the schema exists.
@@ -47,7 +61,8 @@ GRANT SELECT, INSERT, UPDATE ON chain.raw_events, chain.decoded_events, app.acti
 -- except the dynamic tables' own schema, streamling. A no-op IF NOT EXISTS
 -- creates nothing and passes. A rename of streamling would let the writer
 -- create a second one, so renaming it is refused as well. The writer can't
--- drop or disable the trigger: that needs its owner or a superuser.
+-- drop or disable the trigger: that needs its owner or a superuser. It comes
+-- last, so the grants above stand even where the trigger can't be created.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.goldsky_writer_ddl_guard()
 RETURNS event_trigger
@@ -76,20 +91,6 @@ DROP EVENT TRIGGER IF EXISTS goldsky_writer_ddl_guard;
 CREATE EVENT TRIGGER goldsky_writer_ddl_guard ON ddl_command_end
   WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA', 'CREATE EXTENSION', 'CREATE PUBLICATION', 'ALTER PUBLICATION')
   EXECUTE FUNCTION public.goldsky_writer_ddl_guard();
-
--- ---------------------------------------------------------------------------
--- app_server: read-only. Views read chain.* with their owner's privileges, so
--- the app never needs (and never gets) access to the raw landing payloads.
--- ---------------------------------------------------------------------------
-REVOKE ALL ON ALL TABLES IN SCHEMA $all_schema_csv FROM app_server;
-REVOKE ALL ON SCHEMA $all_schema_csv FROM app_server;
-GRANT USAGE ON SCHEMA $app_schema_csv TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA $app_schema_csv TO app_server;
--- The landing table behind app.activity_feed is not an app read surface either.
-REVOKE SELECT ON app.activity_feed_events FROM app_server;
-
--- Views created by future migrations are readable without another grant run.
-ALTER DEFAULT PRIVILEGES IN SCHEMA $app_schema_csv GRANT SELECT ON TABLES TO app_server;
 SQL
 
 echo -e "${GREEN}✓ Permissions granted${NC}"

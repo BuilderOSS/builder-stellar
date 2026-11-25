@@ -66,6 +66,7 @@ expect_refusal "a URL argument" bash "$DB_DIR/migrate.sh" "$scratch_url"
 expect_refusal "rollback --yes" on_scratch "$DB_DIR/rollback.sh" --yes
 expect_refusal "rollback without a terminal" on_scratch "$DB_DIR/rollback.sh"
 expect_refusal "rollback naming another database" on_scratch "$DB_DIR/rollback.sh" --confirm-database postgres
+expect_refusal "rollback naming the database without its host" on_scratch "$DB_DIR/rollback.sh" --confirm-database "$scratch"
 expect_refusal "reset --yes" on_scratch "$DB_DIR/reset-database.sh" --yes
 expect_refusal "reset without a terminal" on_scratch "$DB_DIR/reset-database.sh"
 expect_refusal "reset naming another database" on_scratch "$DB_DIR/reset-database.sh" --confirm-database postgres
@@ -73,7 +74,7 @@ expect_refusal "reset naming another database" on_scratch "$DB_DIR/reset-databas
   || { echo "a refused rollback or reset changed the database" >&2; exit 1; }
 
 echo "→ rollback everything"
-on_scratch "$DB_DIR/rollback.sh" --confirm-database "$scratch" > /dev/null
+on_scratch "$DB_DIR/rollback.sh" --confirm-database "$(confirm_target_name "$scratch")" > /dev/null
 left="$(psql "$scratch_conn" -Atc "SELECT count(*) FROM information_schema.schemata WHERE schema_name IN ($(sql_schema_list))")"
 [ "$left" = "0" ] || { echo "rollback left $left schema(s) behind" >&2; exit 1; }
 echo "→ migrate after rollback"

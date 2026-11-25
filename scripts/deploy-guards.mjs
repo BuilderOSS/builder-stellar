@@ -66,30 +66,16 @@ function keyAddress(identityName, run) {
 /**
  * The deploy identity signs every admin call this script makes (register_implementation,
  * set_latest_implementation, set_current_implementations), so it must be the config's adminAddress.
- * A missing key is an error: the script creates one only with --generate-identity, never on mainnet,
- * and says so. Returns { address, generated }.
+ * The script never creates a key: a missing one is an error (local-up.mjs makes the local admin and
+ * writes its address into the local config). Returns the address.
  */
-export function resolveIdentity({ identityName, network, adminAddress, generate }, run = runQuiet) {
-  let address = keyAddress(identityName, run);
-  let generated = false;
+export function resolveIdentity({ identityName, adminAddress }, run = runQuiet) {
+  const address = keyAddress(identityName, run);
   if (!address) {
-    if (network === 'mainnet') {
-      throw new Error(
-        `No stellar key named ${identityName}. A mainnet admin key is created and stored as docs/KEY_CUSTODY.md ` +
-          'describes (a hardware wallet or the OS secure store), never by this script.'
-      );
-    }
-    if (!generate) {
-      throw new Error(
-        `No stellar key named ${identityName}. Add the admin key first (stellar keys add ${identityName} --secure-store), ` +
-          'or pass --generate-identity to create a new local or testnet key.'
-      );
-    }
-    const created = run('stellar', ['keys', 'generate', identityName]);
-    if (!created.ok) throw new Error(`stellar keys generate ${identityName} failed: ${(created.stderr || created.stdout).trim()}`);
-    address = keyAddress(identityName, run);
-    if (!address) throw new Error(`Generated ${identityName}, but stellar keys address returned nothing`);
-    generated = true;
+    throw new Error(
+      `No stellar key named ${identityName}. Add the admin key first, stored as docs/KEY_CUSTODY.md describes ` +
+        `(stellar keys add ${identityName} --ledger, or --secure-store); this script never creates one.`
+    );
   }
   if (address !== adminAddress) {
     throw new Error(
@@ -99,7 +85,7 @@ export function resolveIdentity({ identityName, network, adminAddress, generate 
         '(docs/KEY_CUSTODY.md).'
     );
   }
-  return { address, generated };
+  return address;
 }
 
 /**

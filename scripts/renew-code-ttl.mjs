@@ -27,7 +27,7 @@
 // --days defaults to 170 and must be above the 4 days contracts bump code to themselves.
 // --identity is the `stellar keys` identity that pays: RENEW_IDENTITY, else `<network>-renewer`. Extending
 // a TTL needs no admin rights, so the payer is a separate low-value key, not the Manager admin
-// (docs/KEY_CUSTODY.md). The stellar CLI signs; no secret is read here. DATABASE_URL reaches psql through
+// (docs/KEY_CUSTODY.md); the admin is refused unless --allow-admin-payer is passed. The stellar CLI signs; no secret is read here. DATABASE_URL reaches psql through
 // a service file and password file (pg-env.mjs), not on its command line.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -48,7 +48,7 @@ import {
 const MODULE_NAMES = ['Manager', 'Token', 'Metadata', 'Auction', 'Governor', 'Treasury', 'Marketplace', 'ClaimMinter'];
 
 const args = process.argv.slice(2);
-const artifactPath = positionalArg(args, ['--dry-run']);
+const artifactPath = positionalArg(args, ['--dry-run', '--allow-admin-payer']);
 const flag = (name, fallback) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : fallback;
@@ -82,8 +82,13 @@ if (!payer.ok) {
   );
   process.exit(1);
 }
-if (payer.stdout.trim() === artifact.config?.adminAddress) {
-  console.warn(`The payer ${source} is the Manager admin. Renewal needs no admin rights: use a separate low-value key (docs/KEY_CUSTODY.md).`);
+// The admin key signs nothing it doesn't need to: renewal is permissionless.
+if (payer.stdout.trim() === artifact.config?.adminAddress && !args.includes('--allow-admin-payer')) {
+  console.error(
+    `The payer ${source} is the Manager admin. Renewal needs no admin rights: pay with a separate low-value key ` +
+      '(docs/KEY_CUSTODY.md), or pass --allow-admin-payer.'
+  );
+  process.exit(1);
 }
 const indexer = (sql) => withPgEnv(process.env.DATABASE_URL, (env) => runQuiet('psql', ['-At', '-c', sql], { env }));
 const view = (id, method, callArgs = []) => invokeView(id, method, callArgs, { network, source });

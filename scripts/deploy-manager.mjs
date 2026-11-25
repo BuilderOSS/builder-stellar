@@ -19,16 +19,12 @@ import {
   runQuiet
 } from './lib.mjs';
 
-const FLAGS = ['--force', '--generate-identity'];
 const args = process.argv.slice(2);
 const force = args.includes('--force');
-// Creates the deploy identity when it is missing, on local and testnet only. Without it a missing key is an
-// error: the script never makes the Manager admin key on its own.
-const generateIdentity = args.includes('--generate-identity');
-const configPath = args.find((arg) => !FLAGS.includes(arg));
+const configPath = args.find((arg) => arg !== '--force');
 
 if (!configPath) {
-  throw new Error('Usage: node scripts/deploy-manager.mjs <config.json> [--force] [--generate-identity]');
+  throw new Error('Usage: node scripts/deploy-manager.mjs <config.json> [--force]');
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -100,13 +96,10 @@ function ensureNetwork() {
   run('stellar', ['network', 'use', networkName]);
 }
 
-// The identity must exist (or be generated with --generate-identity, never on mainnet) and be the
-// config's adminAddress. Checked offline, before anything is built or sent.
+// The identity must already exist and be the config's adminAddress; the script never creates a key.
+// Checked offline, before anything is built or sent.
 function ensureIdentity() {
-  const { address, generated } = resolveIdentity({ identityName, network: networkName, adminAddress, generate: generateIdentity });
-  if (generated) {
-    console.log(`Generated a new key ${identityName} (${address}) because --generate-identity was passed.`);
-  }
+  resolveIdentity({ identityName, adminAddress });
 }
 
 // Friendbot funds the identity on local and testnet; a mainnet admin is funded by hand.

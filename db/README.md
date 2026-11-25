@@ -135,7 +135,10 @@ alone would let the writer create any schema, extension or publication, so
 refuses each of those the writer runs except the `streamling` schema. A no-op
 `IF NOT EXISTS` passes, and renaming `streamling` is refused. Creating an event
 trigger needs a superuser, or `neon_superuser` on Neon, so run `grant-permissions.sh`
-as the database owner.
+as the database owner; the trigger is created last, so the other grants stand if it
+fails. The guard is tested against PostgreSQL 16, not yet against Neon or a running
+Goldsky sink: after the first apply on a branch, check that the pipeline starts and
+its position moves (`goldsky turbo state list <pipeline>`).
 `app_server` is read-only on the view schemas and has **no** access to
 `chain.*` or the landing tables; views read them with their owner's privileges,
 which is why application checks use `app.indexer_status` or `app.activity_feed`,

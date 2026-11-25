@@ -14,7 +14,7 @@ This submits transactions and writes `deploys/<label>-<network>-manager.json`. C
 
 Before it builds or sends anything, the script checks (`scripts/deploy-guards.mjs`):
 
-- **The identity.** It must already exist in the stellar CLI's key store and be the configuration's `adminAddress`, since it signs every admin call. The script never creates the admin key on its own: `--generate-identity` creates a missing local or testnet key and says so, and on mainnet a missing key is an error ([key custody](KEY_CUSTODY.md)). Friendbot funds it on local and testnet only.
+- **The identity.** It must already exist in the stellar CLI's key store and be the configuration's `adminAddress`, since it signs every admin call. The script never creates a key: a missing one is an error ([key custody](KEY_CUSTODY.md)); `node scripts/local-up.mjs` makes the local network's admin. Friendbot funds it on local and testnet only.
 - **The build inputs.** Uncommitted changes under `contracts`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo` or `releases` stop a mainnet deploy, because the artifact's `sourceCommit` would not describe the WASM; elsewhere they print a warning.
 - **Mainnet.** The configuration must carry the public network passphrase and an `upgradeDelayLedgers` of at least 120,960 (7 days). The script shows the label, RPC, admin, upgrade notice, commit and versions, and asks for `mainnet <label>` typed at a terminal. No flag skips it, and without a terminal it refuses.
 

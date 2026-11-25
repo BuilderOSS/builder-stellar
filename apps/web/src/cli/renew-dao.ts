@@ -6,8 +6,8 @@
  *
  * --network reads deploys/builder-<network>-manager.json for the Manager, RPC and passphrase
  * (--artifact overrides the path). --source is a `stellar keys` identity that pays: RENEW_IDENTITY, else
- * `<network>-renewer`. Renewal needs no admin rights, so the payer is a separate low-value key, never the
- * Manager admin (docs/KEY_CUSTODY.md).
+ * `<network>-renewer`. Renewal needs no admin rights, so the payer is a separate low-value key; the Manager
+ * admin is refused unless --allow-admin-payer is passed (docs/KEY_CUSTODY.md).
  *
  * The payer's secret stays in the stellar CLI's key store (its config, the OS secure store or a Ledger).
  * This process builds and prepares each transaction and `stellar tx sign` signs it, so no seed is ever
@@ -109,9 +109,11 @@ async function main() {
   const source = flag('source', process.env.RENEW_IDENTITY || `${network}-renewer`)!;
   // Only the public address is read here; `stellar tx sign` signs below.
   const payer = execFileSync('stellar', ['keys', 'address', source], { encoding: 'utf8' }).trim();
-  if (payer === artifact.config.adminAddress)
-    console.warn(
-      `  The payer ${source} is the Manager admin. Renewal needs no admin rights: use a separate low-value key (docs/KEY_CUSTODY.md).`
+  // This process loads the web dependency tree and asks the CLI to sign what it builds, so it never
+  // asks with the admin key unless told to: renewal is permissionless.
+  if (payer === artifact.config.adminAddress && !process.argv.includes('--allow-admin-payer'))
+    throw new Error(
+      `The payer ${source} is the Manager admin. Renewal needs no admin rights: pay with a separate low-value key (docs/KEY_CUSTODY.md), or pass --allow-admin-payer.`
     );
   const passphrase = artifact.config.networkPassphrase;
   const sign = cliSigner(source, artifact.config.rpcUrl, passphrase);

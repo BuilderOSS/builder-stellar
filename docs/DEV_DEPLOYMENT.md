@@ -113,9 +113,10 @@ Production and dev each have their own Pinata API key, so a leak of one deployme
 uploads on dev, doesn't reach the other. When this page was written, `builder-stellar-dev` still held
 production's key; replace it as follows.
 
-1. In the Pinata dashboard, create a key named for the deployment (for example `tribes-dev`), with only the
-   scopes the upload routes use: signed uploads (`/v3/files/sign`) and pinning by CID
-   (`/v3/files/public/pin_by_cid`). A separate Pinata account for dev also separates storage and billing.
+1. In the Pinata dashboard, create a key named for the deployment (for example `tribes-dev`) with the same
+   scopes as production's key: the upload routes sign uploads, look files up by CID and create one-use upload
+   keys (`apps/web/src/lib/pinata-service.ts`). A separate Pinata account for dev also separates storage and
+   billing.
 2. Set it as `PINATA_JWT` on `builder-stellar-dev` (Production and Preview), and redeploy.
 3. Upload one image on dev.tribes.build to check it.
 4. On `builder-stellar-web`, keep production's key on the Production environment only. Preview deployments

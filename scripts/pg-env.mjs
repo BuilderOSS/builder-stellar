@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const decode = (value) => decodeURIComponent(value);
+const TARGET_VARS = ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD', 'PGSERVICE', 'PGSERVICEFILE', 'PGPASSFILE', 'PGREQUIRESSL', 'PGTARGETSESSIONATTRS'];
 const pgpassEscape = (value) => value.replace(/\\/g, '\\\\').replace(/:/g, '\\:');
 
 /**
@@ -41,15 +42,26 @@ export function pgServiceFiles(url) {
     portList.push(port);
   }
 
+  // Each setting once, no target overrides and no control characters, as in db/lib.sh: a repeated
+  // ?port= or ?dbname= would win in libpq but not in a service file.
   const lines = ['[db]'];
-  if (hostList.some(Boolean)) lines.push(`host=${hostList.join(',')}`);
-  if (portList.some(Boolean)) lines.push(`port=${portList.join(',')}`);
-  if (path) lines.push(`dbname=${decode(path)}`);
-  if (user) lines.push(`user=${user}`);
+  const seen = new Set();
+  const add = (key, value) => {
+    if (/[\x00-\x1f\x7f]/.test(value)) throw new Error(`DATABASE_URL has a control character in its ${key}`);
+    if (['hostaddr', 'service', 'servicefile', 'passfile'].includes(key)) throw new Error(`DATABASE_URL may not set ${key}`);
+    if (seen.has(key)) throw new Error(`DATABASE_URL sets ${key} more than once`);
+    seen.add(key);
+    lines.push(`${key}=${value}`);
+  };
+  if (hostList.some(Boolean)) add('host', hostList.join(','));
+  if (portList.some(Boolean)) add('port', portList.join(','));
+  if (path) add('dbname', decode(path));
+  if (user) add('user', user);
+  if (/[\x00-\x1f\x7f]/.test(password)) throw new Error('DATABASE_URL has a control character in its password');
   for (const pair of query.split('&')) {
     if (!pair) continue;
     const [key, value = ''] = pair.includes('=') ? [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)] : [pair];
-    lines.push(`${decode(key)}=${decode(value)}`);
+    add(decode(key), decode(value));
   }
   return { service: `${lines.join('\n')}\n`, pass: password ? `*:*:*:*:${pgpassEscape(password)}\n` : null };
 }
@@ -60,12 +72,14 @@ export function withPgEnv(url, fn) {
   const dir = mkdtempSync(join(tmpdir(), 'pg-conn-'));
   try {
     writeFileSync(join(dir, 'service'), service, { mode: 0o600 });
-    const env = { ...process.env, PGSERVICEFILE: join(dir, 'service'), PGSERVICE: 'db' };
+    const env = { ...process.env };
+    // Only the URL decides the target: the libpq variables that choose one are cleared.
+    for (const name of TARGET_VARS) delete env[name];
     delete env.DATABASE_URL;
+    Object.assign(env, { PGSERVICEFILE: join(dir, 'service'), PGSERVICE: 'db' });
     if (pass) {
       writeFileSync(join(dir, 'pass'), pass, { mode: 0o600 });
       env.PGPASSFILE = join(dir, 'pass');
-      delete env.PGPASSWORD;
     }
     return fn(env);
   } finally {

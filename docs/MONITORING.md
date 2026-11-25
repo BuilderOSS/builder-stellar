@@ -133,7 +133,9 @@ incident.
   ORDER BY ledger_sequence;
   ```
 
-  Platform events appear once per tribe in the feed; `DISTINCT` folds them back to one row. The RPC keeps
-  events only for its retention window (a provider setting), so the job must run well within it.
+  Platform events appear once per tribe in the feed; `DISTINCT` folds them back to one row.
+  `implementation_revoked` reaches the feed only for tribes that run the revoked hash, so a revocation of an
+  unused hash shows only in the RPC read. The RPC keeps events only for its retention window (a provider
+  setting), so the job must run well within it.
 - Pinata usage for the account of each environment's key, against the monthly budget: its notifications where
   the plan offers them, otherwise a weekly look at the usage page.

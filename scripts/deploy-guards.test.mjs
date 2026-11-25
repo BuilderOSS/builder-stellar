@@ -22,10 +22,6 @@ function fakeStellar(keys = {}) {
     if (command === 'stellar' && args[0] === 'keys' && args[1] === 'address') {
       return keys[args[2]] ? { ok: true, stdout: `${keys[args[2]]}\n`, stderr: '' } : { ok: false, stdout: '', stderr: 'not found' };
     }
-    if (command === 'stellar' && args[0] === 'keys' && args[1] === 'generate') {
-      keys[args[2]] = ADMIN;
-      return { ok: true, stdout: '', stderr: '' };
-    }
     throw new Error(`unexpected call ${command} ${args.join(' ')}`);
   };
   return { run, calls };
@@ -59,37 +55,20 @@ test('uncommitted build inputs stop a mainnet deploy and warn elsewhere', () => 
   assert.throws(() => uncommittedBuildInputs(() => ({ ok: false, stdout: '', stderr: 'not a git repository' })), /can't be checked/);
 });
 
-test('a missing deploy key is an error unless --generate-identity, and never generated on mainnet', () => {
-  for (const network of ['local', 'testnet']) {
-    const { run, calls } = fakeStellar();
-    assert.throws(() => resolveIdentity({ identityName: 'x-admin', network, adminAddress: ADMIN, generate: false }, run), /No stellar key named x-admin/);
-    assert.ok(!calls.some((c) => c[2] === 'generate'), 'nothing was generated');
-  }
-  const mainnet = fakeStellar();
-  assert.throws(
-    () => resolveIdentity({ identityName: 'mainnet-admin', network: 'mainnet', adminAddress: ADMIN, generate: true }, mainnet.run),
-    /never by this script/
-  );
-  assert.ok(!mainnet.calls.some((c) => c[2] === 'generate'), 'no key is generated on mainnet, even when asked');
-
-  const testnet = fakeStellar();
-  assert.deepEqual(
-    resolveIdentity({ identityName: 'testnet-admin', network: 'testnet', adminAddress: ADMIN, generate: true }, testnet.run),
-    { address: ADMIN, generated: true }
-  );
+test('a missing deploy key is an error, and the script never generates one', () => {
+  const { run, calls } = fakeStellar();
+  assert.throws(() => resolveIdentity({ identityName: 'x-admin', adminAddress: ADMIN }, run), /No stellar key named x-admin.*never creates one/);
+  assert.deepEqual(calls, [['stellar', 'keys', 'address', 'x-admin']], 'only the address was read');
 });
 
 test('the deploy key must be the config admin', () => {
   const { run } = fakeStellar({ 'testnet-admin': 'GSOMEONEELSE' });
   assert.throws(
-    () => resolveIdentity({ identityName: 'testnet-admin', network: 'testnet', adminAddress: ADMIN, generate: false }, run),
+    () => resolveIdentity({ identityName: 'testnet-admin', adminAddress: ADMIN }, run),
     /must be the same key/
   );
   const ok = fakeStellar({ 'testnet-admin': ADMIN });
-  assert.deepEqual(resolveIdentity({ identityName: 'testnet-admin', network: 'testnet', adminAddress: ADMIN, generate: false }, ok.run), {
-    address: ADMIN,
-    generated: false
-  });
+  assert.equal(resolveIdentity({ identityName: 'testnet-admin', adminAddress: ADMIN }, ok.run), ADMIN);
 });
 
 test('a mainnet deploy needs "mainnet <label>" typed at a terminal', async () => {

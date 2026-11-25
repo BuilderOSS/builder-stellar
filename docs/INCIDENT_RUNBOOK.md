@@ -21,10 +21,11 @@ change on-chain state or production configuration: run each one deliberately and
 `factory_paused` or `implementation_revoked` from the Manager; or the key's file or device is lost.
 
 **What the holder can do.** Set the code new tribes are created with; approve upgrades to any registered
-hash; register a new Manager hash, which can be applied only after the upgrade notice
-(`upgrade_delay()` ledgers, at least 7 days on mainnet, 720 ledgers on testnet); pause the factory or revoke
-implementations, which blocks pending launches and can end assurance drives in refunds; and hand the admin
-role to another key.
+hash; approve vote sources (`approve_vote_source`); register a new Manager hash, which can be applied only
+after the upgrade notice (`upgrade_delay()` ledgers: 720 on testnet today; the deploy script starts a
+mainnet Manager at 7 days at least, and a reduction with `set_upgrade_delay` waits out the notice in force);
+pause the factory or revoke implementations, which blocks pending launches and can end assurance drives in
+refunds; and hand the admin role to another key.
 
 **What it can't do.** Mint for any tribe, spend a Treasury, or upgrade a launched tribe's contracts: those
 need the tribe's own proposal. A tribe in Setup can be upgraded by its launch admin, so warn launch admins.

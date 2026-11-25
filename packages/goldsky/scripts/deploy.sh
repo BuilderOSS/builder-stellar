@@ -178,7 +178,9 @@ redeploy_guard() {
     exit 1
   fi
   local populated
-  populated=$(psql "$DATABASE_URL" -X -t -A -c "SELECT EXISTS (SELECT 1 FROM chain.raw_events)" 2>/dev/null || echo "")
+  # In a subshell, through db/lib.sh's service and password files: the URL stays off psql's command line.
+  populated=$( (source "$PACKAGE_DIR/../../db/lib.sh" && use_database_url "$DATABASE_URL" \
+    && psql -X -t -A -c "SELECT EXISTS (SELECT 1 FROM chain.raw_events)") 2>/dev/null || echo "")
   if [ "$populated" = "t" ]; then
     echo -e "${RED}✗ chain.raw_events still holds events. A replay cannot overwrite them.${NC}"
     echo "  With the pipeline stopped: DROP SCHEMA streamling CASCADE; db/reset-database.sh (type the database name) && db/migrate.sh && db/grant-permissions.sh"
