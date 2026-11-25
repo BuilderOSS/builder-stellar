@@ -1,10 +1,13 @@
-//! Event emission functions for the Manager contract.
+//! Manager events and their emission helpers. Every state change the
+//! indexer or a member needs to see is an event; the emitting contract is the
+//! Manager.
 
 use common::modules::ModuleEntry;
 use soroban_sdk::{contractevent, Address, BytesN, Env, String, Symbol, Vec};
 
 use crate::storage::{CurrentImplementations, DaoAddresses, DaoWasmHashes};
 
+/// Emitted by the constructor.
 #[contractevent]
 pub struct ManagerInitialized {
     #[topic]
@@ -13,6 +16,7 @@ pub struct ManagerInitialized {
     pub deployed_ledger: u64,
 }
 
+/// Emitted by `propose_admin`; the handover completes at `accept_admin`.
 #[contractevent]
 pub struct AdminProposed {
     #[topic]
@@ -21,6 +25,7 @@ pub struct AdminProposed {
     pub proposed_admin: Address,
 }
 
+/// Emitted by `accept_admin`.
 #[contractevent]
 pub struct AdminChanged {
     #[topic]
@@ -29,6 +34,7 @@ pub struct AdminChanged {
     pub new_admin: Address,
 }
 
+/// Emitted by `register_implementation`.
 #[contractevent]
 pub struct ImplementationRegistered {
     pub name: String,
@@ -47,6 +53,8 @@ pub struct LatestImplementationSet {
     pub wasm_hash: BytesN<32>,
     pub version: String,
 }
+
+/// Emitted by `approve_upgrade` (once per path: re-approving emits nothing).
 #[contractevent]
 pub struct UpgradeApproved {
     #[topic]
@@ -55,6 +63,8 @@ pub struct UpgradeApproved {
     pub to_hash: BytesN<32>,
     pub approved_ledger: u64,
 }
+
+/// Emitted by `revoke_implementation`.
 #[contractevent]
 pub struct ImplementationRevoked {
     #[topic]
@@ -69,6 +79,9 @@ pub struct VoteSourceApproved {
     pub approved: bool,
     pub name: String,
 }
+
+/// Emitted by `create_dao`: the DAO's addresses, the code it was deployed
+/// from and its requested slug. Creators verify `wasm_hashes` before launch.
 #[contractevent]
 pub struct DaoCreated {
     #[topic]
@@ -93,8 +106,9 @@ pub struct PendingSlugUpdated {
     pub slug: String,
 }
 
-/// Emitted by `launch_dao` when the DAO's slug becomes its unique id (it can
-/// later change by vote, see `SlugChanged`).
+/// Emitted when the DAO's slug becomes its unique id: at launch, or earlier
+/// when `open_assurance` reserves it (it can later change by vote, see
+/// `SlugChanged`, or be freed after a failed drive, see `SlugReleased`).
 #[contractevent]
 pub struct SlugClaimed {
     #[topic]
@@ -102,6 +116,7 @@ pub struct SlugClaimed {
     #[topic]
     pub slug: String,
 }
+/// Emitted by `cancel_pending_admin`.
 #[contractevent]
 pub struct AdminProposalCancelled {
     #[topic]
@@ -109,10 +124,16 @@ pub struct AdminProposalCancelled {
     #[topic]
     pub cancelled_admin: Address,
 }
+/// Emitted by `pause_factory`.
 #[contractevent]
 pub struct FactoryPaused {}
+
+/// Emitted by `unpause_factory`.
 #[contractevent]
 pub struct FactoryUnpaused {}
+
+/// Emitted by `launch_dao` and `launch_when_ready`: every contract is Live
+/// with the Treasury as admin, and the Manager holds no further authority.
 #[contractevent]
 pub struct DaoLaunched {
     #[topic]
@@ -160,6 +181,9 @@ pub struct ModuleCreated {
     pub n: u32,
     pub address: Address,
 }
+
+/// Emitted by `set_current_implementations`: the hashes new DAOs and modules
+/// deploy from.
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
     pub token: BytesN<32>,
@@ -170,6 +194,8 @@ pub struct CurrentImplementationsUpdated {
     pub marketplace: BytesN<32>,
     pub claims: BytesN<32>,
 }
+
+/// Emitted by `upgrade_manager`, before the Manager's code is swapped.
 #[contractevent]
 pub struct ManagerUpgraded {
     #[topic]

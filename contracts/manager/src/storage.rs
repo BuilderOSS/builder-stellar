@@ -4,10 +4,15 @@ use soroban_sdk::{
     contracttype, Address, BytesN, Env, IntoVal, String, Symbol, TryFromVal, Val, Vec,
 };
 
+/// A registry record (`register_implementation`). Immutable once written,
+/// except that `revoke_implementation` sets `revoked`, permanently.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImplementationVersion {
+    /// The slot name (`Token`, `Governor`, `ClaimMinter`, `Manager`, ...);
+    /// an upgrade path joins two hashes of the same name only.
     pub name: String,
+    /// Release version, which contracts running this hash report.
     pub version: String,
     pub wasm_hash: BytesN<32>,
     /// Ledger sequence of the registration.
@@ -15,6 +20,8 @@ pub struct ImplementationVersion {
     pub revoked: bool,
 }
 
+/// An approved upgrade path (`approve_upgrade`). Directional and permanent;
+/// a revoked target makes it unusable (`is_upgrade_approved`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpgradeApproval {
@@ -24,6 +31,8 @@ pub struct UpgradeApproval {
     pub approved_ledger: u64,
 }
 
+/// An IPFS base URI and file extension for artwork images, passed to the
+/// Metadata constructor (empty at `create_dao`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArtworkIpfsGroup {
@@ -31,13 +40,21 @@ pub struct ArtworkIpfsGroup {
     pub extension: String,
 }
 
+/// The Governor's settings at creation. `create_dao` checks the bounds; the
+/// launch admin may change them in Setup.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GovernanceConfig {
+    /// Seconds from `propose` to the start of voting
+    /// (`common::MIN_GOVERNANCE_DELAY ..= common::MAX_GOVERNANCE_DELAY`).
     pub voting_delay: u32,
+    /// Seconds voting stays open (same bounds).
     pub voting_period: u32,
+    /// Seconds between queueing and the earliest execution (same bounds).
     pub queue_delay: u32,
+    /// Votes needed to propose; at least 1.
     pub proposal_threshold: u128,
+    /// Quorum in basis points of the voting supply, 1 ..= 10,000.
     pub quorum_bps: u32,
     /// Where voting power comes from: `None` (or the DAO's own token) for
     /// token-weighted voting, else a vote source the Manager admin approved
@@ -46,23 +63,34 @@ pub struct GovernanceConfig {
     pub vote_source: Option<Address>,
 }
 
+/// Auction creation config. Every payment asset must be a Stellar Asset
+/// Contract (`InvalidPaymentAsset`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionConfig {
+    /// Seconds per auction (`common::MIN_AUCTION_DURATION ..=
+    /// common::MAX_AUCTION_DURATION`).
     pub duration: u64,
+    /// Lowest first bid, at least `common::MIN_RESERVE_PRICE`.
     pub reserve_price: i128,
+    /// Seconds a late bid extends the auction to (1 ..=
+    /// `common::MAX_AUCTION_TIME_BUFFER`).
     pub time_buffer: u64,
     pub payment_asset: Address,
 }
 
+/// Marketplace creation config. The payment asset must be a Stellar Asset
+/// Contract.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketplaceConfig {
     pub payment_asset: Address,
+    /// The DAO's cut of secondary sales, at most `common::MAX_FEE_BPS`.
     pub secondary_fee_bps: u32,
 }
 
-/// ClaimMinter creation config: the asset Setup lists are priced in.
+/// ClaimMinter creation config: the asset Setup lists are priced in, which
+/// must be a Stellar Asset Contract.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimsConfig {
@@ -89,6 +117,7 @@ impl ModuleSpec {
         }
     }
 
+    /// The registry kind as a `Symbol`.
     pub fn kind(&self, env: &Env) -> Symbol {
         Symbol::new(env, self.kind_str())
     }
@@ -122,10 +151,14 @@ impl ModuleSpec {
     }
 }
 
+/// What `create_dao` builds: the collection, profile, slug, governance,
+/// modules and membership switches.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitialDaoConfigValues {
+    /// Collection name, 1 to 40 bytes.
     pub token_name: String,
+    /// Collection symbol, 1 to 10 bytes.
     pub token_symbol: String,
     /// DAO profile JSON (description, links, image), 1 to
     /// `common::MAX_PROFILE_LENGTH` bytes. Event-only: the Metadata contract
@@ -151,6 +184,8 @@ pub struct InitialDaoConfigValues {
     pub transfer_agents: Vec<Symbol>,
 }
 
+/// What launch opens. An assurance drive stores this at `open_assurance`
+/// and every launch path then uses the stored copy.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaunchConfig {
@@ -165,12 +200,15 @@ pub struct LaunchConfig {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AssuranceListParams {
+    /// Merkle root of the claim list.
     pub root: BytesN<32>,
+    /// Where the full tree is published (`ipfs://...`).
     pub tree_uri: String,
     /// Price per token (0 for a free drive that still needs its threshold).
     pub price: i128,
     /// Claims stop at this ledger timestamp (after launch, too).
     pub expires_at: u64,
+    /// Tokens the list may mint; also the mint allowance granted.
     pub total: u32,
     /// Distinct claimers needed before the DAO may launch.
     pub threshold_claimers: u32,
@@ -183,8 +221,10 @@ pub struct AssuranceListParams {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Assurance {
+    /// The DAO's ClaimMinter holding the escrow.
     pub claim_minter: Address,
     pub list_id: u32,
+    /// Ledger timestamp after which an unlaunched drive has failed.
     pub deadline: u64,
     pub launch_config: LaunchConfig,
 }
@@ -216,15 +256,21 @@ pub struct CurrentImplementations {
     pub claims: BytesN<32>,
 }
 
+/// `create_dao`'s input. Both `deployer` and `launch_admin` authorise it.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DaoCreationParams {
+    /// Salts the addresses with `nonce`, so each deployer has its own
+    /// address space (`predict_addresses`).
     pub deployer: Address,
     pub nonce: u64,
+    /// Admin of every contract in Setup; consents to being named.
     pub launch_admin: Address,
     pub initial_config: InitialDaoConfigValues,
 }
 
+/// A DAO's contract addresses (returned by `create_dao`, emitted in
+/// `DaoCreated` and `DaoLaunched`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DaoAddresses {
@@ -240,17 +286,20 @@ pub struct DaoAddresses {
     pub claims: Option<Address>,
 }
 
-/// The only factory state retained until the launch administrator finalizes a DAO.
+/// The only factory state retained until the launch administrator finalises a DAO.
 ///
-/// Module WASM hashes are deliberately NOT stored: `launch_dao` reads each
-/// module's current `wasm_hash()` and checks it against the registry, so a
-/// pre-launch admin `upgrade` is honored and a revoked hash is rejected.
+/// Module WASM hashes are deliberately NOT stored: launch reads the code each
+/// contract runs now (`executable()`) and checks it against the registry, so
+/// a pre-launch admin `upgrade` is honoured and a revoked hash is rejected.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingDao {
     pub addresses: DaoAddresses,
+    /// The only address that may launch, rename, open a drive or recover.
     pub launch_admin: Address,
-    /// Requested slug; claimed at `launch_dao`, changeable with `update_pending_slug`.
+    /// Requested slug; claimed at `launch_dao` (or reserved by
+    /// `open_assurance`), changeable with `update_pending_slug` until a
+    /// drive opens.
     pub slug: String,
     /// Payment assets fixed in each module's creation config; launch refuses
     /// a module whose `payment_asset()` changed (`PaymentAssetMismatch`).
@@ -260,13 +309,18 @@ pub struct PendingDao {
     pub claims_payment_asset: Option<Address>,
 }
 
+/// Manager storage keys (namespaced with `common::ns`). Instance unless
+/// marked persistent.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManagerKey {
     ManagerAdmin,
     FactoryPaused,
+    /// Persistent: hash -> [`ImplementationVersion`].
     Implementation(BytesN<32>),
+    /// Persistent: name -> `common::upgrade::LatestPointer` (D42).
     LatestImplementation(String),
+    /// Persistent: (from, to) -> [`UpgradeApproval`].
     UpgradeApproval(BytesN<32>, BytesN<32>),
     CurrentTokenWasm,
     CurrentMetadataWasm,
@@ -276,12 +330,17 @@ pub enum ManagerKey {
     CurrentMarketplaceWasm,
     CurrentManagerWasm,
     CurrentManagerVersion,
+    /// Persistent: token -> [`PendingDao`], removed at launch.
     PendingDao(Address),
+    /// Persistent: the proposed admin awaiting `accept_admin`.
     PendingAdmin,
-    /// slug -> token address, written at `launch_dao`, moved by `change_slug` (the old
-    /// slug is removed). Renewed by the DAO's renewal sweep.
+    /// Persistent: slug -> token address, written at `launch_dao` or when `open_assurance`
+    /// reserves the slug, moved by `change_slug` (the old slug is removed) and
+    /// removed by `release_slug` after a failed drive. Renewed by the DAO's
+    /// renewal sweep.
     SlugToDao(String),
-    /// token address -> current slug, written at `launch_dao` and `change_slug`.
+    /// Persistent: token address -> current slug, written with `SlugToDao` (`launch_dao`,
+    /// `open_assurance`, `change_slug`) and removed with it (`release_slug`).
     /// Renewed by the DAO's renewal sweep.
     DaoSlug(Address),
     /// Instance: the ClaimMinter implementation `create_dao` deploys.
