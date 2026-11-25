@@ -28,6 +28,8 @@ Fetched from testnet on 2026-11-21 for `src/release_0_5_0.rs`, which upgrades th
 
 Token, Auction, Treasury, Marketplace and ClaimMinter need no fixture: production runs exactly this
 checkout's build of them. `release_build_matches_production_and_dev` checks that hash by hash, together
-with the three 0.5.0 hashes. Bytes depend on the compiler, so that test is ignored by default: run it with
-`--include-ignored` on a build made with rustc 1.95.0 and stellar-cli 28.0.0, the release toolchain.
+with the three 0.5.0 hashes. Bytes depend on the compiler and the build platform, so that test is ignored by
+default: run it with `--include-ignored` on a native build on macOS on Apple silicon with rustc 1.95.0 and
+stellar-cli 28.0.0, the platform and toolchain release 0.5.0 was built with
+([reproducible builds](../../../docs/REPRODUCIBLE_BUILDS.md#the-deployed-code-release-050)).
 

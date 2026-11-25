@@ -187,7 +187,7 @@ These are behaviors of the current contracts, not planned fixes.
 - Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches that fit the event budget) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
 - Treasury-held tokens never vote. Tokens the Treasury holds (unsold auctions, transfers to the Treasury) only regain voting power when a proposal transfers them out.
 - No veto once a proposal is queued. Only expiry (14 days after the ETA) stops it.
-- Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must verify `to_hash` against audited reproducible builds and read any `authorize` trees.
+- Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must check that `to_hash` is the published build of a release tag (`node scripts/verify-wasm.mjs <tag>`, see [Reproducible contract builds](REPRODUCIBLE_BUILDS.md)) and read any `authorize` trees.
 - Proposal ids do not include the proposer. An identical-payload proposal can be front-run and then cancelled by its proposer; an honest proposer changes the description.
 - Slug front-running at launch (see [Slugs](#slugs)).
 - Payment assets must be plain, non-regulated Stellar Asset Contracts. AUTH_REQUIRED, clawback, fee-on-transfer or rebasing assets can freeze or misprice settlement.

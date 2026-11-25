@@ -39,7 +39,11 @@ SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk \
 ```
 
 This builds the contracts from the checkout, uploads and registers all eight, sets the current
-implementations and writes `deploys/dev-testnet-manager.json` (commit it to `dev`). Redeploying
+implementations and writes `deploys/dev-testnet-manager.json` (commit it to `dev`). It builds natively
+with the pinned compiler (`rust-toolchain.toml`) and Stellar CLI 28.0.0, so the hashes it registers are
+this machine's build: on macOS they differ from the published release hashes, which come from the
+container build ([reproducible builds](REPRODUCIBLE_BUILDS.md)). It does not yet check them against
+`releases/hashes.json`; `scripts/upgrade-contract.mjs` does. Redeploying
 after contract changes: see [Manager deployment](MANAGER_DEPLOYMENT.md), including
 `DEPLOY_SALT_SUFFIX` for a genuinely fresh Manager and the redeploy checklist (which also means
 steps 2 and 3 again). Renew code TTLs with

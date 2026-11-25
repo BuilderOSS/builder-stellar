@@ -36,7 +36,23 @@ See [the web README](apps/web/README.md) for setup, routes, recovery behavior, a
 
 ## Development
 
-Use pnpm **10.12.4**, Node.js **22+**, Rust/Cargo, and a Stellar CLI compatible with the workspace's `soroban-sdk` **27.0.6**. CI currently uses Node 23; the repository does not establish a tested minimum CLI version.
+You need:
+
+- **Node.js 24 LTS** (the version in [`.nvmrc`](.nvmrc)) and **pnpm 10.12.4** (`packageManager` in `package.json`).
+- **Rust 1.95.0** through rustup. [`rust-toolchain.toml`](rust-toolchain.toml) pins the version and the `wasm32v1-none` target, and rustup installs them on first use.
+- **Stellar CLI 28.0.0**, the version CI and the release build use. Install the release archive for your platform and check its sha256 (GitHub lists it with each archive), or build it with `cargo install --locked stellar-cli --version 28.0.0`. On a Mac with Apple silicon:
+
+  ```bash
+  curl -fsSLO https://github.com/stellar/stellar-cli/releases/download/v28.0.0/stellar-cli-28.0.0-aarch64-apple-darwin.tar.gz
+  echo "416483409db89d9bf58163023d2c9d67cda24a5645042a98c0b8c1378cfc659d  stellar-cli-28.0.0-aarch64-apple-darwin.tar.gz" | shasum -a 256 -c
+  mkdir -p ~/.local/bin && tar -xzf stellar-cli-28.0.0-aarch64-apple-darwin.tar.gz -C ~/.local/bin stellar
+  stellar --version
+  ```
+
+- **Docker**, only for release builds and for verifying a release ([reproducible builds](docs/REPRODUCIBLE_BUILDS.md)).
+- **gitleaks**, optional: the pre-commit hook uses it to scan staged changes for secrets when it is installed (`brew install gitleaks`). CI scans every push.
+
+`.env` and `.env.*` files are ignored by git; only the `.env.example` templates are tracked.
 
 ```bash
 git clone https://github.com/BuilderOSS/builder-stellar.git
@@ -56,9 +72,12 @@ Run from the repository root unless noted. Deployment and generation commands ha
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm contracts:build` | Build contract WASMs with `stellar contract build` |
+| `pnpm contracts:build` | Build contract WASMs with `stellar contract build --locked`, for development and tests |
+| `pnpm contracts:build:release` | Build the checked-out commit in the pinned container; `-- --write-hashes` records `releases/hashes.json` |
+| `pnpm contracts:verify <tag>` | Rebuild a release tag and compare it with the hashes it publishes |
 | `pnpm contracts:bindings` | Regenerate eight TypeScript binding packages |
 | `pnpm contracts:test` | Run Cargo workspace tests, including in-memory integration tests |
+| `pnpm contracts:coverage` | Contract test coverage with `cargo llvm-cov` ([coverage](docs/COVERAGE.md)) |
 | `pnpm indexer:test` | Run Goldsky package tests; DB assertions need a test database |
 | `pnpm db:test` | Migration static checks; also DB tests if `TEST_DATABASE_URL` is set |
 | `pnpm --dir apps/web test` | Run web Vitest tests |
@@ -78,6 +97,7 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 - [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
 - [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
 - [Bindings regeneration](docs/BINDINGS_GENERATION.md)
+- [Reproducible contract builds](docs/REPRODUCIBLE_BUILDS.md), [dependencies and advisories](docs/DEPENDENCIES.md) and the [OpenZeppelin pin](docs/OPENZEPPELIN_PIN.md)
 - [Brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), [press kit](docs/brand/README.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
 
 ## Technology and license

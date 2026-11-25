@@ -189,12 +189,12 @@ fn fixtures_are_production_code() {
     assert_eq!(hex(&upload(&e, PROD_METADATA)), PROD_METADATA_HASH);
 }
 
-/// Byte identity depends on the compiler: production and the dev Manager were built with rustc 1.95.0
-/// and stellar-cli 28.0.0, while CI builds with the latest stable Rust. Run on the release machine,
-/// after `pnpm contracts:build`, before any upload (docs/plans/release-main-1.md, phase 5):
-/// `cargo test -p dao-e2e release_0_5_0 -- --include-ignored`.
+/// Byte identity depends on the compiler and the build platform: production and the dev Manager were
+/// built natively on macOS on Apple silicon with rustc 1.95.0 and stellar-cli 28.0.0, and CI builds on
+/// Linux (docs/REPRODUCIBLE_BUILDS.md). Run on such a Mac, after `pnpm contracts:build`, before any upload
+/// (docs/plans/release-main-1.md, phase 5): `cargo test -p dao-e2e release_0_5_0 -- --include-ignored`.
 #[test]
-#[ignore = "needs the release toolchain (rustc 1.95.0, stellar-cli 28.0.0); run with --include-ignored"]
+#[ignore = "needs the 0.5.0 build platform (macOS on Apple silicon, rustc 1.95.0, stellar-cli 28.0.0); run with --include-ignored"]
 fn release_build_matches_production_and_dev() {
     let e = Env::default();
     for (name, hash) in PROD_UNCHANGED {

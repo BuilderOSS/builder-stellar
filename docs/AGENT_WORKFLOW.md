@@ -85,7 +85,11 @@ Run the relevant checks before handing work to another agent:
 Checks are requirements, not a claim of a passing run. Current CI runs Cargo
 workspace tests, web codegen before lint/typecheck/web tests, Goldsky tests, and
 a separate Build Web job, which also builds the docs site and checks every docs page in
-both themes. It caches node_modules and uses Node 23. Configuration
+both themes, and a Secret Scan job (gitleaks over the whole history). CodeQL runs in its own
+workflow, and release tags are rebuilt by the Contract release build workflow
+(`docs/REPRODUCIBLE_BUILDS.md`). CI uses Node 24 LTS from `.nvmrc` and the Rust toolchain
+from `rust-toolchain.toml`, runs Cargo with `--locked`, and installs dependencies on every
+run. Configuration
 changes belong to implementation owners, not docs-steward.
 
 ## Docs ship with the change
