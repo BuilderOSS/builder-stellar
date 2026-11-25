@@ -1,13 +1,12 @@
 'use client';
 
 import { ArrowRight } from 'lucide-react';
-import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { css, sva } from 'styled-system/css';
 
 import { useLaunchPlan } from '@/components/launch/launch-setup';
 import { SetupProgress } from '@/components/launch/setup-progress';
-import { ButtonLink, Chip, Countdown, Skeleton } from '@/components/ui';
+import { ButtonLink, Chip, Countdown, FallbackImage, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { formatAuctionAmount } from '@/lib/auction-history/state';
 import { daoRoute } from '@/lib/dao-routes';
@@ -69,7 +68,8 @@ const figures = css({ display: 'flex', flexWrap: 'wrap', gap: { base: '5', md: '
 function AuctionArt({ daoId, tokenId }: { daoId: string; tokenId: number }) {
   const { data, isLoading } = useTokenMetadata(daoId, tokenId);
   if (isLoading) return <Skeleton className={css({ width: '100%', height: '100%' })} />;
-  return data ? <Image src={data.image} alt={data.name} width={352} height={352} unoptimized /> : null;
+  // Token art can be an IPFS address: FallbackImage tries each gateway before giving up.
+  return data ? <FallbackImage src={data.image} alt={data.name} width={352} height={352} errorFallbackSrc="" /> : null;
 }
 
 function Shell({
