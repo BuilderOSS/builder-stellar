@@ -8,12 +8,12 @@ This is the list of contract files and folders in the audit scope, with their si
 
 | | |
 | --- | --- |
-| Commit | `3c3ba80e6515341887fff96cfea26c8abe0a4c9c` (2026-11-21), the latest commit that changed a file in scope |
-| `contracts/` tree | `24ac4a8af273e417f2ca35c3222115e12ccd13cc` |
+| Commit | `3ba78998335ab5f8b96884a5a07fbf22dc161f97` (2026-11-24), the latest commit that changed a file in scope |
+| `contracts/` tree | `e4abf5bbd7ac7b3ee53566a55415978c4cdae35a` |
 | Crates in scope | 9 |
-| Code lines in scope | 8,668 |
-| Unit tests in those crates | 464 |
-| Code lines including test-only blocks inside source files | 9,024 |
+| Code lines in scope | 8,701 |
+| Unit tests in those crates | 468 |
+| Code lines including test-only blocks inside source files | 9,057 |
 
 To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it prints the tree above. To regenerate for another commit or tag, run `node scripts/audit-scope.mjs --ref <tag>`; `--check` reports whether this file is current.
 
@@ -25,14 +25,14 @@ To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it 
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | auction | [`contracts/auction/`](../../contracts/auction) | Auction module: sells one new token per auction; refunds outbid bidders | 6 | 1,056 | 61 | 1,277 |
 | common | [`contracts/common/`](../../contracts/common) | Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget and cross-contract clients | 8 | 547 | 19 | 693 |
-| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum and the queue, on the OpenZeppelin governor | 5 | 975 | 74 | 1,956 |
+| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum and the queue, on the OpenZeppelin governor | 5 | 979 | 76 | 2,010 |
 | manager | [`contracts/manager/`](../../contracts/manager) | Manager: factory, implementation registry, upgrade approvals, slugs, launch and assurance drives | 5 | 2,005 | 95 | 3,266 |
 | marketplace | [`contracts/marketplace/`](../../contracts/marketplace) | Marketplace module: escrowed listings and quick-buy pools | 5 | 1,079 | 42 | 1,349 |
 | metadata | [`contracts/metadata/`](../../contracts/metadata) | Metadata: artwork, attributes, token URIs and the DAO profile hash | 6 | 1,156 | 54 | 1,862 |
-| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds and release | 5 | 594 | 22 | 893 |
+| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds and release | 5 | 623 | 24 | 957 |
 | token | [`contracts/token/`](../../contracts/token) | Token: the membership NFT with votes, mint allowances, the module registry and membership switches | 5 | 933 | 76 | 2,089 |
 | treasury | [`contracts/treasury/`](../../contracts/treasury) | Treasury: holds DAO assets and executes queued proposals | 5 | 323 | 21 | 712 |
-| **Total** | | | **50** | **8,668** | **464** | **14,097** |
+| **Total** | | | **50** | **8,701** | **468** | **14,215** |
 
 8 crates build to their own WASM contract. `common` is a library: every contract compiles it in, so its code is reviewed once and ships in each of them.
 
@@ -139,13 +139,13 @@ Each crate's `Cargo.toml` is in scope with its sources, because it sets the depe
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/governor/src/contract.rs`](../../contracts/governor/src/contract.rs) | 874 | 644 |  |
+| [`contracts/governor/src/contract.rs`](../../contracts/governor/src/contract.rs) | 892 | 648 |  |
 | [`contracts/governor/src/error.rs`](../../contracts/governor/src/error.rs) | 40 | 21 |  |
 | [`contracts/governor/src/events.rs`](../../contracts/governor/src/events.rs) | 232 | 193 |  |
-| [`contracts/governor/src/lib.rs`](../../contracts/governor/src/lib.rs) | 55 | 11 | Also 2 lines of test-only code |
+| [`contracts/governor/src/lib.rs`](../../contracts/governor/src/lib.rs) | 56 | 11 | Also 2 lines of test-only code |
 | [`contracts/governor/src/storage.rs`](../../contracts/governor/src/storage.rs) | 299 | 106 | Also 39 lines of test-only code |
 | [`contracts/governor/Cargo.toml`](../../contracts/governor/Cargo.toml) | | | Manifest |
-| **Total** | **1,500** | **975** | |
+| **Total** | **1,519** | **979** | |
 
 ### manager (`contracts/manager/`)
 
@@ -188,13 +188,13 @@ Each crate's `Cargo.toml` is in scope with its sources, because it sets the depe
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/minter/src/contract.rs`](../../contracts/minter/src/contract.rs) | 530 | 397 |  |
+| [`contracts/minter/src/contract.rs`](../../contracts/minter/src/contract.rs) | 562 | 418 |  |
 | [`contracts/minter/src/errors.rs`](../../contracts/minter/src/errors.rs) | 59 | 28 |  |
-| [`contracts/minter/src/events.rs`](../../contracts/minter/src/events.rs) | 69 | 51 |  |
+| [`contracts/minter/src/events.rs`](../../contracts/minter/src/events.rs) | 80 | 59 |  |
 | [`contracts/minter/src/lib.rs`](../../contracts/minter/src/lib.rs) | 32 | 9 | Also 2 lines of test-only code |
 | [`contracts/minter/src/storage.rs`](../../contracts/minter/src/storage.rs) | 211 | 109 | Also 34 lines of test-only code |
 | [`contracts/minter/Cargo.toml`](../../contracts/minter/Cargo.toml) | | | Manifest |
-| **Total** | **901** | **594** | |
+| **Total** | **944** | **623** | |
 
 ### token (`contracts/token/`)
 
@@ -229,11 +229,11 @@ Unit tests and test helpers live next to the code they test. They are evidence f
 | [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) | 1,459 | 1,238 | 61 |
 | [`contracts/common/src/test.rs`](../../contracts/common/src/test.rs) | 463 | 405 | 19 |
 | [`contracts/common/src/testutils.rs`](../../contracts/common/src/testutils.rs) | 346 | 284 | 0 |
-| [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) | 2,311 | 1,915 | 74 |
+| [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) | 2,377 | 1,969 | 76 |
 | [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) | 3,739 | 3,195 | 95 |
 | [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) | 1,435 | 1,306 | 42 |
 | [`contracts/metadata/src/test.rs`](../../contracts/metadata/src/test.rs) | 2,074 | 1,813 | 54 |
-| [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) | 950 | 857 | 22 |
+| [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) | 1,025 | 921 | 24 |
 | [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) | 2,388 | 2,046 | 76 |
 | [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) | 762 | 682 | 21 |
 

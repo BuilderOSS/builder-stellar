@@ -2,7 +2,7 @@
 
 These are the properties the contracts must keep, each with the tests that check it. A property is **Covered** when tests assert it directly, **Partial** when they assert only part of it (the missing part is named), and **Missing** when no test asserts it. Test names are function names in the linked file; search the file for `fn <name>`.
 
-The list describes `origin/dev` plus pull request 118; tests that exist only on that branch are marked "(pull request 118)". Contract changes in progress will add tests; link them here as they merge.
+The list describes `dev` as of the commit in [SCOPE.md](SCOPE.md). Contract changes in progress will add tests; link them here as they merge.
 
 ## Summary
 
@@ -196,10 +196,10 @@ A proposal can call the Treasury itself only for `authorize`, `upgrade` and `mig
 
 The threshold is nonzero, and not above the voting supply when it is set. `propose` caps it at the voting supply at the snapshot and never below 1, and `votes_needed_to_propose()` returns that requirement.
 
-- [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `set_proposal_threshold_zero_fails`; on pull request 118, `threshold_above_the_voting_supply_is_capped_at_the_supply` and `threshold_below_the_voting_supply_is_unchanged`.
+- [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `set_proposal_threshold_zero_fails`, `threshold_above_the_voting_supply_is_capped_at_the_supply`, `threshold_below_the_voting_supply_is_unchanged`.
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `test_governor_proposal_threshold_exceeds_supply`.
 
-**Covered** (the cap by pull request 118).
+**Covered.**
 
 ### INV-18: Governance parameter bounds
 
@@ -272,7 +272,7 @@ A drive is `Met` once `threshold_claimers` distinct addresses have claimed, coun
 
 A claim needs a Merkle proof for the claimer's own leaf; a claimer's total stays within the leaf amount and the list's total; the price is at most `max_price`; the list has not ended; and the mint stays within the ClaimMinter's allowance. `close_list` ends a list, but not the assurance list before launch.
 
-- [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `claims_check_the_proof_the_list_and_the_batch_size`, `a_free_setup_list_is_claimed_in_parts`, `a_live_list_pays_the_treasury_in_any_asset`; on pull request 118, `the_dao_closes_a_setup_list_after_launch` and `close_list_is_the_admins_and_spares_an_open_drive`.
+- [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `claims_check_the_proof_the_list_and_the_batch_size`, `a_free_setup_list_is_claimed_in_parts`, `a_live_list_pays_the_treasury_in_any_asset`, `the_dao_closes_a_setup_list_after_launch`, `close_list_is_the_admins_and_spares_an_open_drive`.
 - [`contracts/e2e/src/membership.rs`](../../contracts/e2e/src/membership.rs) `a_claim_minter_stops_at_its_allowance`.
 
 **Covered.** A single claim larger than its leaf is not tested on its own; the over-leaf case is tested after the leaf is used up.

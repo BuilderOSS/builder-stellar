@@ -2,7 +2,7 @@
 
 These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
 
-This page describes `origin/dev` plus the open pull requests 118 (proposal threshold cap and `close_list`) and 120 (read-model casts). Entries that depend on them say so. An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders or front ends should check.
+This page describes `dev` as of the commit in [SCOPE.md](SCOPE.md). An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders or front ends should check.
 
 | ID | Issue | Area |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ This page describes `origin/dev` plus the open pull requests 118 (proposal thres
 
 ## KI-02: Governance parameter bounds
 
-**Behaviour.** The voting delay, voting period and queue delay must each be 300 seconds to 30 days; the quorum 1 to 10,000 basis points; the proposal threshold nonzero, and not above the voting supply when it is set. The supply check is skipped while the supply is zero, so a launch admin can set the threshold before minting. `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than proposals being impossible (pull request 118). Within these bounds a DAO can still choose parameters that are easy to capture or very slow. A quorum of 10,000 basis points needs every voting-capable token to take part.
+**Behaviour.** The voting delay, voting period and queue delay must each be 300 seconds to 30 days; the quorum 1 to 10,000 basis points; the proposal threshold nonzero, and not above the voting supply when it is set. The supply check is skipped while the supply is zero, so a launch admin can set the threshold before minting. `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than proposals being impossible. A Governor without `votes_needed_to_propose` (0.5.0 and earlier) has no cap. Within these bounds a DAO can still choose parameters that are easy to capture or very slow. A quorum of 10,000 basis points needs every voting-capable token to take part.
 
 **Code.** [`governor/src/contract.rs`](../../contracts/governor/src/contract.rs): the parameter checks, `set_proposal_threshold`, and `propose`.
 
@@ -46,11 +46,11 @@ This page describes `origin/dev` plus the open pull requests 118 (proposal thres
 
 ## KI-04: Unclaimed Setup lists
 
-**Behaviour.** A free claim list that the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` does not show until they are claimed, and they become votes as soon as they are. The DAO can end such a list by proposal with `close_list`, which sets `expires_at` to now and emits `ListClosed`; a claim can still land before that proposal executes. `close_list` exists only in ClaimMinters from the release that adds it (pull request 118), and the app's proposal composer offers it separately.
+**Behaviour.** A free claim list that the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` does not show until they are claimed, and they become votes as soon as they are. The DAO can end such a list by proposal with `close_list`, which sets `expires_at` to now and emits `ListClosed`; a claim can still land before that proposal executes. `close_list` exists only in ClaimMinters from the release that adds it, and the app's proposal composer offers it separately.
 
 **Guidance.** Voters and front ends should read open Setup lists and the ClaimMinter's allowance when judging supply.
 
-**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and, on the pull request 118 branch, `close_list`.
+**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `close_list`.
 
 TODO: the app-side display of unclaimed supply and the composer action are in progress. Link them here when they merge.
 
@@ -140,7 +140,7 @@ TODO: read-model changes in progress tighten how a registration's role is assign
 
 **Behaviour.** The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO cannot use this to add rows to another DAO's views, because identity is windowed per DAO, but a hostile contract can fill its own DAO's admin feed with noise.
 
-The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` do not take an outside module's own upgrade, storage-migration or launch events, so such a contract's events cannot stop a shared view from reading for every DAO (migration 0012, pull request 120). Values past the bigint range, such as an expiry at `u64::MAX`, are read as the bigint maximum (migration 0013, pull request 120).
+The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` do not take an outside module's own upgrade, storage-migration or launch events, so such a contract's events cannot stop a shared view from reading for every DAO (migration 0012). Values past the bigint range, such as an expiry at `u64::MAX`, are read as the bigint maximum (migration 0013).
 
 **Remedies.** The DAO unregisters the contract by vote, which ends its window in every view. Or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop. Whether a running pipeline notices a deleted row without re-applying is not verified. Rows already indexed stay, because the landing tables are append-only.
 

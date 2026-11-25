@@ -39,7 +39,7 @@ node scripts/audit-scope.mjs --ref <tag>
 
 ## Status and TODO markers
 
-The package describes `origin/dev` plus the open pull requests 118 (proposal threshold cap and `close_list`), 119 (upload access) and 120 (read-model casts). Other contract, app and database changes are in progress; where they will change what a page says, the page carries a `TODO` marker instead of a guess. Before sending the package:
+The package describes `dev` as of the commit in [SCOPE.md](SCOPE.md), which includes the proposal threshold cap and `close_list`, the upload access checks, and the read-model casts. Other contract, app and database changes are in progress; where they will change what a page says, the page carries a `TODO` marker instead of a guess. Before sending the package:
 
 - resolve every `TODO` in this folder (`grep -rn TODO docs/audit`);
 - link the OpenZeppelin pin record. TODO: link `docs/OPENZEPPELIN_PIN.md` here once it exists; it will record why the project uses its OpenZeppelin revision and how that differs from the nearest release. `SCOPE.md` links it automatically when it is regenerated after the file lands;

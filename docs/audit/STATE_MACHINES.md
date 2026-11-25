@@ -2,7 +2,7 @@
 
 These diagrams show the main state machines in the contracts, with their transitions and guards. Each transition names the entry point, who may call it and what it checks; error names are in brackets, with the code where the project defines it. The Rust source is authoritative: where a diagram and the code differ, the code is right and the diagram is a documentation bug.
 
-The diagrams describe `origin/dev` plus the open change that caps the proposal threshold and adds `close_list` (pull request 118). Times are ledger timestamps in seconds unless a field says it holds a ledger number.
+The diagrams describe `dev` as of the commit in [SCOPE.md](SCOPE.md). Times are ledger timestamps in seconds unless a field says it holds a ledger number.
 
 - [Module lifecycle: Setup, handoff, Live](#module-lifecycle-setup-handoff-live)
 - [Proposal](#proposal)

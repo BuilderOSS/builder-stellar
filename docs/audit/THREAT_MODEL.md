@@ -2,7 +2,7 @@
 
 This page covers the parts of Tribe Builder that sit between people and the contracts: the web app's server routes (`apps/web`), the Goldsky pipeline (`packages/goldsky`) and the PostgreSQL read model (`db/`). The contracts have their own security model in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md); this tier is out of scope for the contracts audit ([SCOPE.md](SCOPE.md)) and is the subject of a separate, smaller review.
 
-It describes `origin/dev` plus the open pull requests 119 (upload access) and 120 (read-model casts). Work in progress in other branches changes some of it; those places carry a TODO marker.
+It describes `dev` as of the commit in [SCOPE.md](SCOPE.md). Work in progress in other branches changes some of it; those places carry a TODO marker.
 
 ## The rule this tier is built on
 
@@ -56,7 +56,7 @@ TODO: the sign-in checks and the session's lifetime and revocation are being rev
 
 ## 2. The cost of uploads
 
-Uploads to IPFS go through the operator's Pinata account, so each one costs the operator. With pull request 119, every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`, `/api/uploads/pinata-url`, `/api/uploads/complete`) passes one gate, `requireUploadAccount` in `apps/web/src/lib/upload-access.ts`, which that pull request adds:
+Uploads to IPFS go through the operator's Pinata account, so each one costs the operator. Every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`, `/api/uploads/pinata-url`, `/api/uploads/complete`) passes one gate, `requireUploadAccount` in [`lib/upload-access.ts`](../../apps/web/src/lib/upload-access.ts):
 
 1. a session on the deployment's network;
 2. a per-account limit per route in a 10-minute window: `generate-jwt` 10, `pin-cid` 10, `pinata-url` 30, `complete` 30;
@@ -80,7 +80,7 @@ The pipeline ([`packages/goldsky/pipelines/builder-stellar-events.yaml`](../../p
 - The Manager's address is fixed in the pipeline. The DAO's core contracts and its Manager-deployed modules (`auction`, `marketplace`, `claims`) enter the allowlists only from the Manager's `DaoCreated` and `ModuleCreated` events.
 - `streamling.dao_modules` takes any contract that a followed Token reports in `ModuleRegistered`. After launch a DAO can register any contract by proposal, so this list can hold code the Manager never deployed.
 
-The read model ([`db/migrations/0002_manager_views.sql`](../../db/migrations/0002_manager_views.sql)) gives a registration a known role only if the Manager deployed that contract as that kind (`manager.manager_modules`); every other registered contract has the role `module`. A `module`'s events are indexed under its DAO, inside its registration window, with `admin` visibility in the feed. They stay out of the domain views (auctions, pools, listings, claim lists) and out of `manager.daos`. With pull request 120, views that cast event fields read only Manager-deployed roles (`chain.try_int`, migration 0012), and `chain.u64_bigint` reads `u64` values past the bigint range as the bigint maximum (migration 0013), so one contract's malformed or extreme values cannot stop a shared view from reading. Windows are per DAO, so one DAO's registrations do not add rows to another DAO's views.
+The read model ([`db/migrations/0002_manager_views.sql`](../../db/migrations/0002_manager_views.sql)) gives a registration a known role only if the Manager deployed that contract as that kind (`manager.manager_modules`); every other registered contract has the role `module`. A `module`'s events are indexed under its DAO, inside its registration window, with `admin` visibility in the feed. They stay out of the domain views (auctions, pools, listings, claim lists) and out of `manager.daos`. Views that cast event fields read only Manager-deployed roles (`chain.try_int`, migration 0012), and `chain.u64_bigint` reads `u64` values past the bigint range as the bigint maximum (migration 0013), so one contract's malformed or extreme values cannot stop a shared view from reading. Windows are per DAO, so one DAO's registrations do not add rows to another DAO's views.
 
 What remains is in [KI-15 and KI-16](KNOWN_ISSUES.md#ki-15-outside-modules): an outside module can fill its own DAO's admin feed with noise, rows already indexed stay, and the remedy is to unregister it by vote or remove its allowlist row.
 
