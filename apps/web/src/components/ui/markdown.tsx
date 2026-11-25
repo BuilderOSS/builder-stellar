@@ -5,11 +5,17 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { css, cx } from 'styled-system/css';
 
+import { normalizeIpfsUri } from '@/lib/ipfs-uri';
+import { safeMarkdownUrl } from '@/lib/safe-url';
+
 import { FallbackImage } from './FallbackImage';
 
 export type MarkdownVariant = 'rich' | 'comment';
 
-/** Raw HTML is never parsed (no rehype-raw); the sanitizer also allows `ipfs:` images and links. */
+/**
+ * Raw HTML is never parsed (no rehype-raw); the sanitizer also allows `ipfs:` images and links.
+ * Images other than IPFS render as links (see Image).
+ */
 const schema = {
   ...defaultSchema,
   protocols: {
@@ -19,13 +25,7 @@ const schema = {
   }
 };
 
-const SAFE_URL = /^(https?:|mailto:|ipfs:)/i;
-
-/** Only absolute web, mail and IPFS addresses survive; anything else (javascript:, data:, relative) is dropped. */
-export function safeMarkdownUrl(url: string) {
-  const trimmed = url.trim();
-  return SAFE_URL.test(trimmed) ? trimmed : null;
-}
+export { safeMarkdownUrl };
 
 /** Comments support formatting, demoted headings, tables, images, and disabled task-list checkboxes. */
 const COMMENT_ELEMENTS = [
@@ -145,11 +145,21 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<'a'> & {
   );
 }
 
+/**
+ * Images load only from IPFS, through the app's gateways. Any other address would let the author
+ * see who reads the text and when (a tracking pixel), so it is shown as a link the reader can choose
+ * to open. Uploads from the editor are IPFS images, so they always show.
+ */
 function Image({ src, alt, node: _node, ...props }: ComponentProps<'img'> & { node?: unknown }) {
+  const address = typeof src === 'string' ? src : '';
+  const ipfs = address ? normalizeIpfsUri(address) : undefined;
+  if (!ipfs) {
+    return address ? <Link href={address}>{alt?.trim() || 'Image link'}</Link> : null;
+  }
   return (
     <FallbackImage
       {...props}
-      src={typeof src === 'string' ? src : null}
+      src={ipfs}
       alt={alt ?? ''}
       loading="lazy"
       className={image}

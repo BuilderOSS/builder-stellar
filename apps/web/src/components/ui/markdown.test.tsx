@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Markdown, safeMarkdownUrl } from './markdown';
 
+const CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
 const render = (source: string, variant?: 'rich' | 'comment') =>
   renderToStaticMarkup(<Markdown source={source} variant={variant} />);
 
@@ -38,6 +39,21 @@ describe('Markdown', () => {
     expect(html).toContain('/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi');
   });
 
+  // A remote image would tell its author who read the text and when.
+  it('shows images from other hosts as links, never loading them', () => {
+    const html = render('![chart](https://tracker.example/pixel.png)');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('href="https://tracker.example/pixel.png"');
+    expect(html).toContain('>chart<');
+    expect(render('![](http://tracker.example/p.gif)')).toContain('Image link');
+  });
+
+  it('loads a gateway image through the app gateways, not the host in the address', () => {
+    const html = render(`![a](https://tracker.example/ipfs/${CID})`);
+    expect(html).toContain('<img');
+    expect(html).not.toContain('tracker.example');
+  });
+
   it('moves headings down a level', () => {
     const html = render('# Title\n\n## Part');
     expect(html).toContain('<h2>Title</h2>');
@@ -46,7 +62,7 @@ describe('Markdown', () => {
   });
 
   it('renders comment headings and tables while keeping a single page heading', () => {
-    const html = render('# Big\n\n**ok** ![img](https://x.y/a.png)\n\n| A |\n|---|\n| 1 |', 'comment');
+    const html = render(`# Big\n\n**ok** ![img](ipfs://${CID})\n\n| A |\n|---|\n| 1 |`, 'comment');
     expect(html).not.toContain('<h1');
     expect(html).toContain('<h2>Big</h2>');
     expect(html).toContain('<img');
