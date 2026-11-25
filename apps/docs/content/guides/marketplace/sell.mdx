@@ -19,7 +19,7 @@ Members can sell a membership token they hold on the tribe's market. You choose 
 
    <Shot id="marketplace/sell/02" alt="Your token set to Token #3, a price of 50 XLM, and the resale fee line showing what the seller receives" />
 
-3. **Choose when the listing ends.** Under **Listing ends**, choose **1 day**, **7 days** or **30 days** from now, or **Custom** to pick a date and time. **7 days** is chosen by default. The line beneath shows the exact end in your time zone, for example "Ends Wednesday 26 November 2026 at 14:05, your time."
+3. **Choose when the listing ends.** Under **Listing ends**, choose **1 day**, **7 days**, or **30 days** from now, or **Custom** to pick a date and time. **7 days** is chosen by default. The line beneath shows the exact end in your time zone, for example "Ends Wednesday 26 November 2026 at 14:05, your time."
 
    <Shot id="marketplace/sell/03" alt="The Listing ends control with 7 days chosen and the exact end date shown beneath" />
 
@@ -74,22 +74,22 @@ If you allowed the market and then decide not to list, choose **Remove the marke
 
   When the token sells, the buyer pays the price in the listing's asset. In the same transaction, the resale fee goes to the tribe's [Treasury](/reference/glossary#treasury), the rest goes to you, and the token goes to the buyer. The fee is a percentage of the price, at most 25%, rounded down to the smallest unit of the asset. The tribe sets it by vote.
 
-  Each signature pays a Stellar network fee in XLM. Tribe Builder takes no fee. Listings, prices and sales are public on chain as soon as they are confirmed. The app's lists read from an index, which can be a few moments behind.
+  Each signature pays a Stellar network fee in XLM. Tribe Builder takes no fee. Listings, prices, and sales are public on chain as soon as they are confirmed. The app's lists read from an index, which can be a few moments behind.
 </Disclosure>
 
 ## If something goes wrong
 
-- **There is no Sell button.** The tribe has no market, its market is turned off, it hasn't launched, or its memberships are locked. In a tribe with locked memberships, tokens can't be listed by members.
+- **There is no Sell button.** The tribe has no market, its market is turned off, it hasn't launched, or its memberships are locked.
 - **"No tokens found."** A token you received recently can take a few seconds to appear. Reload the page. A token you have already listed is held by the market, so it isn't in this list.
 - **"Your permission expired. Allow the market again."** More than about an hour passed between the two steps. The dialog goes back to the Allow step. Sign it again, then sign List.
 - **"We couldn't check the market's permission for your token. Try again."** Choose **Check** again.
-- **"The resale fee increased since you reviewed it."** or **"The marketplace payment asset changed since you reviewed it."** The tribe changed the market's terms. Nothing was listed. Reload the page, review the new terms and list again.
+- **"The payment asset or fee changed."**, **"The resale fee increased since you reviewed it."**, or **"The marketplace payment asset changed since you reviewed it."** The tribe changed the market's terms. Nothing was listed. Reload the page, review the new terms, and list again.
 - **"This token already has a listing."** Reload the Market page. The listing appears under **Your listings**.
 - **"Memberships in this tribe are locked, so tokens cannot be listed for sale."** Members voted to lock memberships. Selling is not available while they are locked.
 - **"Your USDC trustline has insufficient capacity to receive these sale proceeds."** Raise your trustline's limit in your wallet, then list again.
 - **"Signing was cancelled. No new transaction was submitted."** You closed or declined the wallet request. Choose **Sign and send** again when you are ready.
 - **You stopped after the Allow step.** Nothing is listed, and your token stays in your wallet. Choose **List for sale** again. If the permission is still live, the Allow step is skipped.
-- **The listing stays Updating.** The listing is confirmed but the index hasn't caught up. If it hasn't appeared after a few minutes, reload the page and check the transaction from the dialog.
+- **The listing stays Updating.** The listing is confirmed, but the index doesn't show it yet. If it hasn't appeared after a few minutes, reload the page and check the transaction from the dialog.
 
 For an error code, see [Error messages](/reference/error-messages/).
 

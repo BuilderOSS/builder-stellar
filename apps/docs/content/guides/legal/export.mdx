@@ -1,41 +1,41 @@
 <Callout
   title="This is not legal advice"
-  description="The export helps a registrar's intake. It doesn't form an entity, file anything or contact a registrar. Talk to a qualified lawyer before you form an entity."
+  description="The export helps a registrar's intake. It doesn't form an entity, file anything, or contact a registrar. Talk to a qualified lawyer before you form an entity."
 />
 
 ## Overview
 
 A tribe may decide to form a legal entity. The legal entity export collects what a DAO registrar asks for first, and downloads it as two files you can send them. It is built for MIDAO, which registers DAO LLCs in the Marshall Islands.
 
-Tribe Builder isn't a law firm, a registered agent or a party to any registration. Formation, identity checks (KYC), the operating agreement and tax are between the tribe, its lawyers and the registrar.
+Tribe Builder isn't a law firm, a registered agent, or a party to any registration. Formation, identity checks (KYC), the operating agreement, and tax are between the tribe, its lawyers, and the registrar.
 
 ## Before you start
 
 - Anyone can open the page. It needs no wallet and signs nothing.
 - Nothing is sent anywhere. The files are built in your browser from public data and your answers, then downloaded to your device. You decide who receives them.
-- Your answers are kept only while the page is open. They are gone if you reload, so finish in one sitting.
+- Your answers are kept only while the page is open. They are cleared if you reload the page, so complete all four steps in one visit.
 - Have ready: the legal name you want, the tribe's purpose, a contact person, and, if you have them, the people who manage the tribe and a Representative Agent.
 
 ## Steps
 
-1. **Open Manage, then Legal entity export.** The page has four steps: **Entity**, **People**, **Review** and **Export**.
+1. **Open Manage, then Legal entity export.** The page has four steps: **Entity**, **People**, **Review**, and **Export**.
 
    <Shot id="legal/export/01" alt="The Legal entity export page with the not-legal-advice notice and the four steps" />
 
 2. **Describe the entity.** Under **The entity**:
    - **Proposed legal name** starts from the tribe name. A Marshall Islands DAO LLC name must end with "DAO LLC". "Lantern DAO LLC" and "MIDAO LLC" are valid. "DAOLLC" is not.
    - **Trading name** is optional, if people know you by another name.
-   - **Entity type** is **Non-profit**, **For-profit** or **Not decided yet**. MIDAO can't convert this later, so discuss it with them if you are unsure. A non-profit chooses its kind of good works. A for-profit can describe how profits are shared and answer **Are any members US persons?**
+   - **Entity type** is **Non-profit**, **For-profit**, or **Not decided yet**. MIDAO can't convert this later, so discuss it with them if you are unsure. A non-profit chooses its kind of good works. A for-profit can describe how profits are shared and answer **Are any members US persons?**
    - **Purpose** starts from the tribe description: what the tribe does and why, in 20 to 2,000 characters.
    - **More for the registrar (optional)** takes an estimate of treasury plus funding in US dollars, which MIDAO uses for its fee tiers, and other initial contributions, one per line.
 
    <Shot id="legal/export/02" alt="The Entity step with the proposed legal name, entity type and purpose filled in" />
 
-3. **Name the people.** Under **People**, enter a **Contact name** (required), with an optional email and role. Add up to 10 managers with **Add a manager**, each with a name, role and Stellar address. You can also name a **Representative Agent** and add **Notes for the registrar**.
+3. **Name the people.** Under **People**, enter a **Contact name** (required), with an optional email and role. Add up to 10 managers with **Add a manager**, each with a name, role, and Stellar address. You can also name a **Representative Agent** and add **Notes for the registrar**.
 
    <Shot id="legal/export/03" alt="The People step with a contact and one manager added" />
 
-4. **Review.** **Who a registrar would verify** shows the identity-check category and the accounts that count. **From the chain** lists the membership, voting rules, treasury balances and smart contracts that go into the bundle as they are now. Nothing there needs filling in.
+4. **Review.** **Who a registrar would verify** shows the identity-check category and the accounts that count. **From the chain** lists the membership, voting rules, treasury balances, and smart contracts that go into the bundle as they are now. Nothing there needs filling in.
 
    <Shot id="legal/export/04" alt="The Review step showing who a registrar would verify and the facts read from the chain" />
 
@@ -51,14 +51,14 @@ MIDAO's guidance sorts the people who must complete identity checks into three c
 - **Category B:** if no one is in A, every manager. They are also beneficial owners.
 - **Category C:** if no one is in A or B, any member. MIDAO does not treat them as beneficial owners, but they are still reported and complete identity checks.
 
-The export measures ownership as membership tokens owned, out of all tokens minted, at the time of export. A delegate doesn't own the votes it casts, so voting power is reported beside ownership, not instead of it. Tokens held by the tribe's own Treasury, Auction or Marketplace are listed but never treated as an owner. A contract that owns 25% or more is flagged so the registrar can check who controls it. If the data can't be read, the category is "Category not known" rather than a guess.
+The export measures ownership as membership tokens owned, out of all tokens minted, at the time of export. A delegate doesn't own the votes it casts, so voting power is reported beside ownership, not instead of it. Tokens held by the tribe's own Treasury, Auction, or Marketplace are listed but never treated as an owner. A contract that owns 25% or more is flagged so the registrar can check who controls it. If the data can't be read, the category is "Category not known" rather than a guess.
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
   Nothing is written on chain, and there is no fee. The page only reads.
 
-  The bundle includes the tribe's name, link, status (setup or live) and profile links; the token's name and symbol, minted and voting supply, member count and token settings; the voting rules (voting delay, voting period, proposal threshold, quorum and safety delay); every contract address, marked live or not yet live; the Treasury address and its balances, read live; and the top 25 holders by tokens and by votes. If a part fails to load, the bundle marks it as unknown instead of leaving it out.
+  The bundle includes the tribe's name, link, status (setup or live), and profile links; the token's name and symbol, minted and voting supply, member count, and token settings; the voting rules (voting delay, voting period, proposal threshold, quorum, and safety delay); every contract address, marked live or not yet live; the Treasury address and its balances, read live; and the top 25 holders by tokens and by votes. If a part fails to load, the bundle marks it as unknown instead of leaving it out.
 
   Ownership changes with every transfer, so the bundle records when it was measured. The JSON follows the schema at `https://tribes.build/schemas/legal-export/v2`. Both files repeat that the export is not legal advice.
 </Disclosure>
