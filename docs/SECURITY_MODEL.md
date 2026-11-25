@@ -296,7 +296,10 @@ passes the fee guard, which also refuses a transaction whose fee it can't read.
 Challenge replay bookkeeping and the sign-in rate limits are kept in each server
 instance's memory. There is no shared store: another instance doesn't see a used
 challenge or a client's count, so the limits slow a client down rather than cap the
-deployment. Sign-in deletes the challenge from the cookie it returns, so a replay needs
+deployment. Every in-process store is bounded: the rate limits and upload counts at about
+10,000 entries, the read cache at 2,000 entries and an estimated 128 MB, and challenge
+replay by the challenge's 5-minute expiry (see
+[the threat model](audit/THREAT_MODEL.md#5-replay-and-rate-limit-state-per-instance)). Sign-in deletes the challenge from the cookie it returns, so a replay needs
 the older cookie, within the challenge's 5 minutes, on another instance. The limits
 count per client address, read from one trusted header: `x-vercel-forwarded-for` on
 Vercel, or the header named in `TRUSTED_CLIENT_IP_HEADER` behind another proxy. The

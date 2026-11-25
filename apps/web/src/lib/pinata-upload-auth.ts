@@ -5,8 +5,10 @@ import { isValidUploadType, type UploadAuthorization } from './pinata-upload';
 
 /**
  * Warm-process cache for upload permissions. The signed token is the source of truth,
- * so completion also works when requests land on different server instances.
+ * so completion also works when requests land on different server instances, or after
+ * this cache dropped the entry: it keeps at most MAX_STORED_AUTHORIZATIONS, oldest out first.
  */
+export const MAX_STORED_AUTHORIZATIONS = 5_000;
 const authorizationStore = new Map<
   string,
   { authorization: UploadAuthorization; address: string; expiresAt: number }
@@ -79,6 +81,9 @@ export function storeAuthorization(_uploadId: string, authorization: UploadAutho
   }
 
   const token = encodeAuthorization(authorization, address);
+  while (authorizationStore.size >= MAX_STORED_AUTHORIZATIONS) {
+    authorizationStore.delete(authorizationStore.keys().next().value!);
+  }
   authorizationStore.set(token, {
     authorization: { ...authorization, uploadId: token },
     address,
@@ -170,6 +175,11 @@ export function readPinToken(token: string, address: string, now = Date.now()): 
     return null;
   }
   return { keyId: typeof parsed.key === 'string' && parsed.key ? parsed.key : null };
+}
+
+/** Test helper: how many authorizations the warm cache holds. */
+export function storedAuthorizationCount(): number {
+  return authorizationStore.size;
 }
 
 export function verifyPinToken(token: string, address: string, now = Date.now()): boolean {

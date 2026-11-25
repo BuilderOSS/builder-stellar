@@ -6,9 +6,11 @@ import { createUploadAuthorization } from './pinata-upload';
 import {
   getAuthorization,
   issuePinToken,
+  MAX_STORED_AUTHORIZATIONS,
   PIN_TOKEN_TTL_MS,
   readPinToken,
   storeAuthorization,
+  storedAuthorizationCount,
   verifyPinToken
 } from './pinata-upload-auth';
 
@@ -80,6 +82,17 @@ describe('upload authorization tokens', () => {
     expect(fresh.getAuthorization(uploadId, ALICE)?.uploadType).toBe('dao-image');
     process.env.IRON_PASSWORD = OTHER_SESSION_SECRET;
     expect(fresh.getAuthorization(uploadId, ALICE)).toBeNull();
+  });
+
+  it('keeps at most MAX_STORED_AUTHORIZATIONS warm, and a dropped one still completes from its signature', () => {
+    process.env.IRON_PASSWORD = SESSION_SECRET;
+    const authorization = createUploadAuthorization('dao-image', 'https://uploads.example/sign');
+    const first = storeAuthorization(authorization.uploadId, authorization, 'GFIRST');
+    for (let i = 0; i < MAX_STORED_AUTHORIZATIONS + 50; i += 1) {
+      storeAuthorization(authorization.uploadId, authorization, `G${i}`);
+    }
+    expect(storedAuthorizationCount()).toBe(MAX_STORED_AUTHORIZATIONS);
+    expect(getAuthorization(first, 'GFIRST')?.uploadType).toBe('dao-image');
   });
 
   it('decodes every upload type from the signature, a claim list included', async () => {

@@ -111,6 +111,18 @@ Server-side bookkeeping lives in each server instance's memory, not in a shared 
 
 **The client address** comes from one trusted header: `x-vercel-forwarded-for` on Vercel, or the header `TRUSTED_CLIENT_IP_HEADER` names behind another proxy. Client-supplied `X-Forwarded-For`, `X-Real-IP`, and `CF-Connecting-IP` are otherwise ignored. A header is trustworthy only when a proxy in front of the app sets or overwrites it. Sign-in refuses a production request with no trusted address (503); the API limits do not count such a request, so off Vercel they apply only once `TRUSTED_CLIENT_IP_HEADER` is set. Local development is not counted.
 
+**How much memory each store can hold.** Every store above is bounded, by count, by size, or by its expiry:
+
+| Store | Bound |
+| --- | --- |
+| Read cache ([`lib/server-cache.ts`](../../apps/web/src/lib/server-cache.ts)): DAO configuration, rendered token images, verified claim lists, chain reads, health results | 2,000 entries and an estimated 128 MB, oldest out first; a single value over 32 MB is returned but not kept. Images are measured in bytes, other values by their JSON length |
+| Upload authorizations ([`lib/pinata-upload-auth.ts`](../../apps/web/src/lib/pinata-upload-auth.ts)) | 5,000, oldest out first. The signed token is the record, so a dropped entry still completes |
+| Sign-in and API rate limits ([`lib/auth/rate-limit.ts`](../../apps/web/src/lib/auth/rate-limit.ts)), upload limits and the funded-account cache ([`lib/upload-access.ts`](../../apps/web/src/lib/upload-access.ts)) | About 10,000 entries each, expired entries first, then the oldest. Under a flood from more addresses than that, the oldest client's count starts again |
+| Claim list failures ([`lib/minter/claim-list.ts`](../../apps/web/src/lib/minter/claim-list.ts)) | 500 |
+| Challenge replay ([`lib/auth/server.ts`](../../apps/web/src/lib/auth/server.ts)) | Expiry only: an entry is added only for a server-sealed challenge being checked (removed again if the check fails) or one that signed in, and lives at most the challenge's 5 minutes. Its size follows the rate of sign-ins, which the per-client limits slow. It has no count cap on purpose: dropping an entry would let that challenge sign in again, and refusing new ones when full would let a flood stop sign-in for everyone |
+
+The image library's own cache (sharp) keeps its defaults (50 MB, 100 operations).
+
 On a platform that runs several instances, each counts on its own. A challenge consumed on one instance is not known to another until it expires (5 minutes), and a limit of N per window is N per instance. The limits slow one client down; they do not cap the deployment or stop a distributed flood, which needs the platform's own protection. `SECURITY_MODEL.md` states this: the reference does not claim a shared replay store. The session itself is in the client's cookie, so it does not depend on which instance serves a request.
 
 ## 6. What the app re-reads from chain
