@@ -29,10 +29,13 @@ Source: `contracts/common/src/lib.rs` (`MIN_GOVERNANCE_DELAY`, `MAX_GOVERNANCE_D
 | Time to execute a queued proposal | 14 days after its safety delay ends, then it expires |
 | When voting power is counted | At the ledger before the proposal is made |
 | Who can cancel | Only the person who made it, before voting ends |
+| Minting in one proposal | One 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
 
-Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is three 30-day waits plus 14 days to execute.
+Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay and 14 days to execute.
 
-Source: `contracts/governor/src/storage.rs` (`MAX_PROPOSAL_ACTIONS`, `PROPOSAL_EXPIRATION_PERIOD`), `contracts/common/src/lib.rs` (`MAX_PROPOSAL_COMMENT_LENGTH`), and the OpenZeppelin governor library (`MAX_DESCRIPTION_LENGTH`).
+A proposal runs all its actions in one transaction, which can publish only a limited amount of event data. The contracts refuse a proposal whose mints, with its other actions, could not run together. Split the mints over several proposals.
+
+Source: `contracts/governor/src/storage.rs` (`MAX_PROPOSAL_ACTIONS`, `PROPOSAL_EXPIRATION_PERIOD`, `MAX_PROPOSAL_LIFETIME`), `contracts/common/src/lib.rs` (`MAX_PROPOSAL_COMMENT_LENGTH`, `EXECUTION_EVENT_BUDGET`), and the OpenZeppelin governor library (`MAX_DESCRIPTION_LENGTH`).
 
 ## Auctions
 

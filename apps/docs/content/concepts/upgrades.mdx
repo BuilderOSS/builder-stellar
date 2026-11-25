@@ -28,7 +28,9 @@ A notice also appears on the Manage overview and, for members of launched tribes
 
 The treasury's own upgrade goes in a proposal by itself. The treasury runs the proposal, so later actions in the same proposal would still use its old code. The app separates it for you.
 
-When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal.
+When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal. The treasury is the exception: its migration is a separate step after its upgrade proposal has run, for the same reason its upgrade goes alone.
+
+The governor and the treasury don't run while their stored data is waiting for a migration. Anyone can run their migration, and it needs no proposal.
 
 ## Withdrawn versions
 

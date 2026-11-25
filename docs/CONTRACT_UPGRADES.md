@@ -15,8 +15,11 @@ A module swaps its code with `upgrade(from_hash, to_hash)`, called by its **admi
 setup, the **Treasury** after launch (so, by proposal). The module checks `from_hash` is the code it runs
 (`HashMismatch`, 7005), asks the Manager `is_upgrade_approved(from, to)` (`UpgradeNotApproved`, 7006, also false
 when `to` is revoked), takes the version from the registry, emits `Upgraded`, and swaps the WASM. Storage is
-kept. If the release changes a storage layout, `migrate()` runs next, in the same proposal. The Manager can
-approve a path but can never force a DAO to take it.
+kept. If the release changes a storage layout, `migrate()` runs next, in the same proposal, except for the
+Treasury, which migrates in a second step (§1). The Governor and the Treasury refuse to run while their stored
+layout differs from their code's (`StorageVersionMismatch`: Governor 7518, Treasury 7607), and anyone can call
+their `migrate()`. The
+Manager can approve a path but can never force a DAO to take it.
 
 ## 0. Decide: upgrade or redeploy
 
@@ -30,6 +33,11 @@ DAOs keep their addresses and history only through upgrades.
    - No (e.g. a new event, new logic over existing keys): no `migrate` step.
    - Yes: bump that module's `STORAGE_VERSION` and do the data rewrite in its `migrate()` after
      `common::upgrade::migrate`. Every proposal for this release then runs `upgrade` **then** `migrate`.
+   - Yes, for the **Treasury**: the proposal runs `upgrade` alone. The Treasury runs a proposal on the code it
+     started with, so a `migrate` action in the same proposal still runs the old code, fails `NothingToMigrate`
+     (7012) and reverts the upgrade with it. After the upgrade proposal executes, anyone calls
+     `treasury.migrate()` (no authorization needed); until then `treasury.execute` refuses every proposal
+     (`StorageVersionMismatch`, 7607). See e2e `the_treasury_upgrades_then_migrates_in_two_steps`.
 2. Bump the module in [`releases/contracts.json`](../releases/contracts.json) (e.g. `"token": "0.2.0"`). This is the
    version registered for the new hash. **Registry records are write-once**: a wrong version can never be fixed.
    The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the
@@ -66,7 +74,8 @@ DAOs keep their addresses and history only through upgrades.
    - live upgrade by proposal through `treasury.execute` with `e.set_auths(&[])` (Treasury's own auth only),
      including a call that needs the new code **in the same proposal** if the UI will offer that;
    - rejections: unapproved target, stale `from`, revoked target;
-   - with a storage change: `migrate()` in the same proposal and `storage_version()` after.
+   - with a storage change: `migrate()` in the same proposal (for the Treasury, a separate `migrate()` call after
+     the proposal) and `storage_version()` after.
 4. `cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets`.
 
 ## 3. Bindings and app
@@ -156,8 +165,8 @@ then each DAO.
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
-   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`).
-     Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
+   - The Treasury upgrades itself through its self-call allowlist (`upgrade`, `migrate`); the Governor through an
+     ordinary action that calls `governor.upgrade`. Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
      registry on each read.
    - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
      runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
@@ -183,6 +192,9 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - **Code**: there is no downgrade button. To go back, the Manager admin approves the reverse path
   (`approve_upgrade(<new>, <old>)`; the old hash must not be revoked) and each DAO upgrades again (by proposal
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
+  Never roll the **Governor** or the **Treasury** back across a layout change: code with a lower
+  `STORAGE_VERSION` than the stored one refuses every call but `upgrade` (`StorageVersionMismatch`), and their
+  `upgrade` needs a proposal that they can then no longer execute.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
 - **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
@@ -231,6 +243,8 @@ own proposal is its notice and a migration may have to pass through intermediate
 Manager admin: **approve only the paths the `migrate` code supports.** Approve v1 → v2 and v2 → v3 when v3's
 `migrate` assumes the v2 layout; approve v1 → v3 directly only when v3's `migrate` handles the v1 layout. A DAO
 two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
-`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone (e2e
-`dao_module_chains_two_upgrades_in_one_proposal`). `migrate()` refuses a no-op (`NothingToMigrate`), so include
+`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone, one step per
+proposal, each followed by a separate `treasury.migrate()` call (e2e
+`dao_module_chains_two_upgrades_in_one_proposal`). Never approve a Governor or Treasury path to a lower
+`STORAGE_VERSION` (see Rolling back). `migrate()` refuses a no-op (`NothingToMigrate`), so include
 it only for steps that change the storage version.

@@ -97,22 +97,24 @@ These behaviors are covered by `contracts/token` (`delegation_security`) and the
 
 ## Governance execution path
 
-1. Proposal functions (`propose`, `cast_vote`, `queue`) run on the Governor. `propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { vote_start, vote_end, snapshot_ledger, quorum_votes }`.
+1. Proposal functions (`propose`, `cast_vote`, `queue`) run on the Governor. `propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { vote_start, vote_end, snapshot_ledger, quorum_votes }`. It refuses an action aimed at the Governor's own `consume` (`CannotConsume`, 7516) and mints that could not all execute together (`MintsTooLarge`, 7517; see [Batch minting](#batch-minting)).
 2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`. Authority comes from the proposal.
 3. The Treasury calls `governor.consume(...)`, which requires the Treasury's auth, checks the proposal is Queued, past its ETA (`ProposalNotReady`, 7513) and unexpired, marks it Executed and emits `ProposalExecuted`.
 4. The Treasury dispatches each action in order and emits one `Execute` event per action:
    - target = Treasury, function `authorize`: stores extra authorization trees for the next action (see below);
    - target = Treasury, any other function: the allowlist `upgrade(from, to)`, `migrate()`; anything else fails with `UnknownSelfCall` (7602) or `InvalidSelfCallArgs` (7603);
-   - any other target: invoked with the Treasury authorizing exactly that call, plus any trees from a preceding `authorize`.
+   - any other target: invoked with the Treasury authorizing exactly that call, plus any trees from a preceding `authorize`. An action aimed at the Governor's `consume` fails with `CannotConsume` (7606).
 5. Any failing action reverts the whole transaction, including the Executed mark. The proposal stays Queued and can be retried until it expires.
 
-`governor.execute` always fails with `UseTreasuryExecute` (7507). A proposal has at most 20 actions (`TooManyActions`, 7508). A Succeeded proposal that is never queued expires 14 days after voting ends; a Queued proposal expires 14 days after its ETA.
+`governor.execute` always fails with `UseTreasuryExecute` (7507). A proposal has at most 20 actions (`TooManyActions`, 7508). A Succeeded proposal that is never queued expires 14 days after voting ends; a Queued proposal expires 14 days after its ETA. The longest lifecycle is therefore 118 days: 30 days each of voting delay and voting period, 14 days to queue, a 30-day queue delay and 14 days to execute. `propose` and `queue` each renew the proposal's TTL to 120 days, so each stage (up to 74 days, then up to 44) is covered by the call that starts it (see [TTL and archival](#ttl-and-archival)).
+
+`ProposalExecuted` means the proposal's actions ran in the same transaction. Only `treasury.execute` can consume a proposal, and only the one it is running: with the Treasury's authority, a `consume` call made by one proposal would mark another Executed without running its actions, so `propose` refuses such an action, and the Treasury refuses to dispatch one or to authorize one in an `authorize` tree. Nothing legitimate needs it. A DAO therefore has no way to cancel a queued proposal by consuming it; only expiry stops a queued proposal.
 
 ### Nested authorization (`authorize` actions)
 
 Some calls need the Treasury's authorization below the Treasury's direct call, for example `marketplace.buy` with the Treasury as buyer (the marketplace pulls the SAC payment from the Treasury) or a swap through a router. An `authorize` action (target = Treasury, function `authorize`, one `Vec<AuthNode>` argument) adds those authorization trees to the next action only. Because it is an ordinary action, the trees are part of the proposal id and voters approve them.
 
-Rules: trees apply only to the immediately following external call; an `authorize` that is dangling, followed by another `authorize` or by a Treasury self-call, empty or malformed fails with `InvalidAuthorization` (7605). Trees are bounded to depth 4 and 16 nodes. `treasury.check_authorization(nodes)` is a read-only check to simulate before proposing. Each tree authorizes exactly the invocation it describes (contract, function, arguments), so voters must read them like any other action.
+Rules: trees apply only to the immediately following external call; an `authorize` that is dangling, followed by another `authorize` or by a Treasury self-call, empty or malformed fails with `InvalidAuthorization` (7605). Trees are bounded to depth 4 and 16 nodes. A node for the Governor's `consume`, at any depth, fails with `CannotConsume` (7606). `treasury.check_authorization(nodes)` is a read-only check to simulate before proposing. Each tree authorizes exactly the invocation it describes (contract, function, arguments), so voters must read them like any other action.
 
 ## Upgrade path and migrations
 
@@ -122,7 +124,13 @@ A module upgrade needs all of:
 2. The module's stored current hash equal to `from_hash`.
 3. The module admin's authorization. After launch this is the Treasury, reached by a proposal that targets the module's `upgrade`; for the Treasury itself the proposal uses the self-call allowlist.
 
-Every module records a storage-layout version at construction (`StorageVersion`, initially 1) and exposes an admin-gated `migrate()` and a `storage_version()` view. A release that changes a module's storage layout bumps its `STORAGE_VERSION` and does its data rewrite in `migrate`, which first calls `common::upgrade::migrate` (fails with `NothingToMigrate`, 7012, unless the stored version is older; emits `Migrated`). A governance upgrade proposal runs `upgrade` then `migrate` as consecutive actions.
+Every module records a storage-layout version at construction (`StorageVersion`, initially 1) and exposes `migrate()` and a `storage_version()` view. A release that changes a module's storage layout bumps its `STORAGE_VERSION` and does its data rewrite in `migrate`, which first calls `common::upgrade::migrate` (fails with `NothingToMigrate`, 7012, unless the stored version is older; emits `Migrated`). A governance upgrade proposal runs `upgrade` then `migrate` as consecutive actions; the new code runs the second call.
+
+The Governor and the Treasury refuse to run on a layout that differs from their code's. Every Governor entry point that changes state, the Governor views that decode a stored proposal, and the Treasury's `execute`, `launch` and `handoff` first check `common::upgrade::is_current_layout` and fail with `StorageVersionMismatch` (Governor 7518, Treasury 7607) while the stored version differs from the code's `STORAGE_VERSION`. `upgrade`, `migrate` and the upgrade views (`wasm_hash`, `storage_version`, `version`, `admin`) stay outside the gate. On these two modules `migrate()` needs no authorization: it runs only the migration that the installed code defines, once per layout, and it must stay open, because while the layout is behind the Governor refuses proposals and the Treasury refuses to execute them, so a migration that needed a proposal could never run. The other modules keep an admin-only `migrate` and do not check the layout yet.
+
+**The Treasury migrates in two steps.** The Treasury runs a proposal on the code it started with until the proposal ends, so a `migrate` action after its own `upgrade` in the same proposal still runs the old code, finds nothing to do (`NothingToMigrate`) and reverts the whole proposal, upgrade included. A Treasury release that changes its layout is installed by a proposal that only upgrades the Treasury; anyone then calls `treasury.migrate()`. Until that call, `treasury.execute` refuses every proposal. The Governor has no such limit: it has finished with the proposal before the Treasury dispatches the actions.
+
+**Code older than the stored layout cannot run.** An upgrade to a release with a lower `STORAGE_VERSION` (a rollback across a layout change) leaves the Governor or the Treasury refusing every call but `upgrade`, and their `upgrade` needs a proposal they can no longer execute. The Manager admin must therefore never approve such a path for either module. The registry does not record storage versions, so the Manager cannot refuse one itself.
 
 Revocation: `is_upgrade_approved(from, to)` requires only the target to be non-revoked, so a module on a revoked hash can still migrate away. Registry records are immutable (`ImplementationAlreadyRegistered`, 7109). Registration does not move the "latest" pointer for a name; the Manager admin sets it explicitly with `set_latest_implementation`, so registering an older patch release never regresses it.
 
@@ -156,13 +164,15 @@ A ClaimMinter claim mints through `batch_mint` too, so one claim mints at most 4
 
 Each call must satisfy `common::batch_mint_fits`: `300 × tokens + 450 × recipient entries ≤ 13,500` estimated bytes (`BatchTooLarge`, 7205), about 85% of the limit. That allows up to `MAX_BATCH_MINT` = 43 tokens to one recipient, `MAX_BATCH_RECIPIENTS` = 18 recipients with one token each, or mixes such as 35 tokens over 5 recipients. Entries are counted as new recipients even when they repeat or already delegate. Storage writes (2 per token, ~5 per new recipient, limit 200) and CPU stay well below their limits. The budget also bounds the metadata seeding hook, whose failure (including budget exhaustion) cannot be caught. The e2e suite mints batches at the budget edge against real 16-trait metadata; re-measure there if events change. Larger allocations are minted in several calls.
 
+A proposal runs all its actions in one `treasury.execute` transaction, under one event limit, so two mints that each fit could still never execute together. `propose` therefore estimates the whole execution and refuses a proposal above `common::EXECUTION_EVENT_BUDGET` (15,500 estimated bytes, about 95% of the limit) with `MintsTooLarge` (7517): 150 for `ProposalExecuted`, 300 per action for its `Execute` event, 400 per mint call plus the per-token and per-recipient bytes above, and an allowance of 200 for the own events of each action that is not a mint. Mints are recognised by name and argument shape (`mint(Address, Address)` and `batch_mint(Address, Vec<Address>, Vec<u128>)`) on any target. This accepts one 43-token batch with up to two other actions, two batches of 21, ten single mints, or five mints among 20 actions; the e2e suite executes each of these against 16-trait artwork. An action whose own events exceed the allowance can still make a passed proposal fail at execution, and the Governor does not estimate CPU or memory: a 20-action proposal with five mints and fifteen Governor setters uses about 87% of the transaction memory limit, because every call into a contract instantiates its code. Split a proposal near these limits into two.
+
 ## Error codes
 
 Every project error code is unique across contracts. Each crate owns a block of 100 codes in 7000-7899, outside every OpenZeppelin range:
 
 | Block | Crate |
 | --- | --- |
-| 7000 | common (`NotLive` 7001, `AlreadyLive` 7002, ... `NothingToMigrate` 7012) |
+| 7000 | common (`NotLive` 7001, `AlreadyLive` 7002, ... `NothingToMigrate` 7012, `StorageVersionNotSet` 7013) |
 | 7100 | manager |
 | 7200 | token |
 | 7300 | metadata |
@@ -176,7 +186,7 @@ A code therefore identifies its crate even when it surfaces through a cross-cont
 
 ## TTL and archival
 
-See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances are extended to ~170 days when fewer than 60 days remain; long-lived persistent entries (registry, slugs, delegations, mint allowances, artwork, refunds, claim lists and records) to the network cap when fewer than 30 days remain; proposals to 120 days (covers the longest lifecycle of 104 days) when fewer than 30 remain; listings to 30 days when fewer than 7 remain. Every module entry point extends the module's own instance. Contracts bump shared code only to 4 days (when under 2), so a caller never pays more than a few days of code rent; the platform prepays code. Everything else a DAO owns is renewed by a permissionless sweep: the core contracts' keys from chain reads, and each registered module's from its own `renewal_keys` pages; the payer is whoever signs. A module without `renewal_keys` (one registered from outside the Manager) has only its instance renewed, and the web says so.
+See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances are extended to ~170 days when fewer than 60 days remain; long-lived persistent entries (registry, slugs, delegations, mint allowances, artwork, refunds, claim lists and records) to the network cap when fewer than 30 days remain; proposals to 120 days, at `propose` and again at `queue`, and on any other touch when fewer than 30 remain (the longest lifecycle is 118 days: up to 74 days before `queue`, up to 44 after, so each stage fits one TTL even if ledgers close 25% faster than 5 seconds); listings to 30 days when fewer than 7 remain. Every module entry point extends the module's own instance. Contracts bump shared code only to 4 days (when under 2), so a caller never pays more than a few days of code rent; the platform prepays code. Everything else a DAO owns is renewed by a permissionless sweep: the core contracts' keys from chain reads, and each registered module's from its own `renewal_keys` pages; the payer is whoever signs. A module without `renewal_keys` (one registered from outside the Manager) has only its instance renewed, and the web says so.
 
 ## Known limitations
 
