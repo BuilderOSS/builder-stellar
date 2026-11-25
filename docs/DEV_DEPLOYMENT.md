@@ -104,7 +104,7 @@ Protection (team login), and lifting that would make every PR preview public too
 | `UPLOAD_TOKEN_SECRET` | optional: its own 64-character secret (sensitive). Unset, upload tokens use a key derived from `IRON_PASSWORD` |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
-| `NEXT_PUBLIC_PINATA_GATEWAY` | unset (Pinata's public gateway), or a dedicated gateway of the account behind this deployment's `PINATA_JWT`. Never another account's gateway: a dedicated gateway answers 401 (`ERR_ID:00024`) for files it didn't pin, so uploads would not show |
+| `NEXT_PUBLIC_PINATA_GATEWAY` | unset (Pinata's public gateway), or a dedicated gateway (`<name>.mypinata.cloud`) whose allowed sites in Pinata include `https://dev.tribes.build`. Pinata matches the `Origin` header exactly, so each allowed site needs `https://` and no trailing slash. Any other request, including a link opened directly and a server fetch, gets 401 (`ERR_ID:00024`), and readers fall back to the public gateways |
 | `PINATA_JWT` | dev's own Pinata key, never production's (see [Pinata keys](#pinata-keys)), sensitive |
 | `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`) |
 
