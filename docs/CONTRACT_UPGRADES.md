@@ -202,9 +202,9 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - **Code**: there is no downgrade button. To go back, the Manager admin approves the reverse path
   (`approve_upgrade(<new>, <old>)`; the old hash must not be revoked) and each DAO upgrades again (by proposal
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
-  Don't roll the **Governor** or the **Treasury** back across a layout change: code with a lower
-  `STORAGE_VERSION` than the stored one accepts only recovery proposals (`StorageVersionMismatch` for any other)
-  until a recovery proposal upgrades it to a release that matches the stored layout.
+  Never roll the **Governor** or the **Treasury** back across a layout change. Code with a lower
+  `STORAGE_VERSION` than the stored one accepts only recovery proposals, if it has the recovery path; releases
+  before it (all on `STORAGE_VERSION` 1) have none, and the module could no longer run proposals.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
 - **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
@@ -255,6 +255,6 @@ Manager admin: **approve only the paths the `migrate` code supports.** Approve v
 two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
 `upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone, one step per
 proposal, each followed by a separate `treasury.migrate()` call (e2e
-`dao_module_chains_two_upgrades_in_one_proposal`). Don't approve a Governor or Treasury path to a lower
+`dao_module_chains_two_upgrades_in_one_proposal`). Never approve a Governor or Treasury path to a lower
 `STORAGE_VERSION` (see Rolling back). `migrate()` refuses a no-op (`NothingToMigrate`), so include
 it only for steps that change the storage version.

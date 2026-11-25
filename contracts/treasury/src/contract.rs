@@ -332,10 +332,11 @@ impl DaoTreasuryContract {
 
     /// Allowlisted calls a proposal may aim at the Treasury itself. Authorized
     /// by the proposal (already consumed from the Governor), so no admin auth.
-    /// The `migrate` self-call cannot complete a migration: after the
-    /// Treasury's own `upgrade` in the same proposal it still runs the old
-    /// code (`NothingToMigrate`), and while a migration is due `execute` is
-    /// refused. A migration is completed by calling `migrate` directly.
+    /// The `migrate` self-call cannot complete a migration in the proposal
+    /// that upgrades the Treasury: it still runs the old code
+    /// (`NothingToMigrate`). A later proposal made only of it is a recovery
+    /// proposal and runs the installed code's migration, but calling
+    /// `migrate` directly does the same without a vote.
     fn self_dispatch(e: &Env, function: &Symbol, args: &Vec<Val>) {
         if *function == Symbol::new(e, "upgrade") {
             if args.len() != 2 {

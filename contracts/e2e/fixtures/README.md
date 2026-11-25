@@ -53,4 +53,6 @@ Build: apply the change above to `contracts/{governor,treasury}/src`, then
 | `treasury-recovery-broken.wasm` | Treasury | 2 | always fails | `a2b9ca357bf8c1f63b62119eeac8bfedffa0c0630d5227b4f10d333fb01a7d0c` |
 | `treasury-recovery-fixed.wasm` | Treasury | 2 | works | `afba127044fb89efb342b2e6b8c635d1d72bba5469f8fa1dad3e0c66e914dc22` |
 
-Rebuild them when the recovery path (`is_recovery` in either contract) changes.
+Rebuild them when the recovery path or the layout gates change in either contract (`is_recovery`, and
+the checks in `propose`, `cast_vote`, `queue`, `consume` and `execute`): the stuck module runs the fixture's
+code, not this checkout's.

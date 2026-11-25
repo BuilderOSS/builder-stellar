@@ -2948,6 +2948,84 @@ mod hardening {
         assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
     }
 
+    /// The Governor's own `consume` lets a recovery proposal through while a
+    /// migration is due, and refuses a proposal queued before it: here a
+    /// proposal of only `governor.migrate()` completes the migration through
+    /// `treasury.execute`, while an ordinary queued proposal waits.
+    #[test]
+    fn consume_runs_only_recovery_proposals_while_a_migration_is_due() {
+        let (e, token, treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let reason = String::from_str(&e, "");
+        let ordinary_targets = vec![&e, target.address.clone()];
+        let ordinary_functions = vec![&e, symbol_short!("set_value")];
+        let ordinary_args = proposal_args(&e);
+        let ordinary_description = String::from_str(&e, "queued before");
+        let ordinary = governor.propose(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_description,
+            &proposer,
+        );
+        e.ledger().set_timestamp(2_301);
+        governor.cast_vote(&ordinary, &1, &reason, &proposer);
+        e.ledger().set_timestamp(2_601);
+        let ordinary_hash = description_hash(&e, &ordinary_description);
+        governor.queue(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_hash,
+            &0,
+            &proposer,
+        );
+
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION - 1);
+        let targets = vec![&e, governor.address.clone()];
+        let functions = vec![&e, Symbol::new(&e, "migrate")];
+        let args = vec![&e, Vec::<Val>::new(&e)];
+        let description = String::from_str(&e, "migrate by proposal");
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+        e.ledger().set_timestamp(2_902);
+        governor.cast_vote(&id, &1, &reason, &proposer);
+        e.ledger().set_timestamp(3_203);
+        let hash = description_hash(&e, &description);
+        governor.queue(&targets, &functions, &args, &hash, &0, &proposer);
+        e.ledger().set_timestamp(3_504);
+
+        // Real authorization: only the Treasury's own reaches the targets.
+        e.set_auths(&[]);
+        assert_eq!(
+            treasury
+                .try_execute(
+                    &ordinary_targets,
+                    &ordinary_functions,
+                    &ordinary_args,
+                    &ordinary_hash
+                )
+                .err()
+                .unwrap()
+                .unwrap(),
+            CustomGovernorError::StorageVersionMismatch.into()
+        );
+        treasury.execute(&targets, &functions, &args, &hash);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+        assert_eq!(governor.storage_version(), crate::STORAGE_VERSION);
+
+        // In step again: the ordinary proposal runs.
+        treasury.execute(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_hash,
+        );
+        assert_eq!(target.get_value(), 42);
+    }
+
     /// A proposal Active for voting, with one For vote cast by the proposer,
     /// and a second holder (`voter`) who has not voted.
     fn active_with_vote() -> (
