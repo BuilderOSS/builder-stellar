@@ -17,7 +17,7 @@ The Goldsky generator requires an explicit `MANAGER_DEPLOYMENT_FILE`. Keep web s
 
 Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_feed_events`. SQL views project state and history. **`manager.daos` is a view**, not a mutable DAO table.
 
-`DaoCreated` supplies deployer, launch admin, the core four addresses, the modules created with the DAO (null for a kind it didn't create) and creation WASM hashes; later modules come from `ModuleCreated` and the Token's `ModuleRegistered` (`manager.module_registrations`). Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each contract's `<role>_launched` event by emitting contract. The admin is the launch admin until launch (or a launch drive opens), then the Treasury. Upgrades overlay creation hashes (`manager.module_versions`).
+`DaoCreated` supplies deployer, launch admin, the core four addresses, the modules created with the DAO (null for a kind it didn't create), and creation WASM hashes; later modules come from `ModuleCreated` and the Token's `ModuleRegistered` (`manager.module_registrations`). Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each contract's `<role>_launched` event by emitting contract. The admin is the launch admin until launch (or a launch drive opens), then the Treasury. Upgrades overlay creation hashes (`manager.module_versions`).
 
 Every DAO contract's events resolve through `manager.event_identity`: the core four from creation on, each module only inside its registration window on that DAO's Token (a module registered by two DAOs counts for each in its own window). Events outside every window are excluded from DAO views. Details: [database catalogue](DATABASE_SCHEMA.md).
 
@@ -25,7 +25,7 @@ Manager also retains slug mappings. `DaoCreated.slug` is only a
 request (several pending DAOs may request the same slug); `SlugClaimed` at launch
 makes it unique, and `SlugChanged` (a vote, Manager 0.2.0) moves it and releases the
 old one. `manager.daos.slug` is the current claimed slug once launched, else the
-latest request (`slug_claimed`, `requested_slug` and `claimed_slug` disambiguate).
+latest request (`slug_claimed`, `requested_slug`, and `claimed_slug` disambiguate).
 Layout resolution filters by deployment, prefers the current claimed slug, then the
 latest DAO that moved away from it (`manager.dao_previous_slugs`, so old links
 redirect while the slug is unclaimed), then an unambiguous request, and maps the

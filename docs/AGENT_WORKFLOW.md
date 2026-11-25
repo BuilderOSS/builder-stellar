@@ -81,17 +81,17 @@ Run the relevant checks before handing work to another agent:
 | Scripts | `node --test scripts/*.test.mjs` |
 | Walkthrough harness | `pnpm --dir apps/e2e typecheck` and `test` |
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
-| Docs site | `pnpm --dir apps/docs lint`, `typecheck` and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
+| Docs site | `pnpm --dir apps/docs lint`, `typecheck`, and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
 | Docs screenshots | `pnpm --dir apps/e2e build:capture`, then the capture story on testnet (`docs/qa/SHOWCASE_TRIBE.md`, "Capturing") |
 | Database | `pnpm db:test` (with `TEST_DATABASE_URL` for the database tests), plus forward migration, rollback, permission, and query-plan evidence |
 
 Checks are requirements, not a claim of a passing run. Current CI (`.github/workflows/ci.yml`)
 has four jobs:
 
-- **Rust Checks and Tests:** `cargo fmt`, Clippy, `stellar contract build --locked` and the
+- **Rust Checks and Tests:** `cargo fmt`, Clippy, `stellar contract build --locked`, and the
   Cargo workspace tests.
 - **TypeScript Checks:** web codegen, then web lint and type check, the design tokens and
-  glossary type checks, docs lint, type check and tests, web tests, Goldsky tests, the
+  glossary type checks, docs lint, type check, and tests, web tests, Goldsky tests, the
   walkthrough harness, the script tests, and `pnpm db:test` against a Postgres service.
 - **Build Web:** `pnpm build`, then the docs site build and `pnpm docs:check` on every docs
   page in both themes.
@@ -114,9 +114,9 @@ Before opening a PR, check each surface the change can touch and update it in th
 | --- | --- |
 | What a user sees or does: copy, a flow, a button, an error | The guide and reference pages in `apps/docs/content` that describe it. Search for the old wording |
 | A visible screen in a captured flow | Retake the affected shots (`docs/qa/SHOWCASE_TRIBE.md`), or name them under "Docs" in the PR if testnet can't take them now |
-| Contract interface, limits, errors or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md` and so on) |
-| API routes, views, indexer or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
-| A walkthrough, fixture or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
+| Contract interface, limits, errors, or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md`, and so on) |
+| API routes, views, indexer, or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
+| A walkthrough, fixture, or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
 | Design primitives or tokens | `DESIGN.md` |
 | Finished or new work items | `TODOS.md` |
 
@@ -139,9 +139,9 @@ Before marking docs current:
   relative links must be valid. Label generation, signing, deployment, and reset side effects.
 - Treasury/Governor references must match vector ABI, permissionless queue/execute,
   exact action encoding, atomicity, and scoped ordered execution events.
-- Creation, Setup and launch docs must distinguish chain confirmation, simulation,
+- Creation, Setup, and launch docs must distinguish chain confirmation, simulation,
   local recovery, and indexing. Contract limits must not be confused with CLI budgets.
-- View, Prisma and API fields and timestamp units must agree, with deployment, DAO and
+- View, Prisma, and API fields and timestamp units must agree, with deployment, DAO, and
   module filters and chain or indexed state sources explicit.
 - TTL docs must link actual storage policies and distinguish extension, restoration,
   signed maintenance, and unavailable/missing reports.
@@ -154,7 +154,7 @@ Before marking docs current:
   maintained replacement from [the index](README.md).
 
 Useful evidence: `contracts/e2e/src/test.rs`, Goldsky contract-alignment and read-model
-tests, web creation, recovery and store tests, proposal ABI, state and receipt tests, and
+tests, web creation, recovery, and store tests, proposal ABI, state, and receipt tests, and
 marketplace scope and preparation tests. Live or scratch-database tests and network
 rehearsals require their own approved environment; do not claim them from source inspection.
 
