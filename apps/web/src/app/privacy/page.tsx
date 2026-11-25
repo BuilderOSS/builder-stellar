@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       title="Privacy policy"
       summary={[
         'We don’t ask for your name or email, and there are no ads or third-party analytics.',
-        'Signing in keeps your public wallet address in an encrypted cookie for up to 7 days.',
+        'Signing in keeps your public wallet address in an encrypted cookie for up to 3 days.',
         'What you do onchain, and what you put on IPFS, is public and permanent. We can’t delete it.',
         'Drafts and preferences stay in your browser.',
         <>
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
           <li>
             <strong>Your wallet address and sign-in.</strong> To sign in, your wallet signs a message that proves the
             address is yours. We keep your public address, the network, how you signed in and when, in an encrypted,
-            httpOnly session cookie named &quot;stellar-auth&quot;. There&apos;s no account on our servers.
+            httpOnly session cookie named &quot;__Host-stellar-auth&quot;. There&apos;s no account on our servers.
           </li>
           <li>
             <strong>Technical data.</strong> Our servers see your IP address and request details, such as your browser
@@ -93,7 +93,10 @@ export default function PrivacyPage() {
       <section>
         <h2>6. How long we keep it</h2>
         <ul>
-          <li>The session cookie lasts up to 7 days, or until you disconnect your wallet.</li>
+          <li>
+            The session cookie ends after 24 hours without use, 3 days after you sign in, or when you disconnect your
+            wallet, whichever comes first.
+          </li>
           <li>Sign-in attempt counts are kept in memory for about a minute.</li>
           <li>Request and error logs are kept for a limited time, as our hosting provider sets.</li>
           <li>The index of onchain events is kept while the service runs.</li>

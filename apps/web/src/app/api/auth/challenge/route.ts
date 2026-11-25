@@ -8,11 +8,13 @@ import { createAuthMessage } from '@/lib/auth/message';
 import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
 import {
   AUTH_CHALLENGE_TTL_MS,
+  clearSessionAccount,
   getAuthAppName,
   getAuthOrigin,
   getAuthSession,
   getConfiguredNetwork,
-  getSep10ServerKeypair
+  getSep10ServerKeypair,
+  rejectCrossSiteRequest
 } from '@/lib/auth/server';
 import type { AuthChallengeResponse } from '@/lib/auth/types';
 
@@ -20,7 +22,14 @@ export const dynamic = 'force-dynamic';
 
 const challengeSchema = z.object({ address: z.string().min(1) });
 
+/**
+ * SEP-53 sign-in, step 1: issues a server-signed message for `address` to sign, bound to this
+ * deployment's origin and network, and stores it in the session. Starting a sign-in signs the
+ * session out of any previous account.
+ */
 export async function POST(request: Request) {
+  const crossSite = rejectCrossSiteRequest(request);
+  if (crossSite) return crossSite;
   const rateLimitResponse = enforceAuthRateLimit(request, 'challenge', 30);
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -58,10 +67,7 @@ export async function POST(request: Request) {
     const serverSignature = Buffer.from(serverKeypair.signMessage(unsignedMessage)).toString('base64');
 
     const session = await getAuthSession();
-    delete session.address;
-    delete session.network;
-    delete session.authMethod;
-    delete session.authenticatedAt;
+    clearSessionAccount(session);
     session.challenge = { method: 'sep53', ...challenge, serverPublicKey, serverSignature };
     await session.save();
 
@@ -79,6 +85,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ code: 'INVALID_MESSAGE', message: 'Invalid wallet address.' }, { status: 400 });
+    }
     console.error('Auth challenge failed:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ message: 'Unable to create authentication challenge.' }, { status: 500 });
   }

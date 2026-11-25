@@ -208,18 +208,69 @@ These are behaviors of the current contracts, not planned fixes.
 
 The app authenticates wallets with SEP-53 message signing and a SEP-10 fallback,
 then uses an encrypted `iron-session` cookie. Wallet connection alone is not an
-authenticated session. Challenge/replay/rate-limit bookkeeping is process-local;
-this reference does not claim a shared distributed replay store. Public DAO reads
-remain scoped to the configured deployment. Trading inventory/readiness derive the
-actor from the session, not a submitted address.
+authenticated session. Public DAO reads remain scoped to the configured deployment.
+Trading inventory/readiness derive the actor from the session, not a submitted address.
 
-SEP-10 reads current account signers/medium threshold from canonical Horizon and
-verifies their weighted signatures, excluding the server signer and requiring at
-least one positive client weight. Disabled-master/insufficient-threshold proofs
-cannot fall back. Master-key-only unfunded authentication is allowed only on an
-authoritative Horizon account-not-found 404 problem response, not generic 404 or
-network failure. Read/malformed-account failures return 503. Successful key-only
-sign-in does not establish funding or transaction readiness.
+Both sign-in paths read the account's current signers and medium threshold from
+canonical Horizon. The weight sign-in needs is the medium threshold, and never less
+than 1. SEP-53 checks the message signature first. That signature comes from the
+address's own (master) key, so for an existing account that key's current weight must
+reach the required weight: a master key that was disabled (weight 0), or outweighed
+after a move to other signers, can't sign in. SEP-10 first checks that the signed
+transaction is exactly the challenge it issued, then verifies the challenge's weighted
+signatures against the same weight, excluding the server signer. Neither path falls
+back to the master key alone for an existing account. An address with no account yet
+signs in with its own key's signature, as before, but only on an authoritative Horizon
+account-not-found 404 problem response, not a generic 404 or a network failure. That
+session proves possession of the key, not funding or transaction readiness. Read
+failures, timeouts (8 seconds) and malformed account responses return 503.
+
+Sessions are sealed cookies: `__Host-stellar-auth` in production, so the browser
+accepts it only when it is Secure, host-only and on path `/`, and `stellar-auth` in
+local development over HTTP. Both are `HttpOnly` and `SameSite=Lax`. A session ends
+24 hours after its cookie was last issued. The app's session check on each page load
+(`GET /api/auth/session`) re-issues it, at most every 15 minutes, so a session in use
+continues, but every session ends 3 days after sign-in. Only that route re-issues the
+cookie, because a response to a request sent before a logout could otherwise restore
+the session. The server keeps no list of sessions, so one session can't be revoked on
+its own: logout clears the cookie in that browser, and a copy taken earlier stays valid
+until one of those limits. `IRON_PASSWORD` may be a JSON map of numbered secrets, such
+as `{"2":"<new>","1":"<old>"}`. New cookies are sealed with the highest number and
+cookies sealed with any listed number still open, so adding a higher number rotates the
+secret without signing anyone out. Removing a number ends every session sealed with it,
+and replacing the map with one new secret under a new number ends every session.
+
+The routes that change who is signed in (both challenges, both verifies, and logout)
+accept only POST, and only from the app's own pages: they refuse a request whose
+`Sec-Fetch-Site` is anything but `same-origin`, which includes a sibling subdomain
+such as dev.tribes.build, and, from a browser that doesn't send that header, a request
+whose `Origin` is not `APP_URL`. So another page can't replace or clear a visitor's
+session. A request with neither header is not from a browser page and carries no
+visitor's cookie.
+
+Before the wallet signs a SEP-10 challenge, the browser checks it: a transaction on
+this network with sequence number 0, so it can never be applied on chain; from the
+server key that also signed this sign-in's SEP-53 message, as source and signer; with
+only manageData operations, the first one `<home domain> auth` for the connected
+address and the rest from the server key (apart from `client_domain`). The domains
+come from the same server response, and time bounds are left to the server, so a
+browser with a wrong clock can still sign in. Every transaction the wallet signs
+passes the fee guard, which also refuses a transaction whose fee it can't read.
+
+Challenge replay bookkeeping and the sign-in rate limits are kept in each server
+instance's memory. There is no shared store: another instance doesn't see a used
+challenge or a client's count, so the limits slow a client down rather than cap the
+deployment. Sign-in deletes the challenge from the cookie it returns, so a replay needs
+the older cookie, within the challenge's 5 minutes, on another instance. The limits
+count per client address, read from one trusted header: `x-vercel-forwarded-for` on
+Vercel, or the header named in `TRUSTED_CLIENT_IP_HEADER` behind another proxy. The
+app reads the last address in that header, the one the nearest proxy added, so name a
+header only when a proxy in front of the app sets or overwrites it: with no proxy,
+`next start` passes on whatever the client sent, and behind two proxies that both
+append to `X-Forwarded-For`, the last address is the outer proxy's and every client
+shares one count. Client-supplied `X-Forwarded-For`, `X-Real-IP` and
+`CF-Connecting-IP` are otherwise ignored, and a production request with no trusted
+address is refused with 503.
 
 Marketplace preparation checks same origin, session network, tenant/module/listing
 identity, live wiring/terms, ownership, and relevant account funds/trustlines. It
@@ -284,8 +335,11 @@ the CID must be a file already in the operator's account (Pinata's file list), a
 names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
 within an hour. Each `generate-jwt` key is a Pinata key for one legacy
 `pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
-limit is checked in the browser). Upload tokens are signed with a key derived from
-`IRON_PASSWORD` under its own label, not with the session key.
+limit is checked in the browser). Upload and pin tokens are signed with
+`UPLOAD_TOKEN_SECRET` when it is set, so either secret can rotate without the other.
+When it is unset they use a key derived from the current (highest-numbered)
+`IRON_PASSWORD` under its own label, never the session key itself. Changing the secret
+ends the tokens already issued.
 
 Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
 browser storage, not encrypted shared permissions or on-chain rights. Scope filters

@@ -26,7 +26,10 @@ export type AuthSession = {
   address?: string;
   network?: string;
   authMethod?: AuthMethod;
+  /** When the account signed in (ms). Sets the session's absolute limit. */
   authenticatedAt?: number;
+  /** When the cookie was last issued for this account (ms). Paces the sliding refresh. */
+  refreshedAt?: number;
 };
 
 export type AuthMethod = 'sep53' | 'sep10';
@@ -48,6 +51,9 @@ export type Sep10ChallengeResponse = {
   network: string;
   xdr: string;
   expiresAt: string;
+  /** The domains the challenge names, which the browser checks before the wallet signs it. */
+  homeDomain: string;
+  webAuthDomain: string;
 };
 
 export type AuthSessionResponse = {
