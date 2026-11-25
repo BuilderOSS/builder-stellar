@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { AuthenticationError, getPinataService, PinataError, RateLimitError } from '@/lib/pinata-service';
 import { createUploadAuthorization, isValidUploadType, validateFileSize, validateMimeType } from '@/lib/pinata-upload';
 import { storeAuthorization } from '@/lib/pinata-upload-auth';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 
 /**
  * Request validation schema for signed URL generation
@@ -77,8 +78,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'CSRF validation failed', code: 'CSRF_INVALID' }, { status: 403 });
     }
 
-    // Check authentication
-    await requireAuthenticatedSession();
+    // A funded account, with a limit per account: each signed URL is a paid upload.
+    const session = await requireUploadAccount('pinata-url');
 
     // Parse and validate request body
     body = await request.json().catch(() => ({}));
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const authorization = createUploadAuthorization(data.uploadType, signedUrl);
 
     // Store authorization for verification during completion
-    const uploadId = storeAuthorization(authorization.uploadId, authorization);
+    const uploadId = storeAuthorization(authorization.uploadId, authorization, session.address);
 
     return NextResponse.json(
       {
@@ -141,6 +142,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthError) {
       return authErrorResponse(error);
+    }
+
+    if (error instanceof UploadAccessError) {
+      return uploadAccessErrorResponse(error);
     }
 
     if (error instanceof SyntaxError) {

@@ -263,6 +263,26 @@ acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
 nonce cannot be silently changed after freezing. Unknown acceptance is not proof
 of failure. Missing older envelopes cannot be safely rebroadcast.
 
+Uploads to IPFS go through the operator's Pinata account, so they cost the operator.
+Every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`,
+`/api/uploads/pinata-url`, `/api/uploads/complete`) needs a session on the
+deployment's network, then limits each account per route per 10 minutes, then
+requires that the account exists on that network (canonical Horizon; a failed or
+timed-out lookup refuses, it never passes; an unfunded result is remembered for a
+minute). A key costs nothing; a funded account holds the base reserve on mainnet, but
+on testnet Friendbot funds accounts for free, so there the funded check costs an
+abuser one Friendbot call per key and the limits are per account. There is no
+deployment-wide upload budget, and the checks and counts are per server instance.
+Upload tokens name the account they were issued to and only that account completes
+them, until they expire (they are not single-use). `complete` and `pin-cid` only read:
+the CID must be a file already in the operator's account (Pinata's file list), and
+`complete` checks its size against the token's limit; neither pins a CID the client
+names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
+within an hour. Each `generate-jwt` key is a Pinata key for one legacy
+`pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
+limit is checked in the browser). Upload tokens are signed with a key derived from
+`IRON_PASSWORD` under its own label, not with the session key.
+
 Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
 browser storage, not encrypted shared permissions or on-chain rights. Scope filters
 avoid mixing workspaces but do not secure data from another user of the same browser.
