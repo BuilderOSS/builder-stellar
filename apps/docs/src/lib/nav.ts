@@ -176,7 +176,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'reference/glossary',
         title: 'Glossary',
-        summary: 'Every term, in plain words with the DAO term beneath.'
+        summary: 'Terms in plain words, with the DAO or Stellar term for each.'
       },
       {
         slug: 'reference/proposal-actions',
@@ -192,7 +192,7 @@ export const NAV: DocSection[] = [
       {
         slug: 'reference/contract-addresses',
         title: 'Contract addresses',
-        summary: 'The contracts on each network.'
+        summary: 'The Manager and current releases for each site.'
       },
       { slug: 'reference/faq', title: 'FAQ', summary: 'Common questions and answers.' },
       {

@@ -16,7 +16,7 @@ export type GlossaryEntry = {
 export const GLOSSARY = {
   treasury: {
     term: 'Treasury',
-    plain: 'The funds the tribe holds together. They move only when a proposal passes.',
+    plain: 'The funds the tribe holds together. They move only when a proposal passes and runs.',
     dao: 'An onchain treasury contract. Every payment in and out is public.',
     slug: 'treasury'
   },
