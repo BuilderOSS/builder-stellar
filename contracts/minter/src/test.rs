@@ -13,7 +13,7 @@ use token::{DaoTokenContract, DaoTokenContractClient};
 
 use crate::{
     AssuranceState, AssuranceTerms, ClaimMinter, ClaimMinterClient, ClaimMinterError as E,
-    ClaimRecord, Claimed, EscrowReleased, ListOpened, Refunded,
+    ClaimRecord, Claimed, EscrowReleased, ListClosed, ListOpened, Refunded,
 };
 use common::testutils::{MockManager, MockManagerClient};
 
@@ -546,6 +546,81 @@ fn claims_need_the_claimer() {
         .cm
         .try_claim(&id, &alice, &1, &1, &tree.proofs[0], &0)
         .is_err());
+}
+
+#[test]
+fn the_dao_closes_a_setup_list_after_launch() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    // A free list the launch admin opens in Setup stays claimable after launch.
+    let (id, tree) = d.open(&[(&alice, 5)], 0, None);
+    d.launch();
+    d.cm.claim(&id, &alice, &5, &1, &tree.proofs[0], &0);
+
+    // The admin is now the Treasury: a proposal closes the list.
+    d.env.ledger().set_timestamp(NOW + DAY);
+    d.cm.close_list(&id);
+    assert!(d.env.events().all().events().contains(
+        &ListClosed {
+            list_id: id,
+            minted: 1,
+            total: 100,
+        }
+        .to_xdr(&d.env, &d.cm.address)
+    ));
+    assert_eq!(d.env.auths()[0].0, d.treasury);
+    assert_eq!(d.cm.get_list(&id).unwrap().expires_at, NOW + DAY);
+    assert_eq!(
+        d.cm.try_claim(&id, &alice, &5, &1, &tree.proofs[0], &0)
+            .err()
+            .unwrap()
+            .unwrap(),
+        E::ListExpired
+    );
+    assert_eq!(d.token.balance(&alice), 1);
+    // Closing twice fails like any expired list.
+    assert_eq!(
+        d.cm.try_close_list(&id).err().unwrap().unwrap(),
+        E::ListExpired
+    );
+}
+
+#[test]
+fn close_list_is_the_admins_and_spares_an_open_drive() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    assert_eq!(
+        d.cm.try_close_list(&7).err().unwrap().unwrap(),
+        E::ListNotFound
+    );
+    let (free, _) = d.open(&[(&alice, 1)], 0, None);
+    let (drive, _) = d.open(&[(&alice, 1)], 10, terms(1));
+    // The drive's refunds and release depend on it until launch.
+    assert_eq!(
+        d.cm.try_close_list(&drive).err().unwrap().unwrap(),
+        E::AssuranceNotAllowed
+    );
+
+    // Only the admin (the launch admin in Setup) can close a list.
+    let stranger = Address::generate(&d.env);
+    let args: Vec<Val> = (free,).into_val(&d.env);
+    d.env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &d.cm.address,
+            fn_name: "close_list",
+            args,
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(d.cm.try_close_list(&free).is_err());
+    d.env.mock_all_auths();
+    d.cm.close_list(&free);
+    assert_eq!(d.env.auths()[0].0, d.launch_admin);
+
+    // After launch the drive's list can be closed like any other.
+    d.launch();
+    d.cm.close_list(&drive);
 }
 
 // ============================================================================

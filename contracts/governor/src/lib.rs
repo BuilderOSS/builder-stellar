@@ -22,9 +22,10 @@
 //!
 //! ## Proposal Flow
 //!
-//! 1. **Creation**: A holder with at least `proposal_threshold` votes proposes targets,
-//!    functions and arguments
-//! 2. **Voting Delay**: Short delay before voting starts (allows delegation changes)
+//! 1. **Creation**: A holder with at least `votes_needed_to_propose` votes (the
+//!    `proposal_threshold`, capped at the voting supply) proposes targets, functions
+//!    and arguments; votes are read at the ledger before `propose`
+//! 2. **Voting Delay**: Short delay before voting starts
 //! 3. **Active Voting**: Token holders vote For/Against/Abstain based on snapshot
 //! 4. **Success/Defeat**: Determined by quorum and majority at vote end
 //! 5. **Queue**: Successful proposals queued with execution timestamp (ETA)

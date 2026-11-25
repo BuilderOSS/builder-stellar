@@ -39,6 +39,17 @@ pub struct Claimed {
     pub claimed: u32,
 }
 
+/// A list closed early by the admin (`close_list`): no claims after this.
+/// `minted` of `total` were claimed; the rest can no longer be minted from it.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ListClosed {
+    #[topic]
+    pub list_id: u32,
+    pub minted: u32,
+    pub total: u32,
+}
+
 /// The assurance escrow moved to the Treasury (at launch).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]

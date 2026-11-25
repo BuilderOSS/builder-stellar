@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { BackendFailedError, getPinataService, NotFoundError, PinataError } from '@/lib/pinata-service';
 import {
   cidToUrls,
@@ -9,6 +9,7 @@ import {
   validateUploadCompletion
 } from '@/lib/pinata-upload';
 import { getAuthorization } from '@/lib/pinata-upload-auth';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 
 /**
  * POST /api/uploads/complete
@@ -49,8 +50,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' }, { status: 404 });
     }
 
-    // Check authentication
-    await requireAuthenticatedSession();
+    const session = await requireUploadAccount('complete');
 
     // Parse and validate request body
     const body = await request.json().catch(() => ({}));
@@ -72,8 +72,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const completion = validationResult.data;
 
-    // Look up the authorization
-    const authorization = getAuthorization(completion.uploadId);
+    // Look up the authorization: only the account it was issued to can complete it.
+    const authorization = getAuthorization(completion.uploadId, session.address);
 
     if (!authorization) {
       console.warn(`[/api/uploads/complete] Authorization not found for upload ${completion.uploadId}`);
@@ -105,12 +105,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: completionValidation.error, code: 'VALIDATION_FAILED' }, { status: 422 });
     }
 
-    // Verify CID with Pinata API
-    // Fetch metadata from Pinata to verify:
-    // - CID exists and is accessible
-    // - File size is reasonable
+    // The CID must be a file this account's upload put in the operator's Pinata account (a
+    // read, never a pin), no larger than the authorization allows.
     const pinataService = getPinataService();
     const cidMetadata = await pinataService.verifyCid(completion.cid);
+    if (cidMetadata.size > authorization.maxBytes) {
+      return NextResponse.json(
+        { error: 'The uploaded file is larger than this upload allows.', code: 'FILE_TOO_LARGE' },
+        { status: 422 }
+      );
+    }
 
     // Verify file size matches
     if (cidMetadata.size > 0 && cidMetadata.size !== completion.sizeBytes) {
@@ -130,15 +134,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Pin CID to IPFS for redundancy
-    try {
-      await pinataService.pinCidToIPFS(completion.cid, completion.filename);
-    } catch (pinError) {
-      // Log the error but don't fail the request
-      // The CID is already on Pinata, pinning is just for redundancy
-      console.warn('[/api/uploads/complete] Failed to pin CID to IPFS:', pinError);
-    }
-
     // Convert CID to URLs
     const { ipfsUri, gatewayUrl } = cidToUrls(completion.cid, getPreferredGatewayHost());
 
@@ -156,6 +151,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthError) {
       return authErrorResponse(error);
+    }
+
+    if (error instanceof UploadAccessError) {
+      return uploadAccessErrorResponse(error);
     }
 
     if (error instanceof SyntaxError) {
