@@ -21,4 +21,4 @@ when that was written in the same ledger. Reads at a past ledger therefore see t
 OpenZeppelin `Votes` does. A read at the current or a future ledger fails with `FutureLookup` (1). It emits no
 events, so the indexer needs no role for it.
 
-Tests: `cargo test -p vote-adapter-mock`. The Governor, Manager and e2e adapter tests drive tribes through it.
+Tests: `cargo test -p vote-adapter-mock`. The Governor, Manager, and e2e adapter tests drive tribes through it.

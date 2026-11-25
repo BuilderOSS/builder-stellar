@@ -1,40 +1,54 @@
-# metadata Contract Bindings
+# @builder-stellar/metadata-bindings
 
-TypeScript bindings for the metadata Stellar smart contract.
+TypeScript bindings for the Tribe Builder **Metadata** contract (crate
+`metadata`): the DAO's artwork, token URIs, renderer setting, and community
+profile hash. See the [contract README](../../contracts/metadata/README.md).
 
-## Installation
+> `src/client.ts` and `src/types.ts` are generated from `metadata.wasm`. Do not
+> edit them by hand. This README is hand-written and is preserved when the
+> bindings are regenerated.
+
+## Install and build
+
+This is a pnpm workspace package. A workspace app depends on it as
+`"@builder-stellar/metadata-bindings": "workspace:*"`, as `apps/web` does, and
+`pnpm install` from the repository root links it. Build it before use:
 
 ```bash
-npm install
+pnpm --filter @builder-stellar/metadata-bindings build   # tsc -> dist/
 ```
 
-## Build
-
-```bash
-npm run build
-```
+`pnpm --dir apps/web codegen`, which runs before the web app's `dev` and
+`build`, builds every bindings package.
 
 ## Usage
 
 ```typescript
-import { Client } from "./src";
+import { Client } from '@builder-stellar/metadata-bindings';
 
-const client = new Client({
-  contractId: "YOUR_CONTRACT_ID",
-  rpcUrl: "https://soroban-testnet.stellar.org:443",
-  networkPassphrase: "Test SDF Network ; September 2015",
+const metadata = new Client({
+  contractId: 'C...', // Metadata contract id
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  networkPassphrase: 'Test SDF Network ; September 2015'
+  // add publicKey and signTransaction to sign state-changing calls
 });
 
-// Call contract methods
-// const result = await client.methodName();
+// Artwork properties (read-only)
+const { result } = await metadata.properties_count();
 ```
 
-## Generated Files
+Structs, enums, and events (`ContractEvent`) are exported from `src/types.ts`,
+with `Error` (block 7300) and `CommonError` (7001-7013). Every project contract
+owns a block of 100 codes in 7000-7899, so a code identifies its crate.
 
-- `src/index.ts` - Entry point exporting the Client
-- `src/types.ts` - Type definitions for contract structs, enums, and unions
-- `src/contract.ts` - Client implementation
-- `tsconfig.json` - TypeScript configuration
-- `package.json` - NPM package configuration
+## Regenerating
 
-This package was generated using the Js-Stellar-SDK contract binding generator.
+From the repository root:
+
+```bash
+pnpm contracts:bindings
+```
+
+This builds the contracts, regenerates every `*-bindings` package, and then
+restores each package's `README.md`. See
+[bindings generation](../../docs/BINDINGS_GENERATION.md).
