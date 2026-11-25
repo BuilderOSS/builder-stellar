@@ -1,6 +1,6 @@
-# Design: membership models with capped minting, custody and plug-in modules
+# Design: membership models with capped minting, custody, and plug-in modules
 
-The 0.4.0 design: mint allowances, the Token's module registry, the per-DAO ClaimMinter, the assurance launch and
+The 0.4.0 design: mint allowances, the Token's module registry, the per-DAO ClaimMinter, the assurance launch, and
 quick-buy pools. It shipped in PR #45 (contracts) and PR #46 (web). It was written before the build, so "today"
 means the 0.3.0 contracts it replaced; the "As built" notes in §7 and the implementation notes at the end record
 where the build differed. Code cites it by section (§1 to §7) and by decision (R1 to R9).
@@ -32,7 +32,7 @@ future proof without simply going on increasing number of modules".
   proposal mints at most about 43 tokens**.
 - Today, before launch, only the launch admin can mint (`ensure_mint_authority`,
   `contracts/token/src/contract.rs:550`). This design changes that rule (section 1, "Minting before launch").
-- Today exactly three addresses hold NFTs without voting: Treasury, Auction and Marketplace (`voting_holder`,
+- Today exactly three addresses hold NFTs without voting: Treasury, Auction, and Marketplace (`voting_holder`,
   `contract.rs:492`). They are fixed at construction, so "balances and voting units can never drift apart".
 - The Treasury acts only through executed proposals.
 - Chain-only rule: a client with public RPC must be able to operate and renew a DAO. Every key is in the renewal
@@ -388,7 +388,7 @@ all use the same registration, allowance, and upgrade path.
 
 | Actor | Before launch | After launch |
 |---|---|---|
-| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. With the launch admin of a failed drive, it can replace that drive's ClaimMinter code (`recover_claims`), which then holds the escrow; only to the announced latest, after the notice and at least seven days after the deadline. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
+| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. With the launch admin of a failed drive, it can replace that drive's ClaimMinter code (`recover_claims`), which then holds the escrow; only to the announced latest, after the notice, and at least seven days after the deadline. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
 | Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash announced as latest, after the upgrade notice. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
 | Treasury | Can't act | Mints without a limit; manages allowances and registrations |
 

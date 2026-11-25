@@ -80,7 +80,7 @@ The real connect modal should be exercised, but browser-extension wallets can't 
 - There is a "reject" switch, so declined signatures and recovery states get tested too.
 - One manual smoke pass per release with Freighter on a real device stays in the checklist, because the E2E Wallet proves our code, not every wallet's.
 
-### 3.3 Network, identities and waits
+### 3.3 Network, identities, and waits
 - **Network: testnet.** It's the only network with an indexer (Goldsky), and the read model is part of what we test. A local quickstart can't index, and it has no ledger-time control.
 - **Identities.** Funded testnet keys come from `stellar keys`, named `e2e-founder`, `e2e-member-a`, `e2e-member-b`, and `e2e-operator`. They are funded and topped up by Friendbot in a preflight step, and only public addresses are logged.
 - **Timing.** The contract minimums are 300s each for voting delay, voting period, and queue delay, and 300s for an auction. A proposal therefore takes at least 15 minutes, plus the time for ledgers and the indexer to catch up.
@@ -107,7 +107,7 @@ Each flow is a Playwright spec named for its user goal. `chain` means it signs t
 | W12 | Claims: create a list, publish, claim, refund | chain | |
 | W13 | Treasury: balances, a draft dock proposal | read + chain | |
 | W14 | Members: directory, profile, delegate, transfer, approve, revoke, members-only delegation | chain | |
-| W15 | Manage: profile, token, governance, auction and marketplace settings, all as proposals after launch | chain | Checks the authority copy (Setup versus Requires DAO governance) |
+| W15 | Manage: profile, token, governance, auction, and marketplace settings, all as proposals after launch | chain | Checks the authority copy (Setup versus Requires DAO governance) |
 | W16 | Upgrades: notice, approve upgrade, migrate | chain | Needs an operator-approved path on testnet |
 | W17 | Renewal: quote and renew (tribe tab), and the platform page | chain | |
 | W18 | Legal export: all four steps, both downloads checked | read | Downloads are intercepted, never saved |
@@ -327,7 +327,7 @@ Every page passes two independent checks before merge:
    - The DESIGN.md voice: sentence case, no em dashes in UI copy, no "simply" or "just", the DAO term one line beneath, and exact authority language.
    - British English and the Oxford comma, per `AGENTS.md`.
    - Terms match `packages/glossary`.
-   - Numbers, limits and timings come from the generated reference, never hand-typed.
+   - Numbers, limits, and timings come from the generated reference, never hand-typed.
    - Lint: Vale with a house style package (`docs/style/`) for voice rules, plus a script that flags em dashes and banned words.
 2. **Facts.** A reviewer runs the guide's steps on testnet, or checks the walkthrough spec that already does, and ticks each step.
 3. **Media.** Each screenshot is checked against its step's text:
@@ -409,7 +409,7 @@ The deck and the MIDAO team update use the wording "space optional" and present 
 - **Goldsky lag or outages** make indexer waits flaky. Mitigation: generous condition timeouts, and a clear "indexer late" failure class instead of a generic timeout.
 - **The test wallet diverges from real wallets.** Mitigation: a manual Freighter smoke pass per release, and the module implements the kit's interface exactly.
 - **Screenshot churn** makes docs PRs noisy. Mitigation: deterministic data (the showcase tribe), with fonts, time, and animations frozen.
-- **Scope.** About 20 flows, around 60 docs pages and roughly 240 images per capture. Mitigation: the phased exits in §2, and docs pages ship by area.
+- **Scope.** About 20 flows, around 60 docs pages, and roughly 240 images per capture. Mitigation: the phased exits in §2, and docs pages ship by area.
 
 ## 11. Open questions (answer before P1)
 1. **Wallet approach.** Do you accept a test-only E2E Wallet module in the app build (flag-gated and stripped from production), or must the suite drive a real extension such as Freighter, which is slower and flakier?

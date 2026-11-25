@@ -165,7 +165,7 @@ The asset contracts' `transfer` events are not ingested.
 
 **Proposed:** ingest `transfer` events from the supported asset contracts (XLM and USDC) whose `to` is a known
 treasury, into a new `dao_contributions` view: tribe, asset, amount, from, ledger, transaction hash. The progress bar,
-the gift count and the activity feed ("Someone gave 500 KSh") read from it.
+the gift count, and the activity feed ("Someone gave 500 KSh") read from it.
 
 - **Volume.** USDC transfers on mainnet are many. Filter on the `to` topic early in the pipeline, against the set of
   known treasuries. To check: whether Goldsky can filter by a dynamic list on a topic value, as it does today for

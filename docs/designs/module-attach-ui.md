@@ -2,7 +2,7 @@
 
 Status: shipped in PR #57; § 12 records what changed during the build and what was proven on testnet. The clickable design preview was removed once the build landed; it is in git at `431e9b6:docs/design/module-attach-preview.html`.
 
-Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events and the `manager.daos` view that resolves auction, marketplace, and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
+Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events, and the `manager.daos` view that resolves auction, marketplace, and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
 
 ## 1. Brief
 

@@ -67,7 +67,7 @@ None. Two known items aren't app bugs:
 ### BUG-004 · Connecting again after a refused signature hangs on "Check wallet"
 - **Flow:** W01, refused signature then retry. All viewports and themes.
 - **Severity:** P1 (sign-in blocked until the modal is closed or the page reloaded).
-- **Steps:** Connect, refuse the signature, press Connect again and pick the wallet within about a
+- **Steps:** Connect, refuse the signature, press Connect again, and pick the wallet within about a
   second.
 - **Expected:** the wallet asks for the sign-in signature.
 - **Actual:** the wallet returns its address, but the modal stays open and the top bar shows
@@ -395,7 +395,7 @@ None. Two known items aren't app bugs:
 ### BUG-010 · Change price closed itself after Continue, so the price could not change
 - **Flow:** W10, change a price. Found at desktop dark.
 - **Severity:** P1 (Change price was blocked).
-- **Steps:** in Your listings press Change price, enter a new price and press Continue.
+- **Steps:** in Your listings press Change price, enter a new price, and press Continue.
 - **Expected:** the "Change the price" sequence opens at Step 1 of 3, Cancel the current listing.
 - **Actual:** the sequence rendered for a moment and closed, leaving the listing unchanged.
 - **Root cause:** Continue unmounts the Change price dialog and opens the sequence's dialog in the same
@@ -484,7 +484,7 @@ None. Two known items aren't app bugs:
   cancel and `get_approved` is empty after it.
 
 ### BUG-W11-4 · A pool proposal's summary left out the asset and the sales limit
-- **Flow:** W11, Market settings, Propose a quick-buy pool: the add-to-proposal check, the composer
+- **Flow:** W11, Market settings, Propose a quick-buy pool: the add-to-proposal check, the composer,
   and the proposal page all use the action summary.
 - **Severity:** P2 (members vote on terms the summary didn't state).
 - **Steps:** propose a pool of 3 tokens at 1 XLM, 1 per wallet, 1 sale every 24h.
@@ -610,7 +610,7 @@ None. Two known items aren't app bugs:
   remembered for 60s). The proof file fallback only shows once the lists load, so it was out of reach too.
 - **Root cause:** `fetchJson` in `apps/web/src/lib/minter/claim-list.ts` tried the seven gateways one
   after another with a 15s timeout each.
-- **Fix:** ask every gateway at once, take the first JSON answer and abort the rest, all within one
+- **Fix:** ask every gateway at once, take the first JSON answer, and abort the rest, all within one
   15s budget.
 - **Regression test:** `apps/web/src/lib/minter/claim-list.test.ts` (one budget, every gateway asked
   at once); W12's signed-out @matrix check waits one budget, not more.
@@ -671,7 +671,7 @@ None. Two known items aren't app bugs:
 - **Fix:** a claim list gets its own policy (`application/json`, 12 MB) from `UPLOAD_POLICIES`.
 - **Regression test:** `apps/web/src/lib/pinata-service.test.ts`.
 
-### BUG-CAP-4 · "1 tokens for you", "1 claims so far" and "1 votes"
+### BUG-CAP-4 · "1 tokens for you", "1 claims so far", and "1 votes"
 - **Flow:** docs capture: Claims, with one token on the list and one claim made; the composer's
   For reference → Members list, for a member with one vote.
 - **Severity:** P3 (copy).

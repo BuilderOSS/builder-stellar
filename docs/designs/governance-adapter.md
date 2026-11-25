@@ -50,7 +50,7 @@ The first three methods are OpenZeppelin's `Votes` reads, with the same names an
 
 **Storage.** The source sits in the Governor's existing OpenZeppelin token-contract slot. The Manager passes `vote_source.unwrap_or(token)` as the constructor's `token_contract` argument. That gives three properties:
 
-- No new key, no constructor change and no event change, and default tribes store nothing extra (`docs/STORAGE_DIET.md` rule 2).
+- No new key, no constructor change, and no event change, and default tribes store nothing extra (`docs/STORAGE_DIET.md` rule 2).
 - OZ's `set_token_contract` refuses a second write, so the source is permanent at no cost.
 - Governors already on testnet (0.4.0) hold their token in that slot, so upgraded ones behave exactly as before. There is no storage-version bump and no `migrate` step.
 

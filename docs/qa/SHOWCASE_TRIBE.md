@@ -58,7 +58,7 @@ Roles appear only in proposal text.
 | Identity | Role | Tokens |
 |---|---|---|
 | `e2e-show-founder` | The founder. Creates, sets up, and launches the tribe, writes proposal 1, and votes on, queues, and executes every proposal. | 3 founder tokens |
-| `e2e-show-member-a` | The workshop lead. Wins the first auction, writes the other proposals, sells on the market, and gives a lantern away. | 2 founder tokens, the first auction and a mint |
+| `e2e-show-member-a` | The workshop lead. Wins the first auction, writes the other proposals, sells on the market, and gives a lantern away. | 2 founder tokens, the first auction, and a mint |
 | `e2e-show-member-b` | A new member. Buys their first lantern on the market and delegates their vote. | One bought, one minted |
 | `e2e-show-operator` | A second account. Settles the first auction and receives a lantern. | One received |
 

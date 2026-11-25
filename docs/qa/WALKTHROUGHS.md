@@ -502,7 +502,7 @@ E2E_TIMELINE=w09 E2E_APP_PORT=4359 E2E_MANAGER_ARTIFACT=deploys/dev-testnet-mana
   forms after a UI change. The setup steps it runs first (a token given to the treasury, an approval,
   a listing for the treasury to buy) are signed with `stellar keys` and reused by the next run.
 
-## W02, W13 and W17: discover, treasury and renewal
+## W02, W13, and W17: discover, treasury, and renewal
 
 Run them on the `w02` timeline, in their own worktree:
 
@@ -703,7 +703,7 @@ safety delay are waited out once for every proposal. In order:
 |---|---|
 | W08 cancel | The founder proposes; member A sees no Cancel; the founder cancels before voting opens |
 | W07 propose | The founder composes three actions (2 XLM to member A, 1 XLM to member B, flip members-only delegation) and proposes |
-| W08 propose | Three one-action proposals for the defeated, quorum and expiry cases, a few seconds apart |
+| W08 propose | Three one-action proposals for the defeated, quorum, and expiry cases, a few seconds apart |
 | W07 vote | Founder For (3), member A Against (2), member B Abstain (2), each in their own browser, at the same time |
 | W08 vote | Defeated: A For, B Abstain, founder Against. Quorum: founder For only. Expiry: founder and A For |
 | W07 queue | Member B queues it once the vote passes (anyone can) |
@@ -811,7 +811,7 @@ Not driven through the app, and why:
   show "Claim list unavailable" and members claim with the proof file, the app's own fallback.
 - **Opening the drive.** The drive form only offers whole days (1 to 90), and a refund needs the
   deadline to pass. `src/drive-fixture.ts` opens it with `manager.open_assurance` and a 3-minute
-  deadline; claiming, the failed state and Take back go through the app.
+  deadline; claiming, the failed state, and Take back go through the app.
 - **A deferred auction refund** ("Refund waiting", Claim refund). The Auction credits a refund for
   later only when the push fails. With native XLM a push to a merged account recreates it (tried on
   testnet: the refund arrived as a new account with 1 XLM), so it can't be forced with a 1 XLM
