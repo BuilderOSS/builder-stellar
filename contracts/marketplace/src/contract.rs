@@ -2,8 +2,8 @@
 
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
-    Val, Vec,
+    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, Executable, IntoVal,
+    String, Symbol, Val, Vec,
 };
 
 use common::clients::NftClient;
@@ -16,13 +16,27 @@ use crate::{
     storage::{self, *},
 };
 
+/// A DAO's market for its membership tokens: escrowed secondary listings
+/// and quick-buy pools of new tokens. See the crate documentation.
 #[contract]
 pub struct MarketplaceContract;
 
 #[contractimpl]
 impl MarketplaceContract {
+    /// Deploy-time setup, run once by the Manager at `create_dao` or
+    /// `create_module`. Starts paused and in Setup.
+    ///
+    /// * `token` - the DAO's membership token
     /// * `admin` - setup-phase admin of the parameter setters (the launch admin);
     ///   becomes the Treasury at launch
+    /// * `treasury` - receives fees and pool sales
+    /// * `payment_asset` - asset of new listings, a Stellar Asset Contract
+    ///   (`NotStellarAsset`)
+    /// * `manager`, `current_hash` - upgrade approvals and the running hash
+    /// * `default_secondary_fee_bps` - fee on secondary sales, at most
+    ///   `MAX_FEE_BPS` (`InvalidFee`)
+    ///
+    /// Emits `MarketplaceInitialized`.
     pub fn __constructor(
         e: &Env,
         token: Address,
@@ -36,6 +50,7 @@ impl MarketplaceContract {
         if default_secondary_fee_bps > MAX_FEE_BPS {
             panic_with_error!(e, MarketplaceError::InvalidFee);
         }
+        Self::require_stellar_asset(e, &payment_asset);
         storage::set_config(
             e,
             &MarketplaceConfig {
@@ -59,10 +74,14 @@ impl MarketplaceContract {
         );
     }
 
+    /// The configuration: wiring, payment asset, default fee, and pause state
+    /// (read-only).
     pub fn get_config(e: &Env) -> MarketplaceConfig {
         storage::get_config(e)
     }
 
+    /// The live listing of `token_id`, if any (read-only; an expired listing
+    /// stays until `expire`).
     pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
         storage::get_listing(e, token_id)
     }
@@ -116,7 +135,9 @@ impl MarketplaceContract {
         common::ttl::extend_instance(e);
     }
 
-    /// The configured payment asset (`DaoModule::payment_asset`).
+    /// The configured payment asset (`DaoModule::payment_asset`; read-only).
+    /// The Manager compares it with the asset recorded at `create_dao`
+    /// before launch.
     pub fn payment_asset(e: &Env) -> Address {
         Self::get_config(e).payment_asset
     }
@@ -188,12 +209,18 @@ impl MarketplaceContract {
     //       │
     //   close_pool() ──► release_mint_allowance(unstocked) ; sweep_pool() ×k ──► unsold to Treasury
 
-    /// Open a pool of `size` tokens (the Treasury, by proposal, once Live).
+    /// Open a pool of `size` tokens (the Treasury, by proposal, once Live;
+    /// refused while paused).
     ///
-    /// The pool reserves `size` of the Marketplace's mint allowance for
-    /// itself: the allowance not reserved by other open pools must cover it
+    /// Buyers pay `price` of `asset`, a Stellar Asset Contract
+    /// (`NotStellarAsset`), until `expires_at`. Each buyer may buy at most
+    /// `max_per_buyer`, and the pool sells at most `max_sold_per_period` per
+    /// `period_secs` (`InvalidPool` if any of these is zero). The pool
+    /// reserves `size` of the Marketplace's mint allowance for itself: the
+    /// allowance not reserved by other open pools must cover it
     /// (`AllowanceNotReserved`), so closing one pool never starves another.
-    /// Returns the pool id.
+    /// At most `MAX_OPEN_POOLS` are open (`TooManyPools`). Emits `PoolOpened`
+    /// and returns the pool id.
     #[allow(clippy::too_many_arguments)]
     pub fn open_pool(
         e: &Env,
@@ -221,6 +248,7 @@ impl MarketplaceContract {
         if size == 0 || max_per_buyer == 0 || max_sold_per_period == 0 || period_secs == 0 {
             panic_with_error!(e, MarketplaceError::InvalidPool);
         }
+        Self::require_stellar_asset(e, &asset);
         let mut slots = storage::open_pools(e);
         if slots.len() >= MAX_OPEN_POOLS {
             panic_with_error!(e, MarketplaceError::TooManyPools);
@@ -271,7 +299,9 @@ impl MarketplaceContract {
 
     /// Mint the pool's next chunk (at most `common::MAX_RESTOCK`) into this
     /// contract's custody and append the ids to its stock pages. Anyone may
-    /// call it until the pool closes or expires. Returns how many it minted.
+    /// call it until the pool closes or expires (`PoolClosed`) or has stocked
+    /// its size (`PoolFullyStocked`); it spends this contract's allowance.
+    /// Emits `PoolRestocked` and returns how many it minted.
     pub fn restock(e: &Env, pool_id: u32) -> u32 {
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
@@ -327,11 +357,13 @@ impl MarketplaceContract {
         count
     }
 
-    /// Buy `token_id` from page `page` of a pool: pays the pool price to the
-    /// Treasury and sends the token to `buyer`. Refuses once the pool is
-    /// closed or expired (`PoolClosed`), past the buyer's cap
-    /// (`BuyerLimitReached`) or the period's sales (`PoolRateLimited`), or
-    /// above `max_price` (`PriceAboveMax`).
+    /// Buy `token_id` from page `page` of a pool (`buyer` signs; refused
+    /// while paused): pays the pool price to the Treasury and sends the
+    /// token to `buyer`. Refuses once the pool is closed or expired
+    /// (`PoolClosed`), past the buyer's cap (`BuyerLimitReached`) or the
+    /// period's sales (`PoolRateLimited`), above `max_price`
+    /// (`PriceAboveMax`), or when the token is not on that page
+    /// (`NotInPool`). Emits `PoolPurchased`.
     pub fn buy_from_pool(
         e: &Env,
         pool_id: u32,
@@ -400,7 +432,7 @@ impl MarketplaceContract {
     /// has expired. Gives the unstocked rest of the pool's reservation back
     /// to the Token (`release_mint_allowance`, which saturates if the
     /// Treasury lowered the allowance meanwhile). Unsold stock stays here
-    /// until `sweep_pool`.
+    /// until `sweep_pool`. Emits `PoolClosed`.
     pub fn close_pool(e: &Env, pool_id: u32) {
         common::ttl::extend_instance(e);
         let config = Self::get_config(e);
@@ -432,8 +464,8 @@ impl MarketplaceContract {
 
     /// Return up to `MAX_SWEEP` unsold tokens of a closed pool to the
     /// Treasury, emptying its stock pages from the last. Anyone may call it
-    /// until it returns 0 (pages left). Both holders are non-voting, so no
-    /// votes move.
+    /// until it returns 0 (pages left); `PoolOpen` before `close_pool`. Both
+    /// holders are non-voting, so no votes move. Emits `PoolSwept`.
     pub fn sweep_pool(e: &Env, pool_id: u32) -> u32 {
         common::ttl::extend_instance(e);
         let config = Self::get_config(e);
@@ -482,6 +514,7 @@ impl MarketplaceContract {
         pages_left
     }
 
+    /// Pool `pool_id`, if it was opened (read-only; kept after it closes).
     pub fn get_pool(e: &Env, pool_id: u32) -> Option<Pool> {
         storage::get_pool(e, pool_id)
     }
@@ -507,7 +540,12 @@ impl MarketplaceContract {
         storage::next_pool_id(e)
     }
 
-    /// List `token_id` (escrowed here until bought, cancelled or expired).
+    /// List `token_id` for `price` until `expires_at` (`seller` signs and
+    /// must own it; Live only; refused while paused). The token moves into
+    /// this contract's custody until it is bought, cancelled, expired, or
+    /// returned. The seller must first approve the Marketplace for the
+    /// token; in a locked DAO the Token refuses that approval, so no new
+    /// listing can be made. Emits `SecondaryListingCreated`.
     ///
     /// The fee and payment asset in force are captured in the listing.
     /// `max_fee_bps` and `payment_asset` are the terms the seller signed for:
@@ -576,8 +614,11 @@ impl MarketplaceContract {
         events::emit_secondary_created(e, token_id, &listing);
     }
 
-    /// Buy a secondary listing. Rejects (`PriceAboveMax`) if the listing price
-    /// exceeds `max_price`.
+    /// Buy a secondary listing (`buyer` signs; refused while paused or once
+    /// the listing expired, `ListingExpired`). Rejects (`PriceAboveMax`) if
+    /// the listing price exceeds `max_price`. The buyer pays the fee to the
+    /// Treasury and the rest to the seller, in the asset captured at list
+    /// time, and receives the token. Emits `ListingPurchased`.
     pub fn buy(e: &Env, token_id: u32, buyer: Address, max_price: i128) {
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
@@ -632,6 +673,9 @@ impl MarketplaceContract {
         .publish(e);
     }
 
+    /// Cancel a listing and take the token back (`seller` signs and must be
+    /// the listing's seller, `NotSeller`). Works while paused and after
+    /// expiry. Emits `ListingCancelled`.
     pub fn cancel(e: &Env, token_id: u32, seller: Address) {
         common::ttl::extend_instance(e);
         seller.require_auth();
@@ -651,6 +695,9 @@ impl MarketplaceContract {
         ListingCancelled { token_id, seller }.publish(e);
     }
 
+    /// Return an expired listing's token to its seller (anyone may call;
+    /// `ListingActive` before the expiry). Works while paused. Emits
+    /// `ListingExpired`.
     pub fn expire(e: &Env, token_id: u32) {
         common::ttl::extend_instance(e);
         let listing = Self::load_listing(e, token_id);
@@ -673,6 +720,72 @@ impl MarketplaceContract {
         .publish(e);
     }
 
+    /// Return a listing's token to its seller and remove the listing, before
+    /// its expiry and without the seller (the admin: the Treasury, by
+    /// proposal; only while paused, `NotPaused`). No payment moves. Emits
+    /// `ListingCancelled`.
+    ///
+    /// This is how the DAO empties the Marketplace's escrow, for example
+    /// before unregistering it, which the Token refuses while the Marketplace
+    /// holds tokens. Without it, one listing with a distant expiry would keep
+    /// the Marketplace registered.
+    pub fn return_listing(e: &Env, token_id: u32) {
+        common::ttl::extend_instance(e);
+        let (config, _) = Self::require_admin(e);
+        // Pausing first stops new listings and purchases, so the DAO cannot
+        // pull single listings out of an open market.
+        if !config.paused {
+            panic_with_error!(e, MarketplaceError::NotPaused);
+        }
+        let listing = Self::load_listing(e, token_id);
+        storage::remove_listing(e, token_id);
+        Self::token_transfer(
+            e,
+            &config.token,
+            &e.current_contract_address(),
+            &listing.seller,
+            token_id,
+        );
+        ListingCancelled {
+            token_id,
+            seller: listing.seller,
+        }
+        .publish(e);
+    }
+
+    /// Send `token_id`, a membership token this contract holds that no
+    /// listing or pool records, to the Treasury (the admin, while paused,
+    /// `NotPaused`). For a token someone transferred here directly. A listed
+    /// token is refused (`ListingExists`: use `return_listing`), and so is
+    /// any token while a pool is not yet swept empty (`PoolOpen`), because
+    /// stock pages are not indexed by token. The Token's `Transfer` records
+    /// the move; no marketplace event is emitted.
+    ///
+    /// The Token refuses to unregister the Marketplace while it holds
+    /// tokens, so without this anyone could keep it registered by sending it
+    /// one.
+    pub fn recover_token(e: &Env, token_id: u32) {
+        common::ttl::extend_instance(e);
+        let (config, _) = Self::require_admin(e);
+        if !config.paused {
+            panic_with_error!(e, MarketplaceError::NotPaused);
+        }
+        // A listed token is the seller's; pool stock is the pool's.
+        if storage::get_listing(e, token_id).is_some() {
+            panic_with_error!(e, MarketplaceError::ListingExists);
+        }
+        if !storage::open_pools(e).is_empty() {
+            panic_with_error!(e, MarketplaceError::PoolOpen);
+        }
+        Self::token_transfer(
+            e,
+            &config.token,
+            &e.current_contract_address(),
+            &config.treasury,
+            token_id,
+        );
+    }
+
     /// Comment on `token_id`'s secondary listings. No active listing is
     /// required, so the thread survives relisting. Anyone may comment, even
     /// while paused. Event-only: emits `ListingCommented`, writes no storage.
@@ -687,6 +800,8 @@ impl MarketplaceContract {
         .publish(e);
     }
 
+    /// Pause new listings, purchases, and pools (the admin). Cancel, expire,
+    /// restock, close, and sweep keep working. Emits `MarketplacePaused`.
     pub fn pause(e: &Env) {
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
@@ -695,6 +810,7 @@ impl MarketplaceContract {
         MarketplacePaused { changed_by: admin }.publish(e);
     }
 
+    /// Reopen the marketplace (the admin). Emits `MarketplaceUnpaused`.
     pub fn unpause(e: &Env) {
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
@@ -703,8 +819,9 @@ impl MarketplaceContract {
         MarketplaceUnpaused { changed_by: admin }.publish(e);
     }
 
-    /// Fee applied to new listings (existing listings keep theirs). At most
-    /// `common::MAX_FEE_BPS` (25%).
+    /// Fee applied to new listings (the admin; existing listings keep
+    /// theirs). At most `common::MAX_FEE_BPS` (25%, `InvalidFee`). Emits
+    /// `SecondaryFeeUpdated`.
     pub fn set_secondary_fee_bps(e: &Env, fee_bps: u32) {
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
@@ -720,10 +837,13 @@ impl MarketplaceContract {
         .publish(e);
     }
 
-    /// Asset used by new listings (existing listings keep theirs).
+    /// Asset used by new listings (the admin; existing listings keep
+    /// theirs). It must be a Stellar Asset Contract (`NotStellarAsset`).
+    /// Emits `PaymentAssetUpdated`.
     pub fn set_payment_asset(e: &Env, payment_asset: Address) {
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
+        Self::require_stellar_asset(e, &payment_asset);
         config.payment_asset = payment_asset.clone();
         storage::set_config(e, &config);
         PaymentAssetUpdated {
@@ -733,12 +853,17 @@ impl MarketplaceContract {
         .publish(e);
     }
 
+    /// Replaces this contract's WASM with `to_hash` (admin only: the launch
+    /// admin in Setup, the Treasury by proposal once live). `from_hash` must
+    /// be the running hash, and the Manager must have approved the
+    /// `from_hash` to `to_hash` step (`common::upgrade::apply`).
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         let (config, _) = Self::require_admin(e);
         common::upgrade::apply(e, &config.manager, &from_hash, &to_hash);
     }
 
-    /// Advance the storage layout after an upgrade (admin only).
+    /// Advance the storage layout after an upgrade (admin only;
+    /// `NothingToMigrate` when already current).
     pub fn migrate(e: &Env) {
         Self::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
@@ -754,12 +879,27 @@ impl MarketplaceContract {
         common::admin::admin(e)
     }
 
+    /// The release version registered in the Manager for the running WASM
+    /// (read-only; `ImplementationNotFound` if the registry has none).
     pub fn version(e: &Env) -> String {
         common::upgrade::version(e, &Self::get_config(e).manager)
     }
 
+    /// The running WASM hash (read-only).
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
+    }
+
+    /// Refuse an asset that is not a Stellar Asset Contract
+    /// (`NotStellarAsset`).
+    ///
+    /// Purchases pay through the asset's `transfer`. A custom contract could
+    /// report a payment that never happened or refuse chosen transfers, so
+    /// only Stellar Asset Contracts, whose behaviour is fixed, are taken.
+    fn require_stellar_asset(e: &Env, asset: &Address) {
+        if !matches!(asset.executable(), Some(Executable::StellarAsset)) {
+            panic_with_error!(e, MarketplaceError::NotStellarAsset);
+        }
     }
 
     /// Require the admin's auth (launch admin in setup, Treasury once live);

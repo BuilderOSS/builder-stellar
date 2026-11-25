@@ -3,12 +3,19 @@
 extern crate std;
 
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
     Address, BytesN, Env, IntoVal, String,
 };
 
 use crate::contract::{DaoAuctionContract, DaoAuctionContractClient};
 use crate::error::AuctionError;
+
+/// A Stellar Asset Contract, the only kind of payment token the Auction takes.
+fn sac(e: &Env) -> Address {
+    e.register_stellar_asset_contract_v2(Address::generate(e))
+        .address()
+}
 
 fn setup_auction_contract(
     e: &Env,
@@ -23,7 +30,7 @@ fn setup_auction_contract(
     let owner = Address::generate(e);
     let treasury = Address::generate(e);
     let token_contract = Address::generate(e);
-    let payment_token = Address::generate(e); // SECURITY FIX: Always require payment token
+    let payment_token = sac(e);
 
     let auction_address = e.register(
         DaoAuctionContract,
@@ -34,8 +41,8 @@ fn setup_auction_contract(
             300_u64, // duration: 5 minutes (MIN_AUCTION_DURATION)
             10_000_000_i128,
             10_u32,
-            50_u64,                // time_buffer: 50 seconds
-            payment_token.clone(), // SECURITY FIX: SAC-only
+            50_u64, // time_buffer: 50 seconds
+            payment_token.clone(),
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
         ),
@@ -65,7 +72,7 @@ fn setup_with_payment_token(
     let owner = Address::generate(e);
     let treasury = Address::generate(e);
     let token_contract = Address::generate(e);
-    let payment_token = Address::generate(e);
+    let payment_token = sac(e);
 
     let auction_address = e.register(
         DaoAuctionContract,
@@ -198,7 +205,7 @@ fn try_register_with_time_buffer(e: &Env, time_buffer: u64) -> bool {
                 10_000_000_i128,
                 10_u32,
                 time_buffer,
-                Address::generate(e),
+                sac(e),
                 Address::generate(e),
                 BytesN::from_array(e, &[0u8; 32]),
             ),
@@ -359,7 +366,7 @@ fn test_set_payment_token_when_paused() {
     e.mock_all_auths();
 
     let (auction, _, _, _, _, _) = setup_with_payment_token(&e);
-    let new_payment_token = Address::generate(&e);
+    let new_payment_token = sac(&e);
 
     auction.set_payment_token(&new_payment_token);
     assert_eq!(auction.get_config().payment_token, new_payment_token);
@@ -385,7 +392,7 @@ fn launch_without_start_is_one_shot_and_hands_admin_to_treasury() {
     let owner = Address::generate(&e);
     let treasury = Address::generate(&e);
     let attacker = Address::generate(&e);
-    let payment_token = Address::generate(&e);
+    let payment_token = sac(&e);
     let id = e.register(
         DaoAuctionContract,
         (
@@ -633,7 +640,7 @@ mod upgrade_via_common {
                 10_000_000_i128,
                 10_u32,
                 50_u64,
-                Address::generate(&e),
+                sac(&e),
                 mgr.address.clone(),
                 from.clone(),
             ),
@@ -670,7 +677,7 @@ mod upgrade_via_common {
                 10_000_000_i128,
                 10_u32,
                 50_u64,
-                Address::generate(&e),
+                sac(&e),
                 mgr.address.clone(),
                 from.clone(),
             ),
@@ -701,7 +708,7 @@ mod upgrade_via_common {
                 10_000_000_i128,
                 10_u32,
                 50_u64,
-                Address::generate(&e),
+                sac(&e),
                 mgr.address.clone(),
                 from.clone(),
             ),
@@ -742,7 +749,7 @@ mod upgrade_via_common {
                 10_000_000_i128,
                 10_u32,
                 50_u64,
-                Address::generate(&e),
+                sac(&e),
                 mgr.address.clone(),
                 from.clone(),
             ),
@@ -774,7 +781,7 @@ fn payment_asset_reports_the_configured_token() {
     e.mock_all_auths();
     let (auction, _owner, treasury, _token, _id, original) = setup_with_payment_token(&e);
     assert_eq!(auction.payment_asset(), original);
-    let other = Address::generate(&e);
+    let other = sac(&e);
     auction.set_payment_token(&other);
     assert_eq!(auction.payment_asset(), other);
     auction.launch(&treasury, &false);
@@ -865,16 +872,28 @@ mod refunds {
         token::{StellarAssetClient, TokenClient},
     };
 
-    /// Minimal NFT: `mint` returns sequential ids, `transfer` is a no-op.
+    /// Minimal NFT: `mint` returns sequential ids while the minter has an
+    /// allowance (unlimited unless a test sets one), `transfer` records the
+    /// holder.
     #[contract]
     struct MockNft;
 
     #[contractimpl]
     impl MockNft {
-        pub fn mint(e: Env, _auth: Address, _to: Address) -> u32 {
+        pub fn mint(e: Env, auth: Address, _to: Address) -> u32 {
+            assert!(
+                Self::mint_allowance(e.clone(), auth) > 0,
+                "allowance exceeded"
+            );
             let id: u32 = e.storage().instance().get(&1u32).unwrap_or(0) + 1;
             e.storage().instance().set(&1u32, &id);
             id
+        }
+        pub fn mint_allowance(e: Env, _module: Address) -> u32 {
+            e.storage().instance().get(&3u32).unwrap_or(u32::MAX)
+        }
+        pub fn set_allowance(e: Env, allowance: u32) {
+            e.storage().instance().set(&3u32, &allowance);
         }
         pub fn transfer(e: Env, _from: Address, to: Address, id: u32) {
             e.storage().instance().set(&(2u32, id), &to);
@@ -889,6 +908,7 @@ mod refunds {
     struct Ctx {
         e: Env,
         auction: DaoAuctionContractClient<'static>,
+        nft: MockNftClient<'static>,
         addr: Address,
         treasury: Address,
         sac: StellarAssetClient<'static>,
@@ -912,7 +932,7 @@ mod refunds {
             DaoAuctionContract,
             (
                 Address::generate(&e),
-                nft,
+                nft.clone(),
                 treasury.clone(),
                 300_u64,
                 10_000_000_i128,
@@ -927,9 +947,11 @@ mod refunds {
         auction.launch(&treasury, &true);
         let sac = StellarAssetClient::new(&e, &sac_addr);
         let token = TokenClient::new(&e, &sac_addr);
+        let nft = MockNftClient::new(&e, &nft);
         Ctx {
             e,
             auction,
+            nft,
             addr,
             treasury,
             sac,
@@ -1387,6 +1409,80 @@ mod refunds {
         );
     }
 
+    /// A proposal cut the Auction's allowance while an auction ran: the
+    /// settlement still completes, and the Auction pauses instead of minting
+    /// the next token. Restoring an allowance and unpausing resumes it.
+    #[test]
+    fn settle_completes_and_pauses_when_the_mint_allowance_is_cut_mid_auction() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        let first = c.auction.get_auction().token_id;
+        c.nft.set_allowance(&0);
+        let end = c.auction.get_auction().end_time;
+        c.e.ledger().with_mut(|l| l.timestamp = end);
+
+        c.auction.settle_and_create_new();
+        let state = c.auction.get_auction();
+        assert!(state.settled);
+        assert_eq!(state.token_id, first);
+        assert_eq!(nft_holder(&c, first as u32), Some(a.clone()));
+        assert_eq!(c.token.balance(&c.treasury), 10_000_000);
+        assert!(c.auction.paused());
+        c.assert_invariant();
+        // No allowance, no next auction: unpausing fails at the mint.
+        let admin = c.auction.admin();
+        assert!(c.auction.try_unpause(&admin).is_err());
+        assert!(c.auction.paused());
+
+        c.nft.set_allowance(&5);
+        c.auction.unpause(&admin);
+        assert_eq!(c.auction.get_auction().token_id, first + 1);
+        assert!(!c.auction.get_auction().settled);
+    }
+
+    /// A token sent here directly can go to the Treasury, so no one can keep
+    /// the Auction registered by sending it one; the running auction's token
+    /// cannot.
+    #[test]
+    fn recover_token_sends_a_stray_token_to_the_treasury_but_never_the_lot() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        let lot = c.auction.get_auction().token_id as u32;
+        let stray = 99u32;
+        c.nft.transfer(&a, &c.addr, &stray);
+        // Only while paused.
+        assert!(c.auction.try_recover_token(&stray).is_err());
+        c.pause();
+        assert_eq!(
+            c.auction.try_recover_token(&lot).err().unwrap().unwrap(),
+            AuctionError::TokenInAuction.into()
+        );
+        c.auction.recover_token(&stray);
+        assert_eq!(nft_holder(&c, stray), Some(c.treasury.clone()));
+        // The lot is unaffected and the bid still held.
+        assert!(!c.auction.get_auction().settled);
+        c.assert_invariant();
+        // Only the admin.
+        c.e.set_auths(&[]);
+        assert!(c.auction.try_recover_token(&stray).is_err());
+    }
+
+    /// With an allowance left, settling starts the next auction as before.
+    #[test]
+    fn settle_with_an_allowance_left_starts_the_next_auction() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.nft.set_allowance(&1);
+        let end = c.auction.get_auction().end_time;
+        c.e.ledger().with_mut(|l| l.timestamp = end);
+        c.auction.settle_and_create_new();
+        assert!(!c.auction.paused());
+        assert_eq!(c.auction.get_auction().token_id, 2);
+    }
+
     #[test]
     fn migrate_needs_admin_and_a_newer_layout() {
         let c = setup();
@@ -1456,4 +1552,92 @@ fn storage_keys_do_not_collide() {
         ("common", common_key_shapes(&e)),
         ("PausableStorageKey", shapes(OZ_PAUSABLE_SHAPES)),
     ]);
+}
+
+/// A Wasm token contract posing as a payment asset: it reports balances and
+/// accepts transfers, but its code is its author's to change (here it
+/// refuses every transfer to one chosen address).
+#[contract]
+struct HostileAsset;
+
+#[contractimpl]
+impl HostileAsset {
+    pub fn balance(_e: Env, _id: Address) -> i128 {
+        i128::MAX
+    }
+    pub fn transfer(e: Env, _from: Address, to: Address, _amount: i128) {
+        let blocked: Option<Address> = e.storage().instance().get(&0u32);
+        assert!(blocked != Some(to), "refused");
+    }
+}
+
+fn register_with_payment_token(e: &Env, payment_token: Address) {
+    e.register(
+        DaoAuctionContract,
+        (
+            Address::generate(e),
+            Address::generate(e),
+            Address::generate(e),
+            300_u64,
+            10_000_000_i128,
+            10_u32,
+            50_u64,
+            payment_token,
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
+        ),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #7419)")] // NotStellarAsset
+fn constructor_refuses_a_payment_token_that_is_not_a_stellar_asset() {
+    let e = Env::default();
+    let hostile = e.register(HostileAsset, ());
+    register_with_payment_token(&e, hostile);
+}
+
+/// A Stellar account (`G...`): it has no contract code at all.
+fn account(e: &Env) -> Address {
+    Address::from_string(&String::from_str(
+        e,
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    ))
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #7419)")] // NotStellarAsset
+fn constructor_refuses_an_account_as_payment_token() {
+    let e = Env::default();
+    register_with_payment_token(&e, account(&e));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #7419)")] // NotStellarAsset
+fn constructor_refuses_an_undeployed_contract_address_as_payment_token() {
+    let e = Env::default();
+    register_with_payment_token(&e, Address::generate(&e));
+}
+
+#[test]
+fn set_payment_token_refuses_anything_but_a_stellar_asset() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _, _, _, _, original) = setup_with_payment_token(&e);
+    let hostile = e.register(HostileAsset, ());
+    for candidate in [hostile, account(&e), Address::generate(&e)] {
+        assert_eq!(
+            auction
+                .try_set_payment_token(&candidate)
+                .err()
+                .unwrap()
+                .unwrap(),
+            AuctionError::NotStellarAsset.into()
+        );
+    }
+    assert_eq!(auction.payment_asset(), original);
+    // Another Stellar Asset Contract is accepted.
+    let other = sac(&e);
+    auction.set_payment_token(&other);
+    assert_eq!(auction.payment_asset(), other);
 }

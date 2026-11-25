@@ -9,6 +9,7 @@ use soroban_sdk::{contracttype, Address};
 /// Storage-layout version of this code (see `common::upgrade`).
 pub const STORAGE_VERSION: u32 = 1;
 
+/// The Token's own storage keys, namespaced with `common::ns`.
 #[contracttype]
 pub enum TokenKey {
     /// Persistent: `Address -> u32`, how many more tokens a registered module

@@ -1,6 +1,6 @@
 # Auction contract
 
-Continuous English auctions for one governance NFT at a time. Payment uses a configured Stellar Asset Contract (SAC); native XLM is used through its native SAC address.
+Continuous English auctions for one governance NFT at a time. Payment uses a configured Stellar Asset Contract (SAC); native XLM is used through its native SAC address. Any other payment token is refused at construction and by `set_payment_token` (`NotStellarAsset`, 7419): a custom token could fake payments, refuse chosen refunds, or use up the budget inside the refund's `try_transfer`, which cannot be caught.
 
 ## Constructor and launch
 
@@ -16,7 +16,8 @@ The module starts paused in Setup. It implements the Manager's `DaoModule` inter
 ## Interface and bounds
 
 - `create_bid(bidder, token_id: u128, amount: i128)` requires bidder auth; the amount must meet the reserve (first bid) or the previous bid plus the increment, validated before any payment moves.
-- `settle_and_create_new()` settles and starts the next auction; `settle_auction()` settles while paused without a next auction. **Both require `now >= end_time`** (`AuctionActive`), so a pause cannot end a running auction early. No-bid auctions send the token to the Treasury (where it carries no votes).
+- `settle_and_create_new()` settles and starts the next auction; `settle_auction()` settles while paused without a next auction. **Both require `now >= end_time`** (`AuctionActive`), so a pause cannot end a running auction early. No-bid auctions send the token to the Treasury (where it carries no votes). If the Token will not let the Auction mint the next token (its allowance is 0, for example after a proposal cut it), `settle_and_create_new` still settles and then pauses the Auction instead of starting another; `unpause` resumes once an allowance is granted.
+- `recover_token(token_id)` is admin-only while paused: it sends a token someone transferred to the Auction directly to the Treasury. The token of an auction that has not settled is refused (`TokenInAuction`, 7420). The Token refuses to unregister the Auction while it holds tokens, so this keeps anyone from blocking a removal by sending it one.
 - `cancel_auction()` is admin-only while paused: the only way to end a running auction. It refunds the leader and sends the token to the Treasury.
 - `pause(caller)` / `unpause(caller)` require the caller to be the admin; unpause requires Live state and starts an auction if none is running.
 - `get_auction()` (fails `NotLaunched` before the first auction) / `get_config()`.

@@ -1,3 +1,5 @@
+//! Storage keys, records, and limits for the Marketplace contract.
+
 use soroban_sdk::{contracttype, panic_with_error, Address, Env, Vec};
 
 use crate::error::MarketplaceError;
@@ -22,9 +24,13 @@ fn extend_listing<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(e: &Env, key: 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub struct Listing {
+    /// Who listed the token and receives the proceeds, or the token back.
     pub seller: Address,
+    /// Asking price, in `payment_asset`.
     pub price: i128,
+    /// Purchases stop, and `expire` opens, at this ledger timestamp.
     pub expires_at: u64,
+    /// Fee captured at list time, in basis points of the price.
     pub fee_bps: u32,
     /// Asset captured at list time; later `set_payment_asset` calls do not affect it.
     pub payment_asset: Address,
@@ -44,20 +50,29 @@ pub const MAX_SWEEP: u32 = 25;
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub struct Pool {
+    /// Price of one token, in `asset`.
     pub price: i128,
+    /// The Stellar Asset Contract buyers pay in.
     pub asset: Address,
     /// Sales and restocks stop at this ledger timestamp.
     pub expires_at: u64,
     /// Tokens the pool may stock in all (its allowance reservation).
     pub size: u32,
+    /// Tokens minted into the pool so far.
     pub stocked: u32,
+    /// Tokens sold so far.
     pub sold: u32,
+    /// Most tokens one buyer may buy from this pool.
     pub max_per_buyer: u32,
     /// Most sales per `period_secs`, pool-wide.
     pub max_sold_per_period: u32,
+    /// Length of a sales period, in seconds.
     pub period_secs: u64,
+    /// When the current sales period started.
     pub period_start: u64,
+    /// Sales in the current period.
     pub sold_in_period: u32,
+    /// Set by `close_pool`; a closed pool sells and restocks nothing.
     pub closed: bool,
 }
 
@@ -72,22 +87,31 @@ pub struct PoolSlot {
     pub pages: u32,
 }
 
+/// The Marketplace's wiring and settings.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub struct MarketplaceConfig {
+    /// The DAO's membership token.
     pub token: Address,
     /// Fee and primary-sale recipient. Also the admin once live (`common::admin`).
     pub treasury: Address,
+    /// Asset new listings are priced in, a Stellar Asset Contract.
     pub payment_asset: Address,
+    /// Fee new listings capture, in basis points (at most `MAX_FEE_BPS`).
     pub default_secondary_fee_bps: u32,
+    /// The Manager that approves upgrades and performs the launch.
     pub manager: Address,
+    /// While true, no new listings, purchases, or pools.
     pub paused: bool,
 }
 
+/// Storage keys, namespaced with `common::ns`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub enum DataKey {
+    /// Instance: [`MarketplaceConfig`].
     Config,
+    /// Persistent: token id -> [`Listing`] (the seller's escrow record).
     Listing(u32),
     /// Instance: u32, the id the next pool receives.
     NextPoolId,

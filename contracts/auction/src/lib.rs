@@ -8,7 +8,8 @@
 //! ## Key Features
 //!
 //! - **Continuous Auctions**: New auctions start immediately after the previous one settles
-//! - **SAC Payment**: Requires a configured SAC payment token (payment type locked per auction)
+//! - **SAC Payment**: The payment token must be a Stellar Asset Contract, checked at
+//!   construction and on every change; it locks at the first bid
 //! - **Time Extension**: Anti-sniping mechanism extends auction if bids come near the end
 //! - **Pausable**: The admin pauses for emergencies or configuration changes
 //!   (all setters require a pause)
@@ -27,7 +28,9 @@
 //! 4. **Settlement**: Anyone can settle once time expires (also while paused, but
 //!    never before the end time). The token goes to the winner and the proceeds to
 //!    the treasury; with no bids the token goes to the treasury
-//! 5. **New Auction**: Next token ID auction begins immediately
+//! 5. **New Auction**: Next token ID auction begins immediately. If the Token no
+//!    longer lets the Auction mint (its allowance was cut or used up),
+//!    the settlement still completes and the Auction pauses itself instead
 //!
 //! ## Security Features
 //!

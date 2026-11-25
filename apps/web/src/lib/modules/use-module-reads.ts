@@ -19,7 +19,7 @@ import { MAX_MODULES, type ModuleConfigs, type ModuleKind, specValue } from './k
 import type { PoolState } from './plans';
 import type { ModuleFacts } from './readiness';
 
-export type CheckResult = { state: 'ok' } | { state: 'fail'; message: string };
+export type CheckResult = { state: 'ok'; detail?: string } | { state: 'fail'; message: string };
 
 /** What a simulated call says went wrong, in words; null when it simulated fine. */
 async function simulatedProblem(
@@ -116,19 +116,31 @@ export async function checkAttach<K extends ModuleKind>({
   return problem ? { state: 'fail', message: problem } : { state: 'ok' };
 }
 
-/** The check behind the Remove sheet: the removal itself is the one call that can be run alone. */
+/**
+ * The check behind the Remove sheet: the removal itself is the one call that can be run alone. The Token
+ * refuses to remove a module without votes while it holds any token (7222), so when the planned clean-up
+ * empties it (`emptiedByPlan`), the removal alone is expected to fail now and is not simulated.
+ */
 export async function checkDetach({
   config,
   address,
-  module
+  module,
+  emptiedByPlan = false
 }: {
   config: DaoNetworkConfig;
   address?: string | null;
   module: string;
+  emptiedByPlan?: boolean;
 }): Promise<CheckResult> {
   const token = new TokenClient(adminReadOptions(config, config.tokenContractId, address));
-  const registered = (await token.modules()).result.some((entry) => entry.address === module);
-  if (!registered) return { state: 'fail', message: 'This module has already been removed. Reload this list.' };
+  const entry = (await token.modules()).result.find((candidate) => candidate.address === module);
+  if (!entry) return { state: 'fail', message: 'This module has already been removed. Reload this list.' };
+  if (entry.non_voting && emptiedByPlan && (await token.balance({ account: module })).result > 0)
+    return {
+      state: 'ok',
+      detail:
+        'It holds memberships now, so the removal can only run after the clean-up steps have emptied it. They run first, in order, when it passes.'
+    };
   const problem = await simulatedProblem(() => token.unregister_module({ address: module }), 'token');
   return problem ? { state: 'fail', message: problem } : { state: 'ok' };
 }
@@ -167,10 +179,14 @@ export async function readModuleFacts(
           ...Array.from({ length: slot.pages }, (_, page) => market.pool_stock({ pool_id: slot.pool_id, page }))
         ]);
         const live = pool.result;
+        const open = Boolean(live && !live.closed && live.expires_at > now);
+        const inStock = pages.reduce((sum, stock) => sum + stock.result.length, 0);
         return {
           id: String(slot.pool_id),
-          open: Boolean(live && !live.closed && live.expires_at > now),
-          inStock: pages.reduce((sum, stock) => sum + stock.result.length, 0)
+          open,
+          inStock,
+          // Anyone may restock an open pool until the proposal closes it.
+          maxStock: open && live ? Math.max(inStock, live.size - live.sold) : inStock
         };
       })
     );
