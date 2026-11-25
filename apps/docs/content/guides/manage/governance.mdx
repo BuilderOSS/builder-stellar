@@ -46,9 +46,9 @@ A change applies from the moment it is executed, and only to what happens next:
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Each rule is a setting on the tribe's Governor contract: `set_voting_delay`, `set_voting_period`, `set_proposal_threshold`, `set_quorum_bps` and `set_queue_delay`. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch a change runs only as part of a proposal that passes and is executed.
+  Each rule is a setting on the tribe's Governor contract: `set_voting_delay`, `set_voting_period`, `set_proposal_threshold`, `set_quorum_bps`, and `set_queue_delay`. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch a change runs only as part of a proposal that passes and is executed.
 
-  The Governor rejects values outside its limits. The three timings must be between 300 seconds (5 minutes) and 2,592,000 seconds (30 days). The quorum is stored in basis points, from 1 (0.01%) to 10,000 (100%). It is worked out from the voting supply, which leaves out tokens held by the tribe's Treasury, Auction and Marketplace.
+  The Governor rejects values outside its limits. The three timings must be between 300 seconds (5 minutes) and 2,592,000 seconds (30 days). The quorum is stored in basis points, from 1 (0.01%) to 10,000 (100%). It is worked out from the voting supply, which leaves out tokens held by the tribe's Treasury, Auction, and Marketplace.
 
   Each transaction costs a Stellar network fee in XLM. Tribe Builder takes no fee. The rules and every change to them are public on chain.
 </Disclosure>

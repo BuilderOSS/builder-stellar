@@ -1,11 +1,11 @@
 ## Overview
 
-A quick-buy pool sells new membership tokens at a fixed price. Members decide by vote to open a pool, with its price, size and limits. Anyone can then buy from it until it closes or sells out, and the payments go to the tribe's [Treasury](/reference/glossary#treasury). This guide covers buying from a pool, stocking it, and how the tribe opens, closes and sweeps pools.
+A quick-buy pool sells new membership tokens at a fixed price. Members decide by vote to open a pool, with its price, size, and limits. Anyone can then buy from it until it closes or sells out, and the payments go to the tribe's [Treasury](/reference/glossary#treasury). This guide covers buying from a pool, stocking it, and how the tribe opens, closes, and sweeps pools.
 
 ## Before you start
 
 - **To buy,** you need a Stellar wallet on the tribe's network, connected and signed in. You don't need to be a member. Testnet is the live network today. Hold enough of the pool's payment asset for the price, plus a small network fee in XLM. For a USDC pool, your wallet needs a USDC trustline.
-- **To open, close or sweep a pool,** the tribe must have launched. These changes require DAO governance: a proposal that members vote on. Any connected wallet can add them to a proposal draft.
+- **To open, close, or sweep a pool,** the tribe must have launched. These changes require DAO governance: a proposal that members vote on. Any connected wallet can add them to a proposal draft.
 - Pools work in tribes with locked memberships too, because the tokens come from the tribe itself.
 
 ## Steps
@@ -36,7 +36,7 @@ You receive one token for each purchase. To buy another, repeat the purchase, up
 
    <Shot id="marketplace/pools/05" alt="The Manage the marketplace page with the market status notice and the Propose a quick-buy pool section" />
 
-6. **Fill in the pool.** Under **Propose a quick-buy pool**, enter the **Price per token**, **Tokens in the pool**, **Maximum per wallet**, **Maximum sales per period**, **Period (hours)** and **Closes at (local time)**. The price is in the market's payment asset. Choose a closing time that leaves enough time for the vote, the safety delay and execution.
+6. **Fill in the pool.** Under **Propose a quick-buy pool**, enter the **Price per token**, **Tokens in the pool**, **Maximum per wallet**, **Maximum sales per period**, **Period (hours)**, and **Closes at (local time)**. The price is in the market's payment asset. Choose a closing time that leaves enough time for the vote, the safety delay, and execution.
 
    <Shot id="marketplace/pools/06" alt="The Propose a quick-buy pool form filled in with a price, size, limits and closing time" />
 
@@ -66,13 +66,13 @@ To sell more tokens after a pool sells out or closes, members open a new pool by
 
   **Stocking** calls `restock`, which anyone can call until the pool closes. It mints the pool's next batch, at most 42 tokens, into the Marketplace contract. Tokens held by the market carry no votes.
 
-  **Buying** calls `buy_from_pool` with the pool, the token, your address and the highest price you agree to pay. The contract refuses the purchase if the market is paused, the pool has closed or passed its closing time, the price is higher, you have reached the per-wallet limit, or the pool has reached its sales limit for the current period. The payment goes to the Treasury and the token goes to you, in one transaction. There is no resale fee on a pool sale. Each token sold adds one vote to the tribe.
+  **Buying** calls `buy_from_pool` with the pool, the token, your address, and the highest price you agree to pay. The contract refuses the purchase if the market is paused, the pool has closed or passed its closing time, the price is higher, you have reached the per-wallet limit, or the pool has reached its sales limit for the current period. The payment goes to the Treasury and the token goes to you, in one transaction. There is no resale fee on a pool sale. Each token sold adds one vote to the tribe.
 
   **Closing** calls `close_pool`. The Treasury can close a pool at any time by proposal. Closing returns the pool's unminted reservation to the mint allowance. Minted tokens that didn't sell stay with the market until the pool is swept.
 
   **Sweeping** calls `sweep_pool`, which moves up to 25 unsold tokens to the Treasury each time. A pool with more unsold tokens needs another sweep. Tokens held by the Treasury carry no votes.
 
-  The wallet that submits each transaction pays the Stellar network fee in XLM. Tribe Builder takes no fee. Pools, stock and sales are public on chain.
+  The wallet that submits each transaction pays the Stellar network fee in XLM. Tribe Builder takes no fee. Pools, stock, and sales are public on chain.
 </Disclosure>
 
 ## If something goes wrong

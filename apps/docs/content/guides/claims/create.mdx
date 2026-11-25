@@ -54,13 +54,13 @@ Closing needs a claims module release that has `close_list`. Earlier releases do
 <Disclosure title="Contracts, fees and waits">
   The app builds a merkle tree from the list in your browser. Each entry is a wallet and an amount. The full tree is published to IPFS, and only its root and IPFS link are stored on chain.
 
-  Before launch, the launch admin signs two transactions. The first is `increase_mint_allowance` on the Token, which lets the tribe's ClaimMinter mint up to the list's total. The second is `open_list` on the ClaimMinter, with the root, the IPFS link, the payment asset, a price of 0, the expiry and the total. Lists opened before launch need the tribe's artwork to be uploaded first.
+  Before launch, the launch admin signs two transactions. The first is `increase_mint_allowance` on the Token, which lets the tribe's ClaimMinter mint up to the list's total. The second is `open_list` on the ClaimMinter, with the root, the IPFS link, the payment asset, a price of 0, the expiry, and the total. Lists opened before launch need the tribe's artwork to be uploaded first.
 
   After launch, the same two calls go into one proposal and run from the Treasury once the vote passes and the [safety delay](/reference/glossary#safety-delay) ends.
 
   Payments for claims on a list opened after launch go to the Treasury. A launch drive is the only list whose payments are held until launch.
 
-  The launch admin pays the network fees in XLM for the direct transactions. The list, its root and every claim are public.
+  The launch admin pays the network fees in XLM for the direct transactions. The list, its root, and every claim are public.
 
   Closing a list calls `close_list` on the ClaimMinter with the list's ID. It moves the list's closing time to the current ledger time and records a `ListClosed` event with how many of the list's tokens were claimed. After launch, the Treasury makes the call when the proposal runs. Before launch, the launch admin signs it and pays the network fee. The app checks that the claims module has `close_list` by simulating the call, which signs and sends nothing.
 

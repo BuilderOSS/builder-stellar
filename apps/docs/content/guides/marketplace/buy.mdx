@@ -20,7 +20,7 @@ A tribe's market sells memberships in two ways: resales listed by members, and n
 
    <Shot id="marketplace/buy/02" alt="An expanded listing card with the end date, seller, the amount the seller receives, and the buyer's spendable balance" />
 
-3. **Choose Buy.** The button names the price, for example **Buy for 50 XLM**. A dialog called **Buy this token** opens. Choose **Check**. The app checks the listing, your balance and the network fee, then shows exactly what you pay and the fee.
+3. **Choose Buy.** The button names the price, for example **Buy for 50 XLM**. A dialog called **Buy this token** opens. Choose **Check**. The app checks the listing, your balance, and the network fee, then shows exactly what you pay and the fee.
 
    <Shot id="marketplace/buy/03" alt="The Buy this token dialog with the purchase summary and the network fee" />
 
@@ -43,11 +43,11 @@ Each resale has **Comments** below its details. Anyone signed in can post one. A
 
   In one transaction, your payment is split: the resale fee goes to the tribe's [Treasury](/reference/glossary#treasury), and the rest goes to the seller. The token moves from the Marketplace contract to you. The fee and asset are the ones stored when the token was listed. The seller pays the fee from the price, so you pay only the listed price and the network fee.
 
-  Before you sign, the app checks that the listing is the same one you reviewed, with the same seller, price, fee and end time, and that the transaction pays nothing beyond it. If anything changed, it stops and asks you to reload.
+  Before you sign, the app checks that the listing is the same one you reviewed, with the same seller, price, fee, and end time, and that the transaction pays nothing beyond it. If anything changed, it stops and asks you to reload.
 
   While the market held the token, it carried no vote. Once it is in your wallet, its vote counts for you.
 
-  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The purchase, the amounts and the addresses are public on chain once confirmed.
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The purchase, the amounts, and the addresses are public on chain once confirmed.
 </Disclosure>
 
 ## If something goes wrong
@@ -58,7 +58,7 @@ Each resale has **Comments** below its details. Anyone signed in can post one. A
 - **"Add XLM above the account reserve to pay network fees."** or **"Insufficient spendable balance."** Add funds to your wallet, then choose **Check** again.
 - **"This listing has expired."** The listing ended before you bought. The seller can list the token again.
 - **"This listing changed or closed. Refresh before signing."** Someone bought it, or the seller cancelled or relisted it. Nothing was submitted. Reload the page.
-- **"The price is now higher than the price you reviewed."** Reload, review the new price and buy again if you still want it.
+- **"The price is now higher than the price you reviewed."** Reload, review the new price, and buy again if you still want it.
 - **"The simulated purchase does not match the reviewed listing."** Nothing was submitted. Reload the listing and review it again.
 - **"The marketplace is paused. Purchases and new listings are unavailable."** Members paused the market by vote. Purchases resume when a vote reopens it.
 - **"Signing was cancelled. No new transaction was submitted."** You closed or declined the wallet request. Choose **Sign and send** again when you are ready.

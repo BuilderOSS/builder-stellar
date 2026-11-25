@@ -1,6 +1,6 @@
 ## Overview
 
-The Members page lists everyone who holds a membership token or has votes in the tribe. Each member has a profile with their tokens, their votes and who they delegate to. Anyone can view it, with or without a wallet.
+The Members page lists everyone who holds a membership token or has votes in the tribe. Each member has a profile with their tokens, their votes, and who they delegate to. Anyone can view it, with or without a wallet.
 
 ## Before you start
 
@@ -9,7 +9,7 @@ The Members page lists everyone who holds a membership token or has votes in the
 
 ## Steps
 
-1. **Open the Members page.** Choose **Members** in the tribe's navigation. Under the title, a quiet line says "Each membership is an NFT with one vote." Each row shows a member's address, how many tokens they hold and how many votes they have.
+1. **Open the Members page.** Choose **Members** in the tribe's navigation. Under the title, a quiet line says "Each membership is an NFT with one vote." Each row shows a member's address, how many tokens they hold, and how many votes they have.
 
    <Shot id="members/find/01" alt="The Members page with a list of members, each with a token count and a vote count" />
 
@@ -33,13 +33,13 @@ The Members page lists everyone who holds a membership token or has votes in the
 
 - **Tokens and votes can differ.** Votes include any delegated to that address, and leave out the member's own votes if they delegated them elsewhere. A delegate can have votes without holding any tokens.
 - **"Votes go to …"** under a member means they have delegated their votes to that address.
-- **Tribe contracts.** The tribe's Treasury, Auction and Marketplace can hold tokens. They appear as, for example, "Treasury (tribe contract)" with "Held by the tribe, no votes". Tokens they hold carry no votes.
+- **Tribe contracts.** The tribe's Treasury, Auction, and Marketplace can hold tokens. They appear as, for example, "Treasury (tribe contract)" with "Held by the tribe, no votes". Tokens they hold carry no votes.
 - **Tribes with another vote source.** If a tribe's votes come from another source, the subtitle says so, the list shows tokens only, and a profile's votes come from that source. See [Vote sources](/concepts/vote-sources/).
 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  The directory reads from an index of the tribe's Token contract events: transfers, mints and delegations. It is a read cache, so recent changes can take a short time to appear. Use the refresh button on the page to load the latest data.
+  The directory reads from an index of the tribe's Token contract events: transfers, mints, and delegations. It is a read cache, so recent changes can take a short time to appear. Use the refresh button on the page to load the latest data.
 
   A token page reads its holder live from the Token contract when it can. It says "Read live from the token contract". If the chain can't be read, it shows the index's answer and says actions are paused until the chain can be read.
 
