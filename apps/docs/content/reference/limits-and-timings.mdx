@@ -1,4 +1,4 @@
-These are the limits the contracts enforce. The app checks the same limits before you sign, so a value outside them is caught in the form. Each table ends with a note naming the source.
+The contracts enforce most of these limits. The app checks the same limits before you sign, so a value outside them is caught in the form. The app sets the limits under "Fees and sign-in" itself. Each section ends with a note naming its source.
 
 Times on Stellar are counted in ledgers. A ledger closes about every 5 seconds, so a day is about 17,280 ledgers. Amounts are in the payment asset's smallest unit: 1 XLM is 10,000,000 stroops.
 
@@ -29,9 +29,9 @@ Source: `contracts/common/src/lib.rs` (`MIN_GOVERNANCE_DELAY`, `MAX_GOVERNANCE_D
 | Time to execute a queued proposal | 14 days after its safety delay ends, then it expires |
 | When voting power is counted | At the ledger before the proposal is made |
 | Who can cancel | Only the person who made it, before voting ends |
-| Minting in one proposal | One 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
+| Minting in one proposal | Limited by event data. For example, one 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
 
-Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay, and 14 days to execute.
+Pending, active, and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay, and 14 days to execute.
 
 A proposal runs all its actions in one transaction, which can publish only a limited amount of event data. The contracts refuse a proposal whose mints, with its other actions, could not run together. Split the mints over several proposals.
 
@@ -50,7 +50,7 @@ Source: `contracts/governor/src/storage.rs` (`MAX_PROPOSAL_ACTIONS`, `PROPOSAL_E
 
 New tribes start with a minimum bid increase of 10%. Auction settings change only while auctions are paused, and the payment asset can't change after the first bid.
 
-Source: `contracts/common/src/lib.rs` (`MIN_AUCTION_DURATION`, `MAX_AUCTION_DURATION`, `MAX_AUCTION_TIME_BUFFER`, `MIN_RESERVE_PRICE`), `contracts/auction/src/storage.rs` (`MAX_BID_INCREMENT_PERCENT`, `MAX_AUCTION_EXTENSIONS`) and `contracts/manager/src/contract.rs` (`MIN_BID_INCREMENT_PERCENT`).
+Source: `contracts/common/src/lib.rs` (`MIN_AUCTION_DURATION`, `MAX_AUCTION_DURATION`, `MAX_AUCTION_TIME_BUFFER`, `MIN_RESERVE_PRICE`), `contracts/auction/src/storage.rs` (`MAX_BID_INCREMENT_PERCENT`, `MAX_AUCTION_EXTENSIONS`), and `contracts/manager/src/contract.rs` (`MIN_BID_INCREMENT_PERCENT`).
 
 ## Market
 
@@ -77,25 +77,25 @@ One transaction can publish only a limited amount of event data, so minting happ
 | Assurance drive deadline | At most 90 days away |
 | Claim list address | An `ipfs://` link of at most 256 characters |
 
-Source: `contracts/common/src/lib.rs` (`MAX_BATCH_MINT`, `MAX_BATCH_RECIPIENTS`), `contracts/manager/src/contract.rs` (`MAX_ASSURANCE_WINDOW`) and `contracts/minter/src/contract.rs`.
+Source: `contracts/common/src/lib.rs` (`MAX_BATCH_MINT`, `MAX_BATCH_RECIPIENTS`), `contracts/manager/src/contract.rs` (`MAX_ASSURANCE_WINDOW`), and `contracts/minter/src/contract.rs`.
 
 ## Tribe identity and artwork
 
 | Limit | Value |
 |---|---|
-| Tribe name | At most 40 characters |
+| Tribe name | At most 40 bytes. Accented letters and emoji count as more than one byte. |
 | Token symbol | At most 10 characters |
-| Link | 4 to 63 lowercase letters, numbers or single hyphens, not at the start or end |
-| Profile (description, links and image) | 1 to 4,096 bytes |
-| Other text fields, such as addresses for artwork | At most 256 characters |
+| Link | 4 to 63 lowercase letters, numbers, or single hyphens, not at the start or end |
+| Profile (description, links, and image) | 1 to 4,096 bytes |
+| Other text fields, such as addresses for artwork | At most 256 bytes |
 | Artwork layers (properties) | At most 16 |
 | Items in one artwork layer | At most 1,024 |
 | Artwork items added in one transaction | At most 30 |
-| Artwork layer or item name | At most 64 bytes, with no quotes, backslashes or control characters |
+| Artwork layer or item name | At most 64 bytes, with no quotes, backslashes, or control characters |
 | Image folders in one collection | At most 64 |
 | Modules in one tribe | At most 16 |
 
-Source: `contracts/manager/src/contract.rs` (`MAX_TOKEN_NAME_LENGTH`, `MAX_TOKEN_SYMBOL_LENGTH`, `MIN_SLUG_LENGTH`, `MAX_SLUG_LENGTH`), `contracts/common/src/lib.rs` (`MAX_STRING_LENGTH`, `MAX_ARTWORK_NAME_LENGTH`, `MAX_PROFILE_LENGTH`), `contracts/common/src/modules.rs` (`MAX_MODULES`) and `contracts/metadata/src/storage.rs`.
+Source: `contracts/manager/src/contract.rs` (`MAX_TOKEN_NAME_LENGTH`, `MAX_TOKEN_SYMBOL_LENGTH`, `MIN_SLUG_LENGTH`, `MAX_SLUG_LENGTH`), `contracts/common/src/lib.rs` (`MAX_STRING_LENGTH`, `MAX_ARTWORK_NAME_LENGTH`, `MAX_PROFILE_LENGTH`), `contracts/common/src/modules.rs` (`MAX_MODULES`), and `contracts/metadata/src/storage.rs`.
 
 ## Storage and renewal
 
@@ -107,12 +107,12 @@ Data on Stellar has a lifetime, called its time to live (TTL). When it runs out,
 | Long-lived records: registry, delegations, artwork, claims, refunds | The network maximum, about 180 days | 30 days |
 | Proposals | 120 days | 30 days |
 | Market listings | 30 days | 7 days |
-| Token owners, balances and votes | 30 days | 29 days |
+| Token owners, balances, and votes | 30 days | 29 days |
 | Shared contract code | 4 days from a call; the platform renews it for longer | 2 days |
 
 The network maximum on testnet is 3,110,400 ledgers, about 180 days.
 
-Source: `contracts/common/src/ttl.rs`, `contracts/governor/src/storage.rs` (`PROPOSAL_TTL_EXTEND_TO`), `contracts/marketplace/src/storage.rs` (`LISTING_TTL_EXTEND_TO`) and `docs/TTL_ECONOMICS.md` (measured on testnet, 12 October 2026).
+Source: `contracts/common/src/ttl.rs`, `contracts/governor/src/storage.rs` (`PROPOSAL_TTL_EXTEND_TO`), `contracts/marketplace/src/storage.rs` (`LISTING_TTL_EXTEND_TO`), and `docs/TTL_ECONOMICS.md` (measured on testnet, 12 October 2026).
 
 ## Upgrades
 
@@ -123,7 +123,7 @@ Source: `contracts/common/src/ttl.rs`, `contracts/governor/src/storage.rs` (`PRO
 
 The upgrade notice is the wait between the platform approving a new Manager release and the Manager upgrading to it. A shorter notice takes effect only after the notice already in force has passed. A tribe's own contracts upgrade only by the tribe's vote. See [Upgrades](/concepts/upgrades).
 
-Source: `configs/testnet-manager.json` and `configs/testnet-dev-manager.json` (`upgradeDelayLedgers`), `contracts/common/src/upgrade.rs` (`RECOMMENDED_UPGRADE_DELAY`) and `docs/MANAGER_DEPLOYMENT.md`.
+Source: `configs/testnet-manager.json` and `configs/testnet-dev-manager.json` (`upgradeDelayLedgers`), `contracts/common/src/upgrade.rs` (`RECOMMENDED_UPGRADE_DELAY`), and `docs/MANAGER_DEPLOYMENT.md`.
 
 ## Fees and sign-in
 
@@ -136,4 +136,4 @@ Source: `configs/testnet-manager.json` and `configs/testnet-dev-manager.json` (`
 
 Creating a tribe costs about 10.6 XLM in network fees on testnet, because it pays storage for six new contracts for 170 days.
 
-Source: `apps/web/src/lib/fee/fee-guard.ts` (`FEE_GUARD_STROOPS`), `apps/web/src/lib/auth/server.ts` (`AUTH_CHALLENGE_TTL_MS`, `AUTH_SESSION_IDLE_SECONDS`, `AUTH_SESSION_MAX_AGE_SECONDS`) and `docs/TTL_ECONOMICS.md`.
+Source: `apps/web/src/lib/fee/fee-guard.ts` (`FEE_GUARD_STROOPS`), `apps/web/src/lib/auth/server.ts` (`AUTH_CHALLENGE_TTL_MS`, `AUTH_SESSION_IDLE_SECONDS`, `AUTH_SESSION_MAX_AGE_SECONDS`), and `docs/TTL_ECONOMICS.md`.
