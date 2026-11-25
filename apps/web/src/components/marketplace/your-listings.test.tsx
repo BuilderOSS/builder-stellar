@@ -52,6 +52,15 @@ describe('Your listings', () => {
     expect(html).toContain('Return my token');
     expect(html).not.toContain('Change price');
   });
+  it('says a listing open until u64::MAX has no end date', () => {
+    const state = yourListingState({ ...open, expiresAt: '18446744073709551615' });
+    expect(state).toEqual({ label: 'For sale', meta: 'No end date' });
+    const html = renderToStaticMarkup(
+      <YourListings listings={[{ ...open, expiresAt: '18446744073709551615' }]} {...props} />
+    );
+    expect(html).toContain('No end date');
+    expect(html).not.toContain('Invalid Date');
+  });
   it('marks a confirmed listing as updating, with no actions yet', () => {
     const html = renderToStaticMarkup(<YourListings listings={[{ ...open, eventId: 'pending:hash' }]} {...props} />);
     expect(html).toContain('Updating');

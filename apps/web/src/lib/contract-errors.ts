@@ -211,7 +211,7 @@ const ERRORS: Record<number, string> = {
   7822: 'This tribe already has its assurance drive (AssuranceExists).',
   7823: 'Refunds open only once the assurance drive has failed (NotFailed).',
   7824: 'Nothing of yours is in escrow on this list (NothingToRefund).',
-  7825: 'The assurance threshold must be at least 1 and its deadline after now and before the list expires (InvalidAssurance).',
+  7825: 'The assurance threshold must be from 1 to the list total, and its deadline after now and before the list expires (InvalidAssurance).',
   7826: 'Add the artwork before opening a claim list before launch (ArtworkMissing).',
   7827: 'A list opened before launch must use the claims payment asset (PaymentAssetMismatch).',
   7828: 'A price cannot be negative (InvalidPrice).',

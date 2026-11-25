@@ -37,7 +37,11 @@ export async function verifyAuthProof(input: { address: string; message: string;
 }
 
 export async function requestSep10Challenge(address: string) {
-  return fetchJson<Sep10ChallengeResponse>(`/api/auth/sep10/challenge?address=${encodeURIComponent(address)}`);
+  return fetchJson<Sep10ChallengeResponse>('/api/auth/sep10/challenge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address })
+  });
 }
 
 export async function verifySep10Proof(signedTxXdr: string) {

@@ -8,6 +8,7 @@ import { paymentAssetCode } from '@/lib/assets-config';
 import { useAuctionStatus } from '@/lib/auction-status';
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { useMembershipState } from '@/lib/membership-state';
+import { useClaimMinterCanCloseLists } from '@/lib/minter/hooks';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type { SettingValues } from './catalog';
@@ -23,6 +24,7 @@ export function useSettingValues(): { values: SettingValues; loading: boolean } 
   const auction = useAuctionStatus(daoId, config);
   const membership = useMembershipState(config, address);
   const market = useDaoMarketplace(daoId, 'kind=pool&status=open', Boolean(config.marketplaceContractId));
+  const closeList = useClaimMinterCanCloseLists(config);
 
   const values = useMemo<SettingValues>(
     () => ({
@@ -35,9 +37,18 @@ export function useSettingValues(): { values: SettingValues; loading: boolean } 
         ? undefined
         : market.data?.config
           ? { ...market.data.config, assetCode: paymentAssetCode(config.name, market.data.config.paymentAsset) }
-          : market.data?.config
+          : market.data?.config,
+      claimsCanCloseLists: closeList.data
     }),
-    [governor.data, auction.data, membership.data, market.data, config.name, config.marketplaceContractId]
+    [
+      governor.data,
+      auction.data,
+      membership.data,
+      market.data,
+      config.name,
+      config.marketplaceContractId,
+      closeList.data
+    ]
   );
   return { values, loading: governor.isLoading || auction.isLoading || membership.isLoading };
 }

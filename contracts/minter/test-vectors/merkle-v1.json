@@ -1,0 +1,94 @@
+{
+  "format": "builder-stellar-merkle-v1",
+  "about": "Shared test vectors for ClaimMinter claim trees. contracts/minter/src/test.rs and apps/web/src/lib/minter/tree.test.ts both check them; a change to either side that breaks them changes the format.",
+  "leafRule": "sha256(scval_xdr(address) || u128_be(amount))",
+  "nodeRule": "sha256(sorted(a, b))",
+  "leaves": [
+    {
+      "name": "account",
+      "address": "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H",
+      "amount": "5",
+      "scvalXdr": "0000001200000000000000000101010101010101010101010101010101010101010101010101010101010101",
+      "preimageBytes": 60,
+      "leaf": "2a51515ea93455fc7b4d754b57ba4ec112cd188dc1eecbb85800a7c85f967e29",
+      "claimable": true
+    },
+    {
+      "name": "contract",
+      "address": "CAGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAZTCD",
+      "amount": "43",
+      "scvalXdr": "00000012000000010c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "preimageBytes": 56,
+      "leaf": "26686bf28af346b2a214c33b5e7ce52f0600f368504dbb347ff42c98cdd07944",
+      "claimable": true
+    },
+    {
+      "name": "account, largest amount",
+      "address": "GABAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEJXA",
+      "amount": "340282366920938463463374607431768211455",
+      "scvalXdr": "0000001200000000000000000202020202020202020202020202020202020202020202020202020202020202",
+      "preimageBytes": 60,
+      "leaf": "45e22390f188d246382faca04ad9a405c4145e28dbf59bcdf9610c99fbf0c74b",
+      "claimable": true
+    },
+    {
+      "name": "muxed account (refused)",
+      "address": "MAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAAAAAAAAAAE2K5FG",
+      "amount": "1",
+      "scvalXdr": "000000120000000200000000000004d20101010101010101010101010101010101010101010101010101010101010101",
+      "preimageBytes": 64,
+      "leaf": "e03519e0c28e4de47fceaa76285052bddc4b1a703e78e7f5e6b4ac7af8bd3cd9",
+      "claimable": false
+    }
+  ],
+  "tree": {
+    "claims": [
+      {
+        "address": "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H",
+        "amount": "5"
+      },
+      {
+        "address": "GABAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEJXA",
+        "amount": "3"
+      },
+      {
+        "address": "CAGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAZTCD",
+        "amount": "43"
+      },
+      {
+        "address": "CAGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ242B",
+        "amount": "1"
+      },
+      {
+        "address": "GAFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAVXXV",
+        "amount": "100"
+      }
+    ],
+    "merkleRoot": "8856cdc37ec723df11d06f0994e86ff4c0d9cb0ddea85a839708a4fd178bdc9d",
+    "proofs": {
+      "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H": [
+        "5247c28dda75a3a4d54d2ade2e427c8707a90bea42996c4502e7d31cdff1d28b",
+        "ae6f3779a62bde5d1176a2043bd8bac481c10a1517ae00b72800817c997cf9a2",
+        "61ef71f1a952d7b5e1e460217cf90c7a57abcde108cad2dfdf6bb2ddf7ba5bd0"
+      ],
+      "GABAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEJXA": [
+        "e762475266bcf7525ba9c303d4039b401d167bbb9d89652a2549dd09c9c42723"
+      ],
+      "CAGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAZTCD": [
+        "14f8cb9b8327daac8d46357e579f45c003ba25a1bf4c3beb4a3103b2372340d4",
+        "1fceed3dd8b0f06b3250fca3c9426f7dfb9f846d6ed4febfc05ceb4f269fe2d9",
+        "61ef71f1a952d7b5e1e460217cf90c7a57abcde108cad2dfdf6bb2ddf7ba5bd0"
+      ],
+      "CAGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ2DINBUGQ242B": [
+        "2a51515ea93455fc7b4d754b57ba4ec112cd188dc1eecbb85800a7c85f967e29",
+        "ae6f3779a62bde5d1176a2043bd8bac481c10a1517ae00b72800817c997cf9a2",
+        "61ef71f1a952d7b5e1e460217cf90c7a57abcde108cad2dfdf6bb2ddf7ba5bd0"
+      ],
+      "GAFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAVXXV": [
+        "26686bf28af346b2a214c33b5e7ce52f0600f368504dbb347ff42c98cdd07944",
+        "1fceed3dd8b0f06b3250fca3c9426f7dfb9f846d6ed4febfc05ceb4f269fe2d9",
+        "61ef71f1a952d7b5e1e460217cf90c7a57abcde108cad2dfdf6bb2ddf7ba5bd0"
+      ]
+    }
+  }
+}

@@ -72,10 +72,12 @@ describe('composer and proposal page labels', () => {
       'open-module',
       'open-claim-list'
     ]);
+    // A draft the form starts empty and refuses to build until it is filled in.
+    const filled: Partial<Record<string, unknown>> = { 'close-claim-list': { listId: '0' } };
     const checked: string[] = [];
     for (const handler of getAllActionHandlers()) {
       if (ownTitle.has(handler.type)) continue;
-      const call = handler.buildCallVector(handler.getDefaultValues(), context as never);
+      const call = handler.buildCallVector(filled[handler.type] ?? handler.getDefaultValues(), context as never);
       const role = contractRole(call.target, config, getDeploymentConfig().managerAddress);
       expect(role, handler.type).toBeDefined();
       expect(contractCallLabel(call.function, role), handler.type).toBe(handler.label);

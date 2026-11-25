@@ -30,6 +30,14 @@ function formatXlm(stroops: bigint) {
   return `${whole.toLocaleString('en-US')}.${tenths}`;
 }
 
+/** The XDR is not a transaction the guard can read, so it was not sent to the wallet. */
+export class UnreadableTransactionError extends Error {
+  constructor() {
+    super("This transaction couldn't be read, so nothing was signed.");
+    this.name = 'UnreadableTransactionError';
+  }
+}
+
 /** The most the transaction can charge, in stroops; null when the XDR is not a transaction. */
 export function transactionMaxFee(txXdr: string, networkPassphrase: string = Networks.TESTNET): bigint | null {
   try {
@@ -40,8 +48,13 @@ export function transactionMaxFee(txXdr: string, networkPassphrase: string = Net
   }
 }
 
-/** Throw FeeGuardError when the transaction could charge more than `limit` stroops. */
+/**
+ * Throw FeeGuardError when the transaction could charge more than `limit` stroops, and
+ * UnreadableTransactionError when its fee can't be read: the guard can't vouch for a transaction
+ * it can't read, so it fails closed.
+ */
 export function assertFeeWithinGuard(txXdr: string, networkPassphrase?: string, limit = FEE_GUARD_STROOPS) {
   const fee = transactionMaxFee(txXdr, networkPassphrase);
-  if (fee !== null && fee > limit) throw new FeeGuardError(fee);
+  if (fee === null) throw new UnreadableTransactionError();
+  if (fee > limit) throw new FeeGuardError(fee);
 }

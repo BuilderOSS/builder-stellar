@@ -103,8 +103,9 @@ const supported = {
     'upgrade',
     'migrate'
   ],
-  // The DAO's ClaimMinter: open a claim list (after granting it an allowance), upgrade it.
-  claims: ['open_list', 'upgrade', 'migrate']
+  // The DAO's ClaimMinter: open a claim list (after granting it an allowance), close one early
+  // (releases after 0.5.0), upgrade it.
+  claims: ['open_list', 'close_list', 'upgrade', 'migrate']
 } as const;
 
 type ContractRole = keyof typeof supported;

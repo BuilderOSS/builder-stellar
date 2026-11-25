@@ -8,23 +8,26 @@ import {Address, xdr} from '@stellar/stellar-sdk';
  */
 export const ClaimMinterError = {
   /**
-   * `total`, `leaf_amount` or `mint_now` is zero
+   * `open_list` with a `total` of zero, or `claim` with a `leaf_amount` or
+   * `mint_now` of zero
    */
   7801 : { message: "InvalidAmount" },
   /**
-   * `mint_now` above `common::MAX_BATCH_MINT` (claim the rest in another call)
+   * `claim` with `mint_now` above `common::MAX_BATCH_MINT` (claim the rest
+   * in another call)
    */
   7803 : { message: "BatchTooLarge" },
   /**
-   * `mint_now` is more than is left of the claimer's leaf
+   * `claim` with `mint_now` above what is left of the claimer's leaf
    */
   7807 : { message: "AlreadyClaimed" },
   /**
-   * Merkle proof verification failed
+   * `claim` whose proof doesn't lead from the claimer's leaf to the list's
+   * root, or has more than 32 siblings
    */
   7808 : { message: "MerkleProofInvalid" },
   /**
-   * Arithmetic overflow in the price
+   * `claim` whose cost, `price × mint_now`, overflows
    */
   7809 : { message: "InvalidInput" },
   /**
@@ -32,8 +35,8 @@ export const ClaimMinterError = {
    */
   7810 : { message: "TokenNotLive" },
   /**
-   * `tree_uri` is empty, longer than `common::MAX_STRING_LENGTH`, or not
-   * an `ipfs://` URI
+   * `open_list` with a `tree_uri` that is empty, longer than
+   * `common::MAX_STRING_LENGTH`, or not an `ipfs://` URI
    */
   7812 : { message: "InvalidTreeUri" },
   /**
@@ -41,31 +44,33 @@ export const ClaimMinterError = {
    */
   7815 : { message: "ListNotFound" },
   /**
-   * The list's `expires_at` has passed
+   * `claim` or `close_list` at or after the list's `expires_at`
    */
   7816 : { message: "ListExpired" },
   /**
-   * The claim would mint past the list's `total`
+   * `claim` that would mint past the list's `total`
    */
   7817 : { message: "ListSoldOut" },
   /**
-   * The list's price is above the claimer's `max_price`
+   * `claim` on a list whose price is above the claimer's `max_price`
    */
   7818 : { message: "PriceAboveMax" },
   /**
-   * The assurance list failed: refunds only
+   * `claim` on an assurance list that failed: refunds only
    */
   7819 : { message: "AssuranceFailed" },
   /**
-   * The list has no assurance terms
+   * `assurance_state` or `refund` on a list with no assurance terms
    */
   7820 : { message: "NotAssurance" },
   /**
-   * Assurance terms are only allowed before launch
+   * `open_list` with assurance terms once Live, or `close_list` on the
+   * assurance list before launch
    */
   7821 : { message: "AssuranceNotAllowed" },
   /**
-   * This ClaimMinter already has its assurance list
+   * `open_list` with assurance terms when this ClaimMinter already has its
+   * assurance list
    */
   7822 : { message: "AssuranceExists" },
   /**
@@ -77,23 +82,24 @@ export const ClaimMinterError = {
    */
   7824 : { message: "NothingToRefund" },
   /**
-   * Threshold of zero, or a deadline not after now or after `expires_at`
+   * `open_list` with assurance terms whose threshold is zero or above
+   * `total`, or whose deadline is not after now or is after `expires_at`
    */
   7825 : { message: "InvalidAssurance" },
   /**
-   * Lists opened before launch need artwork (`properties_count() > 0`)
+   * `open_list` before launch while the artwork has no properties
    */
   7826 : { message: "ArtworkMissing" },
   /**
-   * A list opened before launch must use the configured payment asset
+   * `open_list` before launch in an asset other than the configured one
    */
   7827 : { message: "PaymentAssetMismatch" },
   /**
-   * Negative price
+   * `open_list` with a negative price
    */
   7828 : { message: "InvalidPrice" },
   /**
-   * `expires_at` not in the future
+   * `open_list` with an `expires_at` not in the future
    */
   7829 : { message: "InvalidExpiry" },
   /**
@@ -103,7 +109,8 @@ export const ClaimMinterError = {
 }
 
 /**
- * A claim: `amount` tokens minted from `first_token_id` to `claimer`.
+ * A claim (`claim`): `amount` tokens minted to `claimer`, with consecutive
+ * ids from `first_token_id`, in the same transaction as the payment.
  */
 export interface ClaimedEvent {
   name: "Claimed";
@@ -129,7 +136,8 @@ export interface ClaimedEvent {
 }
 
 /**
- * A failed list's escrow returned to a claimer.
+ * A failed list's escrow returned to the claimer who paid it (`refund`).
+ * The claimer's escrow on this list is now zero.
  */
 export interface RefundedEvent {
   name: "Refunded";
@@ -154,7 +162,10 @@ export interface ListClosedEvent {
 }
 
 /**
- * A list opened: its root, where the full tree is published, and its terms.
+ * A list opened (`open_list`): its root, where the full tree is published,
+ * and its terms. The terms never change afterwards, except that
+ * `close_list` can move `expires_at` earlier (`ListClosed`). `assurance` is
+ * set only on the assurance list.
  */
 export interface ListOpenedEvent {
   name: "ListOpened";
@@ -171,7 +182,8 @@ export interface ListOpenedEvent {
 }
 
 /**
- * The assurance escrow moved to the Treasury (at launch).
+ * A list's escrow moved to the Treasury (`release`, also from `launch`).
+ * Emitted only when `amount` is above zero; the list's escrow is now zero.
  */
 export interface EscrowReleasedEvent {
   name: "EscrowReleased";
@@ -183,7 +195,8 @@ export interface EscrowReleasedEvent {
 }
 
 /**
- * `<Module>Launched`: the ClaimMinter went Live with the DAO.
+ * `<Module>Launched`: the ClaimMinter went Live with the DAO (`launch`).
+ * The Treasury is now its admin.
  */
 export interface ClaimMinterLaunchedEvent {
   name: "ClaimMinterLaunched";
@@ -193,28 +206,46 @@ export interface ClaimMinterLaunchedEvent {
 }
 
 /**
- * One claim list: a merkle root of `(claimer, amount)` leaves.
+ * One claim list: a merkle root of `(claimer, amount)` leaves, its terms and
+ * its running totals. The terms are fixed at `open_list`; only `close_list`
+ * moves `expires_at` earlier.
  */
 export interface ClaimList {
+  /**
+   * The asset claims pay in (the configured payment asset for Setup lists).
+   */
   asset: string;
   /**
    * Distinct addresses that claimed at least once.
    */
   claimers: number;
+  /**
+   * The assurance deadline (ledger timestamp), or 0 for no assurance.
+   */
   deadline: bigint;
   /**
-   * Payments held until launch (assurance list in Setup only).
+   * Payments held until launch (assurance list in Setup only). Before
+   * `release`, the sum of its claimers' `ClaimRecord::escrowed`;
+   * `release` sets it to zero and leaves the records. Only this amount is
+   * released or refunded.
    */
   escrow: bigint;
   /**
    * Claims stop at this ledger timestamp.
    */
   expires_at: bigint;
+  /**
+   * Tokens minted from this list so far, at most `total`.
+   */
   minted: number;
   /**
    * Price per token in `asset`, 0 for a free list.
    */
   price: bigint;
+  /**
+   * Root of the `(claimer, amount)` tree (see the hashing notes in
+   * `contract.rs`).
+   */
   root: Uint8Array;
   /**
    * Assurance terms, flattened: a threshold of 0 means none (see
@@ -233,7 +264,7 @@ export interface ClaimList {
 }
 
 /**
- * A claimer's progress on one list.
+ * A claimer's progress on one list (zero before their first claim).
  */
 export interface ClaimRecord {
   /**
@@ -247,7 +278,7 @@ export interface ClaimRecord {
 }
 
 /**
- * Wiring fixed at construction.
+ * Wiring fixed at construction; no function changes it.
  */
 export interface ClaimsConfig {
   /**
@@ -261,6 +292,9 @@ export interface ClaimsConfig {
    * asset.
    */
   payment_asset: string;
+  /**
+   * The DAO's Token: mints every claim and says whether the DAO is Live.
+   */
   token: string;
   /**
    * Receives every payment once the DAO is Live, and the assurance escrow

@@ -43,7 +43,10 @@ export function appServerEnv(): Record<string, string> {
     STELLAR_WEB_AUTH_SECRET: loadIdentity(E2E_WEB_AUTH_IDENTITY, undefined, { create: true }).keypair.secret(),
     STELLAR_HOME_DOMAIN: 'localhost',
     STELLAR_WEB_AUTH_DOMAIN: 'localhost',
-    AUTH_APP_NAME: 'Tribe Builder'
+    AUTH_APP_NAME: 'Tribe Builder',
+    // Each test sends its own X-Forwarded-For (fixtures.ts) so sign-in limits count per test. Off
+    // Vercel the app trusts a client address header only when it is named here.
+    TRUSTED_CLIENT_IP_HEADER: 'x-forwarded-for'
   };
   if (process.env.APP_DATABASE_URL) env.APP_DATABASE_URL = process.env.APP_DATABASE_URL;
   if (E2E_CAPTURE) {

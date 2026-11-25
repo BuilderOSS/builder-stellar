@@ -44,9 +44,18 @@ export function listingEndSeconds(preset: ListingEndPreset, custom: string, nowM
   return Number.isSafeInteger(end) && end > now ? end : null;
 }
 
-/** A readable local date and time, for example "Wednesday 26 November 2026 at 14:05". */
-export function formatListingEnd(seconds: number | string, locale?: string) {
-  return new Date(Number(seconds) * 1000).toLocaleString(locale, { dateStyle: 'full', timeStyle: 'short' });
+/** The latest time a JavaScript Date can hold, in milliseconds (about the year 275760). */
+const MAX_DATE_MS = 8.64e15;
+
+/**
+ * A readable local date and time, for example "Wednesday 26 November 2026 at 14:05". Null for an
+ * end a Date cannot hold: the contract takes any future u64 (up to u64::MAX), and such a listing
+ * has no end date in practice, so each sentence says so in its own words instead of "Invalid Date".
+ */
+export function formatListingEnd(seconds: number | string, locale?: string): string | null {
+  const ms = Number(seconds) * 1000;
+  if (!Number.isFinite(ms) || Math.abs(ms) > MAX_DATE_MS) return null;
+  return new Date(ms).toLocaleString(locale, { dateStyle: 'full', timeStyle: 'short' });
 }
 
 /* ---------- The guided signatures ---------- */

@@ -267,8 +267,9 @@ Sources: [restore-required.ts](../apps/web/src/lib/restore-required.ts),
 
 ## Fee guard
 
-Every app transaction signs through `signWithWallet`, which refuses a transaction whose maximum fee exceeds
-**50 XLM** and explains that it would be paying shared code rent. The design called for 10 XLM, but creating a DAO
+Every app transaction signs through `signWithWallet` (the SEP-10 sign-in challenge through `signSep10Challenge`
+beside it), which refuses a transaction whose maximum fee exceeds **50 XLM** and explains that it would be paying
+shared code rent. It also refuses a transaction whose fee it can't read. The design called for 10 XLM, but creating a DAO
 legitimately costs about 10 XLM of instance rent on testnet. Before D27 a single code bump cost ~300 XLM, well
 above the guard. The Renewal tab passes the price the member already saw as the allowance.
 

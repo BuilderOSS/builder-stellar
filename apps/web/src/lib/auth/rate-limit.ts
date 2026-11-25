@@ -5,6 +5,11 @@ type RateLimitEntry = {
   resetAt: number;
 };
 
+/**
+ * Counts per client address, per scope. The counts live in this server instance's memory: each
+ * instance counts on its own and starts again from zero when it restarts, so the limits slow a
+ * client down rather than set a hard deployment-wide cap. There is no shared store.
+ */
 const entries = new Map<string, RateLimitEntry>();
 
 function pruneExpired(now: number) {
@@ -16,27 +21,46 @@ function pruneExpired(now: number) {
   }
 }
 
-function getClientKey(request: Request): string | null {
-  // Try Vercel header first (production)
-  const vercelIp = request.headers.get('x-vercel-forwarded-for')?.trim();
-  if (vercelIp) return vercelIp;
+/** Vercel's edge sets this header to the connecting client's address and overwrites any value the client sent. */
+export const VERCEL_CLIENT_IP_HEADER = 'x-vercel-forwarded-for';
 
-  // Fallback to standard proxy headers
-  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (forwardedFor) return forwardedFor;
+let warnedInvalidHeader = false;
 
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
+/**
+ * The one request header trusted to carry the client's address, or null when none is.
+ *
+ * A client can send any X-Forwarded-For, X-Real-IP or CF-Connecting-IP header, and nothing replaces
+ * it unless a proxy in front of the app does. So the app trusts only a header the platform sets:
+ * TRUSTED_CLIENT_IP_HEADER when the operator names one (the header their own proxy sets or
+ * overwrites), otherwise Vercel's header on Vercel, otherwise none.
+ */
+export function trustedClientIpHeader(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (configured) {
+    if (/^[a-z0-9-]+$/.test(configured)) return configured;
+    if (!warnedInvalidHeader) {
+      warnedInvalidHeader = true;
+      console.error('TRUSTED_CLIENT_IP_HEADER is not a header name; no client address header is trusted.');
+    }
+    return null;
+  }
+  return env.VERCEL === '1' ? VERCEL_CLIENT_IP_HEADER : null;
+}
 
-  const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
-  if (cloudflareIp) return cloudflareIp;
-
-  // Development fallback - allow local dev with static identifier
-  if (process.env.NODE_ENV === 'development') {
-    return 'localhost-dev';
+/** The rate-limit key for the request's client, or null when the client can't be identified. */
+export function getClientKey(request: Request, env: NodeJS.ProcessEnv = process.env): string | null {
+  const header = trustedClientIpHeader(env);
+  if (header) {
+    // A proxy appends the address it saw, so the last entry is the one it vouches for; any entries
+    // before it came from the client.
+    const address = request.headers.get(header)?.split(',').at(-1)?.trim();
+    if (address) return address;
   }
 
-  // Fail closed in production if no valid IP found
+  // Local development: every request comes from this machine.
+  if (env.NODE_ENV === 'development') return 'localhost-dev';
+
+  // Fail closed: without a trusted address, refuse rather than share one count across clients.
   return null;
 }
 

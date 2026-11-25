@@ -45,7 +45,7 @@ The operator is a single address. Handing it to someone else takes two steps. It
 
 - **A majority vote.** A passed proposal can do anything the rules allow, including spending the whole treasury.
 - **Membership switches.** A tribe can vote to lock transfers, and to let the tribe move any membership. Together, a majority could lock memberships and then take them. The app flags these switches in proposal review.
-- **Founder supply.** The launch admin can mint any number of founder tokens before launch. With the shortest timings, a holder of most votes could pass and run a proposal about 15 minutes after launch.
+- **Founder supply.** The launch admin can mint any number of founder tokens before launch. With the shortest timings, a holder of most votes could pass and run a proposal about 15 minutes after launch. A free claim list opened before launch also stays claimable after launch, until it closes. The claims page and Manage → Membership show these unclaimed tokens, and a proposal can close such a list early. See [Close a list early](/guides/claims/create#close-a-list-early).
 - **No veto after queueing.** Once a proposal is queued, only expiry stops it.
 - **Upgrade code.** The chain checks that an upgrade is approved, not what the new code does.
 - **Outside modules.** A contract registered by proposal that Tribe Builder didn't deploy is not checked by Tribe Builder.

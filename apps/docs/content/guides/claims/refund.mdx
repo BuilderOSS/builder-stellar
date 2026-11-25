@@ -35,6 +35,8 @@ Most claim lists need no refunds. Tokens are minted only when someone claims the
 
   "Failed" is not a stored flag. The contract works it out each time: the deadline has passed and the tribe's Token is not live. Because of that, the contract never allows both a refund and a release of the held payments to the Treasury. A tribe that launched has no refunds. A failed drive can't release funds.
 
+  A refund goes to the wallet that paid, whoever sends it. The claims contract has no way to send it anywhere else. If that wallet can't receive the asset, for example because the asset's issuer froze it, the refund fails and the payment stays held until it can go through. Only payments made by claiming are held for anyone: assets sent to the claims contract directly can't be returned.
+
   If the claims contract's own refund code ever fails, the launch admin can replace it with a fixed version that the platform publishes as the latest claims release (`recover_claims`). The replacement takes over the held payments, so the Manager lets it run only at least seven days (or the platform's upgrade notice, if longer) after the fix was published and after the drive's deadline. Until the notice passes, your payment stays with the code you paid into, so take it back soon after the drive fails.
 
   On a normal list, the contract has no refund. The part of the mint allowance a list didn't use stays with the claims module.
@@ -46,6 +48,7 @@ Most claim lists need no refunds. Tokens are minted only when someone claims the
 
 - **There is no refund button.** The drive may not have failed yet, or the tribe launched. Check the card's label and the deadline. If you paid nothing, for example on a free drive, there is nothing to take back.
 - **The refund failed with `NotFailed`.** The deadline hasn't passed, or the tribe has launched. Payments then stay with the drive or move to the Treasury.
+- **The refund fails although the drive failed and you paid.** Your wallet may not be able to receive the asset at the moment, for example if you removed its trustline or the asset's issuer froze it. Add the trustline again, or ask the issuer, then try again. Your payment stays held until then.
 - **The refund failed with `NothingToRefund`.** Your payment was already returned, or the connected wallet didn't pay. Check that you are using the wallet that claimed.
 - **You want money back from a normal list.** The claims contract can't return it. The tribe can choose to pay it back by proposal from the Treasury.
 

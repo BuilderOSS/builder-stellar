@@ -496,8 +496,8 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
               .
             </li>
             <li>
-              The tribe launches once {confirmDrive.needed.toLocaleString()} of them claim, by{' '}
-              {formatClaimDate(confirmDrive.deadline)}
+              The tribe launches once {confirmDrive.needed.toLocaleString()} of them claim
+              {formatClaimDate(confirmDrive.deadline) ? `, by ${formatClaimDate(confirmDrive.deadline)}` : ''}
               {launchAuction || launchMarketplace
                 ? `, and then ${[launchAuction ? 'auctions start' : null, launchMarketplace ? 'the market opens' : null].filter(Boolean).join(' and ')}`
                 : ''}

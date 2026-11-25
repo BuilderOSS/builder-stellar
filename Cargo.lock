@@ -1036,6 +1036,7 @@ name = "minter"
 version = "0.1.0"
 dependencies = [
  "common",
+ "serde_json",
  "soroban-sdk",
  "token",
 ]

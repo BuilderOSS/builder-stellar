@@ -57,7 +57,7 @@ const ROLE_CALLS: Record<ContractRole, Record<string, string>> = {
     update_profile: 'Update the tribe profile',
     regenerate: 'Seed traits for a token'
   },
-  claims: { open_list: 'Open a claim list' },
+  claims: { open_list: 'Open a claim list', close_list: 'Close a claim list' },
   manager: { create_module: 'Add a module', change_slug: 'Change the tribe link' }
 };
 
