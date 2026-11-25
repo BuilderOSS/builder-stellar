@@ -41,7 +41,7 @@ Tribe Builder ([tribes.build](https://tribes.build)) is a framework and web app 
 | common (shared library) | `contracts/common/` | [ ] |
 | **Total** | | **[ ]** |
 
-Code lines leave out blank lines, comments and test-only code; SCOPE.md explains the count and gives the figure a `cfg`-unaware tool such as `cloc` reports. The file-by-file list is in [SCOPE.md](SCOPE.md#files-in-scope). The unit tests ([number] in these crates) and the integration tests in `contracts/e2e` ([number]) come with the code as evidence.
+Code lines leave out blank lines, comments, and test-only code; SCOPE.md explains the count and gives the figure a `cfg`-unaware tool such as `cloc` reports. The file-by-file list is in [SCOPE.md](SCOPE.md#files-in-scope). The unit tests ([number] in these crates) and the integration tests in `contracts/e2e` ([number]) come with the code as evidence.
 
 ### Dependencies
 
@@ -67,8 +67,8 @@ Code lines leave out blank lines, comments and test-only code; SCOPE.md explains
 
 ## 4. What we provide
 
-- This folder: [README.md](README.md) (start here), [SCOPE.md](SCOPE.md), [STATE_MACHINES.md](STATE_MACHINES.md), [INVARIANTS.md](INVARIANTS.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and [THREAT_MODEL.md](THREAT_MODEL.md).
-- [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md): roles, the admin model, the lifecycle, voting supply, the execution path, upgrades and error codes.
+- This folder: [README.md](README.md) (start here), [SCOPE.md](SCOPE.md), [STATE_MACHINES.md](STATE_MACHINES.md), [INVARIANTS.md](INVARIANTS.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md), and [THREAT_MODEL.md](THREAT_MODEL.md).
+- [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md): roles, the admin model, the lifecycle, voting supply, the execution path, upgrades, and error codes.
 - The design documents in [`docs/designs/`](../designs), and each crate's README.
 - [Test and coverage results for the frozen commit: link.]
 - [Reproducible build instructions and published hashes: link.]
@@ -77,14 +77,14 @@ Please don't report the items in KNOWN_ISSUES.md as new findings, unless you fin
 
 ## 5. Questions we most want answered
 
-1. **Authority after launch.** Can a launch admin, a deployer or the Manager admin keep, or later regain, any power over a DAO after it launches: through admin handoff, mint allowances, claim lists opened in Setup, transfer agents, modules registered in Setup, or upgrades?
+1. **Authority after launch.** Can a launch admin, a deployer, or the Manager admin keep, or later regain, any power over a DAO after it launches: through admin handoff, mint allowances, claim lists opened in Setup, transfer agents, modules registered in Setup, or upgrades?
 2. **Funds without a proposal.** Can any path move a DAO's funds or tokens without a passed proposal, other than the permissionless paths `SECURITY_MODEL.md` lists? Do the Treasury's `authorize` trees authorize only what voters see?
 3. **Escrow.** Is every escrowed amount (auction bids, listings, pool stock, ClaimMinter escrow) always either paid out once or returned once? Can anyone block refunds or settlement?
-4. **Votes and quorum.** Do voting units, the voting supply and the quorum stay correct on every transfer, mint, custody and delegation path? Can a vote count twice, or a quorum be lowered after a proposal is created?
-5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Manager's notice period and recovery upgrades sound?
-6. **Isolation between DAOs.** Can one DAO affect another DAO's state, mints or escrow through the Manager or shared code?
-7. **Resource limits and archival.** Can a passed proposal, a claim or a settlement become impossible to complete because of event, footprint or CPU limits, or because an entry archives?
-8. **Claims.** Are the Merkle proofs and leaf encoding sound for every address type a claimer can have?
+4. **Votes and quorum.** Do voting units, the voting supply, and the quorum stay correct on every transfer, mint, custody, and delegation path? Can a vote count twice, or a quorum be lowered after a proposal is created?
+5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Manager's notice period, and recovery upgrades sound?
+6. **Isolation between DAOs.** Can one DAO affect another DAO's state, mints, or escrow through the Manager or shared code?
+7. **Resource limits and archival.** Can a passed proposal, a claim, or a settlement become impossible to complete because of event, footprint, or CPU limits, or because an entry archives?
+8. **Claims.** Are the Merkle proofs and claim checks sound?
 9. [Your own questions.]
 
 ## 6. Logistics

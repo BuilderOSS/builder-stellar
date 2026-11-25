@@ -2,7 +2,7 @@
 
 These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
 
-This page describes `dev` as of the commit in [SCOPE.md](SCOPE.md). An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders or front ends should check.
+This page was checked against `dev` at `b1ef765`, which includes pull requests 118 to 120. An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders, or front ends should check.
 
 | ID | Issue | Area |
 | --- | --- | --- |
@@ -32,13 +32,13 @@ This page describes `dev` as of the commit in [SCOPE.md](SCOPE.md). An entry is 
 
 ## KI-02: Governance parameter bounds
 
-**Behaviour.** The voting delay, voting period and queue delay must each be 300 seconds to 30 days; the quorum 1 to 10,000 basis points; the proposal threshold nonzero, and not above the voting supply when it is set. The supply check is skipped while the supply is zero, so a launch admin can set the threshold before minting. `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than proposals being impossible. A Governor without `votes_needed_to_propose` (0.5.0 and earlier) has no cap. Within these bounds a DAO can still choose parameters that are easy to capture or very slow. A quorum of 10,000 basis points needs every voting-capable token to take part.
+**Behaviour.** The voting delay, voting period, and queue delay must each be 300 seconds to 30 days; the quorum 1 to 10,000 basis points; the proposal threshold nonzero, and not above the voting supply when it is set. The supply check is skipped while the supply is zero, so a launch admin can set the threshold before minting. `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than proposals being impossible. A Governor without `votes_needed_to_propose` (0.5.0 and earlier) has no cap. Within these bounds a DAO can still choose parameters that are easy to capture or very slow. A quorum of 10,000 basis points needs every voting-capable token to take part.
 
 **Code.** [`governor/src/contract.rs`](../../contracts/governor/src/contract.rs): the parameter checks, `set_proposal_threshold`, and `propose`.
 
 ## KI-03: Founder supply and early takeover
 
-**Behaviour.** During Setup the launch admin can mint any number of founder tokens, in batches that fit the event budget, and delegate them. Launch requires only a nonzero voting supply. With the minimum timings, a majority holder can propose, vote, queue and execute about 15 minutes after launch.
+**Behaviour.** During Setup the launch admin can mint any number of founder tokens, in batches that fit the event budget, and delegate them. Launch requires only a nonzero voting supply. With the minimum timings, a majority holder can propose, vote, queue, and execute about 15 minutes after launch.
 
 **Guidance.** Bidders and holders should inspect founder supply and delegation before taking part. Front ends should show the founders' share.
 
@@ -52,7 +52,7 @@ This page describes `dev` as of the commit in [SCOPE.md](SCOPE.md). An entry is 
 
 **Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `close_list`.
 
-TODO: the app-side display of unclaimed supply and the composer action are in progress. Link them here when they merge.
+TODO: app changes in progress relate to this entry; link them when they merge.
 
 ## KI-05: Treasury-held tokens never vote
 
@@ -62,7 +62,7 @@ TODO: the app-side display of unclaimed supply and the composer action are in pr
 
 ## KI-06: No veto once a proposal is queued
 
-**Behaviour.** A proposer can cancel only while a proposal is `Pending` or `Active`. Once it is queued, only expiry (14 days after the ETA) stops it.
+**Behaviour.** There is no veto once a proposal is queued. Only expiry, 14 days after the ETA, stops it.
 
 **Code.** [`governor/src/contract.rs`](../../contracts/governor/src/contract.rs) `cancel` and the state computation. See [the proposal state machine](STATE_MACHINES.md#proposal).
 
@@ -84,21 +84,21 @@ TODO: link the published WASM hashes and the reproducible build instructions onc
 
 **Behaviour.** A pending DAO's requested slug is public, and it is claimed only at launch (or when an assurance drive opens). Someone can create and launch their own DAO with that slug first. That costs creating a DAO and the rent for its core contracts, and produces a real, launched DAO. The pending DAO's launch then fails with `SlugTaken`, and its launch admin renames it with `update_pending_slug`.
 
-**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `create_dao`, `launch_dao` and `update_pending_slug`. See [Slugs](../SECURITY_MODEL.md#slugs).
+**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `create_dao`, `launch_dao`, and `update_pending_slug`. See [Slugs](../SECURITY_MODEL.md#slugs).
 
 ## KI-10: Payment assets must be plain Stellar Asset Contracts
 
-**Behaviour.** Payment assets must be plain, non-regulated Stellar Asset Contracts. An asset with `AUTH_REQUIRED`, clawback, a fee on transfer or a rebasing balance can freeze or misprice settlement.
+**Behaviour.** Payment assets must be plain, non-regulated Stellar Asset Contracts. An asset with `AUTH_REQUIRED`, clawback, a fee on transfer, or a rebasing balance can freeze or misprice settlement.
 
-**Guidance.** DAOs should price auctions, listings, pools and claim lists in plain assets.
+**Guidance.** DAOs should price auctions, listings, pools, and claim lists in plain assets.
 
-**Code.** The payment paths in [`auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs), [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) and [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs).
+**Code.** The payment paths in [`auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs), [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs), and [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs).
 
-TODO: contract changes in progress add checks on the payment assets a module accepts. Update this entry when they merge.
+TODO: contract changes in progress may change this entry; update it when they merge.
 
 ## KI-11: Manager admin trust
 
-**Behaviour.** The Manager admin selects the hashes that future DAOs deploy, can revoke implementations and can pause the factory. It holds no minting power over any DAO: every module that mints belongs to the DAO, is capped by an allowance the DAO sets, and is upgraded only by the DAO's proposal.
+**Behaviour.** The Manager admin selects the hashes that future DAOs deploy, can revoke implementations, and can pause the factory. It holds no minting power over any DAO: every module that mints belongs to the DAO, is capped by an allowance the DAO sets, and is upgraded only by the DAO's proposal.
 
 The Manager's own upgrade is visible for a notice period: it applies only `upgrade_delay()` ledgers after the approval, and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement. Re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule.
 
@@ -106,7 +106,7 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 **Guidance.** Creators should check `DaoCreated.wasm_hashes` before launch.
 
-**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs): the registry, `pause_factory`, `upgrade_manager`, `propose_admin` and `accept_admin`.
+**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs): the registry, `pause_factory`, `upgrade_manager`, `propose_admin`, and `accept_admin`.
 
 ## KI-12: Assurance proves a launch, not a community
 
@@ -116,13 +116,13 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 ## KI-13: Issuer-controlled payment assets
 
-**Behaviour.** A pool, claim list or escrow priced in an asset whose issuer can freeze, claw back or deauthorize holders can be frozen or drained by that issuer, including the escrow that refunds depend on.
+**Behaviour.** A pool, claim list, or escrow priced in an asset whose issuer can freeze, claw back, or deauthorize holders can be frozen or drained by that issuer, including the escrow that refunds depend on.
 
 **Guidance.** DAOs should price in plain assets ([KI-10](#ki-10-payment-assets-must-be-plain-stellar-asset-contracts)).
 
 ## KI-14: Modules can be delegates
 
-**Behaviour.** A voting module, such as the ClaimMinter or a custom vault, holds voting units like any member and can receive delegations. If its code calls the Governor, it can vote them. Manage, Membership shows the votes each module holds.
+**Behaviour.** A voting module holds voting units like any member and can receive delegations. If its code calls the Governor, it can vote them. Manage, Membership shows the votes each module holds.
 
 **Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `register_module` (the `non_voting` flag) and the voting-unit hooks.
 
@@ -134,27 +134,18 @@ In the read model, a known role (`auction`, `marketplace`, `claims`) means the M
 
 **Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `register_module`; [`db/migrations/0002_manager_views.sql`](../../db/migrations/0002_manager_views.sql).
 
-TODO: read-model changes in progress tighten how a registration's role is assigned. Update this entry when they merge.
+TODO: read-model changes in progress may change this entry; update it when they merge.
 
 ## KI-16: Indexer allowlisting
 
 **Behaviour.** The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO cannot use this to add rows to another DAO's views, because identity is windowed per DAO, but a hostile contract can fill its own DAO's admin feed with noise.
 
-The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` do not take an outside module's own upgrade, storage-migration or launch events, so such a contract's events cannot stop a shared view from reading for every DAO (migration 0012). Values past the bigint range, such as an expiry at `u64::MAX`, are read as the bigint maximum (migration 0013).
+The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` do not take an outside module's own upgrade, storage-migration, or launch events, so such a contract's events cannot stop a shared view from reading for every DAO (migration 0012).
 
-**Remedies.** The DAO unregisters the contract by vote, which ends its window in every view. Or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop. Whether a running pipeline notices a deleted row without re-applying is not verified. Rows already indexed stay, because the landing tables are append-only.
+**Remedies.** The DAO unregisters the contract by vote, which ends its window in every view. Or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`), and checks that new events stop. Whether a running pipeline notices a deleted row without re-applying is not verified. Rows already indexed stay, because the landing tables are append-only.
 
 **Code.** [`packages/goldsky/`](../../packages/goldsky/README.md); [`db/migrations/`](../../db/migrations).
 
 ## KI-17: Archival assumptions
 
 **Behaviour.** The design assumes protocol 23 or later, with automatic restoration where footprints allow, plus periodic maintenance. See [`docs/TTL_ECONOMICS.md`](../TTL_ECONOMICS.md) and [`docs/MONITORING.md`](../MONITORING.md).
-
-## Related design choices
-
-`SECURITY_MODEL.md` also states these trade-offs as part of the design rather than as limitations. They are documented behaviour, not findings:
-
-- [Membership switches](../SECURITY_MODEL.md#membership-switches-locked-tokens): locking transfers takes away members' exit by sale, and with recovery on a majority can move any membership.
-- [Quick-buy pools](../SECURITY_MODEL.md#marketplace): each token sold adds a vote, and the per-buyer cap counts addresses.
-- [Assurance launch](../SECURITY_MODEL.md#assurance-launch): the platform can end a drive in refunds.
-- [Slugs](../SECURITY_MODEL.md#slugs): `change_slug` releases the old slug in the same call, and anyone may claim it.

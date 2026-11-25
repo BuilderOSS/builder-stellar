@@ -81,3 +81,24 @@ test('a file that starts with #![cfg(test)] is all test code', () => {
   assert.equal(r.codeLines + r.testCodeLines, 4);
   assert.equal(r.tests, 1);
 });
+
+test('a test-only enum variant or struct field ends at its comma, not at the closing brace', () => {
+  const src = [
+    'pub enum E {',
+    '    A,',
+    '    #[cfg(test)]',
+    '    B,',
+    '    C,',
+    '}',
+    'pub struct S {',
+    '    pub a: u32,',
+    '    #[cfg(test)]',
+    '    pub b: u32',
+    '}',
+    'pub fn one() {}',
+    'pub fn two() {}'
+  ].join('\n');
+  const r = analyseRustFile(src);
+  assert.equal(r.testCodeLines, 4);
+  assert.equal(r.codeLines, 9);
+});

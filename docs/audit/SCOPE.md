@@ -17,20 +17,20 @@ This is the list of contract files and folders in the audit scope, with their si
 
 To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it prints the tree above. To regenerate for another commit or tag, run `node scripts/audit-scope.mjs --ref <tag>`; `--check` reports whether this file is current.
 
-**How lines are counted.** A code line holds something other than whitespace and comments; blank lines, comment lines and doc comments are left out. Test-only code is counted apart and is not in the scope total: the unit test files, and items behind a `cfg` that is false in a release build, such as `#[cfg(test)]` and `#[cfg(any(test, feature = "testutils"))]`. Tools that do not read `cfg`, such as `cloc`, count the test-only blocks inside source files as code; the second line count above is that figure.
+**How lines are counted.** A code line holds something other than whitespace and comments; blank lines, comment lines, and doc comments are left out. Test-only code is counted apart and is not in the scope total: the unit test files, and items behind a `cfg` that is false in a release build, such as `#[cfg(test)]` and `#[cfg(any(test, feature = "testutils"))]`. Tools that do not read `cfg`, such as `cloc`, count the test-only blocks inside source files as code; the second line count above is that figure.
 
 ## Crates in scope
 
 | Crate | Folder | What it is | Rust files | Code lines | Unit tests | Test code lines |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | auction | [`contracts/auction/`](../../contracts/auction) | Auction module: sells one new token per auction; refunds outbid bidders | 6 | 1,056 | 61 | 1,277 |
-| common | [`contracts/common/`](../../contracts/common) | Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget and cross-contract clients | 8 | 547 | 19 | 693 |
-| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum and the queue, on the OpenZeppelin governor | 5 | 979 | 76 | 2,010 |
-| manager | [`contracts/manager/`](../../contracts/manager) | Manager: factory, implementation registry, upgrade approvals, slugs, launch and assurance drives | 5 | 2,005 | 95 | 3,266 |
+| common | [`contracts/common/`](../../contracts/common) | Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget, and cross-contract clients | 8 | 547 | 19 | 693 |
+| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum, and the queue, on the OpenZeppelin governor | 5 | 979 | 76 | 2,010 |
+| manager | [`contracts/manager/`](../../contracts/manager) | Manager: factory, implementation registry, upgrade approvals, slugs, launch, and assurance drives | 5 | 2,005 | 95 | 3,266 |
 | marketplace | [`contracts/marketplace/`](../../contracts/marketplace) | Marketplace module: escrowed listings and quick-buy pools | 5 | 1,079 | 42 | 1,349 |
-| metadata | [`contracts/metadata/`](../../contracts/metadata) | Metadata: artwork, attributes, token URIs and the DAO profile hash | 6 | 1,156 | 54 | 1,862 |
-| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds and release | 5 | 623 | 24 | 957 |
-| token | [`contracts/token/`](../../contracts/token) | Token: the membership NFT with votes, mint allowances, the module registry and membership switches | 5 | 933 | 76 | 2,089 |
+| metadata | [`contracts/metadata/`](../../contracts/metadata) | Metadata: artwork, attributes, token URIs, and the DAO profile hash | 6 | 1,156 | 54 | 1,862 |
+| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds, and release | 5 | 623 | 24 | 957 |
+| token | [`contracts/token/`](../../contracts/token) | Token: the membership NFT with votes, mint allowances, the module registry, and membership switches | 5 | 933 | 76 | 2,089 |
 | treasury | [`contracts/treasury/`](../../contracts/treasury) | Treasury: holds DAO assets and executes queued proposals | 5 | 323 | 21 | 712 |
 | **Total** | | | **50** | **8,701** | **468** | **14,215** |
 
@@ -105,7 +105,14 @@ TODO: reproducible builds and published WASM hashes are being added. Link the bu
 
 ## Files in scope
 
-Each crate's `Cargo.toml` is in scope with its sources, because it sets the dependencies and features the contract builds with. Line counts are for the whole file; "Code" leaves out blank lines, comments and test-only code.
+Each crate's `Cargo.toml` is in scope with its sources, because it sets the dependencies and features the contract builds with. Line counts are for the whole file; "Code" leaves out blank lines, comments, and test-only code.
+
+### Workspace
+
+| File | What it sets |
+| --- | --- |
+| [`Cargo.toml`](../../Cargo.toml) | The workspace members, the pinned dependencies, and the release profile |
+| [`Cargo.lock`](../../Cargo.lock) | The exact version and source of every dependency |
 
 ### auction (`contracts/auction/`)
 
@@ -258,7 +265,7 @@ Other files in the crate folders:
 | [`contracts/vote-adapter-mock/`](../../contracts/vote-adapter-mock) | A vote source whose admin sets any weight. It exists for tests and testnet and must never be approved on mainnet (see its README). | 3 Rust files, 222 code lines, 5 tests |
 | The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. Whether the modules used are in scope is agreed in the scope letter. | |
 | `soroban-sdk` and the Soroban host | Platform code, trusted as released. | |
-| `apps/`, `packages/`, `db/` | The web app, the indexer, the generated bindings and the SQL read model. They are not contract code; the app and indexer tier has its own [threat model](THREAT_MODEL.md). | |
+| `apps/`, `packages/`, `db/` | The web app, the indexer, the generated bindings, and the SQL read model. They are not contract code; the app and indexer tier has its own [threat model](THREAT_MODEL.md). | |
 | `scripts/`, `configs/`, `deploys/`, `releases/` | Deployment and operations tooling and records. | |
 | `docs/`, `apps/docs/` | Documentation. It describes the contracts but is not part of them. | |
 

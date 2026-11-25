@@ -2,7 +2,7 @@
 
 These are the properties the contracts must keep, each with the tests that check it. A property is **Covered** when tests assert it directly, **Partial** when they assert only part of it (the missing part is named), and **Missing** when no test asserts it. Test names are function names in the linked file; search the file for `fn <name>`.
 
-The list describes `dev` as of the commit in [SCOPE.md](SCOPE.md). Contract changes in progress will add tests; link them here as they merge.
+The list was checked against `dev` at `b1ef765`, which includes pull requests 118 to 120. Contract changes in progress will add tests; link them here as they merge.
 
 ## Summary
 
@@ -48,7 +48,7 @@ The list describes `dev` as of the commit in [SCOPE.md](SCOPE.md). Contract chan
 
 Each account's voting units equal its token balance, and are zero for the Treasury and the non-voting modules (Auction, Marketplace). The `TotalSupply` checkpoint equals the sum of all units, and the sum of `get_votes` equals `TotalSupply`.
 
-- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomised walk (four fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, the membership switches and the transfer paths, asserting all three equalities after every step.
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomised walk (four fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, the membership switches, and the transfer paths, asserting all three equalities after every step.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `system_holders_carry_no_votes_through_every_path`, `registering_a_holder_non_voting_removes_its_votes_from_its_delegate`, `unregistering_a_holding_module_self_delegates_before_votes_return`.
 
 **Covered.**
@@ -65,7 +65,7 @@ The Treasury and non-voting modules are never auto-delegated and cannot cast a v
 
 ### INV-03: Votes and the quorum are fixed at the snapshot
 
-Votes and the voting supply are read at the ledger before `propose`. The quorum is computed once and stored on the proposal; later mints, transfers, listings or rate changes do not change it.
+Votes and the voting supply are read at the ledger before `propose`. The quorum is computed once and stored on the proposal; later mints, transfers, listings, or rate changes do not change it.
 
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `quorum_does_not_follow_later_supply_or_rate_changes`, `escrow_in_the_proposing_ledger_does_not_lower_the_quorum`, `a_mint_in_the_proposing_ledger_counts_toward_the_quorum_supply` (despite its name, it asserts that tokens minted in the proposing ledger neither vote nor count toward the quorum supply).
 
@@ -83,7 +83,7 @@ An account votes once per proposal (OpenZeppelin `count_vote`). Only the propose
 
 ### INV-05: Mint allowance accounting
 
-The admin mints without an allowance. Every other minter must be a registered module and spends its `mint_allowance`; minting past it fails (`AllowanceExceeded`) and leaves it unchanged. `u32::MAX` is unlimited and never decremented. `increase_mint_allowance`, `decrease_mint_allowance` and `release_mint_allowance` change it as documented, and `unregister_module` sets it to zero.
+The admin mints without an allowance. Every other minter must be a registered module and spends its `mint_allowance`; minting past it fails (`AllowanceExceeded`) and leaves it unchanged. `u32::MAX` is unlimited and never decremented. `increase_mint_allowance`, `decrease_mint_allowance`, and `release_mint_allowance` change it as documented, and `unregister_module` sets it to zero.
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `module_mints_within_its_allowance_and_stops_at_zero`, `an_unlimited_allowance_is_never_spent`, `allowances_add_subtract_and_release`, `unregistering_zeroes_the_allowance_and_emits`.
 
@@ -99,9 +99,9 @@ One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the
 
 ### INV-07: Batch mints fit the event budget
 
-`common::batch_mint_fits` refuses a batch over its estimate (`BatchTooLarge`, 7205), and every batch it allows fits the 16 KiB per-transaction event limit.
+The Token refuses a batch over the `common::batch_mint_fits` estimate (`BatchTooLarge`, 7205), and every batch the estimate allows fits the 16 KiB per-transaction event limit.
 
-- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `batch_mint_respects_the_event_budget`: the token, recipient and mixed edges, and `u32` overflow.
+- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `batch_mint_respects_the_event_budget`: the token, recipient, and mixed edges, and `u32` overflow.
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `batches_at_the_event_budget_fit_one_transaction`: measured event bytes at the edge stay under 90% of the limit with 16-trait artwork.
 
 **Covered.** `batch_mint_fits` has no unit test of its own; it is tested through the Token.
@@ -110,7 +110,7 @@ One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the
 
 ### INV-08: One admin per contract
 
-Each contract has one admin, set at construction to the launch admin. `common::admin::handoff` is the only change, to the Treasury, at `open_assurance` or launch. No contract exposes a transfer, a two-step handover or a renounce.
+Each DAO contract has one admin, set at construction to the launch admin. `common::admin::handoff` is the only change, to the Treasury, at `open_assurance` or launch. No DAO contract exposes a transfer, a two-step handover, or a renounce. (The Manager, which is not a DAO contract, has a two-step handover of its own admin.)
 
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `no_module_exposes_admin_transfer_or_renounce`, `a_met_drive_launches_with_the_stored_config_and_releases_the_escrow`, `launch_grants_exactly_the_canonical_mint_set`.
 - [`contracts/common/src/test.rs`](../../contracts/common/src/test.rs) `admin_handoff_moves_authority_and_emits`.
@@ -137,19 +137,19 @@ If any launch check or call fails, the transaction reverts: every contract stays
 
 ### INV-11: Live-only entry points refuse before launch
 
-Before launch these fail with `NotLive` (7001): auction `unpause`; Marketplace `list`, `buy`, `open_pool`, `restock` and `buy_from_pool`; Governor `propose`, `cast_vote`, `queue` and `consume`; `treasury.execute`; `dao_transfer` and `agent_transfer`.
+Before launch these fail with `NotLive` (7001): auction `unpause`; Marketplace `list`, `buy`, `open_pool`, `restock`, and `buy_from_pool`; Governor `propose`, `cast_vote`, `queue`, and `consume`; `treasury.execute`; `dao_transfer` and `agent_transfer`.
 
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `proposal_entrypoints_are_not_live_before_launch_and_work_after`.
 - [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) `execute_before_launch_is_not_live`.
 - [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `secondary_list_and_buy_before_launch_are_not_live`, and `open_pool` in the pool tests.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `dao_transfer_needs_recovery_takes_the_current_owner_and_never_touches_modules`, `transfer_agents_are_granted_by_the_registrar_and_need_both_signatures`.
-- [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs): `unpause` before launch.
+- [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) `unpause_before_launch_is_not_live`.
 
 **Partial:** `restock` and `buy_from_pool` are not asserted to fail with `NotLive`.
 
 ### INV-12: Handoff freezes Setup
 
-After `open_assurance` hands every admin to the Treasury, nothing in Setup can change until launch: settings, artwork, mints, allowances, claim lists, registrations and upgrades.
+After `open_assurance` hands every admin to the Treasury, nothing in Setup can change until launch: settings, artwork, mints, allowances, claim lists, registrations, and upgrades.
 
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `a_met_drive_launches_with_the_stored_config_and_releases_the_escrow`.
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `handoff_is_the_managers_freezes_settings_and_stays_in_setup`.
@@ -168,7 +168,7 @@ After `open_assurance` hands every admin to the Treasury, nothing in Setup can c
 
 ### INV-14: The factory pause
 
-While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready` and `change_slug` refuse (`FactoryPaused`, 7111).
+While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready`, and `change_slug` refuse (`FactoryPaused`, 7111).
 
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `launch_dao_is_blocked_while_the_factory_is_paused`, `change_slug_is_blocked_while_the_factory_is_paused`, `create_module_needs_the_token_admin_and_an_unpaused_factory`, `a_failed_drive_refuses_every_launch_refunds_and_frees_its_slug`.
 
@@ -178,7 +178,7 @@ While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `l
 
 ### INV-15: Proposals execute only through the Treasury, once
 
-`governor.execute` always fails (`UseTreasuryExecute`, 7507). `consume` needs the Treasury's authorization, a `Queued` proposal and `now >= eta`. A proposal executes once. A failing action reverts the whole execution, with no partial effects, and the proposal stays `Queued`. A proposal has at most 20 actions (`TooManyActions`, 7508).
+`governor.execute` always fails (`UseTreasuryExecute`, 7507). `consume` needs the Treasury's authorization, a `Queued` proposal, and `now >= eta`. A proposal executes once. A failing action reverts the whole execution, with no partial effects, and the proposal stays `Queued`. A proposal has at most 20 actions (`TooManyActions`, 7508).
 
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `governor_execute_always_fails_with_use_treasury_execute`, `consume_by_non_treasury_fails`, `execute_before_eta_fails_and_after_expiry_fails`, `failing_call_in_multi_call_proposal_leaves_it_queued_without_partial_effects`, and the `ProposalAlreadyExecuted` and 21-action cases in the same file.
 
@@ -186,7 +186,7 @@ While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `l
 
 ### INV-16: Treasury self-calls and authorization trees
 
-A proposal can call the Treasury itself only for `authorize`, `upgrade` and `migrate` (`UnknownSelfCall` 7602, `InvalidSelfCallArgs` 7603). An `authorize` tree covers only the exact call it describes, only for the next action, and is bounded to depth 4 and 16 nodes (`InvalidAuthorization`, 7605).
+A proposal can call the Treasury itself only for `authorize`, `upgrade`, and `migrate` (`UnknownSelfCall` 7602, `InvalidSelfCallArgs` 7603). An `authorize` tree covers only the exact call it describes, only for the next action, and is bounded to depth 4 and 16 nodes (`InvalidAuthorization`, 7605).
 
 - [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) `self_call_outside_allowlist_is_rejected`, `self_call_with_bad_args_is_rejected`, `authorization_is_exact_and_single_use`, `tree_size_and_depth_are_bounded`, and the malformed-tree cases.
 
@@ -203,7 +203,7 @@ The threshold is nonzero, and not above the voting supply when it is set. `propo
 
 ### INV-18: Governance parameter bounds
 
-The voting delay, voting period and queue delay are each 300 seconds to 30 days; the quorum is 1 to 10,000 basis points. Both the constructor and the setters check them.
+The voting delay, voting period, and queue delay are each 300 seconds to 30 days; the quorum is 1 to 10,000 basis points. Both the constructor and the setters check them.
 
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `setters_accept_exact_max_and_reject_above`, `constructor_rejects_short_voting_delay`, `set_quorum_bps_zero_fails`, and the over-10,000 quorum case.
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `test_governor_queue_delay_minimum_300`.
@@ -277,7 +277,7 @@ A claim needs a Merkle proof for the claimer's own leaf; a claimer's total stays
 
 **Covered.** A single claim larger than its leaf is not tested on its own; the over-leaf case is tested after the leaf is used up.
 
-TODO: ClaimMinter changes in progress add Merkle test vectors shared with the TypeScript tree builder. Link them here when they merge.
+TODO: contract changes in progress add tests; link them here when they merge.
 
 ### INV-26: Recovery upgrades of a failed drive
 
@@ -287,7 +287,7 @@ TODO: ClaimMinter changes in progress add Merkle test vectors shared with the Ty
 - [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `recovery_upgrade_is_the_managers_and_only_before_launch`.
 - [`contracts/e2e/src/membership.rs`](../../contracts/e2e/src/membership.rs) `a_failed_drive_refunds_recovers_and_frees_its_slug`.
 
-**Covered.** TODO: the conditions on `recover_claims` are being revised; update this entry when that merges.
+**Covered.** TODO: contract changes in progress may change this entry; update it when they merge.
 
 ### INV-27: Auction settlement and refunds
 
@@ -301,7 +301,7 @@ Settlement needs `now >= end_time` on both paths, paused or not. `cancel_auction
 
 The fee is at most 25% and recorded in the listing; a listing fails on a worse fee (`FeeAboveMax`) or another asset (`PaymentAssetMismatch`), and a purchase above `max_price` fails (`PriceAboveMax`). A purchase uses the recorded fee and asset. Only the seller cancels; anyone expires after expiry; both return the token to the seller.
 
-- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `list_rejects_a_fee_above_the_sellers_bound`, `list_rejects_an_unexpected_payment_asset`, `buy_rejects_a_price_above_the_buyers_bound`, `secondary_buy_uses_captured_asset_and_fee_after_config_changes`, and the fee-cap, cancel and expire cases.
+- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `list_rejects_a_fee_above_the_sellers_bound`, `list_rejects_an_unexpected_payment_asset`, `buy_rejects_a_price_above_the_buyers_bound`, `secondary_buy_uses_captured_asset_and_fee_after_config_changes`, and the fee-cap, cancel, and expire cases.
 
 **Partial:** a cancel by someone other than the seller (`NotSeller`) is not tested.
 
@@ -349,15 +349,15 @@ Each crate's error codes sit in its own block of 100 in 7000 to 7899, outside Op
 Storage keys do not collide; entry points extend their contract's instance; shared code is bumped only briefly; and a DAO kept alive only by the permissionless sweep still works, with its renewal inventory matching the ledger.
 
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year`, `protocol_runs_on_chain_state_only`, `calls_bump_instance_long_and_shared_code_only_briefly`.
-- [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `state_changing_entrypoint_extends_instance_ttl`; each crate's `storage_keys_do_not_collide`; the `renewal_keys` tests in the Auction, Marketplace and ClaimMinter.
+- [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `state_changing_entrypoint_extends_instance_ttl`; each crate's `storage_keys_do_not_collide`; the `renewal_keys` tests in the Auction, Marketplace, and ClaimMinter.
 
-**Partial:** instance extension is sampled at one entry point per crate, and the Token, Treasury and Auction have no unit test for it.
+**Partial:** instance extension is sampled at one entry point per crate, and the Token, Treasury, and Auction have no unit test for it.
 
-## Test helpers worth knowing
+## Test helpers
 
 - **Randomised walk:** [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) is the only property-style test. It is a fixed-seed walk that also requires each operation, refusals included, to run a minimum number of times.
 - **Invariant helpers:** the Auction's `refunds` module (`assert_invariant`); the Token's `assert_voting_supply` and the registry's `assert_books`.
-- **Resource limits:** `assert_within_limits` in [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs), used by `largest_create_dao_and_propose_fit_the_live_limits`, `reference_dao_sweep_fits_one_transaction` and the 1,000-leaf drive in [`membership.rs`](../../contracts/e2e/src/membership.rs); the Manager's scale tests; the Metadata worst-case tests.
+- **Resource limits:** `assert_within_limits` in [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs), used by `largest_create_dao_and_propose_fit_the_live_limits`, `reference_dao_sweep_fits_one_transaction`, and the 1,000-leaf drive in [`membership.rs`](../../contracts/e2e/src/membership.rs); the Manager's scale tests; the Metadata worst-case tests.
 - **Storage:** [`contracts/common/src/testutils.rs`](../../contracts/common/src/testutils.rs) (`assert_keys_disjoint`, `assert_every_variant_sampled`, `assert_storage_namespaced`, a mock Manager).
 - **Releases:** [`contracts/e2e/src/release_0_5_0.rs`](../../contracts/e2e/src/release_0_5_0.rs) upgrades the deployed 0.4.0 code in place, from fixtures of the deployed WASM.
 - **Vote sources:** [`contracts/e2e/src/vote_adapter.rs`](../../contracts/e2e/src/vote_adapter.rs) and the Governor's adapter tests cover DAOs that vote through another source.

@@ -31,13 +31,13 @@ export const EXCLUDED_CRATES = {
 
 const CRATE_PURPOSE = {
   auction: 'Auction module: sells one new token per auction; refunds outbid bidders',
-  common: 'Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget and cross-contract clients',
-  governor: 'Governor: proposals, voting, quorum and the queue, on the OpenZeppelin governor',
-  manager: 'Manager: factory, implementation registry, upgrade approvals, slugs, launch and assurance drives',
+  common: 'Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget, and cross-contract clients',
+  governor: 'Governor: proposals, voting, quorum, and the queue, on the OpenZeppelin governor',
+  manager: 'Manager: factory, implementation registry, upgrade approvals, slugs, launch, and assurance drives',
   marketplace: 'Marketplace module: escrowed listings and quick-buy pools',
-  metadata: 'Metadata: artwork, attributes, token URIs and the DAO profile hash',
-  minter: 'ClaimMinter module: Merkle claim lists, assurance escrow, refunds and release',
-  token: 'Token: the membership NFT with votes, mint allowances, the module registry and membership switches',
+  metadata: 'Metadata: artwork, attributes, token URIs, and the DAO profile hash',
+  minter: 'ClaimMinter module: Merkle claim lists, assurance escrow, refunds, and release',
+  token: 'Token: the membership NFT with votes, mint allowances, the module registry, and membership switches',
   treasury: 'Treasury: holds DAO assets and executes queued proposals'
 };
 
@@ -226,7 +226,8 @@ export function lexRust(src) {
   return { sanitized: out.join(''), code, comment, lineCount };
 }
 
-// Evaluates a cfg predicate for a release build: no test, no features enabled, other keys assumed true.
+// Evaluates a cfg predicate for a release build: no test, no debug assertions, no features enabled, other keys
+// assumed true.
 export function cfgIsTrueInRelease(expr) {
   let pos = 0;
   const s = expr;
@@ -263,7 +264,7 @@ export function cfgIsTrueInRelease(expr) {
       while (pos < s.length && s[pos] !== ',' && s[pos] !== ')') pos++;
       return name !== 'feature';
     }
-    return name !== 'test';
+    return name !== 'test' && name !== 'debug_assertions';
   };
   return parse();
 }
@@ -283,15 +284,41 @@ function matchBracket(text, open) {
   throw new Error('unbalanced brackets');
 }
 
-// The end (exclusive) of the item that starts at `start`: its first top-level `;`, or the `}` closing its
-// first top-level `{`.
+// Keywords that start an item or statement. Anything else after a cfg attribute is a list element: an enum
+// variant, a struct field, a match arm or an argument.
+const ITEM_KEYWORDS = new Set([
+  'async',
+  'const',
+  'enum',
+  'extern',
+  'fn',
+  'impl',
+  'let',
+  'macro_rules',
+  'mod',
+  'static',
+  'struct',
+  'trait',
+  'type',
+  'union',
+  'unsafe',
+  'use'
+]);
+
+// The end (exclusive) of the item that starts at `start`. An item ends at its first top-level `;` or at the `}`
+// closing its first top-level `{`. A list element ends after its top-level `,`, or before the bracket that closes
+// the list. Either stops before an unmatched closing bracket.
 function itemEnd(text, start) {
+  const head = /^(?:pub(?:\s*\([^)]*\))?\s+)?([A-Za-z_][A-Za-z0-9_]*)/.exec(text.slice(start));
+  const isItem = head ? ITEM_KEYWORDS.has(head[1]) : false;
   let k = start;
   while (k < text.length) {
     const ch = text[k];
     if (ch === ';') return k + 1;
-    if (ch === '{') return matchBracket(text, k);
-    if (ch === '(' || ch === '[') {
+    if (ch === ')' || ch === ']' || ch === '}') return k;
+    if (ch === ',' && !isItem) return k + 1;
+    if (ch === '{' && isItem) return matchBracket(text, k);
+    if (ch === '(' || ch === '[' || ch === '{') {
       k = matchBracket(text, k);
       continue;
     }
@@ -523,6 +550,12 @@ export function collect(ref) {
   const rootManifest = readAt(commit, 'Cargo.toml');
   const lock = lockPackages(readAt(commit, 'Cargo.lock'));
   const sdk = lock.find((p) => p.name === 'soroban-sdk');
+  const sdkLine = (tomlSection(rootManifest, 'workspace.dependencies') ?? []).find((l) =>
+    /^\s*soroban-sdk\s*=/.test(l)
+  );
+  const sdkFeatures = [...(/features\s*=\s*\[([^\]]*)\]/.exec(sdkLine ?? '')?.[1] ?? '').matchAll(/"([^"]+)"/g)].map(
+    (m) => m[1]
+  );
   const ozPackages = lock.filter((p) => p.source?.includes('OpenZeppelin/stellar-contracts'));
   const ozCommit = ozPackages[0]?.source?.split('#')[1] ?? null;
   const ozPin = /OpenZeppelin\/stellar-contracts"\s*,\s*(rev|tag|branch)\s*=\s*"([^"]+)"/.exec(rootManifest);
@@ -542,6 +575,7 @@ export function collect(ref) {
     contractsTree,
     crates,
     sdk,
+    sdkFeatures,
     ozPackages,
     ozCommit,
     ozPin: ozPin ? { kind: ozPin[1], value: ozPin[2] } : null,
@@ -614,7 +648,7 @@ export function render(data) {
   );
   p();
   p(
-    '**How lines are counted.** A code line holds something other than whitespace and comments; blank lines, comment lines and doc comments are left out. Test-only code is counted apart and is not in the scope total: the unit test files, and items behind a `cfg` that is false in a release build, such as `#[cfg(test)]` and `#[cfg(any(test, feature = "testutils"))]`. Tools that do not read `cfg`, such as `cloc`, count the test-only blocks inside source files as code; the second line count above is that figure.'
+    '**How lines are counted.** A code line holds something other than whitespace and comments; blank lines, comment lines, and doc comments are left out. Test-only code is counted apart and is not in the scope total: the unit test files, and items behind a `cfg` that is false in a release build, such as `#[cfg(test)]` and `#[cfg(any(test, feature = "testutils"))]`. Tools that do not read `cfg`, such as `cloc`, count the test-only blocks inside source files as code; the second line count above is that figure.'
   );
   p();
   p('## Crates in scope');
@@ -645,7 +679,7 @@ export function render(data) {
   p('| | |');
   p('| --- | --- |');
   p(
-    `| soroban-sdk | \`${data.sdk?.version ?? 'not found'}\` (crates.io), with the \`experimental_spec_shaking_v2\` feature |`
+    `| soroban-sdk | \`${data.sdk?.version ?? 'not found'}\` (crates.io)${data.sdkFeatures.length ? `, with the ${data.sdkFeatures.map((f) => `\`${f}\``).join(', ')} feature${data.sdkFeatures.length > 1 ? 's' : ''}` : ''} |`
   );
   p(
     `| OpenZeppelin \`stellar-contracts\` | [${OZ_REPO.replace('https://', '')}](${OZ_REPO}) at ${ozRev}${data.ozCommit ? `, commit \`${data.ozCommit}\` (from \`Cargo.lock\`)` : ''}${data.ozPinIsTag ? '' : '. This is a git revision, not a tagged release'} |`
@@ -739,8 +773,17 @@ export function render(data) {
   p('## Files in scope');
   p();
   p(
-    'Each crate\'s `Cargo.toml` is in scope with its sources, because it sets the dependencies and features the contract builds with. Line counts are for the whole file; "Code" leaves out blank lines, comments and test-only code.'
+    'Each crate\'s `Cargo.toml` is in scope with its sources, because it sets the dependencies and features the contract builds with. Line counts are for the whole file; "Code" leaves out blank lines, comments, and test-only code.'
   );
+  p();
+  p('### Workspace');
+  p();
+  p('| File | What it sets |');
+  p('| --- | --- |');
+  p('| [`Cargo.toml`](../../Cargo.toml) | The workspace members, the pinned dependencies, and the release profile |');
+  p('| [`Cargo.lock`](../../Cargo.lock) | The exact version and source of every dependency |');
+  if (data.toolchainFile)
+    p(`| [\`${data.toolchainFile}\`](../../${data.toolchainFile}) | The Rust toolchain and target |`);
   for (const c of inScope) {
     p();
     p(`### ${c.packageName} (\`${c.dir}/\`)`);
@@ -797,7 +840,7 @@ export function render(data) {
   );
   p('| `soroban-sdk` and the Soroban host | Platform code, trusted as released. | |');
   p(
-    '| `apps/`, `packages/`, `db/` | The web app, the indexer, the generated bindings and the SQL read model. They are not contract code; the app and indexer tier has its own [threat model](THREAT_MODEL.md). | |'
+    '| `apps/`, `packages/`, `db/` | The web app, the indexer, the generated bindings, and the SQL read model. They are not contract code; the app and indexer tier has its own [threat model](THREAT_MODEL.md). | |'
   );
   p('| `scripts/`, `configs/`, `deploys/`, `releases/` | Deployment and operations tooling and records. | |');
   p('| `docs/`, `apps/docs/` | Documentation. It describes the contracts but is not part of them. | |');
