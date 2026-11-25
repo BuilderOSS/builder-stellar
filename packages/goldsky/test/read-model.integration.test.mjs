@@ -1202,3 +1202,75 @@ test('u64 fields: a far expiry or period past the bigint range leaves the market
   assert.ok(rows(`SELECT * FROM claims.lists`).length > 0);
   assert.ok(rows(`SELECT * FROM app.activity_feed`).length > 0);
 });
+
+// ---------------------------------------------------------------------------
+// Closed claim lists and Setup lists (migration 0014). Runs last, like the
+// tests above: it lands more events.
+// ---------------------------------------------------------------------------
+test('claims: a closed list stops at its close, and Setup lists are marked', { skip }, () => {
+  const closedFields = contractEventsByContract()['claims:ListClosed'];
+  assert.deepEqual(
+    { topics: closedFields.topics.length, data: [...closedFields.data].sort() },
+    { topics: 1, data: ['minted', 'total'] },
+    'the fixture below uses the fields ListClosed emits'
+  );
+  const others = `SELECT * FROM claims.lists WHERE dao_id <> 'CTOK5' ORDER BY dao_id, list_id`;
+  const before = rows(others);
+
+  // DAO 5: the launch admin opens two free lists in Setup and a claimant takes 2 tokens from the
+  // first. The ClaimMinter launches, the Treasury opens a third list by proposal, and a later
+  // proposal closes the first list.
+  const start = events.length;
+  createDao(5, 340, { deployer: 'GDEPLOYER5', launch: 'GLAUNCH5', slug: 'dao-five' });
+  const list = (id, ledger, evt = 0) =>
+    emit('claims', 'CCLM5', 'list_opened', {
+      topics: [u32(id)], data: { root: bytes(`r5${id}`), tree_uri: str(`ipfs://tree5${id}`), asset: addr('CXLM'), price: i128(0), expires_at: u64(9_000_000_000), total: u32(10), assurance: VOID }, ledger, evt
+    });
+  list(0, 341);
+  list(1, 341, 1);
+  emit('claims', 'CCLM5', 'claimed', { topics: [u32(0), addr('GALICE')], data: { amount: u32(2), first_token_id: u32(0), paid: i128(0), escrowed: bool(false), claimed: u32(2) }, ledger: 342 });
+  emit('claims', 'CCLM5', 'claim_minter_launched', { topics: [addr('CTRE5')], ledger: 343 });
+  list(2, 344);
+  emit('claims', 'CCLM5', 'list_closed', { topics: [u32(0)], data: { minted: u32(2), total: u32(10) }, ledger: 345 });
+  const raw = events.slice(start).map(rawScript);
+  const decodedRows = raw.map(decodeScript);
+  const activityRows = decodedRows.map(activityScript);
+  assert.ok([...raw, ...decodedRows, ...activityRows].every(Boolean), 'every event survives every transform');
+  for (const [schema, table, objects] of [['chain', 'raw_events', raw], ['chain', 'decoded_events', decodedRows], ['app', 'activity_feed_events', activityRows]]) {
+    const columns = tableColumns(schema, table).filter((c) => c !== 'ingested_at');
+    insertRows(`${schema}.${table}`, Object.keys(objects[0]).filter((key) => columns.includes(key)), objects);
+  }
+
+  // The close is ledger 345's time, as the contract's expires_at is now.
+  const closedAt = Math.floor((Date.UTC(2026, 9, 1) + 345 * 5000) / 1000);
+  assert.deepEqual(
+    rows(`SELECT list_id, expires_at, claimed, closed, closed_ledger, extract(epoch FROM closed_at)::bigint AS closed_at,
+      effective_expires_at, opened_in_setup FROM claims.lists WHERE dao_id = 'CTOK5' ORDER BY list_id`).map((r) => ({
+      ...r,
+      list_id: Number(r.list_id),
+      expires_at: Number(r.expires_at),
+      claimed: Number(r.claimed),
+      closed_ledger: r.closed_ledger === null ? null : Number(r.closed_ledger),
+      closed_at: r.closed_at === null ? null : Number(r.closed_at),
+      effective_expires_at: Number(r.effective_expires_at)
+    })),
+    [
+      { list_id: 0, expires_at: 9_000_000_000, claimed: 2, closed: true, closed_ledger: 345, closed_at: closedAt, effective_expires_at: closedAt, opened_in_setup: true },
+      { list_id: 1, expires_at: 9_000_000_000, claimed: 0, closed: false, closed_ledger: null, closed_at: null, effective_expires_at: 9_000_000_000, opened_in_setup: true },
+      { list_id: 2, expires_at: 9_000_000_000, claimed: 0, closed: false, closed_ledger: null, closed_at: null, effective_expires_at: 9_000_000_000, opened_in_setup: false }
+    ]
+  );
+
+  // Other DAOs keep every row. DAO 1's lists came after its launch; DAO 2 never launched, so its
+  // drive is a Setup list. A list past the bigint range keeps that as its effective expiry.
+  assert.deepEqual(rows(others), before);
+  assert.deepEqual(
+    rows(`SELECT dao_id, list_id, closed, opened_in_setup, (effective_expires_at = expires_at) AS same FROM claims.lists WHERE dao_id <> 'CTOK5' ORDER BY dao_id, list_id`)
+      .map((r) => [r.dao_id, Number(r.list_id), r.closed, r.opened_in_setup, r.same]),
+    [['CTOK1', 0, false, false, true], ['CTOK1', 1, false, false, true], ['CTOK1', 2, false, false, true], ['CTOK2', 0, false, true, true]]
+  );
+  assert.deepEqual(
+    rows(`SELECT kind, visibility FROM app.activity_feed WHERE dao_id = 'CTOK5' AND event_name = 'list_closed'`),
+    [{ kind: 'claims.list_closed', visibility: 'public' }]
+  );
+});

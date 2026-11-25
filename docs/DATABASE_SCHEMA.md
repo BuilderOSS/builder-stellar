@@ -139,13 +139,14 @@ auction/marketplace configuration setters are feed rows only; the app reads
 
 ### claims
 
-The ClaimMinter's views (role `claims`, migration `0010_claims_views`). The claims
-page reads list terms, the claimer's progress and the assurance state from chain;
-these views are history and discovery.
+The ClaimMinter's views (role `claims`, migration `0010_claims_views`; `0014_claim_list_closed`
+adds the closed state and the Setup flag to `claims.lists`). The claims page reads list terms,
+the claimer's progress and the assurance state from chain; these views are history, discovery
+and the founder supply that Setup lists can still mint.
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
+| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded`, and the close from `list_closed` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at` (as opened), `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded`, `opened_*`, then `closed` (closed early by `close_list`), `closed_ledger`, `closed_at`, `effective_expires_at` (unix seconds when claims stop: the close time for a closed list, otherwise `expires_at`), and `opened_in_setup` (opened before the ClaimMinter's `claim_minter_launched`) |
 | `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), the claimer's running `claimed` |
 | `claims.claimers` **Prisma** | `claimed`, `refunded` | each claimer's position per list: `claimed`, `paid`, `escrowed`, `refunded` |
 
