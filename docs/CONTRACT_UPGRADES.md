@@ -16,9 +16,11 @@ setup, the **Treasury** after launch (so, by proposal). The module checks `from_
 (`HashMismatch`, 7005), asks the Manager `is_upgrade_approved(from, to)` (`UpgradeNotApproved`, 7006, also false
 when `to` is revoked), takes the version from the registry, emits `Upgraded`, and swaps the WASM. Storage is
 kept. If the release changes a storage layout, `migrate()` runs next, in the same proposal, except for the
-Treasury, which migrates in a second step (§1). The Governor and the Treasury refuse to run while their stored
-layout differs from their code's (`StorageVersionMismatch`: Governor 7518, Treasury 7607), and anyone can call
-their `migrate()`. The
+Treasury, which migrates in a second step (§1). Every module refuses to change state while its stored layout
+differs from its code's (`StorageVersionMismatch`: Manager 7147, Token 7223, Metadata 7320, Auction 7421,
+Governor 7518, Treasury 7607, Marketplace 7730, ClaimMinter 7831); `upgrade`, `migrate` and the views stay open.
+Anyone can call `migrate()` on the Governor, the Treasury, the ClaimMinter and the Manager; the Token, Metadata,
+Auction and Marketplace migrate by proposal, with their upgrade. The
 Manager can approve a path but can never force a DAO to take it.
 
 ## 0. Decide: upgrade or redeploy
@@ -39,8 +41,17 @@ DAOs keep their addresses and history only through upgrades.
      `treasury.migrate()` (no authorization needed); until then `treasury.execute` runs only recovery
      proposals (`StorageVersionMismatch`, 7607, for any other). See e2e
      `the_treasury_upgrades_then_migrates_in_two_steps`.
-   - Rehearse every Governor or Treasury migration on a copy of production (§2) before proposing the upgrade,
-     and keep the Governor's `upgrade` and `migrate` in one proposal, so a failing `migrate` reverts the upgrade.
+   - Rehearse every migration on a copy of production (§2) before proposing the upgrade, and keep each module's
+     `upgrade` and `migrate` (other than the Treasury's) in one proposal, so a failing `migrate` reverts the
+     upgrade. A proposal that upgrades the Token, Metadata, Auction or Marketplace without its `migrate` leaves
+     that module refusing every state change until a later proposal migrates it; the DAO can still vote, because
+     the Governor and the Treasury never call those entry points and the Token's vote reads are views. A token
+     minted while the Metadata migration is due has no artwork until `regenerate`.
+   - A **Manager** release that changes its layout: `upgrade_manager` swaps the code at the end of its own call, so
+     anyone then calls `manager.migrate()` in a second transaction. Until then no DAO can be created or launched and
+     no drive can open, launch or recover, so run it straight after the upgrade. If it fails, the admin registers,
+     announces and approves a fixed `Manager` release (those three calls stay open for the `Manager` name) and
+     upgrades again after the notice. See `a_skipped_migration_halts_the_manager_except_its_own_upgrade`.
    - If a migration fails anyway, the module stays on that release with its migration due, and accepts only a
      **recovery proposal**: every action `upgrade` or `migrate` on the DAO's own Governor or Treasury. Build a
      fixed release, register it and approve `broken -> fixed`, then propose `upgrade(broken, fixed)` and
@@ -222,9 +233,11 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - **Code**: there is no downgrade button. To go back, the Manager admin approves the reverse path
   (`approve_upgrade(<new>, <old>)`; the old hash must not be revoked) and each DAO upgrades again (by proposal
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
-  Never roll the **Governor** or the **Treasury** back across a layout change. Code with a lower
-  `STORAGE_VERSION` than the stored one accepts only recovery proposals, if it has the recovery path; releases
-  before it (all on `STORAGE_VERSION` 1) have none, and the module could no longer run proposals.
+  Never roll any module back across a layout change. Code with a lower `STORAGE_VERSION` than the stored one
+  refuses every state change and has nothing to migrate. The Governor and the Treasury then accept only recovery
+  proposals, if they have the recovery path; releases before it (all on `STORAGE_VERSION` 1) have none, and the
+  module could no longer run proposals. Any other module stays halted until the DAO upgrades it again by proposal,
+  and a ClaimMinter during a drive cannot be upgraded at all until a recovery.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
 - **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file, after you type the database name.
@@ -270,7 +283,14 @@ after the later of the approval and the announcement (`upgrade_delay()` ledgers,
 ledgers), and the same notice in seconds (five per ledger, never less than seven days) after the drive's deadline
 (`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
 latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
-(SECURITY_MODEL, Assurance launch).
+(SECURITY_MODEL, Assurance launch). A recovery to a release with a newer layout is followed by anyone calling
+the ClaimMinter's `migrate()` (no authorization needed); refunds wait for it.
+
+**Opening a drive.** `open_assurance` refuses a ClaimMinter that runs anything other than the current `claims`
+implementation (`set_current_implementations`) or the hash announced as latest for `ClaimMinter` at least
+`upgrade_delay()` ledgers ago (`DriveCodeNotAllowed`, 7148). A pending DAO whose launch admin upgraded the
+ClaimMinter in Setup to another release must move it to one of those before the drive. When a ClaimMinter release
+is published, set it current with the other hashes, or announce it as latest a notice before any drive needs it.
 
 ## Approving upgrade paths for DAO modules
 

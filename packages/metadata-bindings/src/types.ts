@@ -87,7 +87,15 @@ export const Error = {
    * any artwork (`regenerate` seeds it) or was never minted (`token_uri`
    * does not check existence)
    */
-  7319 : { message: "NotSeeded" }
+  7319 : { message: "NotSeeded" },
+  /**
+   * The stored data layout is not the one this code expects: an upgrade
+   * whose `migrate` has not run yet, or an upgrade to code with an older
+   * layout. Every entry point that changes state refuses until `migrate`
+   * (or, for an older layout, another `upgrade`) brings the two back in
+   * step
+   */
+  7320 : { message: "StorageVersionMismatch" }
 }
 
 /**
@@ -285,7 +293,13 @@ export interface PropertyHeader {
 export interface AdminChangedEvent {
   name: "AdminChanged";
   data: {
+    /**
+     * The admin before the handoff (the launch admin).
+     */
     old_admin: string;
+    /**
+     * The admin after it (the Treasury).
+     */
     new_admin: string;
   };
 }
@@ -349,12 +363,19 @@ export const CommonError = {
 }
 
 /**
- * Emitted by `migrate`.
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
  */
 export interface MigratedEvent {
   name: "Migrated";
   data: {
+    /**
+     * The layout version before the migration.
+     */
     from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
     to_storage_version?: number;
   };
 }
@@ -365,8 +386,17 @@ export interface MigratedEvent {
 export interface UpgradedEvent {
   name: "Upgraded";
   data: {
+    /**
+     * The code hash before the upgrade.
+     */
     from_hash: Uint8Array;
+    /**
+     * The code hash after it.
+     */
     to_hash: Uint8Array;
+    /**
+     * The registry's release version for `to_hash`.
+     */
     version?: string;
   };
 }

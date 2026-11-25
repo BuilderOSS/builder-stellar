@@ -43,6 +43,8 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 | [INV-33](#inv-33-storage-and-ttl) | Storage and TTL | Partial |
 | [INV-34](#inv-34-a-due-migration-admits-only-recovery-proposals) | A due migration admits only recovery proposals | Covered |
 | [INV-35](#inv-35-payment-assets-are-stellar-asset-contracts) | Payment assets are Stellar Asset Contracts | Covered |
+| [INV-36](#inv-36-every-module-halts-on-a-mismatched-layout) | Every module halts on a mismatched layout | Covered |
+| [INV-37](#inv-37-a-drive-opens-only-on-current-or-announced-claimminter-code) | A drive opens only on current or announced ClaimMinter code | Covered |
 
 ## Votes and supply
 
@@ -263,7 +265,26 @@ While the Governor's or the Treasury's stored storage version differs from its c
 - [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) `execute_refuses_while_the_layout_is_out_of_step`, `launch_and_handoff_refuse_while_the_layout_is_out_of_step`, `a_recovery_proposal_executes_while_a_migration_is_due`.
 - [`contracts/e2e/src/governance.rs`](../../contracts/e2e/src/governance.rs) `the_treasury_upgrades_then_migrates_in_two_steps`, `a_skipped_governor_migration_is_completed_by_anyone`, `a_governor_whose_migration_fails_recovers_by_proposal`, `a_treasury_whose_migration_fails_recovers_by_proposal`. The last two upgrade to a test-only release whose `migrate` always fails, then recover with a fixed release ([`contracts/e2e/fixtures/README.md`](../../contracts/e2e/fixtures/README.md)).
 
-**Covered.** The gate covers the Governor and the Treasury only; the other modules do not check their layout.
+**Covered.** The other modules have the same gate without a recovery proposal; see [INV-36](#inv-36-every-module-halts-on-a-mismatched-layout).
+
+### INV-36: Every module halts on a mismatched layout
+
+While the Token's, Metadata's, Auction's, Marketplace's, ClaimMinter's or Manager's stored storage version differs from its code's, every entry point on it that changes state fails with its own `StorageVersionMismatch` (Token 7223, Metadata 7320, Auction 7421, Marketplace 7730, ClaimMinter 7831, Manager 7147). `upgrade`, `migrate`, the ClaimMinter's `recovery_upgrade`, and the views stay outside the gate. The ClaimMinter's and the Manager's `migrate` need no authorization; the others stay admin-only, which the Treasury reaches by proposal because the Governor and the Treasury never call a gated entry point to run one. While a Manager migration is due, only the steps of its own upgrade stay open: `register_implementation` and `set_latest_implementation` for the name `Manager`, `approve_upgrade` to a hash registered as `Manager`, and `upgrade_manager`. A Manager with no stored version reads as version 1.
+
+- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `a_skipped_migration_halts_every_state_change_until_migrate`, `code_older_than_its_data_stays_halted_with_upgrade_open`.
+- [`contracts/metadata/src/test.rs`](../../contracts/metadata/src/test.rs), [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) and [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `a_skipped_migration_halts_every_state_change_until_migrate`.
+- [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `a_skipped_migration_halts_every_state_change`, `after_a_failed_drive_anyone_migrates_and_refunds_pay_out`.
+- [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `a_skipped_migration_halts_the_manager_except_its_own_upgrade`, `anyone_runs_the_managers_migration`, `a_manager_without_a_recorded_layout_reads_as_version_one`.
+
+**Covered.** Each test calls every gated entry point of its module.
+
+### INV-37: A drive opens only on current or announced ClaimMinter code
+
+`open_assurance` refuses, with `DriveCodeNotAllowed` (7148) and before anything changes, a ClaimMinter whose code (read with `address.executable()`) is neither the current `claims` implementation nor the hash announced as the latest `ClaimMinter` at least `upgrade_delay()` ledgers ago.
+
+- [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `real_dao::open_assurance_refuses_claim_minter_code_that_is_not_current`, `real_dao::open_assurance_accepts_the_latest_claim_minter_once_its_notice_has_passed`.
+
+**Covered.**
 
 ## Escrow and payments
 

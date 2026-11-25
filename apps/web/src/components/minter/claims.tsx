@@ -39,6 +39,7 @@ import {
   nextClaimCount,
   remainingAllocation
 } from '@/lib/minter/display';
+import { driveCodeText, useDriveCode } from '@/lib/minter/drive-code';
 import {
   claimFetch,
   useClaimHistory,
@@ -104,6 +105,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   const lock = useRef(false);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const data = current.data;
+  // The code holding a drive's payments, shown before anyone pays (the drive freezes it until launch).
+  const driveOpen = Boolean(data && !data.live && data.lists.some((list) => list.assurance));
+  const driveCode = useDriveCode(config, data?.claimsContractId, driveOpen);
   const signedIn = Boolean(
     !current.error &&
     !current.isLoading &&
@@ -426,6 +430,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                 onClaim={(entry) => void prepare(list, entry)}
                 onRefund={() => refund(list)}
                 onLaunch={launch}
+                driveCode={driveCode}
               />
             ))}
           </div>
@@ -461,6 +466,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               Your allocation is {review.prepared.leafAmount} tokens. One claim mints at most {MAX_CLAIM_PER_CALL};
               claim again for the rest.
             </p>
+          ) : null}
+          {review.list.assurance && !data?.live && BigInt(review.prepared.cost) > 0n ? (
+            <DriveCodeNote driveCode={driveCode} />
           ) : null}
           <Disclosure title="Technical details">
             <p>
@@ -625,6 +633,23 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   );
 }
 
+type DriveCodeQuery = ReturnType<typeof useDriveCode>;
+
+/** Which code holds a launch drive's payments, with its hash to check against the release. */
+function DriveCodeNote({ driveCode }: { driveCode: DriveCodeQuery }) {
+  const code = driveCode.data;
+  return (
+    <div>
+      <p className={code && code.standing !== 'current' && code.standing !== 'latest' ? undefined : styles.muted}>
+        {driveCodeText(code, Boolean(driveCode.error) || (driveCode.data === null && !driveCode.isLoading))}
+      </p>
+      {code ? (
+        <Address value={code.hash} label="Claims code hash" compact explorerUrl="" copyLabel="Copy code hash" />
+      ) : null}
+    </div>
+  );
+}
+
 /** One list: its terms, a launch drive's progress, and what the connected wallet can do on it. */
 function ClaimListCard({
   list,
@@ -636,7 +661,8 @@ function ClaimListCard({
   disabled,
   onClaim,
   onRefund,
-  onLaunch
+  onLaunch,
+  driveCode
 }: {
   list: ClaimListView;
   state: ClaimState;
@@ -649,6 +675,7 @@ function ClaimListCard({
   onClaim: (entry: Entry) => void;
   onRefund: () => void;
   onLaunch: () => void;
+  driveCode: DriveCodeQuery;
 }) {
   const { daoConfig: config } = useDaoContext();
   const phase = listPhase(list);
@@ -684,6 +711,7 @@ function ClaimListCard({
                     formatClaimDate(drive.deadline) ? ` by ${formatClaimDate(drive.deadline)}` : ', with no deadline'
                   }. Payments are held until launch.`}
           </p>
+          {!state.live && drive.state !== 'failed' ? <DriveCodeNote driveCode={driveCode} /> : null}
           {drive.state === 'met' && !state.live ? (
             <>
               <p>

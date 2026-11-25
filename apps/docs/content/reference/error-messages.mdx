@@ -225,6 +225,7 @@ These come from the Manager.
 | 7144 | That vote source is not approved by the platform, or its approval was withdrawn. | Choose an approved vote source. See [Vote sources](/concepts/vote-sources). |
 | 7145 | That contract doesn't answer as a vote source. | Check the address. |
 | 7146 | A payment asset is not a Stellar asset contract. | Choose one of the assets the app offers, such as XLM or USDC. |
+| 7148 | The tribe's claims module runs code the platform doesn't deploy now, so the launch drive can't open. A drive opens only on the current claims release, or on one the platform announced as its latest at least a notice ago. | Upgrade the claims module to the current release in Manage → Contract upgrades, then open the drive. See [Assurance drives](/guides/setup/assurance-drives). |
 
 ## Upgrades and storage
 
@@ -245,6 +246,12 @@ These come from the Manager.
 | 7605 | An authorise action is malformed or too large, or it isn't directly followed by the action it approves. | Prepare treasury purchases from the market page, not by hand. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
 | 7606 | An action, or an authorise action, calls the Governor's `consume`. | Remove that action. |
 | 7607 | The Treasury's code and its stored data are from different releases: a migration is due after an upgrade. | Run the Treasury's migration once. Anyone can run it, and it needs no proposal. See [Upgrades](/concepts/upgrades). |
+| 7147 | The Manager's code and its stored data are from different releases: a migration is due after an upgrade. | Wait for the platform to run the Manager's migration. Anyone can run it. |
+| 7223 | The Token's code and its stored data are from different releases: a migration is due after an upgrade. | Propose the Token's migration. The tribe can still vote while it is due. See [Upgrades](/concepts/upgrades). |
+| 7320 | The Metadata contract's code and its stored data are from different releases: a migration is due after an upgrade. | Propose its migration, then seed any token minted meanwhile with "Seed traits for a token". See [Upgrades](/concepts/upgrades). |
+| 7421 | The Auction's code and its stored data are from different releases: a migration is due after an upgrade. | Propose the Auction's migration. See [Upgrades](/concepts/upgrades). |
+| 7730 | The Marketplace's code and its stored data are from different releases: a migration is due after an upgrade. | Propose the Marketplace's migration. See [Upgrades](/concepts/upgrades). |
+| 7831 | The claims module's code and its stored data are from different releases: a migration is due after an upgrade. | Run the claims module's migration once. Anyone can run it, and it needs no proposal. See [Upgrades](/concepts/upgrades). |
 
 ## Codes you should not normally see
 

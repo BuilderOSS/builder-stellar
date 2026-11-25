@@ -90,7 +90,15 @@ export const TokenError = {
    * pools): once unregistered it is no longer DAO custody, so in a locked
    * DAO it could not move those tokens out
    */
-  7222 : { message: "ModuleHoldsTokens" }
+  7222 : { message: "ModuleHoldsTokens" },
+  /**
+   * The stored data layout is not the one this code expects: an upgrade
+   * whose `migrate` has not run yet, or an upgrade to code with an older
+   * layout. Every entry point that changes state refuses until `migrate`
+   * (or, for an older layout, another `upgrade`) brings the two back in
+   * step
+   */
+  7223 : { message: "StorageVersionMismatch" }
 }
 
 /**
@@ -287,7 +295,13 @@ export interface MembersOnlyDelegationChangedEvent {
 export interface AdminChangedEvent {
   name: "AdminChanged";
   data: {
+    /**
+     * The admin before the handoff (the launch admin).
+     */
     old_admin: string;
+    /**
+     * The admin after it (the Treasury).
+     */
     new_admin: string;
   };
 }
@@ -354,7 +368,13 @@ export const CommonError = {
  * An initial mint allowance written by the Token's `launch`.
  */
 export interface MintGrant {
+  /**
+   * Tokens it may mint; `u32::MAX` means unlimited.
+   */
   allowance: number;
+  /**
+   * The registered module that may mint.
+   */
   module: string;
 }
 
@@ -362,7 +382,13 @@ export interface MintGrant {
  * One registry entry.
  */
 export interface ModuleEntry {
+  /**
+   * The module contract.
+   */
   address: string;
+  /**
+   * A built-in kind or `custom_<name>` (see [`is_valid_kind`]).
+   */
   kind: string;
   /**
    * Tokens this module holds carry no votes (custody: Auction, Marketplace).
@@ -391,12 +417,19 @@ export interface TokenSettings {
 }
 
 /**
- * Emitted by `migrate`.
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
  */
 export interface MigratedEvent {
   name: "Migrated";
   data: {
+    /**
+     * The layout version before the migration.
+     */
     from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
     to_storage_version?: number;
   };
 }
@@ -407,8 +440,17 @@ export interface MigratedEvent {
 export interface UpgradedEvent {
   name: "Upgraded";
   data: {
+    /**
+     * The code hash before the upgrade.
+     */
     from_hash: Uint8Array;
+    /**
+     * The code hash after it.
+     */
     to_hash: Uint8Array;
+    /**
+     * The registry's release version for `to_hash`.
+     */
     version?: string;
   };
 }

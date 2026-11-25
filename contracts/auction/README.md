@@ -23,7 +23,7 @@ The module starts paused in Setup. It implements the Manager's `DaoModule` inter
 - `get_auction()` (fails `NotLaunched` before the first auction) / `get_config()`.
 - `pending_refund(bidder)`; `withdraw_refund(bidder)` requires bidder auth.
 - Paused admin setters: `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`.
-- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()`, `version()`, `wasm_hash()`, `storage_version()`.
+- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()` (admin), `version()`, `wasm_hash()`, `storage_version()`. While the stored layout differs from the code's `STORAGE_VERSION`, every entry point that changes state fails `StorageVersionMismatch` (7421); `upgrade`, `migrate` and the views stay open ([upgrade path](../../docs/SECURITY_MODEL.md#upgrade-path-and-migrations)).
 
 Duration is 300–2,592,000 seconds, reserve at least 1,000 base units, increment 1–100%, and time buffer 1–86,400 seconds. Late bids extend the deadline subject to an extension-count cap. The payment token locks after the first bid.
 

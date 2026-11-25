@@ -30,7 +30,11 @@ The treasury's own upgrade goes in a proposal by itself. The treasury runs the p
 
 When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal. The treasury is the exception: its migration is a separate step after its upgrade proposal has run, for the same reason its upgrade goes alone.
 
-The governor and the treasury don't run while their stored data is waiting for a migration. Anyone can run their migration, and it needs no proposal.
+No contract runs while its stored data is waiting for a migration: anything that would change it is refused, while reading it still works. A tribe can still vote, so a skipped migration is always fixed by proposal.
+
+- Anyone can run the migration of the governor, the treasury, and the claims module, and it needs no proposal. During a launch drive nobody can make proposals, so refunds never wait for one.
+- The token, metadata, auction, and market migrate by proposal, in the same proposal as their upgrade. A token minted while the metadata migration is due has no artwork until the tribe seeds it with "Seed traits for a token".
+- The Manager's migration is run by the platform, and anyone can run it. Until it runs, no tribe can be created or launched.
 
 ## Withdrawn versions
 

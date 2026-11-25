@@ -116,9 +116,9 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 **Behaviour.** A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs. The threshold counts addresses, not people.
 
-**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). The ClaimMinter a drive opens on runs the code its launch admin chose in Setup: any registered, non-revoked hash that approved upgrades reach from the one it was created with. `open_assurance` checks only that the code is registered and not revoked.
+**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). A drive opens only on the current ClaimMinter implementation or the hash announced as the latest ClaimMinter at least the upgrade notice ago ([INV-37](INVARIANTS.md#inv-37-a-drive-opens-only-on-current-or-announced-claimminter-code)). The current implementation itself has no notice: the Manager admin can change it at once.
 
-**Guidance.** Members should check the ClaimMinter's hash against the published releases before paying in.
+**Guidance.** The claims page shows the hash the network reports for the drive's ClaimMinter, with its registry release, before anyone pays. Members can check it against the published releases (`node scripts/verify-wasm.mjs <tag>`).
 
 **Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`; [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `open_assurance`.
 

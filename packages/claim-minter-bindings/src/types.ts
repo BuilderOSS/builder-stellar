@@ -105,7 +105,15 @@ export const ClaimMinterError = {
   /**
    * `launch` / `handoff` treasury differs from the one wired at construction
    */
-  7830 : { message: "TreasuryMismatch" }
+  7830 : { message: "TreasuryMismatch" },
+  /**
+   * The stored data layout is not the one this code expects: an upgrade
+   * (or a recovery upgrade) whose `migrate` has not run yet, or an upgrade
+   * to code with an older layout. Every entry point that changes state,
+   * `refund` included, refuses until `migrate` (anyone may call it) or,
+   * for an older layout, another upgrade brings the two back in step
+   */
+  7831 : { message: "StorageVersionMismatch" }
 }
 
 /**
@@ -312,7 +320,13 @@ export interface ClaimsConfig {
 export interface AdminChangedEvent {
   name: "AdminChanged";
   data: {
+    /**
+     * The admin before the handoff (the launch admin).
+     */
     old_admin: string;
+    /**
+     * The admin after it (the Treasury).
+     */
     new_admin: string;
   };
 }
@@ -434,12 +448,19 @@ export interface AssuranceTerms {
 }
 
 /**
- * Emitted by `migrate`.
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
  */
 export interface MigratedEvent {
   name: "Migrated";
   data: {
+    /**
+     * The layout version before the migration.
+     */
     from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
     to_storage_version?: number;
   };
 }
@@ -450,8 +471,17 @@ export interface MigratedEvent {
 export interface UpgradedEvent {
   name: "Upgraded";
   data: {
+    /**
+     * The code hash before the upgrade.
+     */
     from_hash: Uint8Array;
+    /**
+     * The code hash after it.
+     */
     to_hash: Uint8Array;
+    /**
+     * The registry's release version for `to_hash`.
+     */
     version?: string;
   };
 }
