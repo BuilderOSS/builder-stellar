@@ -60,4 +60,9 @@ pub enum TokenError {
     /// (or, for an older layout, another `upgrade`) brings the two back in
     /// step
     StorageVersionMismatch = 7223,
+    /// A transfer or mint into a non-voting module that the module did not
+    /// make itself. Only the module, as the minter, the spender or the
+    /// transfer agent of the call, brings tokens into its own custody, so a
+    /// token sent to it cannot keep it registered (`ModuleHoldsTokens`)
+    ModuleCustodyClosed = 7224,
 }

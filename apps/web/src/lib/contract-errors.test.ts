@@ -36,6 +36,7 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('governor', 7518)).toContain('StorageVersionMismatch');
     expect(getContractErrorMessage('treasury', 7607)).toContain('StorageVersionMismatch');
     expect(getContractErrorMessage('token', 7222)).toContain('ModuleHoldsTokens');
+    expect(getContractErrorMessage('token', 7224)).toContain('ModuleCustodyClosed');
     expect(getContractErrorMessage('auction', 7419)).toContain('NotStellarAsset');
     expect(getContractErrorMessage('auction', 7420)).toContain('TokenInAuction');
     expect(getContractErrorMessage('marketplace', 7728)).toContain('NotStellarAsset');

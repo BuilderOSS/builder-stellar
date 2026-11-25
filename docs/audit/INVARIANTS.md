@@ -45,6 +45,7 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 | [INV-35](#inv-35-payment-assets-are-stellar-asset-contracts) | Payment assets are Stellar Asset Contracts | Covered |
 | [INV-36](#inv-36-every-module-halts-on-a-mismatched-layout) | Every module halts on a mismatched layout | Covered |
 | [INV-37](#inv-37-a-drive-opens-only-on-current-or-announced-claimminter-code) | A drive opens only on current or announced ClaimMinter code | Covered |
+| [INV-38](#inv-38-only-a-non-voting-module-brings-tokens-into-its-custody) | Only a non-voting module brings tokens into its custody | Covered |
 
 ## Votes and supply
 
@@ -52,7 +53,7 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 
 Each account's voting units equal its token balance, and are zero for the Treasury and the non-voting modules (Auction, Marketplace). The `TotalSupply` checkpoint equals the sum of all units, and the sum of `get_votes` equals `TotalSupply`.
 
-- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomized walk (eight fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomized walk (ten fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `system_holders_carry_no_votes_through_every_path`, `registering_a_holder_non_voting_removes_its_votes_from_its_delegate`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 
 **Covered.**
@@ -97,12 +98,22 @@ The admin mints without an allowance. Every other minter must be a registered mo
 
 ### INV-06: The module registry
 
-One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The admin can empty the Auction and the Marketplace while they are paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`); in an unlocked DAO a removal can still be delayed ([KI-19](KNOWN_ISSUES.md#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao)).
+One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The admin can empty the Auction and the Marketplace while they are paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`); nobody else can add a token meanwhile ([INV-38](#inv-38-only-a-non-voting-module-brings-tokens-into-its-custody)), but the Marketplace's own listings can still delay a removal ([KI-19](KNOWN_ISSUES.md#ki-19-removing-the-marketplace-can-be-delayed-by-its-listings)).
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `kinds_are_built_in_or_custom_and_unique`, `the_registry_is_capped`, `registration_needs_the_manager_in_setup_and_the_admin_once_live`, `the_treasury_is_never_a_module_even_with_an_empty_registry`, `a_non_voting_module_holding_tokens_cannot_be_unregistered_until_empty`, `unregistering_a_custody_module_holding_escrow_under_the_lock_is_refused`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 - [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `the_admin_returns_a_listing_to_its_seller_while_paused`, `only_the_admin_returns_a_listing`, `recover_token_moves_only_unrecorded_tokens_to_the_treasury`, `only_the_admin_recovers_a_token`.
 - [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) `recover_token_sends_a_stray_token_to_the_treasury_but_never_the_lot`.
 - [`contracts/e2e/src/membership_hardening.rs`](../../contracts/e2e/src/membership_hardening.rs) `unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused` (refused while it holds a listing, pool stock, and a stray token, then emptied and unregistered) and `cutting_the_auction_allowance_mid_auction_still_settles_it` (the Auction emptied and unregistered).
+
+**Covered.**
+
+### INV-38: Only a non-voting module brings tokens into its custody
+
+A `transfer`, `transfer_from`, `agent_transfer`, `mint` or `batch_mint` to a registered non-voting module fails `ModuleCustodyClosed` (7224) unless the module is the call's minter, spender or transfer agent, or already owns the token, and a refused call moves nothing. The Auction's own mint, the Marketplace's `list` pull and its `restock` mint pass. The Treasury, voting modules and members still take tokens from anyone, and an unregistered module is an ordinary address again.
+
+- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `nobody_else_can_put_a_token_in_a_modules_custody`, `each_module_still_brings_its_own_tokens_in`, `a_transfer_agent_reaches_a_modules_custody_only_as_that_module`, `a_voting_module_takes_tokens_from_anyone`, `under_the_lock_the_treasury_reaches_a_module_only_through_it`, `a_token_sent_while_a_removal_is_pending_cannot_block_it`.
+- [`contracts/e2e/src/membership_hardening.rs`](../../contracts/e2e/src/membership_hardening.rs) `unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused` and `cutting_the_auction_allowance_mid_auction_still_settles_it` (a member's send to the real Marketplace and Auction refused); [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `a_dao_without_optional_modules_launches_and_registers_external_code` (an outside vault pulls its token in).
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: every random mint, batch mint, transfer and agent transfer into custody by anyone but the module is refused and moves nothing; the module's pull and self-mint then pass.
 
 **Covered.**
 

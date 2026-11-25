@@ -24,7 +24,7 @@ This page was checked against `dev` at `f51d301`, which includes pull requests 1
 | [KI-16](#ki-16-indexer-allowlisting) | Indexer allowlisting | Indexer, read model |
 | [KI-17](#ki-17-archival-assumptions) | Archival assumptions | All contracts |
 | [KI-18](#ki-18-a-non-voting-module-that-will-not-release-its-tokens-stays-registered) | A non-voting module that will not release its tokens stays registered | Token |
-| [KI-19](#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao) | Removing the Auction or Marketplace can be delayed in an unlocked DAO | Auction, Marketplace, Token |
+| [KI-19](#ki-19-removing-the-marketplace-can-be-delayed-by-its-listings) | Removing the Marketplace can be delayed by its listings | Marketplace, Token |
 | [KI-20](#ki-20-a-drive-holds-its-slug-until-its-deadline) | A drive holds its slug until its deadline | Manager |
 | [KI-21](#ki-21-claim-list-hashing) | Claim list hashing | ClaimMinter |
 
@@ -162,11 +162,11 @@ The views ignore malformed values from outside modules: a view that casts an eve
 
 **Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `dao_transfer`.
 
-## KI-19: Removing the Auction or Marketplace can be delayed in an unlocked DAO
+## KI-19: Removing the Marketplace can be delayed by its listings
 
-**Behaviour.** The DAO can empty both modules by proposal, but `return_listing` and `recover_token` name the token ids known when the proposal is drafted. While transfers are unlocked, anyone can send a token straight to the module, or list one before the market is paused, between drafting and execution. The removal then fails and the proposal reverts. Each attempt costs the sender that token, which the next proposal recovers to the Treasury. A locked DAO is not exposed: under the lock a holder can neither send a token to a module nor list one.
+**Behaviour.** The Token refuses a token sent to the Auction or the Marketplace by anyone but the module itself (`ModuleCustodyClosed`, 7224), so a direct send can no longer keep either registered. The Auction gains tokens only by minting its own lot, which `cancel_auction` in the removal proposal handles whichever lot is running. The Marketplace still takes tokens through `list`, and `return_listing` names the listings known when the proposal is drafted. While transfers are unlocked, a member can list a token before the removal proposal's `pause` runs; and in any DAO, a seller can cancel a listing the proposal returns, which then fails `ListingNotFound`. Either makes the removal revert. Pausing the market in an earlier proposal stops new listings, and a cancelled listing delays the removal only once, because the next proposal leaves it out.
 
-**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `return_listing` and `recover_token`; [`auction/src/contract.rs`](../../contracts/auction/src/contract.rs) `recover_token`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
+**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `list`, `cancel` and `return_listing`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `require_custody_entry`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
 
 ## KI-20: A drive holds its slug until its deadline
 

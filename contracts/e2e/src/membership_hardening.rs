@@ -118,10 +118,11 @@ fn a_payment_asset_that_is_not_a_stellar_asset_is_refused_everywhere() {
 }
 
 /// A listing made before the DAO locked transfers, pool stock, and a token
-/// a member sent straight to the Marketplace sit in its custody. The Token
-/// refuses to unregister it until the DAO has emptied it, so no seller's
-/// token is stranded behind the lock, and the stray token cannot keep it
-/// registered.
+/// no listing records sit in the Marketplace's custody. The Token refuses to
+/// unregister it until the DAO has emptied it, so no seller's token is
+/// stranded behind the lock, and the stray token cannot keep it registered.
+/// A member's direct send is refused (`ModuleCustodyClosed`), so a stray
+/// token is one sent before the Token refused them.
 #[test]
 fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused() {
     let f = factory();
@@ -160,8 +161,24 @@ fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused()
         &3_600,
     );
     market.restock(&pool);
-    // Sent directly, not listed: no listing records it.
-    token.transfer(&seller, &market.address, &stray);
+    // A member cannot send it straight to the Marketplace.
+    assert_eq!(
+        token
+            .try_transfer(&seller, &market.address, &stray)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleCustodyClosed)
+    );
+    // A token in custody that no listing records, as one sent before that
+    // rule would be: the Marketplace's own pull, outside `list`.
+    token.approve(
+        &seller,
+        &market.address,
+        &stray,
+        &(e.ledger().sequence() + 10_000),
+    );
+    token.transfer_from(&market.address, &seller, &market.address, &stray);
     assert_eq!(token.balance(&market.address), 4);
 
     // The DAO locks transfers, then tries to remove the Marketplace.
@@ -196,8 +213,9 @@ fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused()
 /// A proposal cuts the Auction's allowance while an auction runs. The
 /// auction still settles to its winner and the Auction pauses instead of
 /// minting the next token. The same happens when a finite allowance runs out
-/// by use. A token sent to the Auction directly is recovered to the Treasury,
-/// and then, holding nothing, the Auction can be unregistered.
+/// by use. A direct send to the Auction is refused; a token in its custody
+/// that no auction records is recovered to the Treasury, and then, holding
+/// nothing, the Auction can be unregistered.
 #[test]
 fn cutting_the_auction_allowance_mid_auction_still_settles_it() {
     let f = factory();
@@ -255,9 +273,24 @@ fn cutting_the_auction_allowance_mid_auction_still_settles_it() {
     assert!(!next.settled);
     assert_eq!(token.mint_allowance(&auction.address), 0);
 
-    // The bidder sends their token straight to the Auction. The running
-    // lot cannot be recovered, only a token no auction records.
-    token.transfer(&bidder, &auction.address, &lot_id);
+    // The bidder cannot send their token straight to the Auction.
+    assert_eq!(
+        token
+            .try_transfer(&bidder, &auction.address, &lot_id)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleCustodyClosed)
+    );
+    // A token no auction records, as one sent before that rule would be,
+    // can be recovered; the running lot cannot.
+    token.approve(
+        &bidder,
+        &auction.address,
+        &lot_id,
+        &(e.ledger().sequence() + 100),
+    );
+    token.transfer_from(&auction.address, &bidder, &auction.address, &lot_id);
     auction.pause(&f.dao.treasury);
     assert_eq!(
         auction.try_recover_token(&next_id).err().unwrap().unwrap(),

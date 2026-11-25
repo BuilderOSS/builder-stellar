@@ -40,7 +40,8 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} 
 /**
  * Whether the chosen clean-up leaves the module holding nothing, which the Token requires before it
  * removes a module without votes. A token no pool or running auction accounts for (an open listing, or
- * one sent to the module directly) needs a step the plan cannot add, so the answer is then false.
+ * one sent to the module directly before the Token refused that, 7224) needs a step the plan cannot add, so
+ * the answer is then false.
  */
 export function planEmptiesModule(facts: ModuleFacts, choices: { sweep: boolean; cancel: boolean }): boolean {
   if (!holdsWithoutVotes(facts.kind)) return true;

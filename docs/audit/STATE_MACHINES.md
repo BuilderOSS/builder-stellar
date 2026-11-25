@@ -204,7 +204,7 @@ stateDiagram-v2
 | `settle_and_create_new()` | Anyone | Not paused; not settled; `now >= end_time` (`AuctionActive`, 7404). Marks it settled, sends the token to the winner and the bid to the Treasury (or the token to the Treasury if there was no bid), then creates the next auction. If the Token's mint allowance for the Auction is 0 (cut by a proposal, or a finite allowance used up), it pauses the Auction instead, so the settlement still completes |
 | `settle_auction()` | Anyone | Paused; the same checks as above, without creating a new auction |
 | `cancel_auction()` | The admin | Paused; not settled (`AuctionSettled`). Refunds the leader, marks it settled, and sends the token to the Treasury |
-| `recover_token(token_id)` | The admin | Paused; not the token of an auction that has not settled (`TokenInAuction`, 7420). Sends a token someone transferred to the Auction directly to the Treasury |
+| `recover_token(token_id)` | The admin | Paused; not the token of an auction that has not settled (`TokenInAuction`, 7420). Sends a token no auction records to the Treasury: one sent to the Auction directly before the Token refused that (`ModuleCustodyClosed`, 7224) |
 | `withdraw_refund(bidder)` | The bidder | A credited refund exists (`NoPendingRefund`, 7416) |
 | Setters (`set_duration`, reserve, increment, time buffer, and others) | The admin | Paused. `set_payment_token` also needs a Stellar Asset Contract (`NotStellarAsset`, 7419) |
 
@@ -232,9 +232,9 @@ stateDiagram-v2
 | `cancel(token_id, seller)` | The seller | Seller authorization; the seller recorded on the listing (`NotSeller`). Works while paused. Returns the token |
 | `expire(token_id)` | Anyone | `now >= expires_at` (`ListingActive`). Works while paused. Returns the token to the seller |
 | `return_listing(token_id)` | The admin: the Treasury, by proposal | Paused (`NotPaused`, 7729); the listing exists (`ListingNotFound`, 7705). Returns the token to the seller with no payment and emits `ListingCancelled` |
-| `recover_token(token_id)` | The admin | Paused (`NotPaused`); no listing records the token (`ListingExists`, 7704); no pool left to sweep (`PoolOpen`, 7725). Sends a token someone transferred to the Marketplace directly to the Treasury |
+| `recover_token(token_id)` | The admin | Paused (`NotPaused`); no listing records the token (`ListingExists`, 7704); no pool left to sweep (`PoolOpen`, 7725). Sends a token no listing or pool records to the Treasury: one sent to the Marketplace directly before the Token refused that (`ModuleCustodyClosed`, 7224) |
 
-A token in escrow carries no votes, because the Marketplace is a non-voting module; its votes return with it. `return_listing` and `recover_token` let the DAO empty the Marketplace before unregistering it, which the Token refuses while the Marketplace holds tokens ([module lifecycle](#module-lifecycle-setup-handoff-live)). The constructor and `set_payment_asset` accept only a Stellar Asset Contract (`NotStellarAsset`, 7728).
+A token in escrow carries no votes, because the Marketplace is a non-voting module; its votes return with it. Tokens enter only through `list` and `restock`, because the Token refuses a token sent to the Marketplace by anyone else. `return_listing` and `recover_token` let the DAO empty the Marketplace before unregistering it, which the Token refuses while the Marketplace holds tokens ([module lifecycle](#module-lifecycle-setup-handoff-live)). The constructor and `set_payment_asset` accept only a Stellar Asset Contract (`NotStellarAsset`, 7728).
 
 ## Quick-buy pools
 

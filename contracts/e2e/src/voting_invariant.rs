@@ -9,9 +9,13 @@
 //!    can cast it.
 //!
 //! Listings, auctions, settlements and pool restocks move a token into or out
-//! of a non-voting holder with `transfer` or `batch_mint`, the only paths the
-//! Token sees, so random transfers and mints between wallets and the three
-//! system holders cover them. A vault module that holds tokens is registered
+//! of a non-voting holder with `transfer`, `transfer_from` or a mint, the only
+//! paths the Token sees, so random transfers and mints between wallets and the
+//! three system holders cover them. A token reaches a non-voting module only
+//! when the module makes the call (`ModuleCustodyClosed`): a direct send or
+//! another minter's mint to one is refused and moves nothing, and the module
+//! then pulls the token in itself, as the Marketplace does when it lists one,
+//! or the Auction and Marketplace mint to themselves. A vault module that holds tokens is registered
 //! (non-voting) and unregistered at random, and members delegate to it too
 //! (modules can be delegates, review 2 C3). Unregistering the vault while it
 //! holds tokens is refused and moves nothing, so the sequence empties it
@@ -129,15 +133,14 @@ impl World {
         for (kind, module) in [("auction", &auction), ("marketplace", &marketplace)] {
             token.register_module(&soroban_sdk::Symbol::new(&e, kind), module, &true);
         }
+        // The Auction and Marketplace mint lots and pool stock to themselves.
+        let grant = |module: &Address| common::modules::MintGrant {
+            module: module.clone(),
+            allowance: u32::MAX,
+        };
         token.launch(
             &treasury,
-            &vec![
-                &e,
-                common::modules::MintGrant {
-                    module: minter.clone(),
-                    allowance: u32::MAX,
-                },
-            ],
+            &vec![&e, grant(&minter), grant(&auction), grant(&marketplace)],
         );
         // The stub minter is also the DAO's transfer agent (as the Circle is).
         token.set_transfer_agent(&minter, &true);
@@ -166,6 +169,17 @@ impl World {
     /// Tokens held here carry no votes.
     fn non_voting(&self, holder: &Address) -> bool {
         self.system.contains(holder) || (self.vault_registered && *holder == self.vault)
+    }
+
+    /// A registered non-voting module (not the Treasury): a token reaches it
+    /// only when it makes the call itself.
+    fn custody_module(&self, holder: &Address) -> bool {
+        self.non_voting(holder) && *holder != self.system[0]
+    }
+
+    /// `code`, the error a refused call returned, as a contract error.
+    fn refused(code: u32) -> soroban_sdk::Error {
+        soroban_sdk::Error::from_contract_error(code)
     }
 
     fn any_holder(&self, rng: &mut Lcg) -> Address {
@@ -217,6 +231,17 @@ impl World {
         match rng.below(11) {
             0 => {
                 let to = self.any_holder(rng);
+                if self.custody_module(&to) {
+                    // Another minter's mint into custody is refused.
+                    let err = self.token.try_mint(&self.minter, &to).err().unwrap();
+                    assert_eq!(err.unwrap(), Self::refused(7224));
+                    assert_eq!(self.token.minted(), minted);
+                    if to == self.system[1] || to == self.system[2] {
+                        self.token.mint(&to, &to);
+                        return "module mints to itself";
+                    }
+                    return "mint into custody refused";
+                }
                 self.token.mint(&self.minter, &to);
                 "mint"
             }
@@ -227,6 +252,16 @@ impl World {
                 for _ in 0..n {
                     recipients.push_back(self.any_holder(rng));
                     amounts.push_back(1 + rng.below(3) as u128);
+                }
+                if recipients.iter().any(|r| self.custody_module(&r)) {
+                    let err = self
+                        .token
+                        .try_batch_mint(&self.minter, &recipients, &amounts)
+                        .err()
+                        .unwrap();
+                    assert_eq!(err.unwrap(), Self::refused(7224));
+                    assert_eq!(self.token.minted(), minted);
+                    return "batch_mint into custody refused";
                 }
                 self.token.batch_mint(&self.minter, &recipients, &amounts);
                 "batch_mint"
@@ -243,6 +278,34 @@ impl World {
                 let to = self.any_holder(rng);
                 if to == from {
                     return "skip self-transfer";
+                }
+                let locked = self.token.transfers_locked();
+                if self.custody_module(&to) {
+                    // A direct send into custody is refused: by the lock first
+                    // for a holder, by the custody rule otherwise.
+                    let err = self.token.try_transfer(&from, &to, &id).err().unwrap();
+                    let code = if locked && !self.non_voting(&from) {
+                        7216
+                    } else {
+                        7224
+                    };
+                    assert_eq!(err.unwrap(), Self::refused(code));
+                    assert_eq!(self.token.owner_of(&id), from);
+                    // The module pulls it in itself. Under the lock a holder
+                    // may approve only the Treasury, which moves nothing.
+                    let expiry = self.e.ledger().sequence() + 100;
+                    return match self.token.try_approve(&from, &to, &id, &expiry) {
+                        Ok(_) => {
+                            self.token.transfer_from(&to, &from, &to, &id);
+                            "pull into custody"
+                        }
+                        Err(err) => {
+                            assert_eq!(err.unwrap(), Self::refused(7216));
+                            assert!(locked);
+                            assert_eq!(self.token.owner_of(&id), from);
+                            "transfer refused"
+                        }
+                    };
                 }
                 // On a locked token only DAO-controlled paths pass; a refused
                 // movement moves nothing.
@@ -394,6 +457,17 @@ impl World {
                 if to == from {
                     return "skip self-transfer";
                 }
+                if self.custody_module(&to) {
+                    // The agent is not the module, so custody refuses it.
+                    let err = self
+                        .token
+                        .try_agent_transfer(&self.minter, &from, &to, &id)
+                        .err()
+                        .unwrap();
+                    assert_eq!(err.unwrap(), Self::refused(7224));
+                    assert_eq!(self.token.owner_of(&id), from);
+                    return "agent_transfer into custody refused";
+                }
                 self.token.agent_transfer(&self.minter, &from, &to, &id);
                 "agent_transfer"
             }
@@ -410,10 +484,10 @@ impl World {
 fn voting_units_match_balances_and_checkpoints_add_up() {
     let mut ran: std::collections::BTreeMap<&'static str, u32> = Default::default();
     let mut held_by_vault = 0u32;
-    // Eight seeds: an unregister empties the vault, so registering a vault
-    // that already holds tokens comes up less often per run than it did
-    // when unregistering left the tokens in place.
-    for seed in [1_u64, 7, 42, 2026, 3, 99, 512, 4096] {
+    // Ten seeds: an unregister empties the vault, and a registered vault
+    // gains tokens only by pulling them in, so a vault holding tokens comes
+    // up less often per run than it did when either was looser.
+    for seed in [1_u64, 7, 42, 2026, 3, 99, 512, 4096, 8191, 65_537] {
         let mut world = World::new();
         let mut rng = Lcg(seed);
         world.assert_invariant(0, "launch");
@@ -444,6 +518,11 @@ fn voting_units_match_balances_and_checkpoints_add_up() {
         ("dao_transfer", 10),
         ("dao_transfer refused", 10),
         ("agent_transfer", 20),
+        ("pull into custody", 10),
+        ("module mints to itself", 5),
+        ("mint into custody refused", 5),
+        ("batch_mint into custody refused", 10),
+        ("agent_transfer into custody refused", 10),
     ] {
         assert!(
             ran.get(op).copied().unwrap_or(0) >= at_least,

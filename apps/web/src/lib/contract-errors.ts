@@ -108,6 +108,7 @@ const ERRORS: Record<number, string> = {
   7221: 'Votes can only be delegated to members of this tribe (DelegateNotMember).',
   7222: 'This module still holds memberships, so it can’t be removed yet: empty it first (ModuleHoldsTokens).',
   7223: 'The Token code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
+  7224: 'This module takes memberships only through its own actions, such as a listing on the market. List the membership or send it to the tribe instead (ModuleCustodyClosed).',
   // metadata
   7301: 'Metadata is not initialised.',
   7302: 'Treasury mismatch.',

@@ -41,6 +41,18 @@ use crate::storage::*;
 /// so balances and voting units can never drift apart
 /// (docs/designs/membership-models.md §1).
 ///
+/// # Module custody
+///
+/// Only a non-voting module brings tokens into its own custody: a transfer
+/// or mint to one fails `ModuleCustodyClosed` unless the module itself is
+/// the minter, the spender or the transfer agent of the call. The Auction
+/// mints each lot to itself, and the Marketplace pulls a listed token with
+/// `transfer_from` and mints pool stock to itself, so both pass; a token
+/// sent to either by anyone else is refused. A non-voting module therefore
+/// gains tokens only through its own entry points, and a proposal that
+/// pauses it and empties it can unregister it. The Treasury is not a module
+/// and takes tokens from anyone.
+///
 /// # Minting
 ///
 /// The admin (the launch admin in Setup, the Treasury once live) mints without
@@ -258,7 +270,9 @@ impl DaoTokenContract {
     /// A transfer agent moves `token_id` from `from` to `to` (Live only;
     /// `agent` and `from` both authorize; `NotTransferAgent`). Works on locked
     /// and unlocked tokens alike, and does not check the recipient's consent:
-    /// an agent that needs it checks it itself. Emits OpenZeppelin `Transfer`
+    /// an agent that needs it checks it itself. The one exception is a
+    /// non-voting module, which receives a token only when it is the agent
+    /// or the owner (`ModuleCustodyClosed`). Emits OpenZeppelin `Transfer`
     /// and `AgentTransfer`.
     pub fn agent_transfer(e: &Env, agent: Address, from: Address, to: Address, token_id: u32) {
         Self::require_current_layout(e);
@@ -269,6 +283,7 @@ impl DaoTokenContract {
         if !Self::transfer_agents(e).contains(&agent) {
             panic_with_error!(e, TokenError::NotTransferAgent);
         }
+        Self::require_custody_entry(e, &to, &[&agent, &from]);
         Self::move_token(e, &from, &to, token_id);
         AgentTransfer {
             agent,
@@ -678,11 +693,14 @@ impl DaoTokenContract {
 
     /// Mints the next sequential token id to `to` (minter auth; the minter must
     /// be the admin or a registered module with allowance, see `# Minting`). A recipient without a
-    /// delegate is self-delegated so it can vote immediately. Emits
-    /// OpenZeppelin `Mint` plus `MintWithMinter`. Returns the token id.
+    /// delegate is self-delegated so it can vote immediately. A non-voting
+    /// module receives a mint only from itself (`ModuleCustodyClosed`, see
+    /// `# Module custody`). Emits OpenZeppelin `Mint` plus `MintWithMinter`.
+    /// Returns the token id.
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
         Self::require_current_layout(e);
         minter.require_auth();
+        Self::require_custody_entry(e, to, &[minter]);
         Self::spend_mint_authority(e, minter, 1);
         common::ttl::extend_instance(e);
         let holder = Self::voting_holder(e, to);
@@ -708,8 +726,10 @@ impl DaoTokenContract {
     ///
     /// Delegation, balance and vote checkpoints are touched once per recipient
     /// entry rather than once per token, which keeps the footprint small.
-    /// Emits OpenZeppelin `Mint` per token and one `MintBatchWithMinter` for
-    /// the whole range. Returns every new token id in order.
+    /// As with `mint`, a non-voting module may be a recipient only when it is
+    /// the minter (`ModuleCustodyClosed`). Emits OpenZeppelin `Mint` per
+    /// token and one `MintBatchWithMinter` for the whole range. Returns every
+    /// new token id in order.
     pub fn batch_mint(
         e: &Env,
         minter: &Address,
@@ -741,6 +761,9 @@ impl DaoTokenContract {
         }
         if !common::batch_mint_fits(total, recipients.len()) {
             panic_with_error!(e, TokenError::BatchTooLarge);
+        }
+        for recipient in recipients.iter() {
+            Self::require_custody_entry(e, &recipient, &[minter]);
         }
         Self::spend_mint_authority(e, minter, total);
 
@@ -792,8 +815,10 @@ impl DaoTokenContract {
     /// Transfers `token_id` from `from` (auth) to `to`, moving the voting unit
     /// between their delegates. A recipient without a delegate is
     /// self-delegated. On a locked token only a DAO-controlled path passes
-    /// (`TransfersLocked`, see `check_locked_path`). Emits OpenZeppelin
-    /// `Transfer`.
+    /// (`TransfersLocked`, see `check_locked_path`). Nobody but a non-voting
+    /// module puts a token in its custody, so `to` may not be one unless it
+    /// is `from` (`ModuleCustodyClosed`, see `# Module custody`). Emits
+    /// OpenZeppelin `Transfer`.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
         Self::require_current_layout(e);
         common::ttl::extend_instance(e);
@@ -801,11 +826,15 @@ impl DaoTokenContract {
         if Self::settings(e).transfers_locked {
             Self::check_locked_path(e, from, to, None);
         }
+        Self::require_custody_entry(e, to, &[from]);
         Self::move_token(e, from, to, token_id);
     }
 
     /// Like `transfer`, by an approved `spender` (auth; OpenZeppelin's
     /// approval check runs first, so an unapproved spender fails as before).
+    /// A non-voting module receives the token only when it is the spender
+    /// pulling it into its own custody, as the Marketplace does when it lists
+    /// one, or `from` (`ModuleCustodyClosed`).
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
         Self::require_current_layout(e);
         common::ttl::extend_instance(e);
@@ -814,6 +843,7 @@ impl DaoTokenContract {
         if Self::settings(e).transfers_locked {
             Self::check_locked_path(e, from, to, Some(spender));
         }
+        Self::require_custody_entry(e, to, &[spender, from]);
         Self::move_token(e, from, to, token_id);
     }
 
@@ -915,6 +945,24 @@ impl DaoTokenContract {
     /// DAO custody: the Treasury or a registered non-voting module.
     fn is_custody(e: &Env, account: &Address) -> bool {
         Self::voting_holder(e, account).is_none()
+    }
+
+    /// Fails `ModuleCustodyClosed` when `to` is a non-voting module that is
+    /// not among `by`: the call's minter, spender or agent, which authorized
+    /// it, and for a transfer the owner `from`, since a token the module
+    /// already holds is not entering its custody. Only the module itself
+    /// brings a token into its custody (`# Module custody`). The Treasury,
+    /// voting modules and members still take tokens from anyone.
+    fn require_custody_entry(e: &Env, to: &Address, by: &[&Address]) {
+        if by.contains(&to) {
+            return;
+        }
+        if Self::read_modules(e)
+            .iter()
+            .any(|m| m.non_voting && m.address == *to)
+        {
+            panic_with_error!(e, TokenError::ModuleCustodyClosed);
+        }
     }
 
     /// The paths a locked token may move along (docs/designs/locked-tokens.md

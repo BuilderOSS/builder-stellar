@@ -98,7 +98,14 @@ export const TokenError = {
    * (or, for an older layout, another `upgrade`) brings the two back in
    * step
    */
-  7223 : { message: "StorageVersionMismatch" }
+  7223 : { message: "StorageVersionMismatch" },
+  /**
+   * A transfer or mint into a non-voting module that the module did not
+   * make itself. Only the module, as the minter, the spender or the
+   * transfer agent of the call, brings tokens into its own custody, so a
+   * token sent to it cannot keep it registered (`ModuleHoldsTokens`)
+   */
+  7224 : { message: "ModuleCustodyClosed" }
 }
 
 /**

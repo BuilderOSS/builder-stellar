@@ -292,6 +292,14 @@ implementation (`set_current_implementations`) or the hash announced as latest f
 ClaimMinter in Setup to another release must move it to one of those before the drive. When a ClaimMinter release
 is published, set it current with the other hashes, or announce it as latest a notice before any drive needs it.
 
+**Module custody (Token).** From the Token release that adds `ModuleCustodyClosed` (7224), a token reaches a
+non-voting module only when the module makes the call: the Auction's own mint, the Marketplace's `list` pull and
+pool `restock`. The Auction and Marketplace need no upgrade for it. Upgrading a DAO's Token does not move tokens
+someone sent to a module directly before the upgrade: a removal still needs `recover_token` for those. A module
+from outside the Manager that expects tokens sent to it, such as a vault or a contract wallet registered as
+non-voting custody, must pull them with `transfer_from` after the upgrade. Proposals and scripts that send a
+Treasury token straight to a module fail; list it through the Marketplace instead.
+
 ## Approving upgrade paths for DAO modules
 
 DAO modules keep directional approvals (`approve_upgrade(from, to)`) and no latest-only rule, because a DAO's
