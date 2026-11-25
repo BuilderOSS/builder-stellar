@@ -224,9 +224,9 @@ act before launch). If a drive fails and the ClaimMinter's refund code is broken
 `ClaimMinter` hash. It works only once the drive has failed and never on a live module. The Manager admin
 registers the fix, approves the path from the running hash and announces the fix as latest for `ClaimMinter`
 (`set_latest_implementation`; otherwise `UpgradeNotLatest`, 7131). The upgrade then waits out the Manager's notice
-(`upgrade_delay()` ledgers) after the later of the approval and the announcement, and the same notice in seconds
-(five per ledger, never less than seven days) after the drive's deadline (`UpgradeDelayNotElapsed`, 7130 until
-then). Announcing the fix as
+after the later of the approval and the announcement (`upgrade_delay()` ledgers, never less than seven days of
+ledgers), and the same notice in seconds (five per ledger, never less than seven days) after the drive's deadline
+(`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
 latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
 (SECURITY_MODEL, Assurance launch).
 

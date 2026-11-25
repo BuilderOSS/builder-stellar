@@ -47,7 +47,7 @@ Local browser storage → creation/proposal drafts and preferences (not indexed)
 Alternatively the launch admin opens an **assurance drive** (`open_assurance`): an assurance claim list, the slug reserved and every admin handed to the Treasury at once. People claim (and pay into escrow); once enough distinct claimers have claimed, anyone calls `launch_when_ready`, which launches with the stored config and releases the escrow to the Treasury. If the deadline passes first, everyone can `refund` and `release_slug` frees the slug. See [security](SECURITY_MODEL.md#assurance-launch).
 
 Slug-to-Token and Token-to-slug mappings remain in Manager after launch; there is
-no enumeration API. Creation only requests a slug (several pending DAOs may request the same one, and `update_pending_slug` renames a request); launch claims it uniquely, and a launched DAO can later move to a new slug by vote (`change_slug`, Manager 0.2.0), which releases the old one. Slug getters resolve launched DAOs only and do not renew TTL;
+no enumeration API. Creation only requests a slug (several pending DAOs may request the same one, and `update_pending_slug` renames a request); launch claims it uniquely, and a launched DAO can later move to a new slug by vote (`change_slug`, Manager 0.2.0), which releases the old one. Slug getters resolve launched DAOs and DAOs whose assurance drive reserved a slug, and do not renew TTL;
 the slug entries are renewed by the DAO's storage sweep ([TTL_ECONOMICS](TTL_ECONOMICS.md)). Indexed layout resolution
 maps a slug to the canonical DAO Token ID before services use it.
 

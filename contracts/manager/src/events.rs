@@ -319,7 +319,7 @@ pub fn emit_slug_changed(env: &Env, token_address: &Address, old_slug: &String, 
     .publish(env);
 }
 
-/// Emitted when a DAO's slug is claimed at launch.
+/// Emitted when a DAO's slug is claimed, at launch or when a drive opens.
 pub fn emit_slug_claimed(env: &Env, token_address: &Address, slug: &String) {
     SlugClaimed {
         token_address: token_address.clone(),

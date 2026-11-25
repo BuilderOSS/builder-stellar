@@ -35,7 +35,7 @@ Most claim lists need no refunds. Tokens are minted only when someone claims the
 
   "Failed" is not a stored flag. The contract works it out each time: the deadline has passed and the tribe's Token is not live. Because of that, the contract never allows both a refund and a release of the held payments to the Treasury. A tribe that launched has no refunds. A failed drive can't release funds.
 
-  If the claims contract's own refund code ever fails, the launch admin can replace it with a fixed version that the platform publishes as the latest claims release (`recover_claims`). The replacement takes over the held payments, so the Manager lets it run only after the platform's upgrade notice has passed since the fix was published, and at least seven days (or the notice, if longer) after the drive's deadline. Until the notice passes, your payment stays with the code you paid into, so take it back soon after the drive fails.
+  If the claims contract's own refund code ever fails, the launch admin can replace it with a fixed version that the platform publishes as the latest claims release (`recover_claims`). The replacement takes over the held payments, so the Manager lets it run only at least seven days (or the platform's upgrade notice, if longer) after the fix was published and after the drive's deadline. Until the notice passes, your payment stays with the code you paid into, so take it back soon after the drive fails.
 
   On a normal list, the contract has no refund. The part of the mint allowance a list didn't use stays with the claims module.
 

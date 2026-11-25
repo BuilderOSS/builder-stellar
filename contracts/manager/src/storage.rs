@@ -152,7 +152,7 @@ impl ModuleSpec {
 }
 
 /// What `create_dao` builds: the collection, profile, slug, governance,
-/// modules and membership switches.
+/// modules, and membership switches.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitialDaoConfigValues {

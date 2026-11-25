@@ -44,8 +44,8 @@
 //!
 //! - Admin-controlled implementation registry and two-step admin handover
 //! - Factory pause blocks `create_dao`, `create_module`, `open_assurance`,
-//!   `launch_dao`, `launch_when_ready` and `change_slug`; refunds,
-//!   `release_slug` and `recover_claims` stay open
+//!   `launch_dao`, `launch_when_ready`, and `change_slug`; refunds,
+//!   `release_slug`, and `recover_claims` stay open
 //! - Per-deployer deterministic salts (creator + nonce + module)
 //! - Input validation against the shared bounds in `common`
 //! - See `docs/SECURITY_MODEL.md` for the trust model

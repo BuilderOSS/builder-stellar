@@ -1,5 +1,5 @@
 //! Manager contract: the Tribe Builder platform's implementation registry,
-//! DAO factory, launch path (direct or by assurance drive) and slug registry.
+//! DAO factory, launch path (direct or by assurance drive), and slug registry.
 //! The Manager has authority over a DAO only while it is pending; launch hands
 //! every contract to the DAO's Treasury.
 
@@ -577,8 +577,8 @@ impl ManagerContract {
     // ========================================================================
 
     /// Pause the factory (emergency measure). While paused, `create_dao`,
-    /// `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready`
-    /// and `change_slug` fail with `FactoryPaused`. Refunds, `release_slug`
+    /// `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready`,
+    /// and `change_slug` fail with `FactoryPaused`. Refunds, `release_slug`,
     /// and `recover_claims` stay open, so a pause can end a drive in refunds
     /// but never trap its escrow.
     ///
@@ -623,20 +623,22 @@ impl ManagerContract {
     /// the call (one signature if they are the same address). Module
     /// constructors do not require auth.
     ///
-    /// The requested slug is validated and must not belong to a launched DAO,
-    /// but it is only claimed at `launch_dao` (pending DAOs hold no slug, so an
-    /// abandoned creation blocks nothing).
+    /// The requested slug is validated and must not be held, but it is only
+    /// claimed at `launch_dao` or when a drive opens (a pending DAO without a
+    /// drive holds no slug, so an abandoned creation blocks nothing).
     ///
     /// # Errors
     ///
     /// * `FactoryPaused` - Factory is paused
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
     /// * `InvalidModules` - A kind listed twice
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
     /// * `InvalidPaymentAsset` - A module's payment asset is not a Stellar
     ///   Asset Contract
     /// * `UnknownAgentKind` - `transfer_agents` names a kind `modules` does
-    ///   not create exactly once
+    ///   not create, or names a kind twice
+    /// * `CurrentImplementationsNotSet` / `ImplementationNotFound` - no usable
+    ///   current implementation
     /// * `VoteSourceNotApproved` - the chosen vote source is not approved
     /// * Bounds: `StringEmpty`, `StringTooLong`, `InvalidGovernanceTiming`,
     ///   `InvalidQuorumBps`, `InvalidProposalThreshold`, `InvalidDuration`,
@@ -958,7 +960,7 @@ impl ManagerContract {
     /// # Errors
     ///
     /// * `DaoNotFound` - No pending DAO for `token_address`
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
     pub fn update_pending_slug(
         env: Env,
         token_address: Address,
@@ -1354,7 +1356,7 @@ impl ManagerContract {
     ///   recorded but cannot rename: its Token admin is the Treasury, which
     ///   cannot act before launch.
     /// * `SlugUnchanged` - `new_slug` is the DAO's current slug
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
     pub fn change_slug(
         env: Env,
         token_address: Address,
@@ -2055,7 +2057,7 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// `SlugTaken` if a launched DAO already claimed `slug`.
+    /// `SlugTaken` if a DAO holds `slug` (launched, or in a drive).
     fn require_slug_unclaimed(env: &Env, slug: &String) -> Result<(), ManagerError> {
         if has_persistent(env, &ManagerKey::SlugToDao(slug.clone())) {
             return Err(ManagerError::SlugTaken);

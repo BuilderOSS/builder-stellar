@@ -746,7 +746,7 @@ export interface CurrentImplementations {
 
 /**
  * What `create_dao` builds: the collection, profile, slug, governance,
- * modules and membership switches.
+ * modules, and membership switches.
  */
 export interface InitialDaoConfigValues {
   governance: GovernanceConfig;
