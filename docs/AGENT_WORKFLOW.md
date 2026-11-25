@@ -178,8 +178,9 @@ inventing links. Recheck after replacements. Local ignored feedback records are
 useful context when available, but the check must work from tracked source alone.
 
 `ARTWORK_GUIDE_URL` in `apps/web/src/lib/help-links.ts` points to the artwork
-guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). Add new
-documentation links there, pointing to the matching docs.tribes.build page.
+guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). New
+documentation links in the app use `docsHref()` (`apps/web/src/lib/site.ts`) with a page path
+that `apps/docs/src/lib/nav.ts` lists.
 
 ## Optional vendor skills
 
