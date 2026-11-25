@@ -50,7 +50,7 @@ The payment asset, shown as **Paid in**, is fixed once the first bid is placed. 
 
   A pause does not end a running auction early. Its end time stays the same, and it can be settled after that time. A new duration applies to auctions that start after the change. Only `cancel_auction`, which also needs the admin while paused, ends a running auction early. It refunds the top bid and sends the token to the Treasury.
 
-  The payment asset changes only with a separate advanced action, and only before the first bid is placed.
+  The payment asset changes only with a separate advanced action, and only before the first bid is placed. Before launch, keep the asset chosen at creation: launch is refused if a module no longer uses it.
 
   Each direct change costs a Stellar network fee in XLM. Every change emits an event and is public on chain.
 </Disclosure>
