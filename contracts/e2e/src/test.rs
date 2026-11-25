@@ -5826,3 +5826,6 @@ mod locked;
 
 #[path = "vote_adapter.rs"]
 mod vote_adapter;
+
+#[path = "governance.rs"]
+mod governance;

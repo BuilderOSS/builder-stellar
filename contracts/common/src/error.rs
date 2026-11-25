@@ -1,3 +1,6 @@
+//! Typed errors shared by the modules, the error-code block of every crate,
+//! and [`require`].
+
 use soroban_sdk::contracterror;
 
 /// Error-code blocks, one per crate. Every project error code lives in
@@ -7,14 +10,23 @@ use soroban_sdk::contracterror;
 /// knowing which contract raised it. Each crate numbers its errors from
 /// `block + 1`. The e2e suite asserts every enum stays inside its block.
 pub mod codes {
+    /// `common` (`CommonError`).
     pub const COMMON: u32 = 7000;
+    /// `manager`.
     pub const MANAGER: u32 = 7100;
+    /// `token`.
     pub const TOKEN: u32 = 7200;
+    /// `metadata`.
     pub const METADATA: u32 = 7300;
+    /// `auction`.
     pub const AUCTION: u32 = 7400;
+    /// `governor` (its own errors; OpenZeppelin's keep their 5000s codes).
     pub const GOVERNOR: u32 = 7500;
+    /// `treasury`.
     pub const TREASURY: u32 = 7600;
+    /// `marketplace`.
     pub const MARKETPLACE: u32 = 7700;
+    /// `minter` (the ClaimMinter).
     pub const MINTER: u32 = 7800;
     /// Size of each block.
     pub const BLOCK_SIZE: u32 = 100;

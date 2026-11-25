@@ -37,4 +37,16 @@ pub enum CustomGovernorError {
     CommentEmpty = 7514,
     /// Comment body or vote reason exceeds `MAX_PROPOSAL_COMMENT_LENGTH`
     CommentTooLong = 7515,
+    /// A proposal action calls this Governor's `consume`. Only
+    /// `treasury.execute` consumes a proposal, and only the one it runs
+    CannotConsume = 7516,
+    /// The proposal's `mint` and `batch_mint` actions, with its other
+    /// actions, would publish more contract events than one
+    /// `treasury.execute` allows (`common::EXECUTION_EVENT_BUDGET`); split
+    /// them over several proposals
+    MintsTooLarge = 7517,
+    /// The stored data layout differs from the one this code expects: a
+    /// migration is due (anyone may call `migrate`), or the code is older
+    /// than the data
+    StorageVersionMismatch = 7518,
 }

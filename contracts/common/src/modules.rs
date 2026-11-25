@@ -10,10 +10,15 @@ use soroban_sdk::{contracttype, Address, Env, Symbol, SymbolStr, TryFromVal, Val
 /// transfer by `voting_holder`).
 pub const MAX_MODULES: u32 = 16;
 
-/// Built-in module kinds. Custom kinds are `custom_<name>`.
+// Built-in module kinds. Custom kinds are `custom_<name>`.
+
+/// The Auction (holds the token on auction; non-voting).
 pub const KIND_AUCTION: &str = "auction";
+/// The Marketplace (holds listed and pool tokens; non-voting).
 pub const KIND_MARKETPLACE: &str = "marketplace";
+/// The ClaimMinter (mints claim lists; holds no tokens).
 pub const KIND_CLAIMS: &str = "claims";
+/// A Circle module (holds no tokens).
 pub const KIND_CIRCLE: &str = "circle";
 /// Prefix of every custom kind. A `Symbol` holds at most 32 characters from
 /// `a-zA-Z0-9_`, so `<name>` is 1 to 25 characters by construction.
@@ -23,7 +28,9 @@ pub const CUSTOM_KIND_PREFIX: &str = "custom_";
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModuleEntry {
+    /// A built-in kind or `custom_<name>` (see [`is_valid_kind`]).
     pub kind: Symbol,
+    /// The module contract.
     pub address: Address,
     /// Tokens this module holds carry no votes (custody: Auction, Marketplace).
     pub non_voting: bool,
@@ -69,7 +76,9 @@ pub struct TokenSettings {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MintGrant {
+    /// The registered module that may mint.
     pub module: Address,
+    /// Tokens it may mint; `u32::MAX` means unlimited.
     pub allowance: u32,
 }
 
