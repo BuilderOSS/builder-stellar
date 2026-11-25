@@ -128,8 +128,9 @@ Source: `configs/testnet-manager.json` and `configs/testnet-dev-manager.json` (`
 |---|---|
 | Network fee the app will ask you to sign | At most 50 XLM. Above that, the app refuses to sign and says why. |
 | Sign-in message lifetime | 5 minutes |
-| Sign-in session | 7 days |
+| Sign-in session without use | 24 hours |
+| Sign-in session, longest | 3 days from sign-in |
 
 Creating a tribe costs about 10.6 XLM in network fees on testnet, because it pays storage for six new contracts for 170 days.
 
-Source: `apps/web/src/lib/fee/fee-guard.ts` (`FEE_GUARD_STROOPS`), `apps/web/src/lib/auth/server.ts` (`AUTH_CHALLENGE_TTL_MS`, `AUTH_SESSION_TTL_SECONDS`) and `docs/TTL_ECONOMICS.md`.
+Source: `apps/web/src/lib/fee/fee-guard.ts` (`FEE_GUARD_STROOPS`), `apps/web/src/lib/auth/server.ts` (`AUTH_CHALLENGE_TTL_MS`, `AUTH_SESSION_IDLE_SECONDS`, `AUTH_SESSION_MAX_AGE_SECONDS`) and `docs/TTL_ECONOMICS.md`.

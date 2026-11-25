@@ -4,8 +4,9 @@ import { WebAuth } from '@stellar/stellar-sdk';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { AccountLookupError } from '@/lib/auth/account-signers';
 import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
-import { Sep10AccountLookupError, verifySep10AccountProof } from '@/lib/auth/sep10-account';
+import { verifySep10AccountProof } from '@/lib/auth/sep10-account';
 import { matchesSep10Transaction } from '@/lib/auth/sep10-proof';
 import {
   AuthError,
@@ -15,14 +16,23 @@ import {
   getAuthSession,
   getConfiguredNetwork,
   getSep10ServerKeypair,
-  releaseAuthChallenge
+  rejectCrossSiteRequest,
+  releaseAuthChallenge,
+  startSessionAccount
 } from '@/lib/auth/server';
 
 export const dynamic = 'force-dynamic';
 
 const verifySchema = z.object({ signedTxXdr: z.string().min(1) });
 
+/**
+ * SEP-10 sign-in, step 2: checks that the signed transaction is exactly the challenge issued to this
+ * session and that its signatures meet the account's current signer weights, then signs the session
+ * in. Each challenge works once.
+ */
 export async function POST(request: Request) {
+  const crossSite = rejectCrossSiteRequest(request);
+  if (crossSite) return crossSite;
   const rateLimitResponse = enforceAuthRateLimit(request, 'sep10-verify', 10);
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -89,11 +99,7 @@ export async function POST(request: Request) {
       webAuthDomain: challenge.webAuthDomain
     });
 
-    session.address = parsed.clientAccountID;
-    session.network = network.name;
-    session.authMethod = 'sep10';
-    session.authenticatedAt = Date.now();
-    session.challenge = undefined;
+    startSessionAccount(session, { address: parsed.clientAccountID, network: network.name, authMethod: 'sep10' });
     await session.save();
     consumeAuthChallenge(claimedChallenge);
 
@@ -103,7 +109,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (claimedChallenge) releaseAuthChallenge(claimedChallenge);
-    if (error instanceof Sep10AccountLookupError)
+    if (error instanceof AccountLookupError)
       return NextResponse.json(
         { code: 'ACCOUNT_LOOKUP_UNAVAILABLE', message: error.message },
         { status: 503, headers: { 'Cache-Control': 'no-store' } }
