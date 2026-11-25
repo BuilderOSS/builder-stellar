@@ -655,6 +655,14 @@ view ClaimsList {
   openedLedger          BigInt    @map("opened_ledger")
   openedAt              DateTime? @map("opened_at")
   openedTransactionHash String    @map("opened_transaction_hash")
+  /** Closed early by its admin (`close_list`, by proposal once Live). */
+  closed                Boolean
+  closedLedger          BigInt?   @map("closed_ledger")
+  closedAt              DateTime? @map("closed_at")
+  /** Unix seconds when claims stop: the close time for a closed list, otherwise `expiresAt`. */
+  effectiveExpiresAt    BigInt    @map("effective_expires_at")
+  /** Opened before the ClaimMinter launched: a free one is founder supply until claimed or closed. */
+  openedInSetup         Boolean   @map("opened_in_setup")
 
   @@map("lists")
   @@schema("claims")

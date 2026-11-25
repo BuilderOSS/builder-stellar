@@ -25,6 +25,7 @@ export function ListingEndField({
   onCustomChange: (value: string) => void;
 }) {
   const end = listingEndSeconds(preset, custom);
+  const endText = end === null ? null : formatListingEnd(end);
   return (
     <Field>
       <FieldLabel id={`${id}-label`}>Listing ends</FieldLabel>
@@ -47,7 +48,7 @@ export function ListingEndField({
         />
       ) : null}
       <FieldHelperText>
-        {end ? `Ends ${formatListingEnd(end)}, your time.` : 'Choose a date and time in the future, in your time.'}
+        {endText ? `Ends ${endText}, your time.` : 'Choose a date and time in the future, in your time.'}
       </FieldHelperText>
     </Field>
   );

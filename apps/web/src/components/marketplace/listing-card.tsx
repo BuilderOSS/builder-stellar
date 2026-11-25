@@ -146,7 +146,7 @@ export function ListingCard({
         <div className={styles.stack}>
           <dl className={styles.details}>
             <dt>{pool ? 'Closes' : 'Ends'}</dt>
-            <dd>{formatListingEnd(listing.expiresAt)}</dd>
+            <dd>{formatListingEnd(listing.expiresAt) ?? (pool ? 'No closing date' : 'No end date')}</dd>
             <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
             <dt>Created</dt>
