@@ -38,6 +38,7 @@ fn extend_persistent_ttl<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &E
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
+    /// Instance: the [`Settings`] (token and renderer base).
     Settings,
     /// Instance: fingerprint of the event-only DAO profile.
     Profile,
@@ -57,7 +58,9 @@ pub enum DataKey {
     /// `[page * TOKENS_PER_ATTRIBUTE_PAGE, (page + 1) * TOKENS_PER_ATTRIBUTE_PAGE)`
     /// (see "Attributes pages" below).
     AttributesPage(u32),
+    /// Instance: the Manager, the only caller of `launch` and `handoff`.
     Manager,
+    /// Instance: the DAO's Treasury, the only address the admin can move to.
     Treasury,
 }
 
@@ -65,7 +68,9 @@ pub enum DataKey {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// The Token this contract serves and where token images are rendered.
 pub struct Settings {
+    /// The Token: the only caller of the mint hooks.
     pub token: Address,
     /// Base URL of the image compositor; `token_uri` points `image` here.
     pub renderer_base: String,
@@ -77,24 +82,37 @@ pub struct Settings {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileState {
+    /// SHA-256 of the latest profile bytes.
     pub hash: BytesN<32>,
+    /// Updates since creation (0 = the profile given at construction).
     pub seq: u32,
 }
 
+/// The IPFS folder (`base_uri`) and file extension a batch of item images
+/// was uploaded with. Items point at their group by `reference_slot`; the
+/// off-chain compositor builds each image URL from it.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IpfsGroup {
+    /// At most `common::MAX_STRING_LENGTH` bytes.
     pub base_uri: String,
+    /// At most `common::MAX_EXTENSION_LENGTH` bytes.
     pub extension: String,
 }
 
+/// One value of a property (a trait), as `get_items` returns it.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Item {
+    /// At most `common::MAX_ARTWORK_NAME_LENGTH` bytes, without `"`, `\` or
+    /// control characters (it is copied into the token JSON).
     pub name: String,
+    /// Index of the item's [`IpfsGroup`] (`get_ipfs_group`), below
+    /// `MAX_IPFS_GROUPS`.
     pub reference_slot: u32,
 }
 
+/// A property (trait type) with all of its items, in item order.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Property {
@@ -110,16 +128,22 @@ pub struct PropertyHeader {
     pub item_count: u32,
 }
 
+/// An item to add with `add_properties`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ItemParam {
+    /// The property's index: among the existing properties, or, with
+    /// `is_new_property`, among the `names` of the same call.
     pub property_id: u32,
     pub name: String,
+    /// Whether `property_id` counts from the first property this call adds.
     pub is_new_property: bool,
 }
 
 // Storage helpers
 
+/// The settings, extending the instance TTL when present. `NotInitialized`
+/// if never set.
 pub fn get_settings(env: &Env) -> Result<Settings, Error> {
     let settings = env
         .storage()
@@ -139,6 +163,7 @@ pub fn set_settings(env: &Env, settings: &Settings) {
     extend_instance_ttl(env);
 }
 
+/// The profile fingerprint. `NotInitialized` if never set.
 pub fn get_profile_state(env: &Env) -> Result<ProfileState, Error> {
     env.storage()
         .instance()
@@ -153,6 +178,8 @@ pub fn set_profile_state(env: &Env, state: &ProfileState) {
     extend_instance_ttl(env);
 }
 
+/// Item count of each property, in property order; empty before any artwork
+/// and right after a reset.
 pub fn get_item_counts(env: &Env) -> Vec<u32> {
     env.storage()
         .instance()
@@ -260,6 +287,7 @@ pub fn get_item_name(env: &Env, property_index: u32, index: u32) -> Option<Strin
     names.get(index % ITEMS_PER_PAGE)
 }
 
+/// Write one item page in its stored form ([`ItemPage`]).
 pub fn set_item_page(env: &Env, property_index: u32, page: u32, items: &Vec<Item>) {
     let mut names = Vec::new(env);
     let mut slots = Bytes::new(env);
@@ -297,10 +325,12 @@ pub fn get_ipfs_data(env: &Env) -> Vec<IpfsGroup> {
     groups.slice(0..count.min(groups.len()))
 }
 
+/// One IPFS group in use, or `None` past the count.
 pub fn get_ipfs_group(env: &Env, index: u32) -> Option<IpfsGroup> {
     get_ipfs_data(env).get(index)
 }
 
+/// Store every group and set the count to match.
 pub fn set_ipfs_data(env: &Env, groups: &Vec<IpfsGroup>) {
     let key = common::ns(env, DataKey::IpfsGroups);
     env.storage().persistent().set(&key, groups);
@@ -346,7 +376,8 @@ pub fn get_properties(env: &Env) -> Vec<Property> {
 // 16-property record is 17 bytes (33 when wide). Records are scanned (at most
 // 64 per page) in a stack buffer, so a lookup is one storage read.
 
-/// Most properties a collection holds.
+/// Most properties a collection holds: each property takes two bytes of the
+/// 32-byte artwork seed.
 pub const MAX_PROPERTIES: u32 = 16;
 const MAX_RECORD_BYTES: usize = 1 + 2 * MAX_PROPERTIES as usize;
 /// Header bit: the record's indexes are two bytes each.
@@ -530,6 +561,7 @@ pub fn set_attributes_range(env: &Env, first_token_id: u32, attributes: &Vec<Vec
     }
 }
 
+/// `set_attributes_range` for one token.
 pub fn set_attributes(env: &Env, token_id: u32, attributes: &Vec<u32>) {
     let mut one = Vec::new(env);
     one.push_back(attributes.clone());

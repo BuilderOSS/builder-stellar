@@ -3,6 +3,7 @@
 use soroban_sdk::{contractevent, Address, BytesN, Env, String, Vec};
 
 /// Emitted once when the Manager launches the metadata module (Setup -> Live).
+/// `treasury` is the admin from then on.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MetadataLaunched {
@@ -17,6 +18,8 @@ pub fn emit_launched(env: &Env, treasury: &Address) {
     .publish(env);
 }
 
+/// Emitted once by the constructor, when the Manager deploys the contract
+/// in `create_dao`. `admin` is the launch admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MetadataInitialized {
@@ -61,6 +64,9 @@ pub fn emit_profile_updated(env: &Env, seq: u32, hash: &BytesN<32>, profile: &St
     .publish(env);
 }
 
+/// A new property, from `add_properties`, `delete_and_recreate_properties`
+/// or the constructor. `property_id` is its index (ids restart at 0 after a
+/// reset). Items are not emitted; read them with `get_items`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyAdded {
@@ -77,6 +83,9 @@ pub fn emit_property_added(env: &Env, property_id: u32, name: &String) {
     event.publish(env);
 }
 
+/// A token's trait selections, from `on_minted` or `regenerate`.
+/// `selections` is `[num_properties, item_index..]`, as `get_attributes`
+/// returns it. Not emitted for a token minted before any artwork.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SeedGenerated {
@@ -126,6 +135,7 @@ pub fn emit_seeds_generated(
     event.publish(env);
 }
 
+/// The admin changed the image compositor URL (`update_renderer_base`).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RendererBaseUpdated {
@@ -141,6 +151,9 @@ pub fn emit_renderer_base_updated(env: &Env, old_base: &String, new_base: &Strin
     event.publish(env);
 }
 
+/// The admin cleared every property (`delete_and_recreate_properties`); the
+/// new properties follow as `PropertyAdded` from id 0. Tokens keep their
+/// stored selections.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertiesReset {
