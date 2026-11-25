@@ -83,7 +83,14 @@ export const TokenError = {
   /**
    * Members-only delegation: the delegatee holds no token or holds no votes
    */
-  7221 : { message: "DelegateNotMember" }
+  7221 : { message: "DelegateNotMember" },
+  /**
+   * `unregister_module` on a non-voting module that still holds tokens.
+   * Empty it first (settle or cancel the auction, return listings, sweep
+   * pools): once unregistered it is no longer DAO custody, so in a locked
+   * DAO it could not move those tokens out
+   */
+  7222 : { message: "ModuleHoldsTokens" }
 }
 
 /**

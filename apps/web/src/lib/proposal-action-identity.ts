@@ -210,6 +210,11 @@ function highRiskMessage(action: ProposalQueuedAction) {
 }
 
 const PAUSE_TOGGLES = new Set(['pause-auction', 'unpause-auction', 'pause-marketplace', 'unpause-marketplace']);
+/**
+ * Calls that may repeat with the same values: one `sweep_pool` returns at most 25 tokens, so a larger
+ * pool needs several, and a sweep of an emptied pool returns 0 without failing.
+ */
+const REPEATABLE = new Set(['sweep-pool']);
 /** Auction calls the contract only accepts while auctions are paused. */
 const NEEDS_PAUSED_AUCTION = new Set([
   'set-auction-reserve-price',
@@ -480,6 +485,7 @@ export function analyzeProposalAction(
     });
 
   existing.forEach((candidate, index) => {
+    if (REPEATABLE.has(action.type) && candidate.type === action.type) return;
     const candidateIdentity = getProposalActionIdentity(candidate);
     if (candidateIdentity.key === identity.key) {
       findings.push({

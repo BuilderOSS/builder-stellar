@@ -97,7 +97,21 @@ export type PoolState = {
   open: boolean;
   /** Memberships minted into the pool and not yet sold or swept. */
   inStock: number;
+  /**
+   * The most it can hold when the proposal runs: anyone may restock an open pool until it closes, up
+   * to its size less what it has sold. Defaults to `inStock`.
+   */
+  maxStock?: number;
 };
+
+/** `marketplace::MAX_SWEEP`: the most tokens one `sweep_pool` call returns to the treasury. */
+export const MAX_SWEEP = 25;
+
+/** Sweeps that empty `pool` however far it is restocked before the proposal runs. */
+export function sweepsFor(pool: PoolState): number {
+  const stock = Math.max(pool.inStock, pool.maxStock ?? pool.inStock);
+  return Math.max(1, Math.ceil(stock / MAX_SWEEP));
+}
 
 /**
  * Removing a module. `pools` are only the market's pools to clean up, and `cancelAuction` is only
@@ -124,13 +138,21 @@ export function buildDetachPlan({
           title: `Close pool ${pool.id}`,
           detail: 'No more buying from it.'
         });
-      if (pool.open || pool.inStock > 0)
-        steps.push({
-          type: 'sweep-pool',
-          values: { poolId: pool.id },
-          title: `Sweep pool ${pool.id}`,
-          detail: 'Its unsold memberships go back to the treasury.'
-        });
+      if (pool.open || pool.inStock > 0) {
+        // The Token refuses to remove a market that still holds a token, and one sweep returns at most
+        // 25, so the plan sweeps as often as the largest stock needs. Extra sweeps return 0.
+        const sweeps = sweepsFor(pool);
+        for (let n = 1; n <= sweeps; n += 1)
+          steps.push({
+            type: 'sweep-pool',
+            values: { poolId: pool.id },
+            title: sweeps === 1 ? `Sweep pool ${pool.id}` : `Sweep pool ${pool.id} (${n} of ${sweeps})`,
+            detail:
+              sweeps === 1
+                ? 'Its unsold memberships go back to the treasury.'
+                : 'Up to 25 of its unsold memberships go back to the treasury.'
+          });
+      }
     }
   if (kind === 'auction' && cancelAuction)
     steps.push(

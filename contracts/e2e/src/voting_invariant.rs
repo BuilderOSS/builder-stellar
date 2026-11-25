@@ -13,7 +13,9 @@
 //! Token sees, so random transfers and mints between wallets and the three
 //! system holders cover them. A vault module that holds tokens is registered
 //! (non-voting) and unregistered at random, and members delegate to it too
-//! (modules can be delegates, review 2 C3). The membership switches
+//! (modules can be delegates, review 2 C3). Unregistering the vault while it
+//! holds tokens is refused and moves nothing, so the sequence empties it
+//! first. The membership switches
 //! (docs/designs/locked-tokens.md) flip at random: locked transfers, members-only
 //! delegation and recovery, with `dao_transfer` and `agent_transfer` in the mix;
 //! a movement or delegation the switches refuse must move nothing. The
@@ -289,18 +291,45 @@ impl World {
                 }
             }
             // Register the vault (moving the votes of what it holds out of the
-            // supply) or unregister it (self-delegating it, moving them back).
+            // supply) or unregister it. A vault that still holds tokens is
+            // refused, moving nothing; it then hands its tokens to wallets (it
+            // is custody, so even a locked token may leave) and unregisters.
             5 => {
                 let kind = soroban_sdk::Symbol::new(&self.e, "custom_vault");
                 let holding = self.token.balance(&self.vault) > 0;
                 if self.vault_registered {
+                    if !holding {
+                        self.token.unregister_module(&self.vault);
+                        self.vault_registered = false;
+                        return "unregister";
+                    }
+                    let before = (
+                        self.token.balance(&self.vault),
+                        self.token.total_supply(),
+                        self.token.modules().len(),
+                    );
+                    let refused = self.token.try_unregister_module(&self.vault);
+                    assert_eq!(
+                        refused.err().unwrap().unwrap(),
+                        soroban_sdk::Error::from_contract_error(7222)
+                    );
+                    let after = (
+                        self.token.balance(&self.vault),
+                        self.token.total_supply(),
+                        self.token.modules().len(),
+                    );
+                    assert_eq!(before, after, "a refused unregister changed state");
+                    // Recipients follow the id, so emptying draws nothing from
+                    // the generator and the rest of the sequence is unchanged.
+                    for id in 0..minted {
+                        if self.token.owner_of(&id) == self.vault {
+                            let to = self.wallets[id as usize % self.wallets.len()].clone();
+                            self.token.transfer(&self.vault, &to, &id);
+                        }
+                    }
                     self.token.unregister_module(&self.vault);
                     self.vault_registered = false;
-                    if holding {
-                        "unregister holding"
-                    } else {
-                        "unregister"
-                    }
+                    "unregister refused, then emptied"
                 } else {
                     self.token.register_module(&kind, &self.vault, &true);
                     self.vault_registered = true;
@@ -381,7 +410,10 @@ impl World {
 fn voting_units_match_balances_and_checkpoints_add_up() {
     let mut ran: std::collections::BTreeMap<&'static str, u32> = Default::default();
     let mut held_by_vault = 0u32;
-    for seed in [1_u64, 7, 42, 2026] {
+    // Eight seeds: an unregister empties the vault, so registering a vault
+    // that already holds tokens comes up less often per run than it did
+    // when unregistering left the tokens in place.
+    for seed in [1_u64, 7, 42, 2026, 3, 99, 512, 4096] {
         let mut world = World::new();
         let mut rng = Lcg(seed);
         world.assert_invariant(0, "launch");
@@ -424,7 +456,7 @@ fn voting_units_match_balances_and_checkpoints_add_up() {
         "transfer",
         "delegate",
         "register holding",
-        "unregister holding",
+        "unregister refused, then emptied",
     ] {
         assert!(
             ran.get(op).copied().unwrap_or(0) >= 20,

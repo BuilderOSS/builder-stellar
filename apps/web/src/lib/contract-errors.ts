@@ -103,6 +103,7 @@ const ERRORS: Record<number, string> = {
   7219: 'This module is not a transfer agent (NotTransferAgent).',
   7220: 'A DAO transfer cannot move tokens held by a module (ModuleCustody).',
   7221: 'Votes can only be delegated to members of this tribe (DelegateNotMember).',
+  7222: 'This module still holds memberships, so it can’t be removed yet: empty it first (ModuleHoldsTokens).',
   // metadata
   7301: 'Metadata is not initialised.',
   7302: 'Treasury mismatch.',
@@ -142,6 +143,8 @@ const ERRORS: Record<number, string> = {
   7416: 'There is no pending refund for this address.',
   7417: 'Auction time buffer must be between 1 and 86,400 seconds.',
   7418: 'A bid comment can be at most 1,024 bytes (CommentTooLong).',
+  7419: 'The auction’s payment asset must be a Stellar asset contract (NotStellarAsset).',
+  7420: 'That token is in the running auction: settle or cancel the auction first (TokenInAuction).',
   // governor
   7501: 'Queue delay must be at least 300 seconds.',
   7502: 'Proposal threshold must be at least 1 vote and cannot exceed the voting supply.',
@@ -189,9 +192,11 @@ const ERRORS: Record<number, string> = {
   7722: 'This pool sold its limit for now; try again later (PoolRateLimited).',
   7723: 'That token is no longer in this pool; pick another (NotInPool).',
   7724: 'Too many pools are open: close and sweep one first (TooManyPools).',
-  7725: 'Close the pool before sweeping it (PoolOpen).',
+  7725: 'Close the pool before sweeping it, and sweep every pool before recovering a token (PoolOpen).',
   7726: 'Pool size, buyer cap, sales rate and period must all be above zero (InvalidPool).',
   7727: 'This pool is fully stocked (PoolFullyStocked).',
+  7728: 'The market’s payment asset must be a Stellar asset contract (NotStellarAsset).',
+  7729: 'Pause the market first (NotPaused).',
   // minter
   7801: 'Claim at least one token, and lists hold at least one (InvalidAmount).',
   7803: 'One claim mints at most 43 tokens; claim the rest in another transaction (BatchTooLarge).',
