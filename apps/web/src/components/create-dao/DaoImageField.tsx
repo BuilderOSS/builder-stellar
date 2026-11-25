@@ -73,7 +73,7 @@ export function DaoImageField() {
           <img src={preview} alt="Tribe image preview" />
         ) : (
           // An uploaded image tries every IPFS gateway before the default image: a gateway that refuses
-          // the file (a dedicated gateway serves only its own account's files) is not the last word.
+          // the file (a dedicated gateway answers only its allowed sites) is not the last word.
           <FallbackImage
             src={image === DEFAULT_DAO_IMAGE_URL ? LOCAL_DEFAULT_DAO_IMAGE_URL : image}
             errorFallbackSrc={LOCAL_DEFAULT_DAO_IMAGE_URL}

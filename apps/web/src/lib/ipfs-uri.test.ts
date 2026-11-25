@@ -41,3 +41,15 @@ describe('IPFS gateway order', () => {
     expect(urls?.every((url) => url.endsWith('/ipfs/bafkreiexample/art/head.png'))).toBe(true);
   });
 });
+
+describe('dedicated Pinata gateways', () => {
+  it('tells a dedicated gateway from the public ones', async () => {
+    const { isDedicatedPinataGateway } = await load();
+
+    expect(isDedicatedPinataGateway('https://nouns-builder.mypinata.cloud/ipfs/bafkreiexample')).toBe(true);
+    expect(isDedicatedPinataGateway('https://gateway.pinata.cloud/ipfs/bafkreiexample')).toBe(false);
+    expect(isDedicatedPinataGateway('https://mypinata.cloud.example.com/ipfs/bafkreiexample')).toBe(false);
+    expect(isDedicatedPinataGateway('/images/default-dao.png')).toBe(false);
+    expect(isDedicatedPinataGateway('')).toBe(false);
+  });
+});

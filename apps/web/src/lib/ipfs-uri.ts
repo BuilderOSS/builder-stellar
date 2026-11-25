@@ -5,9 +5,7 @@
 
 /**
  * The gateway tried first when `NEXT_PUBLIC_PINATA_GATEWAY` is unset. Pinata's public gateway serves
- * every public file, including the ones this app's uploads pin. A dedicated `*.mypinata.cloud` gateway
- * serves only its own account's files (401, `ERR_ID:00024`, for any other), so set the variable to a
- * dedicated gateway only when it belongs to the account behind `PINATA_JWT`.
+ * every public file to any request, including the ones this app's uploads pin.
  */
 export const DEFAULT_PINATA_GATEWAY = 'gateway.pinata.cloud';
 
@@ -21,11 +19,28 @@ export const IPFS_GATEWAYS = [
       'dweb.link',
       'w3s.link',
       'ipfs.decentralized-content.com',
-      // Nouns Builder's dedicated gateway: it serves only files pinned in that account, so it is last.
+      // Nouns Builder's dedicated gateway: it answers only its allowed sites (see
+      // isDedicatedPinataGateway), so it is last.
       'nouns-builder.mypinata.cloud'
     ].map((gateway) => `https://${gateway.replace(/^https?:\/\//, '').replace(/\/$/, '')}`)
   )
 ];
+
+/**
+ * Whether a URL is on a dedicated Pinata gateway (`<name>.mypinata.cloud`). A dedicated gateway with
+ * allowed sites (Pinata's Host Origin access control) answers only a request whose `Origin` header is
+ * one of those sites, written with `https://`. Any other request gets 401 (`ERR_ID:00024`), including
+ * a link opened directly, a server fetch, and a plain `<img>`, none of which send an `Origin`. So an
+ * image from one needs `crossorigin`, and still loads only on an allowed site; the other gateways
+ * stay as fallbacks.
+ */
+export function isDedicatedPinataGateway(url: string): boolean {
+  try {
+    return new URL(url).hostname.endsWith('.mypinata.cloud');
+  } catch {
+    return false;
+  }
+}
 
 const CID_PATTERN = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|ba[A-Za-z0-9]{50,})$/;
 
