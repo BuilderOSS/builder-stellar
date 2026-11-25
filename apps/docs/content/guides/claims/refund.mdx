@@ -37,6 +37,8 @@ Most claim lists need no refunds. Tokens are minted only when someone claims the
 
   A refund goes to the wallet that paid, whoever sends it. The claims contract has no way to send it anywhere else. If that wallet can't receive the asset, for example because the asset's issuer froze it, the refund fails and the payment stays held until it can go through. Only payments made by claiming are held for anyone: assets sent to the claims contract directly can't be returned.
 
+  If the claims contract's own refund code ever fails, the launch admin can replace it with a fixed version that the platform publishes as the latest claims release (`recover_claims`). The replacement takes over the held payments, so the Manager lets it run only at least seven days (or the platform's upgrade notice, if longer) after the fix was published and after the drive's deadline. Until the notice passes, your payment stays with the code you paid into, so take it back soon after the drive fails.
+
   On a normal list, the contract has no refund. The part of the mint allowance a list didn't use stays with the claims module.
 
   You pay the Stellar network fee in XLM. Refunds are public on chain.

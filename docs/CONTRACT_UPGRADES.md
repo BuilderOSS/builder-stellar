@@ -221,7 +221,13 @@ registry only vouches for Manager-approved hashes.
 **Failed assurance drives.** An open drive freezes its DAO's upgrades (every admin is the Treasury, which can't
 act before launch). If a drive fails and the ClaimMinter's refund code is broken, the launch admin recorded in
 `PendingDao` runs `manager.recover_claims(token, from_hash, to_hash)` to move that DAO's ClaimMinter to a
-Manager-approved `claims` hash; it works only once the drive has failed and never on a live module
+`ClaimMinter` hash. It works only once the drive has failed and never on a live module. The Manager admin
+registers the fix, approves the path from the running hash and announces the fix as latest for `ClaimMinter`
+(`set_latest_implementation`; otherwise `UpgradeNotLatest`, 7131). The upgrade then waits out the Manager's notice
+after the later of the approval and the announcement (`upgrade_delay()` ledgers, never less than seven days of
+ledgers), and the same notice in seconds (five per ledger, never less than seven days) after the drive's deadline
+(`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
+latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
 (SECURITY_MODEL, Assurance launch).
 
 ## Approving upgrade paths for DAO modules
