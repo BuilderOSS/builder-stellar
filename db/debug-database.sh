@@ -10,50 +10,21 @@
 # - Permissions
 #
 # Usage:
-#   ./db/debug-database.sh [database_url]
 #   DATABASE_URL=postgres://... ./db/debug-database.sh
 #
 
-set -e  # Exit on error
-
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-# Get database URL from argument or environment
-DATABASE_URL="${1:-$DATABASE_URL}"
-
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}Error: DATABASE_URL not provided${NC}"
-  echo ""
-  echo "Usage:"
-  echo "  ./db/debug-database.sh postgres://user:pass@host:5432/dbname"
-  echo "  DATABASE_URL=postgres://... ./db/debug-database.sh"
-  exit 1
-fi
 
 echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Database Debug Report${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
 echo ""
 
-# Check if psql is installed
-if ! command -v psql &> /dev/null; then
-  echo -e "${RED}Error: psql is not installed${NC}"
-  exit 1
-fi
-
-# Test database connection
 echo -e "${YELLOW}→ Testing database connection...${NC}"
-if ! psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
-  echo -e "${RED}✗ Failed to connect to database${NC}"
-  exit 1
-fi
-echo -e "${GREEN}✓ Connected successfully${NC}"
+require_database "${1:-}"
+echo -e "${GREEN}✓ Connected to $DB_TARGET${NC}"
 echo ""
 
 # Database info
@@ -62,7 +33,7 @@ echo -e "${CYAN}Database Information${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-psql "$DATABASE_URL" << 'EOF'
+psql << 'EOF'
 SELECT
   current_database() as database_name,
   current_user as connected_as,
@@ -77,7 +48,7 @@ echo -e "${CYAN}Database Roles${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-psql "$DATABASE_URL" << 'EOF'
+psql << 'EOF'
 SELECT
   rolname as role_name,
   rolcanlogin as can_login,
@@ -91,8 +62,8 @@ EOF
 
 echo ""
 
-GOLDSKY_EXISTS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'goldsky_writer'" | tr -d ' ')
-APP_EXISTS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'app_server'" | tr -d ' ')
+GOLDSKY_EXISTS=$(psql -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'goldsky_writer'" | tr -d ' ')
+APP_EXISTS=$(psql -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'app_server'" | tr -d ' ')
 
 if [ "$GOLDSKY_EXISTS" -eq 0 ]; then
   echo -e "${YELLOW}⚠️  goldsky_writer role does not exist${NC}"
@@ -110,7 +81,7 @@ echo -e "${CYAN}Database Schemas${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-psql "$DATABASE_URL" << 'EOF'
+psql << 'EOF'
 SELECT
   schema_name,
   schema_owner
@@ -138,7 +109,7 @@ echo -e "${CYAN}Tables per Schema${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-psql "$DATABASE_URL" << 'EOF'
+psql << 'EOF'
 SELECT
   schemaname as schema_name,
   COUNT(*) as table_count,
@@ -168,10 +139,10 @@ echo -e "${CYAN}Applied Migrations${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-MIGRATIONS_TABLE_EXISTS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'" | tr -d ' ')
+MIGRATIONS_TABLE_EXISTS=$(psql -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'" | tr -d ' ')
 
 if [ "$MIGRATIONS_TABLE_EXISTS" -eq 1 ]; then
-  psql "$DATABASE_URL" << 'EOF'
+  psql << 'EOF'
 SELECT
   version,
   applied_at
@@ -192,7 +163,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 if [ "$GOLDSKY_EXISTS" -eq 1 ] || [ "$APP_EXISTS" -eq 1 ]; then
-  psql "$DATABASE_URL" << 'EOF'
+  psql << 'EOF'
 SELECT
   grantee,
   table_schema,
@@ -208,8 +179,8 @@ EOF
   echo ""
 
   # Check if permissions are granted
-  GOLDSKY_PERMS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee = 'goldsky_writer'" | tr -d ' ')
-  APP_PERMS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee = 'app_server'" | tr -d ' ')
+  GOLDSKY_PERMS=$(psql -t -c "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee = 'goldsky_writer'" | tr -d ' ')
+  APP_PERMS=$(psql -t -c "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee = 'app_server'" | tr -d ' ')
 
   if [ "$GOLDSKY_EXISTS" -eq 1 ] && [ "$GOLDSKY_PERMS" -eq 0 ]; then
     echo -e "${YELLOW}⚠️  goldsky_writer has no table permissions${NC}"
@@ -231,7 +202,7 @@ echo -e "${CYAN}Summary and Next Steps${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-SCHEMAS_COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'marketplace', 'claims', 'app')" | tr -d ' ')
+SCHEMAS_COUNT=$(psql -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'marketplace', 'claims', 'app')" | tr -d ' ')
 
 # Determine what needs to be done
 NEEDS_ROLES=false

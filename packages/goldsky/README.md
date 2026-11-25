@@ -116,7 +116,8 @@ any change to a transform's output (kinds, summaries, actors, addresses) or a ne
 replay (details in [`db/README.md`](../../db/README.md)):
 
 1. `./scripts/deploy.sh delete` (the pipeline must be stopped before the schema drop)
-2. `DROP SCHEMA streamling CASCADE;` then `db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh`
+2. `DROP SCHEMA streamling CASCADE;` then `db/reset-database.sh && db/migrate.sh && db/grant-permissions.sh`
+   (the reset asks for the database name, typed in full)
 3. `pnpm generate && ./scripts/deploy.sh deploy`
 4. Verify as an admin role once the replay has caught up:
    - `SELECT count(*) FROM chain.decoded_events WHERE contract_role = 'unknown'` → 0

@@ -25,7 +25,7 @@ export function marketplaceTradeFailure(error: unknown) {
   if (error instanceof AuthError || error instanceof MarketplaceError || error instanceof ZodError)
     return marketplaceFailure(error);
   console.error('[marketplace preparation]', error);
-  return NextResponse.json({ message: marketplaceErrorMessage(error) }, { status: 422 });
+  return NextResponse.json({ message: marketplaceErrorMessage(error, { showUnknown: false }) }, { status: 422 });
 }
 export async function marketplaceActor() {
   const actor = await requireAuthenticatedSession();

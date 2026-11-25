@@ -2,8 +2,10 @@ import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { NextResponse } from 'next/server';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { internalErrorResponse } from '@/lib/api-error';
 import { parseContractErrorCode } from '@/lib/contract-errors';
 import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
+import { isDaoNotFound } from '@/lib/dao-db';
 import { getGoldskyAuctionBids, getGoldskyAuctionHistory } from '@/lib/goldsky';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/server-cache';
@@ -98,8 +100,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       })
     );
   } catch (error) {
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : 'Auction unavailable' },
+    if (isDaoNotFound(error))
+      return NextResponse.json(
+        { message: 'Tribe not found.' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      );
+    return internalErrorResponse(
+      'auction',
+      error,
+      { message: 'The auction is unavailable. Try again.' },
       { status: 500 }
     );
   }

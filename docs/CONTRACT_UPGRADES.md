@@ -123,6 +123,8 @@ DAOs keep their addresses and history only through upgrades.
    TEST_DATABASE_URL="postgres://$(whoami)@localhost:5432/builder_migration_test" ./db/test-migrations.sh
    dropdb -h localhost builder_migration_test
    ```
+   The role in the URL must be a superuser: the run creates roles and the writer's event trigger
+   ([db operations](../db/README.md#verifying-changes)).
 
 Commit all of the above before touching the network.
 
@@ -133,8 +135,8 @@ then each DAO.
 
 1. **Database**: apply the migration and refresh grants.
    ```sh
-   ./db/migrate.sh "$ADMIN_DATABASE_URL"
-   ./db/grant-permissions.sh "$ADMIN_DATABASE_URL"
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/migrate.sh
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/grant-permissions.sh
    ```
 2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`, the name `pnpm generate`
    writes into `packages/goldsky/pipelines/builder-stellar-events.yaml`): apply it **in place**
@@ -207,7 +209,7 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
   before it (all on `STORAGE_VERSION` 1) have none, and the module could no longer run proposals.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
-- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
+- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file, after you type the database name.
 - Registry records cannot be edited or deleted; a mistaken version string needs a new build (new hash).
 
 ## Manager upgrades
@@ -243,7 +245,13 @@ registry only vouches for Manager-approved hashes.
 **Failed assurance drives.** An open drive freezes its DAO's upgrades (every admin is the Treasury, which can't
 act before launch). If a drive fails and the ClaimMinter's refund code is broken, the launch admin recorded in
 `PendingDao` runs `manager.recover_claims(token, from_hash, to_hash)` to move that DAO's ClaimMinter to a
-Manager-approved `claims` hash; it works only once the drive has failed and never on a live module
+`ClaimMinter` hash. It works only once the drive has failed and never on a live module. The Manager admin
+registers the fix, approves the path from the running hash and announces the fix as latest for `ClaimMinter`
+(`set_latest_implementation`; otherwise `UpgradeNotLatest`, 7131). The upgrade then waits out the Manager's notice
+after the later of the approval and the announcement (`upgrade_delay()` ledgers, never less than seven days of
+ledgers), and the same notice in seconds (five per ledger, never less than seven days) after the drive's deadline
+(`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
+latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
 (SECURITY_MODEL, Assurance launch).
 
 ## Approving upgrade paths for DAO modules

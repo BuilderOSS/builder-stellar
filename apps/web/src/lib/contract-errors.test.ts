@@ -48,6 +48,7 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage(undefined, 7415)).toBeUndefined();
     expect(getContractErrorMessage('manager', 7130)).toContain('UpgradeDelayNotElapsed');
     expect(getContractErrorMessage('manager', 7143)).toContain('UnknownAgentKind');
+    expect(getContractErrorMessage('manager', 7146)).toContain('InvalidPaymentAsset');
     // Queue raises 5006 for an already-queued proposal too.
     expect(getContractErrorMessage('governor', 5006)).toContain('already queued');
     expect(getContractErrorMessage('governor', 5009)).toBe(

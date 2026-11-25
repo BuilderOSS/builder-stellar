@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { parseLimit, parseOffset } from '@/lib/api-pagination';
 import { getGoldskyActivityFeed } from '@/lib/goldsky';
 
@@ -28,13 +29,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return NextResponse.json(
-      {
-        items: [],
-        generatedAt: new Date().toISOString(),
-        message: error instanceof Error ? error.message : 'Activity feed unavailable'
-      },
-      { status: 503, headers: { 'Cache-Control': 'no-store' } }
-    );
+    return internalErrorResponse('activity-feed', error, {
+      items: [],
+      generatedAt: new Date().toISOString(),
+      message: 'Activity is unavailable. Try again.'
+    });
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { directoryScope } from '@/lib/member-directory/query';
 import { holderTokenId } from '@/lib/member-directory/validation';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
@@ -44,7 +45,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       metadataIssue: metadata.status === 'rejected' ? 'Artwork metadata is unavailable. Try refreshing.' : null
     };
     return NextResponse.json(body, { headers });
-  } catch {
-    return NextResponse.json({ message: 'Token details are unavailable. Try again.' }, { status: 503, headers });
+  } catch (error) {
+    return internalErrorResponse('token', error, { message: 'Token details are unavailable. Try again.' }, { headers });
   }
 }

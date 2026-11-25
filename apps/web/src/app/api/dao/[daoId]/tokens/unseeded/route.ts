@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { directoryScope } from '@/lib/member-directory/query';
 import { prisma } from '@/lib/prisma';
 
@@ -34,9 +35,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
-    return NextResponse.json(
-      { tokenIds: [], message: error instanceof Error ? error.message : 'Unseeded tokens unavailable' },
-      { status: 503, headers: { 'Cache-Control': 'no-store' } }
-    );
+    return internalErrorResponse('unseeded-tokens', error, {
+      tokenIds: [],
+      message: 'Tokens without artwork could not be listed. Try again.'
+    });
   }
 }

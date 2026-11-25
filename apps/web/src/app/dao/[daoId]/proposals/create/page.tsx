@@ -45,6 +45,7 @@ import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { simulatedProposalId } from '@/lib/proposal-id';
 import {
   encodeProposalMetadata,
+  normalizeUrl,
   PROPOSAL_DESCRIPTION_MAX_BYTES,
   proposalDescriptionBytes,
   validateProposalMetadataDraft
@@ -140,6 +141,8 @@ export default function ProposalCreatePage() {
 
   // Metadata validation
   const metadataValidation = validateProposalMetadataDraft(metadata);
+  // The link exactly as it will be submitted (a bare address gains https://; unsafe schemes drop).
+  const proposalLink = normalizeUrl(metadata.url);
   const descriptionBytes = proposalDescriptionBytes(metadata);
 
   const readiness = reviewReadiness(metadata, queuedActions);
@@ -553,9 +556,9 @@ export default function ProposalCreatePage() {
                     <section className={review} aria-label="Proposal preview">
                       <h2 className={reviewTitle}>{metadata.title}</h2>
                       <Markdown source={metadata.description} variant="rich" />
-                      {metadata.url ? (
-                        <a href={metadata.url} target="_blank" rel="noreferrer" className={reviewLink}>
-                          {metadata.url}
+                      {proposalLink ? (
+                        <a href={proposalLink} target="_blank" rel="noreferrer" className={reviewLink}>
+                          {proposalLink}
                         </a>
                       ) : null}
                       <h3 className={reviewHeading}>

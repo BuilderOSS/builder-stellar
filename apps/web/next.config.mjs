@@ -1,3 +1,5 @@
+import { securityHeaderRules } from './security-headers.mjs';
+
 // The public site (see src/lib/site.ts). NEXT_PUBLIC_SITE_URL overrides it per deployment.
 const SITE_URL = new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://tribes.build');
 
@@ -32,6 +34,11 @@ const nextConfig = {
       { protocol: 'https', hostname: LEGACY_HOST, pathname: '/images/**' },
       { protocol: 'https', hostname: LEGACY_HOST, pathname: '/api/render/**' }
     ]
+  },
+  // Baseline security headers on every response (security-headers.mjs); pages also get a
+  // per-request Content-Security-Policy from src/middleware.ts.
+  async headers() {
+    return securityHeaderRules();
   },
   async redirects() {
     return [

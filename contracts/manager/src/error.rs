@@ -73,9 +73,13 @@ pub enum ManagerError {
     SlugNotFound = 7128,
     /// `change_slug` to the slug the DAO already has
     SlugUnchanged = 7129,
-    /// The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+    /// The upgrade notice has not passed: `upgrade_manager` less than
+    /// `upgrade_delay()` ledgers after the approval or the announcement, or
+    /// `recover_claims` before that notice has also passed since the drive's
+    /// deadline
     UpgradeDelayNotElapsed = 7130,
-    /// `upgrade_manager` to a hash that is not the latest Manager implementation.
+    /// `upgrade_manager` or `recover_claims` to a hash that is not the one
+    /// announced as latest for its name (`latest_pointer`)
     UpgradeNotLatest = 7131,
     /// A module's payment asset differs from the one recorded when it was
     /// created (the launch admin changed it in Setup); change it back first
@@ -112,4 +116,7 @@ pub enum ManagerError {
     /// The address does not answer the vote source interface
     /// (`common::clients::VoteSourceApi`)
     InvalidVoteSource = 7145,
+    /// A payment asset is not a Stellar Asset Contract (`create_dao`,
+    /// `create_module`, `open_assurance`)
+    InvalidPaymentAsset = 7146,
 }

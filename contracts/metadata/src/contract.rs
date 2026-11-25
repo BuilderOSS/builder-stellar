@@ -14,26 +14,40 @@ pub const MAX_PAGE: u32 = 50;
 
 /// Metadata Contract
 ///
-/// Manages metadata for Nouns-style artwork generation for each NFT token.
-/// Each DAO has its own Metadata contract with custom properties and items.
+/// Holds one DAO's artwork (properties, items and IPFS groups), seeds each
+/// token's trait selections when the Token mints it, and builds its SEP-50
+/// `token_uri` document on-chain. Each DAO has its own Metadata contract.
 #[contract]
 pub struct MetadataContract;
 
 #[contractimpl]
 impl MetadataContract {
-    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    /// One-shot launch handoff (Setup -> Live).
     ///
     /// Hands the admin (artwork, settings and upgrades) to `treasury`, marks
-    /// the module live, and emits `MetadataLaunched`. A second call panics
-    /// with `AlreadyLive`.
+    /// the module Live, and emits `MetadataLaunched`. After an early
+    /// `handoff` the admin is already the Treasury and does not move again.
+    ///
+    /// # Authorization
+    ///
+    /// The Manager wired at construction (`launch_dao` / `launch_when_ready`).
+    ///
+    /// # Panics
+    ///
+    /// * `AlreadyLive` - a second call
+    /// * `TreasuryMismatch` - `treasury` is not the Treasury wired at construction
     pub fn launch(env: Env, treasury: Address) {
         let manager = Self::manager(&env);
+        // Only the Manager launches, after its launch checks have passed.
         manager.require_auth();
+        // One-shot: a second launch could not move the admin anywhere new,
+        // but must not emit a second `MetadataLaunched`.
         common::lifecycle::mark_live(&env);
         let wired: Option<Address> = env
             .storage()
             .instance()
             .get(&common::ns(&env, DataKey::Treasury));
+        // The admin may only move to this DAO's own Treasury.
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
@@ -42,16 +56,29 @@ impl MetadataContract {
         emit_launched(&env, &treasury);
     }
 
-    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
-    /// to the Treasury and the contract stays in Setup, so artwork and
-    /// settings are frozen until launch.
+    /// Early handoff for an assurance drive (`manager.open_assurance`): the
+    /// admin moves to the Treasury and the contract stays in Setup. The
+    /// Treasury cannot act before launch, so artwork and settings are frozen
+    /// until then.
+    ///
+    /// # Authorization
+    ///
+    /// The Manager wired at construction.
+    ///
+    /// # Panics
+    ///
+    /// * `AlreadyLive` - the contract is already Live
+    /// * `TreasuryMismatch` - `treasury` is not the Treasury wired at construction
     pub fn handoff(env: Env, treasury: Address) {
+        // Only the Manager freezes Setup, as part of opening a drive.
         Self::manager(&env).require_auth();
+        // After launch the admin is already the Treasury; nothing to hand off.
         common::lifecycle::require_setup(&env);
         let wired: Option<Address> = env
             .storage()
             .instance()
             .get(&common::ns(&env, DataKey::Treasury));
+        // The admin may only move to this DAO's own Treasury.
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
@@ -59,17 +86,24 @@ impl MetadataContract {
         common::ttl::extend_instance(&env);
     }
 
-    /// Initialize the metadata contract
+    /// Initialise the metadata contract. Runs once, when the Manager deploys
+    /// it in `create_dao`; it needs no authorization.
     ///
     /// # Arguments
     ///
-    /// * `token` - The associated NFT token contract
+    /// * `token` - The associated NFT token contract; the only caller of the
+    ///   mint hooks
     /// * `profile` - DAO profile JSON (description, links, image; 1 to
     ///   `common::MAX_PROFILE_LENGTH` bytes). Emitted in `ProfileUpdated`
     ///   (seq 0); only its hash is stored.
     /// * `renderer_base` - Base URL of the image compositor used by `token_uri`
+    /// * `manager` - The Manager: the only caller of `launch` and `handoff`,
+    ///   and the registry `upgrade` and `version` read
+    /// * `current_hash` - The WASM hash this contract was deployed from
     /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO treasury; `launch` must be called with exactly this address
+    /// * `property_names`, `items`, `ipfs_group` - Initial artwork, added as by
+    ///   `add_properties`; both lists empty means no artwork yet
     ///
     /// # Panics
     ///
@@ -88,6 +122,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) {
+        // The renderer base is copied verbatim into every token's JSON.
         if let Err(err) = Self::check_text(&renderer_base, common::MAX_STRING_LENGTH) {
             soroban_sdk::panic_with_error!(&env, err);
         }
@@ -118,14 +153,31 @@ impl MetadataContract {
         emit_metadata_initialized(&env, &token, &renderer_base, &admin);
     }
 
+    /// Replace this contract's code with `to_hash`.
+    ///
+    /// # Authorization
+    ///
+    /// The admin: the launch admin in Setup, the Treasury (by proposal) once
+    /// Live. During an assurance drive the admin is the Treasury, which
+    /// cannot act before launch, so upgrades are frozen.
+    ///
+    /// # Guarantees
+    ///
+    /// `from_hash` must be the running hash (`HashMismatch`) and the Manager
+    /// registry must approve `from_hash -> to_hash` with a non-revoked target
+    /// (`UpgradeNotApproved`); see `common::upgrade::apply`.
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        // Code changes are the DAO's decision, through its admin.
         common::admin::require_admin(&env);
         let manager = Self::manager(&env);
         common::upgrade::apply(&env, &manager, &from_hash, &to_hash);
     }
 
-    /// Advance the storage layout after an upgrade (admin only).
+    /// Advance the storage layout after an upgrade (admin only). Panics
+    /// `NothingToMigrate` unless the stored layout is older than this code's
+    /// `STORAGE_VERSION`.
     pub fn migrate(env: Env) {
+        // Rewrites stored data, so only the admin who upgraded may run it.
         common::admin::require_admin(&env);
         common::upgrade::migrate(&env, STORAGE_VERSION);
     }
@@ -135,19 +187,27 @@ impl MetadataContract {
         common::upgrade::storage_version(&env)
     }
 
-    /// Module admin: the launch admin during setup, the Treasury once live.
+    /// Module admin: the launch admin during setup, the Treasury once live
+    /// (or from an assurance drive's early `handoff`).
     pub fn admin(env: Env) -> Address {
         common::admin::admin(&env)
     }
 
+    /// Release version of the running code, looked up in the Manager
+    /// registry by `wasm_hash()`. Panics `ImplementationNotFound` if the
+    /// registry has no record of it.
     pub fn version(env: Env) -> String {
         common::upgrade::version(&env, &Self::manager(&env))
     }
 
+    /// The WASM hash this contract recorded at construction or its last
+    /// `upgrade`. It is the contract's own record; the host's view of the
+    /// running code is `Address::executable()`.
     pub fn wasm_hash(env: Env) -> BytesN<32> {
         common::upgrade::current_hash(&env)
     }
 
+    /// The Manager wired at construction. Panics `ManagerNotSet` if absent.
     fn manager(env: &Env) -> Address {
         env.storage()
             .instance()
@@ -157,7 +217,9 @@ impl MetadataContract {
             })
     }
 
-    /// Add new properties and items
+    /// Add new properties and items. Items are appended to existing
+    /// properties or to the new ones in `names`; all of them share
+    /// `ipfs_group`, which is reused if it equals the last group stored.
     ///
     /// # Arguments
     ///
@@ -172,11 +234,16 @@ impl MetadataContract {
     /// # Errors
     ///
     /// * `OnePropertyAndItemRequired` - First addition must have at least 1 property and 1 item
-    /// * `PropertyHasNoItems` - Property created without items
-    /// * `TooManyProperties` - Exceeds 16 property limit
+    /// * `PropertyHasNoItems` - The call adds no items, or a new property gets none
+    /// * `TooManyProperties` - Exceeds the `MAX_PROPERTIES` (16) limit
     /// * `InvalidPropertySelected` - Item references non-existent property
     /// * `TooManyItems` - more than `MAX_ITEMS_PER_CALL` (30) items in one call;
-    ///   batch larger uploads across several calls (each adds its own IPFS group)
+    ///   batch larger uploads across several calls (calls with the same
+    ///   `ipfs_group` share one group)
+    /// * `PropertyFull` - a property would exceed `MAX_ITEMS_PER_PROPERTY`
+    /// * `TooManyIpfsGroups` - a new group beyond `MAX_IPFS_GROUPS`
+    /// * `StringTooLong` / `InvalidName` - a name or the group's strings
+    ///   break the caps or contain `"`, `\` or a control character
     pub fn add_properties(
         env: Env,
         names: Vec<String>,
@@ -184,19 +251,27 @@ impl MetadataContract {
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        // Check authorization
+        // The artwork is the admin's: the launch admin in Setup, the
+        // Treasury (by proposal) once Live.
         Self::require_admin(&env);
 
         Self::_add_properties(&env, names, items, ipfs_group)
     }
 
-    /// Delete all properties and recreate with new ones
+    /// Delete all properties and recreate with new ones. Tokens keep their
+    /// stored selections; `token_uri` leaves out any trait whose property
+    /// or item no longer exists, and an index that still exists now names
+    /// the new item at that position.
     ///
     /// WARNING: This can break existing token metadata if properties change structure
     ///
     /// # Authorization
     ///
     /// Admin only.
+    ///
+    /// # Errors
+    ///
+    /// As `add_properties`, for the new artwork.
     pub fn delete_and_recreate_properties(
         env: Env,
         names: Vec<String>,
@@ -204,7 +279,7 @@ impl MetadataContract {
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        // Check authorization
+        // Replacing the artwork is the admin's decision, as adding to it is.
         Self::require_admin(&env);
 
         // Reset the counts. Names, item pages and the IPFS group vector are
@@ -222,6 +297,9 @@ impl MetadataContract {
 
     /// Generate seed for a token upon mint (hook called by Token contract)
     ///
+    /// Writes the token's selections (an empty record when no properties
+    /// exist yet) and emits `SeedGenerated` when it seeds.
+    ///
     /// # Arguments
     ///
     /// * `token_id` - The token ID being minted
@@ -230,12 +308,17 @@ impl MetadataContract {
     ///
     /// Returns `true` if seed was generated successfully, `false` if no properties exist
     ///
+    /// # Authorization
+    ///
+    /// Only the Token wired at construction (its auth is required).
+    ///
     /// # Errors
     ///
-    /// Only the token contract may call this (its auth is required).
+    /// * `NotInitialized` - settings missing
     pub fn on_minted(env: Env, token_id: u32) -> Result<bool, Error> {
         common::ttl::extend_instance(&env);
-        // Verify caller is token contract
+        // Only the Token's mint path may seed: this overwrites the token's
+        // selections, so any other caller could re-roll its traits.
         Self::require_token(&env)?;
 
         let counts = Self::item_counts(&env);
@@ -253,8 +336,9 @@ impl MetadataContract {
         Ok(true)
     }
 
-    /// Re-seed a token that was minted before artwork existed (or whose
-    /// `on_minted` hook failed). Admin only.
+    /// Seed a token that was minted before artwork existed (or whose
+    /// `on_minted` hook failed). Admin only. A token that already has
+    /// selections is never re-seeded, so the admin cannot re-roll traits.
     ///
     /// # Errors
     ///
@@ -263,14 +347,17 @@ impl MetadataContract {
     /// * `NoProperties` - no properties are configured yet
     pub fn regenerate(env: Env, token_id: u32) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
+        // A repair for the DAO's own tokens, so the admin's.
         Self::require_admin(&env);
 
         let settings = get_settings(&env)?;
         // Existence by the id counter, not `owner_of`: a holder's ownership
-        // entry may have archived, which would fail the whole call.
+        // entry may have archived, which would fail the whole call. A future
+        // id is seeded by its own mint.
         if token_id >= common::clients::NftClient::new(&env, &settings.token).minted() {
             return Err(Error::TokenNotMinted);
         }
+        // Seeded traits are final: re-seeding would let the admin grind them.
         if !get_attributes(&env, token_id).is_empty() {
             return Err(Error::AlreadySeeded);
         }
@@ -292,11 +379,16 @@ impl MetadataContract {
     /// instead of once per token. Emits a single `SeedsGenerated` event for
     /// the whole range rather than one `SeedGenerated` per token.
     ///
+    /// # Authorization
+    ///
+    /// Only the Token wired at construction (its auth is required).
+    ///
     /// # Errors
     ///
-    /// Only the token contract may call this (its auth is required).
+    /// * `NotInitialized` - settings missing
     pub fn on_minted_batch(env: Env, first_token_id: u32, count: u32) -> Result<bool, Error> {
         common::ttl::extend_instance(&env);
+        // As `on_minted`: only the Token may write selections.
         Self::require_token(&env)?;
 
         let counts = Self::item_counts(&env);
@@ -321,19 +413,24 @@ impl MetadataContract {
         Ok(true)
     }
 
-    /// Get properties count
+    /// Number of properties (at most `MAX_PROPERTIES`). Anyone may read it.
     pub fn properties_count(env: Env) -> u32 {
         get_property_count(&env)
     }
 
     /// Paginated items of a property (`limit` <= `MAX_PAGE`). Returns an empty
     /// vec when `property_id` is out of range or `start` is past the end.
+    ///
+    /// # Errors
+    ///
+    /// * `LimitTooHigh` - `limit` above `MAX_PAGE`
     pub fn get_items(
         env: Env,
         property_id: u32,
         start: u32,
         limit: u32,
     ) -> Result<Vec<Item>, Error> {
+        // Bounds the pages one read loads.
         if limit > MAX_PAGE {
             return Err(Error::LimitTooHigh);
         }
@@ -365,7 +462,7 @@ impl MetadataContract {
         get_ipfs_group(&env, index)
     }
 
-    /// Get items count for a property
+    /// Item count of a property, 0 when it does not exist.
     pub fn items_count(env: Env, property_id: u32) -> u32 {
         get_item_count(&env, property_id).unwrap_or(0)
     }
@@ -385,12 +482,13 @@ impl MetadataContract {
         out
     }
 
-    /// Get IPFS data count
+    /// Number of IPFS groups in use (at most `MAX_IPFS_GROUPS`).
     pub fn ipfs_data_count(env: Env) -> u32 {
         get_ipfs_group_count(&env)
     }
 
-    /// Get property by ID
+    /// A property with all of its items, or `None` when it does not exist.
+    /// Reads every item page of the property (at most `MAX_ITEM_PAGES`).
     pub fn get_property(env: Env, property_id: u32) -> Option<Property> {
         assemble_property(&env, property_id)
     }
@@ -401,7 +499,13 @@ impl MetadataContract {
         get_properties(&env)
     }
 
-    /// Get the generated item selections for a minted token.
+    /// The generated item selections for a token, as
+    /// `[num_properties, item_index..]`.
+    ///
+    /// # Errors
+    ///
+    /// * `TokenNotMinted` - the token has no selections: it does not exist,
+    ///   or it was minted before any artwork
     pub fn get_attributes(env: Env, token_id: u32) -> Result<Vec<u32>, Error> {
         let attributes = get_attributes(&env, token_id);
         if attributes.is_empty() {
@@ -415,25 +519,32 @@ impl MetadataContract {
         get_ipfs_data(&env)
     }
 
-    /// Get settings
+    /// The token and renderer base. `NotInitialized` if never set.
     pub fn get_settings(env: Env) -> Result<Settings, Error> {
         get_settings(&env)
     }
 
-    /// Get token address
+    /// The Token this contract serves (the only caller of the mint hooks).
     pub fn token(env: Env) -> Result<Address, Error> {
         Ok(get_settings(&env)?.token)
     }
 
-    /// Get renderer base URL
+    /// Base URL of the image compositor `token_uri` points `image` at.
     pub fn renderer_base(env: Env) -> Result<String, Error> {
         Ok(get_settings(&env)?.renderer_base)
     }
 
-    /// Update renderer base URL (admin only).
+    /// Update renderer base URL (admin only). Emits `RendererBaseUpdated`.
+    ///
+    /// # Errors
+    ///
+    /// * `StringTooLong` / `InvalidName` - longer than
+    ///   `common::MAX_STRING_LENGTH`, or contains `"`, `\` or a control character
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
+        // Where every token's image points is the admin's setting.
         Self::require_admin(&env);
+        // Copied verbatim into every token's JSON.
         Self::check_text(&new_renderer_base, common::MAX_STRING_LENGTH)?;
 
         let mut settings = get_settings(&env)?;
@@ -452,10 +563,17 @@ impl MetadataContract {
     /// the profile (for example one proposed before another edit executed)
     /// fails with `ProfileSeqMismatch` instead of overwriting newer fields.
     /// Emits `ProfileUpdated` with the next seq; only the hash is stored.
+    ///
+    /// # Errors
+    ///
+    /// * `ProfileSeqMismatch` - `expected_seq` is not the current seq
+    /// * `InvalidProfile` - empty or longer than `common::MAX_PROFILE_LENGTH`
     pub fn update_profile(env: Env, expected_seq: u32, profile: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
+        // The DAO's public profile is the admin's to change.
         Self::require_admin(&env);
         let state = get_profile_state(&env)?;
+        // Optimistic concurrency: refuse an edit based on an older profile.
         if expected_seq != state.seq {
             return Err(Error::ProfileSeqMismatch);
         }
@@ -481,10 +599,15 @@ impl MetadataContract {
     /// `get_ipfs_group`. Traits whose property or item no longer exists (after
     /// a reset) are left out.
     ///
+    /// Anyone may call it; it only reads.
+    ///
     /// # Errors
     ///
-    /// * `NotSeeded` - the token has no attributes yet (minted before artwork)
-    /// * `InvalidName` - `token_name` contains `"`, `\` or a control character
+    /// * `NotSeeded` - the token has no attributes yet (minted before
+    ///   artwork, or not minted: existence is not checked here)
+    /// * `StringTooLong` / `InvalidName` - `token_name` is longer than
+    ///   `common::MAX_STRING_LENGTH` or contains `"`, `\` or a control character
+    /// * `TokenUriTooLong` - the document would not fit its buffer
     pub fn token_uri(env: Env, token_id: u32, token_name: String) -> Result<String, Error> {
         let attributes = get_attributes(&env, token_id);
         if attributes.is_empty() {
@@ -563,15 +686,19 @@ impl MetadataContract {
             return Err(Error::PropertyHasNoItems);
         }
 
+        // Bounds the entries one call writes (see `MAX_ITEMS_PER_CALL`).
         if num_new_items > MAX_ITEMS_PER_CALL {
             return Err(Error::TooManyItems);
         }
 
-        // Check if not too many properties
+        // Each property takes two bytes of the 32-byte seed, and a record
+        // holds at most `MAX_PROPERTIES` indexes.
         if num_stored_properties + num_new_properties > MAX_PROPERTIES {
             return Err(Error::TooManyProperties);
         }
 
+        // Names are copied verbatim into the token JSON; the group's
+        // strings are capped to keep their entry small.
         Self::check_length_max(&ipfs_group.base_uri, common::MAX_STRING_LENGTH)?;
         Self::check_length_max(&ipfs_group.extension, common::MAX_EXTENSION_LENGTH)?;
         for name in names.iter() {
@@ -614,6 +741,8 @@ impl MetadataContract {
             }
 
             let count = counts.get(property_id).unwrap();
+            // Keeps every item index within the two bytes a stored
+            // selection holds, and the pages per property bounded.
             if count >= MAX_ITEMS_PER_PROPERTY {
                 return Err(Error::PropertyFull);
             }
@@ -657,6 +786,8 @@ impl MetadataContract {
         if count > 0 && groups.get(count - 1).as_ref() == Some(group) {
             return Ok(count - 1);
         }
+        // An item stores its group index in one byte, and every group sits
+        // in one entry, so the count stays bounded.
         if count >= MAX_IPFS_GROUPS {
             return Err(Error::TooManyIpfsGroups);
         }
@@ -729,12 +860,13 @@ impl MetadataContract {
         Bytes::from_array(env, &hash.to_array())
     }
 
+    /// Require the module admin's authorization (`common::admin`).
     fn require_admin(env: &Env) {
         common::admin::require_admin(env);
     }
 
-    /// Settings strings are bounded so the instance entry (loaded on every
-    /// mint hook) stays small.
+    /// Strings are capped so the entries that hold them stay small (the
+    /// settings sit in the instance entry, loaded on every mint hook).
     fn check_length_max(value: &String, max: u32) -> Result<(), Error> {
         if value.len() > max {
             return Err(Error::StringTooLong);
@@ -767,6 +899,7 @@ impl MetadataContract {
     /// Store the profile fingerprint at `seq` and emit the profile text.
     fn store_profile(env: &Env, seq: u32, profile: &String) -> Result<(), Error> {
         let len = profile.len();
+        // The text is event-only; the cap bounds the event's size.
         if len == 0 || len > common::MAX_PROFILE_LENGTH {
             return Err(Error::InvalidProfile);
         }
@@ -782,6 +915,7 @@ impl MetadataContract {
         Ok(())
     }
 
+    /// Require the authorization of the Token wired at construction.
     fn require_token(env: &Env) -> Result<(), Error> {
         let settings = get_settings(env)?;
         settings.token.require_auth();

@@ -1,18 +1,18 @@
-//! Manager Contract
-//!
-//! The central hub for the Stellar Builder platform, combining:
-//! 1. Implementation Management - Registry of contract implementations
-//! 2. DAO Factory - Atomic deployment of new DAOs
-//! 3. DAO Lifecycle - Deployment and launch handoff
+//! Manager contract: the Tribe Builder platform's implementation registry,
+//! DAO factory, launch path (direct or by assurance drive), and slug registry.
+//! The Manager has authority over a DAO only while it is pending; launch hands
+//! every contract to the DAO's Treasury.
 
 use common::clients::{
     ClaimsClient, DaoModuleClient, GovernorVoteSourceClient, NftClient, TreasuryLaunchClient,
-    VoteSourceClient, WasmHashClient,
+    VoteSourceClient,
 };
 use common::modules::{
     AssuranceState, AssuranceTerms, MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE,
 };
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec};
+use soroban_sdk::{
+    contract, contractimpl, Address, Bytes, BytesN, Env, Executable, String, Symbol, Val, Vec,
+};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -47,6 +47,22 @@ const MIN_BID_INCREMENT_PERCENT: u32 = 10;
 /// Longest an assurance drive may run (90 days, seconds): it bounds how long
 /// a drive holds its slug and keeps members' fees in escrow (review S2).
 pub const MAX_ASSURANCE_WINDOW: u64 = 90 * 86_400;
+/// Seconds per ledger used to measure the upgrade notice from a timestamp
+/// (a failed drive's deadline, in `recover_claims`): 86,400 seconds over
+/// `common::ttl::DAY_IN_LEDGERS`.
+pub const SECONDS_PER_LEDGER: u64 = 86_400 / common::ttl::DAY_IN_LEDGERS as u64;
+/// Shortest time members have after a failed drive's deadline to take their
+/// refunds before a recovery upgrade can apply (7 days, seconds). A lowered
+/// upgrade notice takes effect only after the old one, but before the
+/// deadline members cannot act on that warning, so the refund time has its
+/// own floor.
+pub const MIN_RECOVERY_REFUND_WINDOW: u64 = 7 * 86_400;
+/// The same floor in ledgers, for the notice a recovery target waits after
+/// its approval and announcement: a lowered notice cannot let a newly
+/// announced target (for example a second recovery right after a first)
+/// apply before members can refund with the code in place.
+pub const MIN_RECOVERY_NOTICE_LEDGERS: u32 =
+    (MIN_RECOVERY_REFUND_WINDOW / SECONDS_PER_LEDGER) as u32;
 
 #[contractimpl]
 impl ManagerContract {
@@ -54,16 +70,20 @@ impl ManagerContract {
     // Initialization
     // ========================================================================
 
-    /// Initialize the Manager contract with an admin.
+    /// Initialise the Manager. Runs once, at deployment; the factory starts
+    /// unpaused and the registry empty.
     ///
     /// # Arguments
     ///
-    /// * `admin` - The address that will control implementation management and factory settings
-    /// * `current_hash` - Current Manager WASM hash for upgrade tracking
-    /// * `version` - Current Manager version (e.g., "0.1.0")
-    /// `upgrade_delay`: ledgers between an approval and the earliest
-    /// `upgrade_manager` (`common::upgrade::RECOMMENDED_UPGRADE_DELAY` on a
-    /// public network; short on testnet). Changeable with `set_upgrade_delay`.
+    /// * `admin` - controls the registry, the factory pause, vote source
+    ///   approvals and the Manager's own upgrade
+    /// * `current_hash` - the Manager's own WASM hash, the `from_hash` of its
+    ///   first `upgrade_manager`
+    /// * `version` - the Manager's release version (for example "0.1.0")
+    /// * `upgrade_delay` - the upgrade notice in ledgers, for
+    ///   `upgrade_manager` and `recover_claims`
+    ///   (`common::upgrade::RECOMMENDED_UPGRADE_DELAY` on a public network,
+    ///   short on testnet); changeable with `set_upgrade_delay`
     pub fn __constructor(
         env: Env,
         admin: Address,
@@ -163,7 +183,12 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Select the latest implementation for `name` (admin only).
+    /// Announce `wasm_hash` as the latest implementation for `name` (admin
+    /// only). This is the only hash `upgrade_manager` and `recover_claims`
+    /// may move to, and the app shows it as the available upgrade.
+    ///
+    /// Re-announcing the current latest keeps its announcement ledger, so the
+    /// notice measured from it cannot be restarted (D42).
     ///
     /// # Errors
     ///
@@ -275,11 +300,19 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Revoke an implementation (emergency measure).
+    /// Revoke an implementation (emergency measure). Permanent: a record is
+    /// never un-revoked.
     ///
     /// # Authorization
     ///
     /// Only callable by admin.
+    ///
+    /// # Effects
+    ///
+    /// A revoked hash can no longer be an upgrade target, a current
+    /// implementation or the latest (`get_latest_implementation`), and a
+    /// pending DAO running it cannot launch. Contracts already running it
+    /// keep running it and may still upgrade away from it.
     ///
     /// # Arguments
     ///
@@ -372,7 +405,7 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Whether new DAOs may choose `source` as their vote source.
+    /// Whether new DAOs may choose `source` as their vote source. Read-only.
     pub fn is_vote_source_approved(env: Env, source: Address) -> bool {
         get_persistent::<String>(&env, &ManagerKey::ApprovedVoteSource(source)).is_some()
     }
@@ -543,14 +576,15 @@ impl ManagerContract {
     // Factory Pause/Unpause
     // ========================================================================
 
-    /// Pause the factory (emergency measure).
+    /// Pause the factory (emergency measure). While paused, `create_dao`,
+    /// `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready`,
+    /// and `change_slug` fail with `FactoryPaused`. Refunds, `release_slug`,
+    /// and `recover_claims` stay open, so a pause can end a drive in refunds
+    /// but never trap its escrow.
     ///
     /// # Authorization
     ///
     /// Only callable by admin.
-    ///
-    /// # Errors
-    ///
     pub fn pause_factory(env: Env) -> Result<(), ManagerError> {
         Self::require_admin(&env)?;
         set_factory_paused(&env, true);
@@ -563,9 +597,6 @@ impl ManagerContract {
     /// # Authorization
     ///
     /// Only callable by admin.
-    ///
-    /// # Errors
-    ///
     pub fn unpause_factory(env: Env) -> Result<(), ManagerError> {
         Self::require_admin(&env)?;
         set_factory_paused(&env, false);
@@ -579,7 +610,9 @@ impl ManagerContract {
 
     /// Create a new DAO: the four core contracts (Token, Metadata, Governor,
     /// Treasury) and the modules listed in `initial_config.modules`, deployed
-    /// atomically, with each module registered on the Token.
+    /// atomically from the current implementations, with each module
+    /// registered on the Token. Every module's payment asset must be a
+    /// Stellar Asset Contract.
     ///
     /// The launch administrator owns the setup window and may configure the
     /// contracts before `launch_dao`.
@@ -590,16 +623,26 @@ impl ManagerContract {
     /// the call (one signature if they are the same address). Module
     /// constructors do not require auth.
     ///
-    /// The requested slug is validated and must not belong to a launched DAO,
-    /// but it is only claimed at `launch_dao` (pending DAOs hold no slug, so an
-    /// abandoned creation blocks nothing).
+    /// The requested slug is validated and must not be held, but it is only
+    /// claimed at `launch_dao` or when a drive opens (a pending DAO without a
+    /// drive holds no slug, so an abandoned creation blocks nothing).
     ///
     /// # Errors
     ///
     /// * `FactoryPaused` - Factory is paused
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
     /// * `InvalidModules` - A kind listed twice
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
+    /// * `InvalidPaymentAsset` - A module's payment asset is not a Stellar
+    ///   Asset Contract
+    /// * `UnknownAgentKind` - `transfer_agents` names a kind `modules` does
+    ///   not create, or names a kind twice
+    /// * `CurrentImplementationsNotSet` / `ImplementationNotFound` - no usable
+    ///   current implementation
+    /// * `VoteSourceNotApproved` - the chosen vote source is not approved
+    /// * Bounds: `StringEmpty`, `StringTooLong`, `InvalidGovernanceTiming`,
+    ///   `InvalidQuorumBps`, `InvalidProposalThreshold`, `InvalidDuration`,
+    ///   `InvalidParamBounds`, `InvalidTimeBuffer`, `InvalidFee`
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
         // factory operation and subsequent admin-gated setup calls.
@@ -812,7 +855,8 @@ impl ManagerContract {
     /// Deploy a module for an existing DAO from the current implementation
     /// of `spec`'s kind (docs/designs/membership-models.md §2). Needs the
     /// authorization of the Token's admin: the launch admin in Setup, the
-    /// Treasury (by proposal) once Live.
+    /// Treasury (by proposal) once Live. The payment asset must be a Stellar
+    /// Asset Contract.
     ///
     /// The module lands at `predict_module_address(token, kind, n)` with
     /// `n = module_count(token, kind)`, and `expected_n` must equal that `n`
@@ -832,8 +876,12 @@ impl ManagerContract {
     /// * `FactoryPaused` - Factory is paused
     /// * `DaoNotFound` - `token` is not a DAO this Manager created
     /// * `StaleModuleIndex` - `expected_n` is not `module_count(token, kind)`
+    /// * `InvalidPaymentAsset` - the payment asset is not a Stellar Asset
+    ///   Contract
     /// * `CurrentImplementationsNotSet` / `ImplementationNotFound` - no usable
     ///   implementation for the kind
+    /// * the kind's bounds (`InvalidDuration`, `InvalidParamBounds`,
+    ///   `InvalidTimeBuffer`, `InvalidFee`)
     pub fn create_module(
         env: Env,
         token: Address,
@@ -850,6 +898,8 @@ impl ManagerContract {
             return Err(ManagerError::DaoNotFound);
         }
         let nft = NftClient::new(&env, &token);
+        // Whoever controls the DAO decides its modules: the launch admin in
+        // Setup, the Treasury (a passed proposal) once Live.
         let admin = nft.admin();
         admin.require_auth();
         let kind = spec.kind(&env);
@@ -891,13 +941,13 @@ impl ManagerContract {
     }
 
     /// Modules of `kind` `create_module` deployed for `token` so far: the `n`
-    /// the next one is deployed with.
+    /// the next one is deployed with. Read-only.
     pub fn module_count(env: Env, token: Address, kind: Symbol) -> u32 {
         get_persistent(&env, &ManagerKey::ModuleCount(token, kind)).unwrap_or(0)
     }
 
     /// Where `create_module(token, <kind>, n)` deploys. A pure function of
-    /// its inputs and this Manager's address.
+    /// its inputs and this Manager's address. Read-only.
     pub fn predict_module_address(env: Env, token: Address, kind: Symbol, n: u32) -> Address {
         env.deployer()
             .with_current_contract(Self::module_salt(&env, &token, &kind, n))
@@ -910,7 +960,7 @@ impl ManagerContract {
     /// # Errors
     ///
     /// * `DaoNotFound` - No pending DAO for `token_address`
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
     pub fn update_pending_slug(
         env: Env,
         token_address: Address,
@@ -920,6 +970,7 @@ impl ManagerContract {
         let key = ManagerKey::PendingDao(token_address.clone());
         let mut pending: PendingDao =
             get_persistent(&env, &key).ok_or(ManagerError::DaoNotFound)?;
+        // The launch admin recorded at creation owns the pending DAO's slug.
         pending.launch_admin.require_auth();
         // The drive reserved `pending.slug`; the two must not drift apart.
         if has_persistent(&env, &ManagerKey::Assurance(token_address.clone())) {
@@ -948,7 +999,9 @@ impl ManagerContract {
     /// - The requested slug must still be unclaimed (`SlugTaken`; change it with
     ///   `update_pending_slug`)
     /// - The core contracts and every registered module must CURRENTLY run a
-    ///   registered, non-revoked hash (`PendingDaoUsesRevokedImplementation`)
+    ///   registered, non-revoked hash, as the host reports their code
+    ///   (`executable()`, not their own `wasm_hash()`), checked before the
+    ///   Manager calls into them (`PendingDaoUsesRevokedImplementation`)
     /// - Every module's `payment_asset()` must equal the asset recorded at its
     ///   creation (`PaymentAssetMismatch`)
     ///
@@ -974,6 +1027,7 @@ impl ManagerContract {
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
                 .ok_or(ManagerError::DaoNotFound)?;
+        // Only the launch admin decides when a DAO without a drive launches.
         pending.launch_admin.require_auth();
         // During an assurance drive the stored config wins, so the launch
         // admin cannot change what members signed up for.
@@ -1012,7 +1066,12 @@ impl ManagerContract {
     ///
     /// * `DaoNotFound` / `FactoryPaused` / `LaunchAdminNotOwner`
     /// * `AssuranceExists` - one drive per DAO
+    /// * `PendingDaoUsesRevokedImplementation` - a contract runs revoked or
+    ///   unregistered code
     /// * `NoClaimMinter` - the DAO has no registered ClaimMinter
+    /// * `InvalidPaymentAsset` - the recorded claims asset is not a Stellar
+    ///   Asset Contract (possible only for a DAO created before the creation
+    ///   check)
     /// * `DeadlineTooFar` - more than `MAX_ASSURANCE_WINDOW` away
     /// * `SlugTaken` - another DAO launched with the slug
     /// * ClaimMinter errors for the list terms (block 7800)
@@ -1026,6 +1085,8 @@ impl ManagerContract {
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
                 .ok_or(ManagerError::DaoNotFound)?;
+        // The drive freezes the DAO and takes members' money: only its
+        // launch admin may open it.
         pending.launch_admin.require_auth();
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
@@ -1034,7 +1095,12 @@ impl ManagerContract {
         if has_persistent(&env, &assurance_key) {
             return Err(ManagerError::AssuranceExists);
         }
+        // Members' money goes into the ClaimMinter and the DAO freezes, so
+        // every contract must run registered, active code first, as at
+        // launch.
+        Self::require_dao_code(&env, &pending.addresses)?;
         let nft = NftClient::new(&env, &token_address);
+        // The handoff below needs the launch admin to still hold the Token.
         if nft.admin() != pending.launch_admin {
             return Err(ManagerError::LaunchAdminNotOwner);
         }
@@ -1045,6 +1111,10 @@ impl ManagerContract {
             .claims_payment_asset
             .clone()
             .ok_or(ManagerError::NoClaimMinter)?;
+        // Checked again here, not only at creation: a DAO created before the
+        // creation check existed may have recorded any contract, and the
+        // drive's escrow and refunds move through this asset.
+        Self::require_stellar_asset(&asset)?;
         if list.deadline
             > env
                 .ledger()
@@ -1144,6 +1214,7 @@ impl ManagerContract {
         let assurance: Assurance =
             get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
                 .ok_or(ManagerError::NoAssurance)?;
+        // A drive that can still launch keeps its slug.
         if !Self::drive_failed(&env, &token_address, &assurance) {
             return Err(ManagerError::AssuranceNotFailed);
         }
@@ -1163,15 +1234,35 @@ impl ManagerContract {
     }
 
     /// Upgrade a failed drive's ClaimMinter, for refunds its code cannot pay
-    /// (review B2). Only the launch admin recorded in PendingDao, only once
-    /// the drive has failed (the Manager's own rule: the deadline passed and
-    /// the Token is not Live; ClaimMinter's state machine is never asked), and
-    /// only to a hash the registry approves for the running ClaimMinter.
+    /// (review B2).
+    ///
+    /// # Authorization
+    ///
+    /// Only the launch admin recorded in `PendingDao`.
+    ///
+    /// # Guarantees
+    ///
+    /// - The drive has failed by the Manager's own rule (the deadline passed
+    ///   and the Token is not Live; ClaimMinter's state machine is never
+    ///   asked), so the upgrade cannot change whether the DAO launches.
+    /// - `to_hash` is approved from `from_hash` in the registry, not revoked,
+    ///   and is the hash announced as latest for its name (`latest_pointer`).
+    /// - The Manager's upgrade notice has passed since the approval and the
+    ///   announcement (`upgrade_delay()` ledgers, at least
+    ///   `MIN_RECOVERY_NOTICE_LEDGERS`) and since the drive's deadline (in
+    ///   seconds, at least `MIN_RECOVERY_REFUND_WINDOW`). Members have at
+    ///   least seven days after the drive fails, and after each recovery
+    ///   target is announced, to refund with the code in place.
     ///
     /// # Errors
     ///
     /// * `DaoNotFound` / `NoAssurance`
     /// * `AssuranceNotFailed` - the drive may still launch
+    /// * `InvalidUpgradePath` - the path is not approved, or the target is
+    ///   revoked or named differently
+    /// * `UpgradeNotLatest` - `to_hash` is not the latest for its name
+    /// * `UpgradeDelayNotElapsed` - the notice has not passed since the
+    ///   approval or the announcement, or the refund time since the deadline
     pub fn recover_claims(
         env: Env,
         token_address: Address,
@@ -1182,10 +1273,15 @@ impl ManagerContract {
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
                 .ok_or(ManagerError::DaoNotFound)?;
+        // Every admin is the Treasury during a drive, and it cannot act
+        // before launch; the launch admin recorded at creation is the only
+        // party left who can ask for a fix.
         pending.launch_admin.require_auth();
         let assurance: Assurance =
             get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
                 .ok_or(ManagerError::NoAssurance)?;
+        // Once the drive has failed nothing can launch, so the upgrade cannot
+        // change whether the DAO launches.
         if !Self::drive_failed(&env, &token_address, &assurance) {
             return Err(ManagerError::AssuranceNotFailed);
         }
@@ -1197,6 +1293,35 @@ impl ManagerContract {
         let version: ImplementationVersion =
             get_persistent(&env, &ManagerKey::Implementation(to_hash.clone()))
                 .ok_or(ManagerError::ImplementationNotFound)?;
+        // The new code takes over the escrow, so a recovery waits out the
+        // same notice as the Manager's own upgrade (D42): only to the
+        // announced latest, counted from the later of the approval and the
+        // announcement. Without this, a newly approved hash could apply at
+        // once and move the escrow before members claim their refunds.
+        let latest = Self::latest_pointer(env.clone(), version.name.clone())
+            .ok_or(ManagerError::UpgradeNotLatest)?;
+        if latest.wasm_hash != to_hash {
+            return Err(ManagerError::UpgradeNotLatest);
+        }
+        let approved =
+            Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
+                .ok_or(ManagerError::InvalidUpgradePath)?;
+        // Floored like the refund time below, so lowering the notice cannot
+        // make a newly announced target apply at once.
+        let notice = common::upgrade::delay(&env).max(MIN_RECOVERY_NOTICE_LEDGERS);
+        let since = approved.max(latest.set_ledger);
+        if (env.ledger().sequence() as u64) < since.saturating_add(notice as u64) {
+            return Err(ManagerError::UpgradeDelayNotElapsed);
+        }
+        // The notice also counts from the deadline, with a floor: refunds
+        // open only when the drive fails, so a target announced (or a notice
+        // lowered) long before it would otherwise race the first refunds.
+        let refund_window = (common::upgrade::delay(&env) as u64)
+            .saturating_mul(SECONDS_PER_LEDGER)
+            .max(MIN_RECOVERY_REFUND_WINDOW);
+        if env.ledger().timestamp() <= assurance.deadline.saturating_add(refund_window) {
+            return Err(ManagerError::UpgradeDelayNotElapsed);
+        }
         ClaimsClient::new(&env, &assurance.claim_minter).recovery_upgrade(
             &from_hash,
             &to_hash,
@@ -1205,7 +1330,8 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// The pending DAO's assurance drive, if one is recorded.
+    /// The pending DAO's assurance drive, if one is recorded. Read-only. A
+    /// failed drive stays recorded: the DAO never launches.
     pub fn get_assurance(env: Env, token_address: Address) -> Option<Assurance> {
         extend_instance_ttl(&env);
         get_persistent(&env, &ManagerKey::Assurance(token_address))
@@ -1224,10 +1350,13 @@ impl ManagerContract {
     /// # Errors
     ///
     /// * `FactoryPaused` - Slug claims are stopped while the factory is paused
-    /// * `SlugNotFound` - `token_address` is not a launched DAO (pending DAOs
-    ///   use `update_pending_slug`)
+    /// * `SlugNotFound` - no slug is recorded for `token_address`: not a DAO
+    ///   this Manager created, or a pending DAO without a drive (it uses
+    ///   `update_pending_slug`). A DAO in an assurance drive has its slug
+    ///   recorded but cannot rename: its Token admin is the Treasury, which
+    ///   cannot act before launch.
     /// * `SlugUnchanged` - `new_slug` is the DAO's current slug
-    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or held by another DAO
     pub fn change_slug(
         env: Env,
         token_address: Address,
@@ -1237,10 +1366,13 @@ impl ManagerContract {
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
         }
-        // Only `launch_dao` writes DaoSlug, so this gates out unknown token
+        // Only `launch_dao` and `open_assurance` write DaoSlug, both for
+        // tokens this Manager created, so this gates out unknown token
         // contracts before any call into them.
         let old_slug: String = get_persistent(&env, &ManagerKey::DaoSlug(token_address.clone()))
             .ok_or(ManagerError::SlugNotFound)?;
+        // After launch the Token admin is the Treasury, so a rename needs a
+        // passed proposal.
         NftClient::new(&env, &token_address).admin().require_auth();
         if new_slug == old_slug {
             return Err(ManagerError::SlugUnchanged);
@@ -1259,14 +1391,18 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// The pending DAO created at `token_address`, until it launches.
+    /// Read-only.
     pub fn get_pending_dao(env: Env, token_address: Address) -> Option<PendingDao> {
         extend_instance_ttl(&env);
         get_persistent(&env, &ManagerKey::PendingDao(token_address))
     }
 
-    /// Token address of the launched DAO that claimed `slug`.
+    /// Token address of the DAO holding `slug`: a launched DAO, or a pending
+    /// DAO whose assurance drive reserved it (until `release_slug`).
     ///
-    /// Plain read: does not extend TTL (the DAO's storage sweep renews the slug entries).
+    /// Plain read: does not extend the slug entry's TTL (the DAO's storage
+    /// sweep renews the slug entries).
     pub fn get_dao_by_slug(env: Env, slug: String) -> Result<Address, ManagerError> {
         extend_instance_ttl(&env);
         env.storage()
@@ -1275,8 +1411,9 @@ impl ManagerContract {
             .ok_or(ManagerError::SlugNotFound)
     }
 
-    /// Slug claimed by a launched DAO, if any (a pending DAO's requested slug
-    /// is in `get_pending_dao`).
+    /// Slug held by `token_address`, if any: a launched DAO's, or the one a
+    /// pending DAO's assurance drive reserved. Another pending DAO's
+    /// requested slug is in `get_pending_dao`. Read-only.
     pub fn get_slug(env: Env, token_address: Address) -> Option<String> {
         extend_instance_ttl(&env);
         env.storage()
@@ -1284,7 +1421,7 @@ impl ManagerContract {
             .get(&common::ns(&env, ManagerKey::DaoSlug(token_address)))
     }
 
-    /// Predict DAO addresses without deploying.
+    /// Predict DAO addresses without deploying. Read-only.
     ///
     /// Useful for frontends to show addresses before user confirms deployment.
     /// Every module kind `create_dao` can deploy is predicted; a DAO created
@@ -1326,6 +1463,11 @@ impl ManagerContract {
     ///
     /// * `ImplementationNotFound` - Target implementation doesn't exist or is revoked
     /// * `InvalidVersion` - from_hash doesn't match current hash
+    /// * `InvalidUpgradePath` - the target is not named `Manager`, or the
+    ///   path is not approved
+    /// * `UpgradeNotLatest` - the target is not the announced latest Manager
+    /// * `UpgradeDelayNotElapsed` - `upgrade_delay()` ledgers have not passed
+    ///   since the later of the approval and the announcement (D42)
     pub fn upgrade_manager(
         env: Env,
         from_hash: BytesN<32>,
@@ -1447,13 +1589,13 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Current admin.
+    /// Current admin. Read-only.
     pub fn get_admin(env: Env) -> Option<Address> {
         extend_instance_ttl(&env);
         get_admin(&env)
     }
 
-    /// Pending admin awaiting acceptance, if any.
+    /// Pending admin awaiting acceptance, if any. Read-only.
     pub fn get_pending_admin(env: Env) -> Option<Address> {
         extend_instance_ttl(&env);
         get_persistent(&env, &ManagerKey::PendingAdmin)
@@ -1481,6 +1623,7 @@ impl ManagerContract {
         }
         let addresses = pending.addresses.clone();
         let treasury = addresses.treasury.clone();
+        let registry = Self::require_dao_code(&env, &addresses)?;
         // Typed clients (common::clients) rather than the module crates:
         // linking those would export their functions from the Manager WASM.
         let nft = NftClient::new(&env, &addresses.token);
@@ -1497,6 +1640,8 @@ impl ManagerContract {
                 }
             }
             None => {
+                // The launch hands over the Token's admin, so the launch
+                // admin must still hold it.
                 if nft.admin() != pending.launch_admin {
                     return Err(ManagerError::LaunchAdminNotOwner);
                 }
@@ -1507,31 +1652,6 @@ impl ManagerContract {
             == Some(pending.slug.clone());
         if !slug_held {
             Self::require_slug_unclaimed(&env, &pending.slug)?;
-        }
-        let registry = nft.modules();
-        // Every contract must currently run a registered, non-revoked hash. The
-        // CURRENT hash is read from each (not the one recorded at create_dao)
-        // so a pre-launch `upgrade` to an approved hash is honored.
-        let mut contracts: Vec<Address> = Vec::from_array(
-            &env,
-            [
-                addresses.token.clone(),
-                addresses.metadata.clone(),
-                addresses.governor.clone(),
-                addresses.treasury.clone(),
-            ],
-        );
-        for entry in registry.iter() {
-            contracts.push_back(entry.address);
-        }
-        for contract in contracts.iter() {
-            let current = WasmHashClient::new(&env, &contract).wasm_hash();
-            let record =
-                get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
-            match record {
-                Some(r) if !r.revoked => {}
-                _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
-            }
         }
         // At least one voting-capable token must exist.
         if nft.total_supply() <= 0 {
@@ -1619,6 +1739,48 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// Check the code of a pending DAO's core contracts and registered
+    /// modules (`require_active_code`) before the Manager calls into any of
+    /// them, and return the registry. The CURRENT code is read (not the hash
+    /// recorded at `create_dao`) so a pre-launch `upgrade` to an approved
+    /// hash is honoured. In Setup only the Manager registers modules, and a
+    /// drive freezes the registry, so a drive's ClaimMinter is among them.
+    fn require_dao_code(
+        env: &Env,
+        addresses: &DaoAddresses,
+    ) -> Result<Vec<common::modules::ModuleEntry>, ManagerError> {
+        for core in [
+            &addresses.token,
+            &addresses.metadata,
+            &addresses.governor,
+            &addresses.treasury,
+        ] {
+            Self::require_active_code(env, core)?;
+        }
+        let registry = NftClient::new(env, &addresses.token).modules();
+        for entry in registry.iter() {
+            Self::require_active_code(env, &entry.address)?;
+        }
+        Ok(registry)
+    }
+
+    /// `PendingDaoUsesRevokedImplementation` unless `contract` runs WASM whose
+    /// hash is registered and not revoked.
+    ///
+    /// The host reports the code (`executable()`). A contract's own
+    /// `wasm_hash()` is only what its storage says, and a contract running
+    /// other code could report any registered hash.
+    fn require_active_code(env: &Env, contract: &Address) -> Result<(), ManagerError> {
+        let hash = match contract.executable() {
+            Some(Executable::Wasm(hash)) => hash,
+            _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
+        };
+        match get_persistent::<ImplementationVersion>(env, &ManagerKey::Implementation(hash)) {
+            Some(record) if !record.revoked => Ok(()),
+            _ => Err(ManagerError::PendingDaoUsesRevokedImplementation),
+        }
+    }
+
     /// The Manager's failure rule (review 2 A3): the deadline passed and the
     /// Token is not Live. ClaimMinter's `refund` applies the same rule.
     fn drive_failed(env: &Env, token: &Address, assurance: &Assurance) -> bool {
@@ -1647,7 +1809,7 @@ impl ManagerContract {
     }
 
     /// The hashes `create_dao` and `create_module` deploy from, or `None`
-    /// before `set_current_implementations`. Raw values: a hash revoked since
+    /// before `set_current_implementations`. Read-only. Raw values: a hash revoked since
     /// it was set is still returned (DAOs created from it still run it), which
     /// is what platform code renewal needs. `create_dao` itself rechecks each.
     pub fn current_implementations(env: Env) -> Option<CurrentImplementations> {
@@ -1668,18 +1830,22 @@ impl ManagerContract {
     /// The hash announced as latest for `name` and the ledger it was announced
     /// at (D42). Unlike `get_latest_implementation`, a revoked hash is still
     /// returned: the pointer is what the platform's upgrade rule and the app's
-    /// pending-upgrade display read.
+    /// pending-upgrade display read. Read-only.
     pub fn latest_pointer(env: Env, name: String) -> Option<LatestPointer> {
         get_persistent(&env, &ManagerKey::LatestImplementation(name))
     }
 
-    /// The upgrade notice in force for `upgrade_manager`.
+    /// The upgrade notice in force, in ledgers, for `upgrade_manager` and for
+    /// `recover_claims` (which also measures it from the drive's deadline,
+    /// at `SECONDS_PER_LEDGER` seconds per ledger and never less than
+    /// `MIN_RECOVERY_REFUND_WINDOW`).
     pub fn upgrade_delay(env: Env) -> u32 {
         common::upgrade::delay(&env)
     }
 
-    /// Change the Manager's upgrade notice (admin). A longer notice applies
-    /// at once; a shorter one only after the notice in force has passed.
+    /// Change the Manager's upgrade notice (admin only). A longer notice
+    /// applies at once; a shorter one only after the notice in force has
+    /// passed, so the notice cannot be cut to rush an upgrade through.
     pub fn set_upgrade_delay(env: Env, ledgers: u32) -> Result<(), ManagerError> {
         Self::require_admin(&env)?;
         common::upgrade::set_delay(&env, ledgers);
@@ -1687,7 +1853,8 @@ impl ManagerContract {
     }
 
     /// Ledger at which `approve_upgrade(from, to)` was recorded, if it was.
-    /// `upgrade_manager` waits `upgrade_delay()` after it.
+    /// Read-only. `upgrade_manager` and `recover_claims` wait
+    /// `upgrade_delay()` after it.
     pub fn upgrade_approved_ledger(
         env: Env,
         from_hash: BytesN<32>,
@@ -1864,8 +2031,9 @@ impl ManagerContract {
     }
 
     // TODO(pricing): before production, decide whether slugs should cost something
-    // (ENS-style length-tiered rent, admin-managed reserve for brands). Today the
-    // only cost is the create fee plus rent, which does not scale with a slug's value.
+    // (ENS-style length-tiered rent, admin-managed reserve for brands). There is no
+    // create fee: today the only cost is rent for the DAO's contracts, which does
+    // not scale with a slug's value.
     fn validate_slug(slug: &String) -> Result<(), ManagerError> {
         let len = slug.len();
         if !(MIN_SLUG_LENGTH..=MAX_SLUG_LENGTH).contains(&len) {
@@ -1889,7 +2057,7 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// `SlugTaken` if a launched DAO already claimed `slug`.
+    /// `SlugTaken` if a DAO holds `slug` (launched, or in a drive).
     fn require_slug_unclaimed(env: &Env, slug: &String) -> Result<(), ManagerError> {
         if has_persistent(env, &ManagerKey::SlugToDao(slug.clone())) {
             return Err(ManagerError::SlugTaken);
@@ -1953,8 +2121,23 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Bounds on a module's creation config (each module checks them again).
+    /// `InvalidPaymentAsset` unless `asset` is a Stellar Asset Contract.
+    ///
+    /// Modules move escrow and refunds through the asset's `transfer`. A SAC's
+    /// code is the host's; any other contract runs code of its own choosing,
+    /// which could report balances it does not hold, refuse chosen refunds,
+    /// or spend the call's budget inside a refund and block a module.
+    fn require_stellar_asset(asset: &Address) -> Result<(), ManagerError> {
+        match asset.executable() {
+            Some(Executable::StellarAsset) => Ok(()),
+            _ => Err(ManagerError::InvalidPaymentAsset),
+        }
+    }
+
+    /// Bounds on a module's creation config (each module checks them again),
+    /// and its payment asset must be a Stellar Asset Contract.
     fn validate_module_spec(spec: &ModuleSpec) -> Result<(), ManagerError> {
+        Self::require_stellar_asset(&spec.payment_asset())?;
         match spec {
             ModuleSpec::Auction(auction) => {
                 if auction.duration < MIN_AUCTION_DURATION

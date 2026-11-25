@@ -46,9 +46,9 @@ Before launch, `auction.unpause`, the Marketplace's `open_pool`, `restock`, `buy
 - the factory is not paused (`FactoryPaused`, 7111): the pause is the emergency stop for creation, drives and launch;
 - `launch_admin` authorization and that it is still the Token admin (`LaunchAdminNotOwner`, 7126);
 - the requested slug is still unclaimed (`SlugTaken`, 7123); see [Slugs](#slugs);
-- every contract's current `wasm_hash()` (core and registered modules) is registered and not revoked (`PendingDaoUsesRevokedImplementation`, 7121), checked before any launch call;
+- the code every contract runs (core and registered modules) is a registered, non-revoked hash (`PendingDaoUsesRevokedImplementation`, 7121). The Manager reads the code from the host (`address.executable()`), not from the contract's own `wasm_hash()`, which reports only what its storage says. It checks each contract before calling into it, and before any launch call. `open_assurance` runs the same check before a drive opens;
 - the Token's voting supply is greater than zero (`LaunchSupplyZero`, 7120): at least one token is held by someone other than the Treasury or a non-voting module;
-- each module's payment asset equals the one recorded at `create_dao` / `create_module` (`PaymentAssetMismatch`);
+- each module's payment asset equals the one recorded at `create_dao` / `create_module` (`PaymentAssetMismatch`). `create_dao`, `create_module` and `open_assurance` refuse a payment asset that is not a Stellar Asset Contract (`InvalidPaymentAsset`, 7146), so a module created by a Manager with this check launches only with one (a DAO created before the check keeps the asset it recorded);
 - allowances: a started Auction is granted an unlimited allowance (`u32::MAX`, it sells one token per auction); the Marketplace gets none (each pool's proposal grants its stock); the ClaimMinter keeps what the launch admin granted; the Treasury needs none, because the admin mints without one.
 
 ## Mint allowances and modules
@@ -84,7 +84,14 @@ A launch admin can open the DAO's launch as an assurance drive: `manager.open_as
 - `launch_when_ready(token)` is open to anyone while the state is `Met` and the deadline hasn't passed; it runs every `launch_dao` check with the stored launch config and calls `release` in the same transaction, so the escrow reaches the Treasury with the launch.
 - After a failure, `refund(list_id, claimer)` (anyone may call it; funds go only to the claimer) returns each payment, and `release_slug` frees the slug. Claimers keep their tokens, which carry no power because the DAO never goes Live.
 - **Refunds go only to the address that paid.** The ClaimMinter's code has no way to redirect one. If that address can't receive the asset (the asset's issuer froze or deauthorized it, or an account removed its trustline), `refund` fails and the payment stays in escrow until a later call succeeds. Assets sent to the ClaimMinter directly, outside `claim`, are in no escrow: `release` and `refund` move only what `claim` recorded, and no other function moves assets, so such transfers stay in the contract. Only an upgrade (the DAO's own, or `recover_claims` after a failed drive) could change either rule.
-- **`recover_claims`.** If the ClaimMinter's own refund code is broken, the launch admin recorded in `PendingDao` can upgrade that DAO's ClaimMinter, only after the drive has failed by the Manager's rule (`deadline` passed and the Token not Live; ClaimMinter's state machine is never consulted), and only to a Manager-approved `claims` hash. The window opens only once nothing can launch, so the upgrade can't change the outcome; it can only unblock refunds.
+- **`recover_claims`.** If the ClaimMinter's own refund code is broken, the launch admin recorded in `PendingDao` can upgrade that DAO's ClaimMinter. The Manager allows it only:
+  - after the drive has failed by the Manager's rule (`deadline` passed and the Token not Live; ClaimMinter's state machine is never consulted), so the upgrade can't change whether the DAO launches;
+  - to a hash the registry approves from the running one and announces as latest for its name (`latest_pointer`; `UpgradeNotLatest`, 7131);
+  - once the upgrade notice has passed since the approval and since the announcement (`upgrade_delay()` ledgers, never less than seven days of ledgers, `MIN_RECOVERY_NOTICE_LEDGERS`), and since the deadline (that notice at five seconds a ledger, never less than seven days, `MIN_RECOVERY_REFUND_WINDOW`; `UpgradeDelayNotElapsed`, 7130). The floors matter because a lowered notice takes effect after the old one: before the deadline members can't act on that warning, and after a first recovery a second target could otherwise apply at once.
+
+  The new code takes over the escrow, so recovery is a trust point: the Manager admin chooses the code and the launch admin applies it. The rule guarantees time, not code. Members have at least seven days after the drive fails, and after each recovery target is announced, to take their refunds with the code in place (`refund` is open to anyone, for any claimer), and the only possible recovery target is visible as "running → latest" for at least that time. A member who has not been refunded by then depends on the recovery code.
+
+  The ClaimMinter a drive opens on runs the code its launch admin chose in Setup: any registered, non-revoked hash that approved upgrades reach from the one it was created with. `open_assurance` checks only that the code is registered and not revoked, so members should check the ClaimMinter's hash against the published releases before paying in.
 - **The platform can end a drive in refunds.** The Manager admin can pause the factory or revoke an implementation the DAO runs; either blocks `launch_when_ready` until the deadline passes, and the drive fails. Nobody loses funds (refunds stay open), but a `Met` drive can be denied its launch.
 
 ## Voting supply and quorum
@@ -150,11 +157,11 @@ Revocation: `is_upgrade_approved(from, to)` requires only the target to be non-r
 
 ## Slugs
 
-`create_dao` validates the requested slug and rejects one already claimed by a launched DAO, but does not claim it. The slug is stored in `PendingDao`; `launch_dao` claims it (permanent, unique, emits `SlugClaimed`) and fails with `SlugTaken` if another DAO launched with it first. The launch admin can then rename with `update_pending_slug`. An abandoned pending DAO holds no slug, so there is nothing to release or expire. The exception is an assurance drive: `open_assurance` claims the slug when the drive opens, so nobody can take it while people pay in; if the drive fails, anyone can free it with `release_slug` (`SlugReleased`).
+`create_dao` validates the requested slug and rejects one already claimed by a launched DAO, but does not claim it. The slug is stored in `PendingDao`; `launch_dao` claims it (permanent, unique, emits `SlugClaimed`) and fails with `SlugTaken` if another DAO launched with it first. The launch admin can then rename with `update_pending_slug`. An abandoned pending DAO holds no slug, so there is nothing to release or expire. The exception is an assurance drive: `open_assurance` claims the slug when the drive opens, writing both `SlugToDao` and `DaoSlug` (`SlugClaimed`), so nobody can take it while people pay in, and `get_slug` and `get_dao_by_slug` resolve it before launch. If the drive fails, anyone can free it with `release_slug`, which removes both entries (`SlugReleased`).
 
-After launch, `change_slug(token, new_slug)` (Manager 0.2.0) moves a DAO to a new slug. It refuses unknown tokens before calling them (only `launch_dao` writes `DaoSlug`), then requires the token's `admin()`, which is the Treasury after launch, so only a passed proposal can rename. This relies on the token having no admin transfer after launch; a token release that adds one must revisit it. The old slug is released in the same call and anyone may claim it, even in the same transaction as `treasury.execute`. The app redirects an old link only while no DAO holds it and tells voters so. The new slug is visible in the proposal before execution and can be taken first; execution then fails with `SlugTaken` and the DAO proposes again. The factory pause also blocks `change_slug`.
+After launch, `change_slug(token, new_slug)` (Manager 0.2.0) moves a DAO to a new slug. It refuses unknown tokens before calling them (only `launch_dao` and `open_assurance` write `DaoSlug`, both for tokens the Manager created), then requires the token's `admin()`, which is the Treasury after launch, so only a passed proposal can rename. A DAO in an assurance drive has a `DaoSlug` but can't rename: its token admin is already the Treasury, which can't act before launch. This relies on the token having no admin transfer after launch; a token release that adds one must revisit it. The old slug is released in the same call and anyone may claim it, even in the same transaction as `treasury.execute`. The app redirects an old link only while no DAO holds it and tells voters so. The new slug is visible in the proposal before execution and can be taken first; execution then fails with `SlugTaken` and the DAO proposes again. The factory pause also blocks `change_slug`.
 
-Trade-off: a pending DAO's requested slug is public, so someone can create and launch their own DAO with it first. That costs the create fee plus rent for the core contracts and yields a real, launched DAO, so it is far costlier than squatting at creation, but not impossible. Slug pricing (TODO in `manager/src/contract.rs`) is the lever if it becomes a problem.
+Trade-off: a pending DAO's requested slug is public, so someone can create and launch their own DAO with it first. This costs no create fee, only rent for the core contracts, and yields a real, launched DAO, so it is costlier than squatting at creation, but not impossible. Slug pricing (TODO in `manager/src/contract.rs`) is the lever if it becomes a problem.
 
 ## Auction
 
@@ -220,16 +227,16 @@ These are behaviors of the current contracts, not planned fixes.
 - Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must verify `to_hash` against audited reproducible builds and read any `authorize` trees.
 - Proposal ids do not include the proposer. An identical-payload proposal can be front-run and then cancelled by its proposer; an honest proposer changes the description.
 - Slug front-running at launch (see [Slugs](#slugs)).
-- Payment assets must be plain, non-regulated Stellar Asset Contracts. The Auction and Marketplace refuse anything that is not a Stellar Asset Contract (`NotStellarAsset`), but cannot tell which issuer flags an asset has: AUTH_REQUIRED, clawback, fee-on-transfer, or rebasing assets can freeze or misprice settlement.
+- Payment assets must be plain, non-regulated Stellar Asset Contracts. The Manager (at `create_dao`, `create_module`, and `open_assurance`, `InvalidPaymentAsset`), the Auction, and the Marketplace (`NotStellarAsset`) refuse anything that is not a Stellar Asset Contract, but cannot tell which issuer flags an asset has: AUTH_REQUIRED, clawback, fee-on-transfer, or rebasing assets can freeze or misprice settlement.
 - A non-voting module that will not release its tokens stays registered. The Token refuses to unregister a non-voting module while it holds tokens, and `dao_transfer` cannot move tokens out of a module. An outside module whose code holds tokens and offers no way to release them, or a member's contract wallet registered as non-voting custody that keeps its tokens, can then never be unregistered: it stays custody (it may move its tokens out and approve anyone for them under the lock), keeps its kind, and stays in the indexer's allowlist. The DAO can still cut its allowance to 0 and revoke it as a transfer agent, and the operator can remove it from the indexer's allowlist (see "Indexer allowlisting" below).
 - Removing the Auction or Marketplace can be delayed in an unlocked DAO. The DAO can empty both by proposal (see [Mint allowances and modules](#mint-allowances-and-modules)), but `return_listing` and `recover_token` name the token ids known when the proposal is drafted. While transfers are unlocked, anyone can send a token straight to the module, or list one before the market is paused, between drafting and execution; the removal then fails and the proposal reverts. Each attempt costs the sender that token, which the next proposal recovers to the Treasury. A locked DAO is not exposed: under the lock a holder can neither send a token to a module nor list one.
-- Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations and pause the factory. It holds no minting power over any DAO: every module that mints is the DAO's own, capped by an allowance the DAO sets, and upgrades only by the DAO's proposal (docs/designs/membership-models.md supersedes the shared Minter and STORAGE_DIET D41). **The Manager's own upgrade is visible for the full notice (D42):** it applies only `upgrade_delay()` ledgers after the approval and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement; re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule. Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`). The admin can also end an assurance drive in refunds (see [Assurance launch](#assurance-launch)).
+- Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations and pause the factory. It holds no minting power over any DAO: every module that mints is the DAO's own, capped by an allowance the DAO sets, and upgrades only by the DAO's proposal, apart from `recover_claims` on a failed drive (docs/designs/membership-models.md supersedes the shared Minter and STORAGE_DIET D41). **The Manager's own upgrade is visible for the full notice (D42):** it applies only `upgrade_delay()` ledgers after the approval and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement; re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule, except a recovery upgrade (see [Assurance launch](#assurance-launch)). Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`). The admin can also end an assurance drive in refunds, and, with the launch admin of a failed drive, replace that drive's ClaimMinter code once the upgrade notice has passed (see [Assurance launch](#assurance-launch)).
 - Assurance proves a launch, not a community. A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs; the threshold counts addresses, not people.
 - A drive holds its slug until its deadline. `open_assurance` reserves the slug when the drive opens, and `release_slug` frees it only once the drive has failed. A drive nobody intends to meet can therefore keep a slug from other DAOs for up to 90 days (`MAX_ASSURANCE_WINDOW`).
 - Claim list hashing. Merkle leaves and nodes carry no tag, and a root is not bound to a list, a ClaimMinter, or a network. Tags would add no protection here: the contract computes every leaf itself from the claimer and amount, a leaf never has a node's length for any address `claim` accepts (a node hashes 64 bytes, an account leaf 60, and a contract leaf 56; a muxed address would make 64, but `claim` takes an `Address`, which a muxed address never converts to), and a root takes effect only when an admin opens a list with it. A root opened on two lists lets each listed address claim on both, as the admins chose. Changing the format would also cost more than it gives: binding the list id needs the id when the tree is built, but a proposal opens its list under the id current when it executes, and a hashing version recorded per list would depend on the code running at that moment unless `open_list` took the version as an argument. `contracts/minter/test-vectors/merkle-v1.json` pins the format for the contract and the web's tree builder.
 - Issuer-controlled payment assets. A pool, claim list or escrow priced in an asset whose issuer can freeze, claw back or deauthorize holders can be frozen or drained by that issuer, including the escrow refunds depend on. DAOs should price in plain assets (see the payment-asset limitation above).
 - Modules can be delegates. A voting module holds voting units like any member and can receive delegations; if its code calls the Governor it can vote them. Manage → Membership shows the votes each module holds.
-- Outside modules. After launch the Treasury can register any contract as a module by proposal, under any kind, a built-in one included. Its mint allowance caps what it can mint, but the platform can't vouch for its code and its records are not covered by one-click renewal. A known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code: the indexer fills those roles only from the Manager's `DaoCreated` / `ModuleCreated`, and the read model takes a registration's role from the kind the Manager deployed it as (`manager.manager_modules`). Every other registered contract is role `module`: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` doesn't list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage → Membership badges it "Not deployed by the Manager".
+- Outside modules. After launch the Treasury can register any contract as a module by proposal, under any kind, a built-in one included. Its mint allowance caps what it can mint, but the platform can't vouch for its code and its records are not covered by one-click renewal. A known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code for that DAO: the indexer fills those roles only from the Manager's `DaoCreated` / `ModuleCreated`, and the read model takes a registration's role from the kind the Manager deployed it as, only when the registering DAO is the one it was deployed for (`manager.created_modules`, migration 0015). A DAO that registers another DAO's module sees it as role `module`, so it can't present that DAO's market or claims list as its own and send buyers' payments to the other DAO. Every other registered contract is role `module` too: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` doesn't list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage → Membership badges it "Not deployed by the Manager".
 - Indexer allowlisting (accepted, review finding 3). The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO can't use this to inject rows into another DAO's views (identity is windowed per DAO), but a hostile contract can fill its own DAO's admin feed with noise. The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` don't take an outside module's own upgrade, storage-migration or launch events (migration 0012), so such a contract's events can't stop a shared view from reading for every DAO. Remedies: the DAO unregisters it by vote (once it holds no tokens, if it is non-voting), which ends its window in every view; or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, then re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop (whether a running pipeline notices a deleted row without that is unverified). Rows already indexed stay: the landing tables are append-only.
 - Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).
 
@@ -325,7 +332,8 @@ single-token approval revocation is not collection-wide permission revocation.
 Claims use the ClaimMinter the Token's registry names (`token.module("claims")`),
 the list's root, price and the claimer's record read from chain, and a
 claimer-bound Merkle proof; restoration-required simulations are rejected. The
-claim list is fetched from the list's `tree_uri` and rebuilt: the app offers a
+claim list is fetched from the list's `tree_uri` through public IPFS gateways (see
+[Server-side fetches](#server-side-fetches)) and rebuilt: the app offers a
 proof only when the rebuilt root equals the chain's, and uses the rebuilt proof,
 never the file's. The claim carries `max_price`, so a price change fails the claim.
 The client rechecks the list, price and the claimer's progress before signing.
@@ -376,3 +384,86 @@ avoid mixing workspaces but do not secure data from another user of the same bro
 Clearing storage removes recovery data. Read-only SQL credentials do not imply that
 all server endpoints are side-effect free: uploads and transaction preparation have
 their own boundaries. See [web reference](../apps/web/README.md).
+
+### Response headers
+
+Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a `Permissions-Policy` that turns off
+the camera, microphone, location, payment, screen capture, and motion sensors. WebUSB and WebHID
+stay available for hardware wallets. Vercel sends `Strict-Transport-Security` on every
+deployment; a production build that runs elsewhere sends the same value itself. API responses
+add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The rules are in
+`apps/web/security-headers.mjs`.
+
+Pages get a Content-Security-Policy from `apps/web/src/middleware.ts`, with a fresh nonce for
+each response. Scripts run only with that nonce (`'strict-dynamic'` lets them load the app's
+chunks), so markup injected into a page can't run script. The policy also lists the hosts the
+app and the wallet kit use for images, connections, and frames: the IPFS gateways, the site and
+its old host, Stellar RPC and Horizon, Pinata uploads, the wallet icons, WalletConnect, the
+frames Albedo, Trezor, and HOT open, and HOT's request relay. Reading the nonce makes every page
+render per request. Since no page may be framed, the app can't run inside another site's frame,
+including a wallet that opens apps in one (HOT inside Telegram).
+
+The page policy is report-only for now, because several wallets (WalletConnect, Albedo, Trezor,
+HOT, and Ledger) can't be tried on a local server and may need hosts the list lacks. Browsers
+send violations to `POST /api/csp-report`, which logs a trimmed summary as `[csp-report]` and
+stores nothing. While the policy is report-only, pages enforce `frame-ancestors 'none';
+object-src 'none'; base-uri 'self'; form-action 'self'`. Setting `CSP_MODE=enforce` and
+redeploying enforces the whole policy; do that once the log shows no unexpected violations.
+The Vercel toolbar on preview deployments loads a script without the nonce, so an enforced
+policy blocks it there. A tribe's image, and a token image from a renderer other than this site,
+can be any `https:` address the tribe chose; the policy reports those, and enforcing it hides
+them, so decide whether to allow such hosts before enforcing.
+
+### Member-written content
+
+Markdown (proposal descriptions, comments, and tribe descriptions) shows images only from IPFS,
+through the app's gateways. An image at any other address would tell its author who read the
+text and when, so it is shown as a link the reader can choose to open, or as plain text when it
+already sits inside a link. A gateway address on
+another host is read as its IPFS path, so that host is never contacted. The app does not proxy
+remote images: a proxy would fetch any address from the server and cost the operator on every
+view, while the editor already uploads images to IPFS.
+
+Links and image addresses pass through `safeMarkdownUrl` (`apps/web/src/lib/safe-url.ts`):
+only `https:`, `http:`, `mailto:`, and `ipfs:` addresses survive. A proposal's discussion link
+goes through the same check when it is written and again when it is read, since the chain
+stores any text; a link with another scheme is dropped.
+
+### API errors and rate limits
+
+When a route fails for a reason the client can't act on (the database, the indexer, RPC, or
+IPFS), it answers with a short message and logs the detail on the server, since upstream error
+text can name hosts, queries, or configuration. Validation errors and the app's own errors keep
+their messages. `/api/health` returns how many Goldsky pipeline errors there are
+(`pipeline.error_count`), not their text. This applies to every API route except sign-in
+(`/api/auth/*`) and uploads (`/api/pinata/*`, `/api/uploads/*`).
+
+These routes are limited per client address, per server instance, with the same bookkeeping as
+sign-in (`apps/web/src/lib/api-rate-limit.ts`):
+
+| Routes | Limit |
+| --- | --- |
+| Artwork rendering (`/api/render`) | 300 a minute |
+| Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
+| Claim state and claim history | 120 a minute, shared |
+| `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
+| `POST /api/csp-report` | 30 a minute |
+
+Over the limit, a route answers 429 with `Retry-After`. The limits leave room for a group that
+shares one network address, such as people claiming at an event. The client is identified as
+sign-in identifies it: by `x-vercel-forwarded-for` on Vercel, or by the header
+`TRUSTED_CLIENT_IP_HEADER` names. A request without such an address is not counted, where
+sign-in refuses it, so these public routes stay available; off Vercel the limits apply only once
+`TRUSTED_CLIENT_IP_HEADER` is set. Local development is not counted. The limits stop one client
+from hammering a route; they don't stop a distributed flood, which needs the platform's own
+protection. Each health route also reuses one result for 10 seconds.
+
+### Server-side fetches
+
+The server fetches remote content in two places: artwork layers (`/api/render` and share
+cards) and claim lists. Both use `fetchPublicUrl` (`apps/web/src/lib/safe-remote-fetch.ts`).
+Each hop, redirects included, must use HTTPS and resolve only to public addresses, and the
+connection is pinned to the address that was checked, so a second DNS answer can't swap in an
+internal one. At most three redirects are followed, each checked before it is requested, and
+the body is capped in size.

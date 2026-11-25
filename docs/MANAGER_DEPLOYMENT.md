@@ -4,7 +4,7 @@ Manager owns the platform implementation registry and factory. It deploys each D
 
 ## Inputs and commands
 
-Run from the repository root with a funded identity on the configured network:
+Run from the repository root with the admin identity, funded, on the configured network:
 
 ```bash
 pnpm deploy:manager configs/testnet-manager.json
@@ -12,9 +12,17 @@ pnpm deploy:manager configs/testnet-manager.json
 
 This submits transactions and writes `deploys/<label>-<network>-manager.json`. Contract addresses are deterministic (salt from label, network, package and WASM hash): with unchanged WASMs a rerun reattaches to the existing Manager. Set `DEPLOY_SALT_SUFFIX` for a genuinely fresh Manager (for example after a reset when the previous one already holds the slugs you need). `--force` bypasses the artifact overwrite prompt; it is not a database reset or proof of a fresh deployment. The script can resume from existing artifacts. `DEPLOY_IDENTITY` overrides the default `<network>-admin` identity; the configuration's `adminAddress` is a public account address, not a secret.
 
-Inputs are [network configuration](../configs/testnet-manager.json), [release versions](../releases/contracts.json), and built contract sources. The configuration's `upgradeDelayLedgers` sets the Manager's upgrade notice (ledgers between an approval and the earliest Manager upgrade; 720 on testnet, 120,960 = 7 days recommended on a public network; default 7 days when unset). The admin can change it later with `set_upgrade_delay`; a reduction only applies after the notice in force. The script runs `stellar contract build`, uploads eight WASMs (Manager, Token, Metadata, Governor, Treasury, Auction, Marketplace, ClaimMinter), registers their names/versions, selects each name's latest implementation (`set_latest_implementation`; registration alone does not move it), and sets the seven current implementations `create_dao` and `create_module` deploy (`set_current_implementations --current '{…}'`, `claims` being the ClaimMinter).
+Before it builds or sends anything, the script checks (`scripts/deploy-guards.mjs`):
 
-Registry entries are write-once. The script checks existing/created records against expected name/version. A wrong record cannot be renamed or un-revoked. Every uploaded WASM is extended to 170 days right after upload (`EXTEND_CODE_TTL_DAYS` overrides; values at or under the contracts' 4-day code target are refused): new code is born at the network minimum of 7 days, and contracts only ever bump shared code a few days. Renew it with `node scripts/renew-code-ttl.mjs <manager-artifact> --days 170`, which reads every hash from chain. See [storage and TTL](TTL_ECONOMICS.md).
+- **The identity.** It must already exist in the stellar CLI's key store and be the configuration's `adminAddress`, since it signs every admin call. The script never creates a key: a missing one is an error ([key custody](KEY_CUSTODY.md)); `node scripts/local-up.mjs` makes the local network's admin. Friendbot funds it on local and testnet only.
+- **The build inputs.** Uncommitted changes under `contracts`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo` or `releases` stop a mainnet deploy, because the artifact's `sourceCommit` would not describe the WASM; elsewhere they print a warning.
+- **Mainnet.** The configuration must carry the public network passphrase and an `upgradeDelayLedgers` of at least 120,960 (7 days). The script shows the label, RPC, admin, upgrade notice, commit and versions, and asks for `mainnet <label>` typed at a terminal. No flag skips it, and without a terminal it refuses.
+
+A Manager whose admin is a multisig account is deployed with a single key and then handed over with `propose_admin` and `accept_admin` ([key custody](KEY_CUSTODY.md#a-multisig-admin)).
+
+Inputs are [network configuration](../configs/testnet-manager.json), [release versions](../releases/contracts.json), and built contract sources. The configuration's `upgradeDelayLedgers` sets the Manager's upgrade notice (ledgers between an approval and the earliest Manager upgrade; 720 on testnet; default 120,960 = 7 days when unset, and the minimum on mainnet). The admin can change it later with `set_upgrade_delay`; a reduction only applies after the notice in force. The script runs `stellar contract build`, uploads eight WASMs (Manager, Token, Metadata, Governor, Treasury, Auction, Marketplace, ClaimMinter), registers their names/versions, selects each name's latest implementation (`set_latest_implementation`; registration alone does not move it), and sets the seven current implementations `create_dao` and `create_module` deploy (`set_current_implementations --current '{…}'`, `claims` being the ClaimMinter).
+
+Registry entries are write-once. The script checks existing/created records against expected name/version. A wrong record cannot be renamed or un-revoked. Every uploaded WASM is extended to 170 days right after upload (`EXTEND_CODE_TTL_DAYS` overrides; values at or under the contracts' 4-day code target are refused): new code is born at the network minimum of 7 days, and contracts only ever bump shared code a few days. Renew it with `node scripts/renew-code-ttl.mjs <manager-artifact> --days 170`, which reads every hash from chain and is paid by the renewal payer `<network>-renewer`, not the admin ([key custody](KEY_CUSTODY.md#renewal-payer)). See [storage and TTL](TTL_ECONOMICS.md).
 
 ## Artifacts and consumers
 
@@ -33,10 +41,10 @@ pnpm deploy:dao --validate-only configs/testnet-builder-dao.json
 pnpm deploy:dao create_dao configs/testnet-builder-dao.json configs/testnet-manager.json
 pnpm deploy:dao admin_checklist configs/testnet-builder-dao.json configs/testnet-manager.json
 pnpm deploy:dao launch_dao configs/testnet-builder-dao.json configs/testnet-manager.json
-node scripts/renew-dao.mjs --network testnet --token <Token contract address> --days 90   # renew everything the DAO owns, slug included (permissionless)
+node scripts/renew-dao.mjs --network testnet --token <Token contract address> --days 90   # renew everything the DAO owns, slug included (permissionless; paid by testnet-renewer)
 ```
 
-These are separate phases. Prediction is `predict_addresses(creator, nonce)`, not `predict`. `create_dao` only requests the config's `slug` (4-63 chars of `[a-z0-9-]`) and fails early if a launched DAO holds it; `launch_dao` claims it, first launch wins (`SlugTaken`; rename a pending request with `update_pending_slug`). Each rehearsal run uses a fresh slug. The Manager has a slug registry (`get_dao_by_slug`, `get_slug`, launched DAOs only; `change_slug` moves a launched DAO by vote) but no DAO list API. `launch_dao` also checks the factory is not paused (`FactoryPaused`), the launch admin is still the token admin, a nonzero voting supply, and each module's payment asset unchanged since creation. See [DAO deployment](DAO_DEPLOYMENT.md) for configuration, signatures, setup, and recovery.
+These are separate phases. Prediction is `predict_addresses(creator, nonce)`, not `predict`. `create_dao` only requests the config's `slug` (4-63 chars of `[a-z0-9-]`) and fails early if a launched DAO holds it; `launch_dao` claims it, first launch wins (`SlugTaken`; rename a pending request with `update_pending_slug`). Each rehearsal run uses a fresh slug. The Manager has a slug registry (`get_dao_by_slug`, `get_slug`, launched DAOs and DAOs whose drive reserved a slug; `change_slug` moves a launched DAO by vote) but no DAO list API. `launch_dao` also checks the factory is not paused (`FactoryPaused`), the launch admin is still the token admin, a nonzero voting supply, and each module's payment asset unchanged since creation. See [DAO deployment](DAO_DEPLOYMENT.md) for configuration, signatures, setup, and recovery.
 
 ## Registry and upgrades
 

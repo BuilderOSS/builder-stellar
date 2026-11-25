@@ -582,6 +582,33 @@ use crate::storage::{
 /// Platform upgrade notice used by these tests (short; a deploy-time choice).
 const TEST_UPGRADE_DELAY: u32 = 1_000;
 
+/// The code hash the test host gives every natively registered contract
+/// (the hash of empty WASM). `launch_dao` reads each contract's code from
+/// the host, so tests that launch native mocks register this hash.
+fn native_hash(env: &Env) -> BytesN<32> {
+    env.crypto().sha256(&Bytes::new(env)).into()
+}
+
+/// Register `native_hash` once, so DAOs built from native mocks can launch.
+fn register_native_hash(env: &Env, client: &ManagerContractClient) -> BytesN<32> {
+    let hash = native_hash(env);
+    if client.get_implementation(&hash).is_none() {
+        client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "1"),
+            &hash,
+        );
+    }
+    hash
+}
+
+/// A fresh Stellar Asset Contract: the only kind of payment asset the
+/// Manager accepts.
+fn test_asset(env: &Env) -> Address {
+    env.register_stellar_asset_contract_v2(Address::generate(env))
+        .address()
+}
+
 /// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and one
 /// more function (`second`: name and arity), both returning void. Lets
 /// `create_dao` run its real deploy path without the full module WASMs (the
@@ -681,6 +708,7 @@ fn slug_for_nonce(env: &Env, nonce: u64) -> String {
 }
 
 fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
+    let asset = test_asset(env);
     DaoCreationParams {
         deployer: deployer.clone(),
         nonce,
@@ -705,10 +733,10 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
                     duration: 300,
                     reserve_price: 1000,
                     time_buffer: 1,
-                    payment_asset: Address::generate(env),
+                    payment_asset: asset.clone(),
                 }),
                 ModuleSpec::Marketplace(MarketplaceConfig {
-                    payment_asset: Address::generate(env),
+                    payment_asset: asset,
                     secondary_fee_bps: 100,
                 }),
             ],
@@ -1007,12 +1035,8 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
     register_stub_implementations(&env, &client);
 
     // Seed a PendingDao whose modules are mocks so launch_dao can complete.
-    // Mocks report the all-zero hash, which must be registered.
-    client.register_implementation(
-        &String::from_str(&env, "Mock"),
-        &String::from_str(&env, "1"),
-        &BytesN::from_array(&env, &[0u8; 32]),
-    );
+    // Mocks run the native hash, which must be registered.
+    register_native_hash(&env, &client);
     let launch_admin = Address::generate(&env);
     let token = env.register(MockModule, ());
     let governor = env.register(MockLaunchModule, ());
@@ -1125,7 +1149,9 @@ mod real_dao {
         env.ledger().set_timestamp(1_000);
         let manager = client.address.clone();
         let launch_admin = Address::generate(&env);
-        let hash = BytesN::from_array(&env, &[0u8; 32]);
+        // Every contract here is native, so its code is `native_hash`; the
+        // constructors record the same hash, so `wasm_hash()` agrees.
+        let hash = native_hash(&env);
 
         let auction_id = Address::generate(&env);
         let marketplace_id = Address::generate(&env);
@@ -1244,7 +1270,7 @@ mod real_dao {
             ),
         );
 
-        // The modules report the all-zero hash; launch_dao requires it registered.
+        // The modules run the native hash; launch_dao requires it registered.
         client.register_implementation(
             &String::from_str(&env, "Mock"),
             &String::from_str(&env, "0.1.0"),
@@ -2252,6 +2278,31 @@ mod real_dao {
         assert_eq!(recorded.deadline, now + 10 * DAY);
     }
 
+    /// Register `to` under the running ClaimMinter's name, approve the path
+    /// from the native code, and announce `to` as latest: everything a
+    /// recovery needs except the notice.
+    fn announce_recovery(dao: &RealDao, to: &BytesN<32>) -> BytesN<32> {
+        let env = &dao.env;
+        let from = native_hash(env);
+        dao.client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "0.2.0"),
+            to,
+        );
+        dao.client.approve_upgrade(&from, to);
+        dao.client
+            .set_latest_implementation(&String::from_str(env, "Mock"), to);
+        from
+    }
+
+    /// Move the ledger on by `ledgers` and the clock to `timestamp`.
+    fn move_to(env: &Env, ledgers: u32, timestamp: u64) {
+        env.ledger().with_mut(|l| {
+            l.sequence_number += ledgers;
+            l.timestamp = timestamp;
+        });
+    }
+
     #[test]
     fn recover_claims_waits_for_a_failed_drive_and_needs_the_launch_admin() {
         use common::testutils::empty_wasm;
@@ -2259,14 +2310,9 @@ mod real_dao {
         let env = &dao.env;
         let token = &dao.addresses.token;
         let ((alice, pa), (bob, pb)) = drive(&dao, cfg(env, true, true));
-        let from = BytesN::from_array(env, &[0u8; 32]);
+        let deadline = dao.client.get_assurance(token).unwrap().deadline;
         let to = empty_wasm(env);
-        dao.client.register_implementation(
-            &String::from_str(env, "Mock"),
-            &String::from_str(env, "0.2.0"),
-            &to,
-        );
-        dao.client.approve_upgrade(&from, &to);
+        let from = announce_recovery(&dao, &to);
         // Neither while Open...
         assert_eq!(
             dao.client.try_recover_claims(token, &from, &to),
@@ -2283,8 +2329,11 @@ mod real_dao {
             dao.client.try_recover_claims(token, &from, &to),
             Err(Ok(ManagerError::AssuranceNotFailed))
         );
-        env.ledger()
-            .set_timestamp(env.ledger().timestamp() + 10 * DAY + 1);
+        move_to(
+            env,
+            recovery_notice_ledgers(),
+            deadline + recovery_window_seconds() + 1,
+        );
         let stranger = Address::generate(env);
         env.mock_auths(&[MockAuth {
             address: &stranger,
@@ -2297,6 +2346,187 @@ mod real_dao {
         }]);
         assert!(dao.client.try_recover_claims(token, &from, &to).is_err());
         env.mock_all_auths();
+        dao.client.recover_claims(token, &from, &to);
+        env.as_contract(&dao.claims.address, || {
+            assert_eq!(common::upgrade::current_hash(env), to);
+        });
+    }
+
+    /// A recovery target announced well before the deadline still waits the
+    /// whole notice after the drive fails, and members refund in that time
+    /// from the code they paid into.
+    #[test]
+    fn recovery_waits_out_the_notice_after_the_deadline_so_members_refund_first() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let ((alice, pa), _) = drive(&dao, cfg(env, true, true));
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        let deadline = dao.client.get_assurance(token).unwrap().deadline;
+        let to = empty_wasm(env);
+        let from = announce_recovery(&dao, &to);
+
+        // The notice since the approval and announcement passes before the
+        // deadline; the drive then fails.
+        move_to(env, recovery_notice_ledgers(), deadline + 1);
+        assert_eq!(
+            dao.claims.assurance_state(&0),
+            common::modules::AssuranceState::Failed
+        );
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        // Members take their refunds during the notice.
+        let pay = soroban_sdk::token::TokenClient::new(env, &dao.payment);
+        assert_eq!(dao.claims.refund(&0, &alice), 10);
+        assert_eq!(pay.balance(&alice), 100);
+        // Still refused on the notice's last second...
+        move_to(env, 0, deadline + recovery_window_seconds());
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        // ...and applied after it.
+        move_to(env, 1, deadline + recovery_window_seconds() + 1);
+        dao.client.recover_claims(token, &from, &to);
+        env.as_contract(&dao.claims.address, || {
+            assert_eq!(common::upgrade::current_hash(env), to);
+        });
+    }
+
+    /// A drive opens only while every contract runs registered, active code:
+    /// members' money must not go into code the platform revoked.
+    #[test]
+    fn open_assurance_checks_the_code_every_contract_runs() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        dao.client.revoke_implementation(&native_hash(env));
+        let now = env.ledger().timestamp();
+        let list = crate::storage::AssuranceListParams {
+            root: BytesN::from_array(env, &[1u8; 32]),
+            tree_uri: String::from_str(env, "ipfs://bafytree"),
+            price: 10,
+            expires_at: now + 30 * DAY,
+            total: 2,
+            threshold_claimers: 2,
+            deadline: now + 10 * DAY,
+        };
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &list, &cfg(env, true, true)),
+            Err(Ok(ManagerError::PendingDaoUsesRevokedImplementation))
+        );
+        assert!(dao.client.get_assurance(token).is_none());
+        assert_eq!(dao.token.admin(), dao.launch_admin);
+    }
+
+    /// Lowering the upgrade notice long before the deadline does not shorten
+    /// the time members have to take their refunds.
+    #[test]
+    fn a_lowered_notice_still_leaves_members_the_refund_floor() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let ((alice, pa), _) = drive(&dao, cfg(env, true, true));
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        let deadline = dao.client.get_assurance(token).unwrap().deadline;
+        let to = empty_wasm(env);
+        let from = announce_recovery(&dao, &to);
+        // The notice drops to nothing once the notice in force has passed,
+        // all before the deadline.
+        dao.client.set_upgrade_delay(&0);
+        move_to(env, TEST_UPGRADE_DELAY, deadline + 1);
+        assert_eq!(dao.client.upgrade_delay(), 0);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, 0, deadline + crate::MIN_RECOVERY_REFUND_WINDOW);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        assert_eq!(dao.claims.refund(&0, &alice), 10);
+        // The notice since the announcement has the same floor in ledgers.
+        move_to(
+            env,
+            crate::MIN_RECOVERY_NOTICE_LEDGERS - TEST_UPGRADE_DELAY - 1,
+            deadline + crate::MIN_RECOVERY_REFUND_WINDOW + 1,
+        );
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, 1, env.ledger().timestamp());
+        dao.client.recover_claims(token, &from, &to);
+
+        // A second target right after the first still waits the floor, with
+        // the notice at zero and the deadline long past: members refund with
+        // the first recovery's code in that time.
+        let next = BytesN::from_array(env, &[5u8; 32]);
+        dao.client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "0.3.0"),
+            &next,
+        );
+        dao.client.approve_upgrade(&to, &next);
+        dao.client
+            .set_latest_implementation(&String::from_str(env, "Mock"), &next);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &to, &next),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+    }
+
+    /// A target registered after the drive failed applies only once it is
+    /// the announced latest and the notice has passed since the approval and
+    /// the announcement.
+    #[test]
+    fn a_newly_registered_recovery_target_waits_for_its_announcement_and_notice() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        drive(&dao, cfg(env, true, true));
+        let deadline = dao.client.get_assurance(token).unwrap().deadline;
+        // Long after the failure, so only the approval and announcement count.
+        move_to(env, 0, deadline + recovery_window_seconds() + 1);
+
+        let name = String::from_str(env, "Mock");
+        let from = native_hash(env);
+        let to = empty_wasm(env);
+        dao.client
+            .register_implementation(&name, &String::from_str(env, "0.2.0"), &to);
+        dao.client.approve_upgrade(&from, &to);
+        // The announcement comes later than the approval; the notice counts
+        // from the later of the two.
+        move_to(env, 500, env.ledger().timestamp());
+        // Approved but never announced as latest.
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeNotLatest))
+        );
+        // Another hash announced as latest: still not this one.
+        dao.client.set_latest_implementation(&name, &from);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeNotLatest))
+        );
+        dao.client.set_latest_implementation(&name, &to);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, recovery_notice_ledgers() - 1, env.ledger().timestamp());
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, 1, env.ledger().timestamp());
         dao.client.recover_claims(token, &from, &to);
         env.as_contract(&dao.claims.address, || {
             assert_eq!(common::upgrade::current_hash(env), to);
@@ -2634,8 +2864,6 @@ mod launch_revocation {
     use super::*;
     use crate::error::ManagerError;
 
-    const HASH: u8 = 0;
-
     struct Mocks {
         token: Address,
         all: [Address; 6],
@@ -2704,72 +2932,84 @@ mod launch_revocation {
         hash
     }
 
+    /// Have every mock report `hash` from its own `wasm_hash()`.
+    fn report(env: &Env, m: &Mocks, hash: &BytesN<32>) {
+        for module in &m.all {
+            env.as_contract(module, || env.storage().instance().set(&2u32, hash));
+        }
+    }
+
+    /// Run `contract` on `hash` without touching its storage, so its own
+    /// `wasm_hash()` no longer matches its code. `native_hash` swaps a mock
+    /// back to its native code.
+    fn swap_code(env: &Env, contract: &Address, hash: &BytesN<32>) {
+        env.as_contract(contract, || {
+            env.deployer().update_current_contract_wasm(hash.clone())
+        });
+    }
+
     #[test]
-    fn launch_rejects_revoked_hash_then_succeeds_after_upgrade_to_approved_hash() {
+    fn launch_checks_the_code_the_host_runs_not_the_hash_a_contract_reports() {
         let (env, client, _admin) = setup();
-        let old = register(&env, &client, HASH);
-        let new = register(&env, &client, 9);
+        let native = register_native_hash(&env, &client);
+        let reported = register(&env, &client, 9);
         let m = seed(&env, &client);
         let _ = &m.launch_admin;
-
-        client.revoke_implementation(&old);
-        let r = client.try_launch_dao(&m.token, &cfg(&env));
+        // Every contract reports a registered, active hash, but the code they
+        // run is revoked: launch is refused and nothing launches.
+        report(&env, &m, &reported);
+        client.revoke_implementation(&native);
         assert_eq!(
-            r.err().unwrap().unwrap(),
-            ManagerError::PendingDaoUsesRevokedImplementation
+            client.try_launch_dao(&m.token, &cfg(&env)),
+            Err(Ok(ManagerError::PendingDaoUsesRevokedImplementation))
         );
-        // Nothing launched: the pending record is intact.
         assert!(client.get_pending_dao(&m.token).is_some());
 
-        // Upgrading only the token is not enough: every module ran the revoked hash.
-        env.as_contract(&m.token, || {
-            env.storage().instance().set(&2u32, &new);
-        });
-        assert_eq!(
-            client
-                .try_launch_dao(&m.token, &cfg(&env))
-                .err()
-                .unwrap()
-                .unwrap(),
-            ManagerError::PendingDaoUsesRevokedImplementation
-        );
-        // Pre-launch upgrade of every module to a non-revoked approved hash.
-        for module in &m.all {
-            env.as_contract(module, || {
-                env.storage().instance().set(&2u32, &new);
-            });
-        }
+        // The reverse: active code launches whatever the contracts report.
+        let (env, client, _admin) = setup();
+        register_native_hash(&env, &client);
+        let m = seed(&env, &client);
+        report(&env, &m, &BytesN::from_array(&env, &[77u8; 32]));
         client.launch_dao(&m.token, &cfg(&env));
         assert!(client.get_pending_dao(&m.token).is_none());
     }
 
     #[test]
-    fn launch_rejects_each_module_on_revoked_or_unregistered_hash() {
+    fn launch_rejects_each_contract_on_revoked_or_unregistered_code() {
         for i in 0..6 {
             let (env, client, _admin) = setup();
-            let old = register(&env, &client, HASH);
+            let native = register_native_hash(&env, &client);
             let m = seed(&env, &client);
-            // Unregistered current hash on module i.
-            env.as_contract(&m.all[i], || {
-                env.storage()
-                    .instance()
-                    .set(&2u32, &BytesN::from_array(&env, &[77u8; 32]));
-            });
-            let r = client.try_launch_dao(&m.token, &cfg(&env));
+            report(&env, &m, &native);
+            // Unregistered code on contract i, checked before any call into it.
+            let other = env.deployer().upload_contract_wasm(stub_wasm(
+                &env,
+                "swapped",
+                0,
+                ("initialize", 0),
+            ));
+            swap_code(&env, &m.all[i], &other);
             assert_eq!(
-                r.err().unwrap().unwrap(),
-                ManagerError::PendingDaoUsesRevokedImplementation
+                client.try_launch_dao(&m.token, &cfg(&env)),
+                Err(Ok(ManagerError::PendingDaoUsesRevokedImplementation)),
+                "contract {i} on unregistered code"
             );
-            // Restoring it to the registered hash allows launch; revoking blocks it again.
-            env.as_contract(&m.all[i], || {
-                env.storage().instance().set(&2u32, &old);
-            });
-            client.revoke_implementation(&old);
-            let r = client.try_launch_dao(&m.token, &cfg(&env));
+            // Registered, then revoked: still refused.
+            client.register_implementation(
+                &String::from_str(&env, "Token"),
+                &String::from_str(&env, "2"),
+                &other,
+            );
+            client.revoke_implementation(&other);
             assert_eq!(
-                r.err().unwrap().unwrap(),
-                ManagerError::PendingDaoUsesRevokedImplementation
+                client.try_launch_dao(&m.token, &cfg(&env)),
+                Err(Ok(ManagerError::PendingDaoUsesRevokedImplementation)),
+                "contract {i} on revoked code"
             );
+            // Back on registered, active code: the launch goes through.
+            swap_code(&env, &m.all[i], &native);
+            client.launch_dao(&m.token, &cfg(&env));
+            assert!(client.get_pending_dao(&m.token).is_none());
         }
     }
 }
@@ -2788,15 +3028,8 @@ fn params_with_slug(env: &Env, nonce: u64, slug: &str) -> DaoCreationParams {
 /// Seed a pending DAO backed by mock modules (so `launch_dao` completes)
 /// that requests `slug`. Returns its token address.
 fn seed_mock_pending(env: &Env, client: &ManagerContractClient, slug: &str) -> Address {
-    // Mocks report the all-zero hash, which launch_dao requires registered.
-    let zero = BytesN::from_array(env, &[0u8; 32]);
-    if client.get_implementation(&zero).is_none() {
-        client.register_implementation(
-            &String::from_str(env, "Mock"),
-            &String::from_str(env, "1"),
-            &zero,
-        );
-    }
+    // Mocks run the native hash, which launch_dao requires registered.
+    register_native_hash(env, client);
     let launch_admin = Address::generate(env);
     let token = env.register(MockModule, ());
     env.as_contract(&token, || {
@@ -3347,7 +3580,7 @@ fn manager_upgrade_waits_out_its_notice() {
 
 fn claims_spec(env: &Env) -> ModuleSpec {
     ModuleSpec::Claims(crate::storage::ClaimsConfig {
-        payment_asset: Address::generate(env),
+        payment_asset: test_asset(env),
     })
 }
 
@@ -3525,7 +3758,7 @@ fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
             },
         );
     });
-    let from = BytesN::from_array(&env, &[0u8; 32]);
+    let from = native_hash(&env);
     let to = BytesN::from_array(&env, &[9u8; 32]);
     client.register_implementation(
         &String::from_str(&env, "Mock"),
@@ -3555,11 +3788,29 @@ fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
         client.try_recover_claims(&token, &from, &BytesN::from_array(&env, &[8u8; 32])),
         Err(Ok(crate::ManagerError::InvalidUpgradePath))
     );
+    // The approved target applies once announced and its notice has passed.
+    client.set_latest_implementation(&String::from_str(&env, "Mock"), &to);
+    env.ledger().with_mut(|l| {
+        l.sequence_number += recovery_notice_ledgers();
+        l.timestamp = 2_000 + recovery_window_seconds() + 1;
+    });
     client.recover_claims(&token, &from, &to);
     assert_eq!(
         lying_client.recovered(),
         Some((to, String::from_str(&env, "2")))
     );
+}
+
+/// The refund time `recover_claims` measures from the drive's deadline, in
+/// seconds: the notice in seconds, never less than the floor.
+fn recovery_window_seconds() -> u64 {
+    (TEST_UPGRADE_DELAY as u64 * crate::SECONDS_PER_LEDGER).max(crate::MIN_RECOVERY_REFUND_WINDOW)
+}
+
+/// The notice, in ledgers, a recovery target waits after its approval and
+/// announcement: the notice, never less than the floor.
+fn recovery_notice_ledgers() -> u32 {
+    TEST_UPGRADE_DELAY.max(crate::MIN_RECOVERY_NOTICE_LEDGERS)
 }
 
 #[test]
@@ -3740,4 +3991,168 @@ fn launch_with_a_governor_older_than_vote_source_uses_the_token() {
     let (env, client, _admin) = setup();
     let token = seed_mock_pending(&env, &client, "old-governor");
     client.launch_dao(&token, &launch_cfg(&env));
+}
+
+// ============================================================================
+// Payment assets must be Stellar Asset Contracts
+// ============================================================================
+
+/// Addresses that are not Stellar Asset Contracts: a contract running its
+/// own code, an address with nothing deployed, and an account.
+fn lookalike_assets(env: &Env) -> [Address; 3] {
+    [
+        env.register(MockToggleModule, ()),
+        Address::generate(env),
+        Address::from_str(
+            env,
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        ),
+    ]
+}
+
+/// `params` with every module's payment asset set to `asset`.
+fn with_asset(env: &Env, params: &DaoCreationParams, asset: &Address) -> DaoCreationParams {
+    let mut params = params.clone();
+    params.initial_config.modules = soroban_sdk::vec![
+        env,
+        ModuleSpec::Auction(AuctionConfig {
+            duration: 300,
+            reserve_price: 1000,
+            time_buffer: 1,
+            payment_asset: asset.clone(),
+        }),
+        ModuleSpec::Marketplace(MarketplaceConfig {
+            payment_asset: asset.clone(),
+            secondary_fee_bps: 100,
+        }),
+        ModuleSpec::Claims(crate::storage::ClaimsConfig {
+            payment_asset: asset.clone(),
+        }),
+    ];
+    params
+}
+
+#[test]
+fn create_dao_requires_a_stellar_asset_contract_for_every_payment_asset() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    let sac = test_asset(&env);
+    let base = with_asset(&env, &dao_params(&env, &deployer, 1), &sac);
+    for lookalike in lookalike_assets(&env) {
+        // Each module in turn priced in the lookalike, the others in the SAC.
+        for i in 0..base.initial_config.modules.len() {
+            let mut params = base.clone();
+            let spec = match params.initial_config.modules.get(i).unwrap() {
+                ModuleSpec::Auction(mut c) => {
+                    c.payment_asset = lookalike.clone();
+                    ModuleSpec::Auction(c)
+                }
+                ModuleSpec::Marketplace(mut c) => {
+                    c.payment_asset = lookalike.clone();
+                    ModuleSpec::Marketplace(c)
+                }
+                ModuleSpec::Claims(mut c) => {
+                    c.payment_asset = lookalike.clone();
+                    ModuleSpec::Claims(c)
+                }
+            };
+            params.initial_config.modules.set(i, spec);
+            assert_eq!(
+                client.try_create_dao(&params),
+                Err(Ok(ManagerError::InvalidPaymentAsset)),
+                "module {i} priced in a non-SAC asset"
+            );
+        }
+    }
+    // All three in the SAC: created.
+    let addresses = client.create_dao(&base);
+    let pending = client.get_pending_dao(&addresses.token).unwrap();
+    assert_eq!(pending.claims_payment_asset, Some(sac));
+}
+
+#[test]
+fn create_module_requires_a_stellar_asset_contract() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let token = seed_mock_pending(&env, &client, "mock-dao");
+    for lookalike in lookalike_assets(&env) {
+        let spec = ModuleSpec::Claims(crate::storage::ClaimsConfig {
+            payment_asset: lookalike,
+        });
+        assert_eq!(
+            client.try_create_module(&token, &spec, &0),
+            Err(Ok(ManagerError::InvalidPaymentAsset))
+        );
+    }
+    // Nothing was deployed or counted.
+    let claims = soroban_sdk::Symbol::new(&env, "claims");
+    assert_eq!(client.module_count(&token, &claims), 0);
+    client.create_module(&token, &claims_spec(&env), &0);
+}
+
+/// A ClaimMinter created with a contract asset before the creation check
+/// existed cannot open a drive priced in that asset.
+#[test]
+fn open_assurance_refuses_a_recorded_asset_that_is_not_a_stellar_asset_contract() {
+    use real_dao::*;
+    let dao = build();
+    let env = &dao.env;
+    let token = &dao.addresses.token;
+    let lookalike = env.register(MockToggleModule, ());
+    // The ClaimMinter as an older Manager could have built it, and the
+    // matching PendingDao record.
+    env.register_at(
+        &dao.claims.address,
+        minter::ClaimMinter,
+        (
+            dao.launch_admin.clone(),
+            token.clone(),
+            dao.addresses.treasury.clone(),
+            dao.client.address.clone(),
+            lookalike.clone(),
+            native_hash(env),
+        ),
+    );
+    let mut pending = dao.client.get_pending_dao(token).unwrap();
+    pending.claims_payment_asset = Some(lookalike);
+    env.as_contract(&dao.client.address, || {
+        crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
+    });
+    dao.metadata.add_properties(
+        &soroban_sdk::vec![env, String::from_str(env, "Background")],
+        &soroban_sdk::vec![
+            env,
+            metadata::ItemParam {
+                property_id: 0,
+                name: String::from_str(env, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &metadata::IpfsGroup {
+            base_uri: String::from_str(env, "ipfs://art/"),
+            extension: String::from_str(env, ".png"),
+        },
+    );
+    let now = env.ledger().timestamp();
+    let list = crate::storage::AssuranceListParams {
+        root: BytesN::from_array(env, &[1u8; 32]),
+        tree_uri: String::from_str(env, "ipfs://bafytree"),
+        price: 10,
+        expires_at: now + 30 * 86_400,
+        total: 2,
+        threshold_claimers: 2,
+        deadline: now + 10 * 86_400,
+    };
+    let launch = LaunchConfig {
+        launch_auction: true,
+        launch_marketplace: true,
+    };
+    assert_eq!(
+        dao.client.try_open_assurance(token, &list, &launch),
+        Err(Ok(ManagerError::InvalidPaymentAsset))
+    );
+    // Nothing changed: no drive, no slug, the launch admin still holds it.
+    assert!(dao.client.get_assurance(token).is_none());
+    assert_eq!(dao.token.admin(), dao.launch_admin);
 }

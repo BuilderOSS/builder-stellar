@@ -1,15 +1,17 @@
 # Application and indexer monitoring
 
-Monitor database access, matching event freshness, RPC access, and contract TTL separately. This page describes implemented endpoints/manual checks; it does not claim deployed alerting or a production on-call system.
+Monitor database access, matching event freshness, RPC access, and contract TTL separately. This page describes implemented endpoints/manual checks and, in the [alerting plan](#alerting-plan), the alerts to set up. No alerting or on-call system is deployed today.
 
 ## Health endpoints
 
 | Endpoint | Meaning and status |
 | --- | --- |
-| `GET /api/health` | Chain head, the pipeline's own position and Goldsky status (with `GOLDSKY_API_TOKEN`), the newest ledger with a DAO event, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. |
-| `GET /api/goldsky/health` | Read-only `app.indexer_status` query. `healthy` returns 200, `unhealthy` 503; no-store. A missing row can still return healthy with null latest ledger/zero events. |
+| `GET /api/health` | Chain head, the pipeline's own position and Goldsky status (with `GOLDSKY_API_TOKEN`), the newest ledger with a DAO event, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. One result is reused for 10 seconds (`Cache-Control: public, max-age=0, s-maxage=10`). |
+| `GET /api/goldsky/health` | Read-only `app.indexer_status` query. `healthy` returns 200, `unhealthy` 503; no-store. One result is reused for 10 seconds. A missing row can still return healthy with null latest ledger/zero events. |
 
-The first endpoint emits `rpc_latest_ledger`, `pipeline_last_ledger`, `pipeline_lag_ledgers`, `db_latest_ledger`, `db_latest_event_age_ledgers`, `dao_count`, `recent_activity_1h`, and a `pipeline` object (`configured`, `status`, `errors`); timings include `rpc_check`, `event_check`, `pipeline_check`, `dao_check`, `total`. Alerts include `pipeline_lag`, `pipeline_failed`, `pipeline_unknown`, `no_recent_activity`, `db_slow`, `rpc_unreachable`.
+Both endpoints are public and share a limit of 30 requests a minute per client address; past it they answer 429 with `Retry-After`. Poll at most every 10 seconds, since faster polling sees the same result.
+
+The first endpoint emits `rpc_latest_ledger`, `pipeline_last_ledger`, `pipeline_lag_ledgers`, `db_latest_ledger`, `db_latest_event_age_ledgers`, `dao_count`, `recent_activity_1h`, and a `pipeline` object (`configured`, `status`, `error_count`); timings include `rpc_check`, `event_check`, `pipeline_check`, `dao_check`, `total`. Alerts include `pipeline_lag`, `pipeline_failed`, `pipeline_unknown`, `no_recent_activity`, `db_slow`, `rpc_unreachable`. Goldsky's error messages can name the sink's hosts and tables, so the endpoint returns only their count; the messages are in the server log as `[api:health] Goldsky pipeline errors:`, or in `goldsky turbo` and the Goldsky dashboard.
 
 How status is decided:
 
@@ -28,6 +30,10 @@ curl -s http://localhost:4242/api/goldsky/health
 An inactive DAO deployment can have no recent matching events while the pipeline is processing normally. Event age is not source processing lag; that is what `pipeline_lag_ledgers` measures. A 200 response is not proof that the last mutation is indexed or that every contract is usable.
 
 Sources: [health route](../apps/web/src/app/api/health/route.ts), [Goldsky route](../apps/web/src/app/api/goldsky/health/route.ts), [health helper](../apps/web/src/lib/goldsky.ts).
+
+## Application logs
+
+When an API route fails for a reason the client can't act on, the client sees a short message and the detail goes to the server log: as `[api:<route>]` (for example `[api:proposals]`), or `[marketplace]`, `[marketplace preparation]`, and `[treasury]` for those services. Sign-in and upload routes keep their own logging. Content-Security-Policy violations arrive as `[csp-report]` lines with the directive, the blocked address (origin and path), and the page. While the page policy is report-only, check these before setting `CSP_MODE=enforce` (see [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)).
 
 ## Database/event checks
 
@@ -69,10 +75,10 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
-**Shared contract code is the platform's to renew, and nothing renews it automatically.** Owner: whoever holds the
-Manager admin identity (`DEPLOY_IDENTITY`, `<network>-admin` by default); the renewal is a plain extend, so a
-non-admin funded key can run it too. Cadence: a dry run every Monday, a renewal whenever any hash is under 60
-days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
+**Shared contract code is the platform's to renew, and nothing renews it automatically.** The renewal is a plain
+extend, so it needs no admin rights: the script pays with the renewal payer, `<network>-renewer` by default
+(`RENEW_IDENTITY` or `--identity` overrides it), a separate low-value key ([key custody](KEY_CUSTODY.md#renewal-payer)).
+Cadence: a dry run every Monday, a renewal whenever any hash is under 60 days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
 for 4 days after the platform lapses has its code archived and every call fails until a permissionless restore.
 
 ```bash
@@ -92,3 +98,50 @@ Use [storage and TTL](TTL_ECONOMICS.md) for renewal. The platform renews shared 
 For missing indexed data, first compare artifact/network/start ledger and scoped contract IDs; then inspect pipeline processing/transform errors with the configured Goldsky CLI. The wrapper and CLI prerequisite caveat are in [the package README](../packages/goldsky/README.md). Do not print secrets to diagnose configuration.
 
 Schema/permission/reset procedures belong in [db/README.md](../db/README.md). A reset deletes data and is not a routine health fix. There is no guaranteed ingestion latency or deployed alert threshold beyond the endpoint calculations above.
+
+## Alerting plan
+
+None of these alerts is deployed yet. Each one names its signal, where to read it, when it fires, and the
+response ([incident runbook](INCIDENT_RUNBOOK.md)). Send every alert to a channel at least two people watch,
+and record each planned admin change before it is made, so an alert for it can be told apart from an
+incident.
+
+| Alert | Signal | Fires when | Response |
+| --- | --- | --- | --- |
+| Manager admin call | Manager events `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `current_implementations_updated`, `latest_implementation_set`, `upgrade_delay_changed`, `vote_source_approved`, `manager_upgraded` | Any event not in the record of planned changes | [Admin key compromise](INCIDENT_RUNBOOK.md#manager-admin-key-compromise) |
+| Implementation registered or revoked | `implementation_registered`, `implementation_revoked` | Any hash that is not a published release hash | The same |
+| Upgrade approved | `upgrade_approved` (`from_hash`, `to_hash`) | Any approval not in the record; any target that is not a published release hash | The same; warn tribes not to pass upgrades to the target |
+| Factory paused | `factory_paused`, `factory_unpaused` | Every time | [Pausing the factory](INCIDENT_RUNBOOK.md#pausing-the-factory); tell the launch admins of pending tribes |
+| Indexer stalled | `/api/health`: `pipeline_lag_ledgers`, the `pipeline_failed`, `pipeline_lag` and `pipeline_unknown` alerts | Two checks in a row return 503, or `pipeline_lag_ledgers` is over 100 for 15 minutes | Check the pipeline with the Goldsky CLI ([package README](../packages/goldsky/README.md)) |
+| App or database down | `/api/health` or `/api/goldsky/health` returns 503 or 500, or doesn't answer | Two checks in a row | Vercel and Neon status, then the logs |
+| A view stopped reading | A page or `/api/health` fails with a database error while the pipeline is current | Once | [Malformed indexer event](INCIDENT_RUNBOOK.md#a-malformed-indexer-event) |
+| Pinata spend | Pinata usage and billing (storage, bandwidth, requests); upload route error rates in the Vercel logs | Usage passes half, then 80% of the monthly budget; uploads rise far above their usual daily count | Check upload logs per account; [leaked `PINATA_JWT`](INCIDENT_RUNBOOK.md#leaked-secrets) if the uploads aren't the app's |
+| Shared code expiring | `renew-code-ttl.mjs --dry-run` (the weekly cron above) | Any hash under 60 days, or the dry run fails | Renew; under 14 days is urgent |
+
+**How to collect them.** Three small pieces cover every row:
+
+- An uptime monitor that requests `/api/health` and `/api/goldsky/health` for each deployment every
+  5 minutes and alerts on a non-200 response. The health route already sets the status from the pipeline
+  lag and the database.
+- A scheduled job, every 15 minutes, that reads the Manager's events. Read them from the RPC
+  (`getEvents` filtered by the Manager's contract ID), so the alert still works when the indexer is the
+  thing that stopped, and compare them with the read model as a second source. As `app_server`:
+
+  ```sql
+  SELECT DISTINCT event_name, ledger_sequence, transaction_hash
+  FROM app.activity_feed
+  WHERE deployment_id = 'manager:<Manager contract address>'
+    AND contract_role = 'manager'
+    AND event_name IN ('admin_proposed', 'admin_proposal_cancelled', 'admin_changed', 'current_implementations_updated',
+      'latest_implementation_set', 'upgrade_delay_changed', 'vote_source_approved', 'manager_upgraded',
+      'implementation_registered', 'implementation_revoked', 'upgrade_approved', 'factory_paused', 'factory_unpaused')
+    AND ledger_sequence > <last ledger checked>
+  ORDER BY ledger_sequence;
+  ```
+
+  Platform events appear once per tribe in the feed; `DISTINCT` folds them back to one row.
+  `implementation_revoked` reaches the feed only for tribes that run the revoked hash, so a revocation of an
+  unused hash shows only in the RPC read. The RPC keeps events only for its retention window (a provider
+  setting), so the job must run well within it.
+- Pinata usage for the account of each environment's key, against the monthly budget: its notifications where
+  the plan offers them, otherwise a weekly look at the usage page.

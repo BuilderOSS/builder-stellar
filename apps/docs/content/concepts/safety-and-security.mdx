@@ -23,14 +23,16 @@ The operator controls the Manager, Tribe Builder's registry and factory contract
 
 By pausing or withdrawing, the operator can stop a launch drive that has enough claims, so that it ends in refunds.
 
+If a launch drive fails and its claims contract can't pay refunds, the operator can publish a fixed claims release, which the tribe's launch admin may then apply to that contract. The fix takes over the held payments, so it can apply only at least seven days after the drive's deadline and after the fix is published. Members can take their payments back with the original code in that time. See [Claim refunds](/guides/claims/refund).
+
 The operator is a single address. Handing it to someone else takes two steps. Its own upgrades of the Manager wait out a notice period, which Manage → Contract upgrades shows.
 
 ## What the platform operator can't do
 
 - Mint tokens for any tribe.
-- Move a tribe's funds or tokens.
+- Move a tribe's funds or tokens. The one exception is the fix for a failed launch drive, described above.
 - Change a tribe's settings after launch.
-- Apply an upgrade to a tribe. Only the tribe can, by vote.
+- Apply an upgrade to a tribe. Only the tribe can, by vote, apart from the fix for a failed launch drive, which its launch admin applies.
 
 ## What the app does
 

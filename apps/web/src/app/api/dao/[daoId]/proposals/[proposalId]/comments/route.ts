@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { getGoldskyProposalComments } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
@@ -18,10 +19,11 @@ export async function GET(request: Request, context: { params: Promise<{ daoId: 
       await getGoldskyProposalComments(daoId, { proposalId, limit: Math.min(limit, 1000), offset }),
       { headers: { 'Cache-Control': 'no-store' } }
     );
-  } catch {
-    return NextResponse.json(
-      { items: [], generatedAt: new Date().toISOString(), message: 'Proposal comments unavailable' },
-      { status: 503 }
-    );
+  } catch (error) {
+    return internalErrorResponse('proposal-comments', error, {
+      items: [],
+      generatedAt: new Date().toISOString(),
+      message: 'Proposal comments unavailable'
+    });
   }
 }
