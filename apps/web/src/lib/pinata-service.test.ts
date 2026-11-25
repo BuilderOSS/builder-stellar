@@ -181,9 +181,9 @@ describe('PinataService upload keys', () => {
         url.searchParams.get('offset')
       ])
     ).toEqual([
-      ['tribes-folder-upload-', 'false', null],
-      ['tribes-folder-upload-', 'false', '5'],
-      ['tribes-folder-upload-', 'false', '7']
+      ['tribes-folder-upload-', null, null],
+      ['tribes-folder-upload-', null, '5'],
+      ['tribes-folder-upload-', null, '7']
     ]);
   });
 
@@ -201,6 +201,35 @@ describe('PinataService upload keys', () => {
     });
     await expect(new PinataService().revokeExpiredUploadKeys(NOW)).resolves.toBe(UPLOAD_KEY_SWEEP_REVOKE_LIMIT);
     expect(page).toBeLessThanOrEqual(UPLOAD_KEY_SWEEP_PAGE_LIMIT);
+  });
+
+  it('skips a key Pinata refuses to revoke and goes on, but stops on a refused credential', async () => {
+    const past = `tribes-folder-upload-${seconds(NOW - 60_000)}`;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const revoked: string[] = [];
+    let status = 400;
+    fetchMock.mockImplementation(async (url: URL | string, init?: RequestInit) => {
+      if (String(url).startsWith('https://api.pinata.cloud/v3/api_keys'))
+        return json({
+          keys: String(url).includes('offset')
+            ? []
+            : [
+                { key: 'stale', name: past },
+                { key: 'next', name: past }
+              ]
+        });
+      const key = JSON.parse(init!.body as string).apiKey;
+      if (key === 'stale') return json({ error: { message: 'already revoked' } }, status);
+      revoked.push(key);
+      return json({}, 200);
+    });
+    await expect(new PinataService().revokeExpiredUploadKeys(NOW)).resolves.toBe(1);
+    expect(revoked).toEqual(['next']);
+    expect(error).toHaveBeenCalledWith('[pinata-upload-keys] could not revoke an expired key:', 'already revoked');
+
+    status = 403;
+    await expect(new PinataService().revokeExpiredUploadKeys(NOW)).rejects.toMatchObject({ code: 'AUTH_FAILED' });
+    error.mockRestore();
   });
 
   it('fails the sweep when the key list is refused, so the caller logs it', async () => {

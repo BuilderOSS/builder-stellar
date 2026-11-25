@@ -72,8 +72,12 @@ export async function cached<T>(key: string, ttlMs: number, load: () => Promise<
   const entry = store.get(key);
   if (entry?.pending) return entry.pending as Promise<T>;
   if (entry && entry.expires > now && 'value' in entry) return entry.value as T;
-  const pending = load().then(
+  // Only this load's own entry is replaced or removed: an entry that was evicted or invalidated
+  // meanwhile, or replaced by a newer load, is left as it is.
+  const own = () => store.get(key)?.pending === pending;
+  const pending: Promise<T> = load().then(
     (value) => {
+      if (!own()) return value;
       const bytes = estimateBytes(value);
       if (bytes > limits.maxValueBytes) {
         // Too large to keep: every caller waiting on this load still gets it.
@@ -85,7 +89,7 @@ export async function cached<T>(key: string, ttlMs: number, load: () => Promise<
       return value;
     },
     (error: unknown) => {
-      remove(key);
+      if (own()) remove(key);
       throw error;
     }
   );

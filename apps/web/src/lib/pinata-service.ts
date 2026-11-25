@@ -266,8 +266,9 @@ export class PinataService {
     let offset = 0;
     for (let page = 0; page < UPLOAD_KEY_SWEEP_PAGE_LIMIT; page += 1) {
       const url = new URL(`${this.apiUrl}/v3/api_keys`);
+      // Filter by name only: revoked keys are skipped below from each key's own `revoked` field,
+      // so the sweep doesn't depend on how the list reads a `revoked` parameter.
       url.searchParams.set('name', UPLOAD_KEY_PREFIX);
-      url.searchParams.set('revoked', 'false');
       if (offset) url.searchParams.set('offset', String(offset));
       let keys: unknown[];
       try {
@@ -295,7 +296,14 @@ export class PinataService {
         unseen += 1;
         const deadline = uploadKeyDeadline(name);
         if (isRevoked === true || deadline === null || deadline > now) continue;
-        await this.revokeUploadKey(key);
+        try {
+          await this.revokeUploadKey(key);
+        } catch (error) {
+          // A refused key must not stop the rest of the sweep; a refused credential does.
+          if (error instanceof AuthenticationError) throw error;
+          console.error('[pinata-upload-keys] could not revoke an expired key:', (error as Error).message);
+          continue;
+        }
         revoked += 1;
         if (revoked >= UPLOAD_KEY_SWEEP_REVOKE_LIMIT) return revoked;
       }

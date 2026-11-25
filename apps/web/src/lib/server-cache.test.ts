@@ -63,6 +63,24 @@ describe('server cache', () => {
     expect(serverCacheUsage()).toEqual({ entries: 0, bytes: 0 });
   });
 
+  it('a load that finishes after its entry was invalidated, or replaced by a newer load, changes nothing', async () => {
+    let finishOld = (_value: string) => {};
+    const old = cached('k', 60_000, () => new Promise<string>((resolve) => (finishOld = resolve)));
+    invalidateCached('k');
+    let finishNew = (_value: string) => {};
+    const fresh = cached('k', 60_000, () => new Promise<string>((resolve) => (finishNew = resolve)));
+    finishOld('stale');
+    expect(await old).toBe('stale');
+    // The newer load is still the one callers share.
+    const third = vi.fn(async () => 'third');
+    const shared = cached('k', 60_000, third);
+    finishNew('fresh');
+    expect(await fresh).toBe('fresh');
+    expect(await shared).toBe('fresh');
+    expect(third).not.toHaveBeenCalled();
+    expect(await cached('k', 60_000, third)).toBe('fresh');
+  });
+
   it('estimates sizes: binary exactly, text and objects by their length, cycles and bigints without throwing', () => {
     expect(estimateBytes(bytes(1234))).toBe(1234);
     expect(estimateBytes(new Uint8Array(10).buffer)).toBe(10);
