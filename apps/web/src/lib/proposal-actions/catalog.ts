@@ -27,6 +27,8 @@ export type SettingValues = {
   membership?: MembershipState;
   /** The market's config, with its payment asset's code ("XLM") when it is a known asset. */
   marketplace?: (MarketplaceConfig & { assetCode?: string }) | null;
+  /** Whether the tribe's ClaimMinter has `close_list`; releases up to 0.5.0 don't. */
+  claimsCanCloseLists?: boolean;
 };
 
 /** Where an action sits in the picker. "Elsewhere" actions are prepared on their own page and never picked. */
@@ -148,6 +150,7 @@ export const ACTION_CATALOG: Record<ProposalActionType, ActionMeta> = {
   'set-artwork-renderer': { section: 'elsewhere', part: 'Membership', keywords: 'artwork renderer images' },
   'regenerate-token-traits': { section: 'elsewhere', part: 'Membership', keywords: 'seed traits' },
   'open-claim-list': { section: 'elsewhere', part: 'Membership', keywords: 'claims allowlist' },
+  'close-claim-list': { section: 'setting', part: 'Membership', keywords: 'claims allowlist end stop founder supply' },
   'set-voting-delay': {
     section: 'setting',
     part: 'Rules',
@@ -395,8 +398,15 @@ export function actionAvailability(
     return { available: false, reason: 'This tribe has no auction yet.', ...MODULE_FIX };
   if (MARKET_TYPES.has(type) && !config.marketplaceContractId)
     return { available: false, reason: 'This tribe has no market yet.', ...MODULE_FIX };
-  if (type === 'open-claim-list' && !config.claimsContractId)
+  if ((type === 'open-claim-list' || type === 'close-claim-list') && !config.claimsContractId)
     return { available: false, reason: 'This tribe has no claims module yet.', ...MODULE_FIX };
+  if (type === 'close-claim-list' && values.claimsCanCloseLists === false)
+    return {
+      available: false,
+      reason: 'This tribe’s claims module is an earlier release that cannot close lists. Upgrade it first.',
+      fixHref: ACTION_SOURCES.upgrades.href,
+      fixLabel: ACTION_SOURCES.upgrades.label
+    };
   if (type === 'dao-transfer' && values.membership && !values.membership.settings.daoRecovery)
     return {
       available: false,

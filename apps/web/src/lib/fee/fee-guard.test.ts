@@ -9,7 +9,13 @@ import {
 } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { assertFeeWithinGuard, FEE_GUARD_STROOPS, FeeGuardError, transactionMaxFee } from './fee-guard';
+import {
+  assertFeeWithinGuard,
+  FEE_GUARD_STROOPS,
+  FeeGuardError,
+  transactionMaxFee,
+  UnreadableTransactionError
+} from './fee-guard';
 
 function txWithResourceFee(resourceFee: bigint) {
   const contractId = Address.contract(Buffer.alloc(32, 3)).toString();
@@ -41,8 +47,8 @@ describe('fee guard', () => {
     expect(() => assertFeeWithinGuard(xdr, undefined, fee)).not.toThrow();
     expect(() => assertFeeWithinGuard(xdr, undefined, fee - 1n)).toThrow(FeeGuardError);
   });
-  it('leaves anything that is not a transaction to the wallet', () => {
+  it('refuses anything it cannot read as a transaction', () => {
     expect(transactionMaxFee('not xdr')).toBeNull();
-    expect(() => assertFeeWithinGuard('not xdr')).not.toThrow();
+    expect(() => assertFeeWithinGuard('not xdr')).toThrow(UnreadableTransactionError);
   });
 });

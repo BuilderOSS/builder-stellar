@@ -299,6 +299,11 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${price} each, at most ${action.maxPerBuyer} per wallet and ${action.maxSoldPerPeriod} sold every ${action.periodHours}h, closing ${closing}`;
   }
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
+  if (action.type === 'close-claim-list') {
+    const id = String(action.listId ?? '');
+    const name = /^\d+$/.test(id) ? `claim list ${Number(id) + 1} (list ID ${id})` : `claim list ${id}`;
+    return `Close ${name} now: claims on it stop, and its unclaimed tokens can no longer be minted from it`;
+  }
   if (action.type === 'sweep-pool') return `Move pool #${action.poolId}’s unsold tokens to the treasury`;
   if (action.type === 'batch-mint-governance-token') {
     if (Array.isArray(action.allocations) && action.allocations.length) {

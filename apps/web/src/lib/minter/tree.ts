@@ -16,6 +16,14 @@
  * The chain cannot check a file against its root. Consumers rebuild the tree
  * from `claims` and refuse the file unless the rebuilt root equals the chain's;
  * the proof they use is the rebuilt one, never the file's.
+ *
+ * Leaves and nodes carry no tag, and the hashes don't bind the network, token, or
+ * list. `verifyClaimTree` checks the network and token header fields against the
+ * chain; `list` is informational. Length keeps a leaf from being taken for a node:
+ * see `claimLeaf`. `list` is the id expected when the tree was built; a proposal
+ * can open the list under a later id, which leaves the proofs valid because the
+ * root does not depend on it. The format is pinned by
+ * contracts/minter/test-vectors/merkle-v1.json, which the contract's tests check too.
  */
 import { sha256 } from '@noble/hashes/sha2.js';
 import { StrKey } from '@stellar/stellar-sdk';

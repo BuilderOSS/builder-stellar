@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { AccountLookupError, verifySep53SignerWeight } from '@/lib/auth/account-signers';
 import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
 import {
   AuthError,
@@ -11,7 +12,9 @@ import {
   getAuthOrigin,
   getAuthSession,
   getConfiguredNetwork,
-  releaseAuthChallenge
+  rejectCrossSiteRequest,
+  releaseAuthChallenge,
+  startSessionAccount
 } from '@/lib/auth/server';
 import { verifyAuthProof } from '@/lib/auth/verification';
 
@@ -23,7 +26,14 @@ const verifySchema = z.object({
   signature: z.string().min(1)
 });
 
+/**
+ * SEP-53 sign-in, step 2: checks the wallet's signature over the challenge message issued to this
+ * session, then that the signing key still has enough weight on its account, and only then signs
+ * the session in. Each challenge works once.
+ */
 export async function POST(request: Request) {
+  const crossSite = rejectCrossSiteRequest(request);
+  if (crossSite) return crossSite;
   const rateLimitResponse = enforceAuthRateLimit(request, 'verify', 10);
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -61,12 +71,11 @@ export async function POST(request: Request) {
       domain,
       uri
     });
+    // The signature proves the caller holds the address's own key. Check that the key still speaks
+    // for the account, so a master key that was disabled or outweighed can't sign in.
+    await verifySep53SignerWeight(body.data.address, network);
 
-    delete session.challenge;
-    session.address = body.data.address;
-    session.network = network.name;
-    session.authMethod = 'sep53';
-    session.authenticatedAt = Date.now();
+    startSessionAccount(session, { address: body.data.address, network: network.name, authMethod: 'sep53' });
     await session.save();
     consumeAuthChallenge(claimedNonce);
 
@@ -76,6 +85,12 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (claimedNonce) releaseAuthChallenge(claimedNonce);
+    if (error instanceof AccountLookupError) {
+      return NextResponse.json(
+        { code: 'ACCOUNT_LOOKUP_UNAVAILABLE', message: error.message },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
     if (error instanceof SyntaxError) {
       return NextResponse.json({ code: 'INVALID_MESSAGE', message: 'Invalid authentication proof.' }, { status: 400 });
     }

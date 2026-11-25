@@ -70,6 +70,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | `0011_vote_sources` | vote sources (`manager.vote_sources`), `governance.settings.vote_source` |
 | `0012_outside_module_casts` | `chain.try_int` (text to integer, NULL for anything else); `manager.module_versions` and `manager.module_launches` take upgrades, storage migrations and launch events only from the contracts the Manager deployed, so the views ignore malformed values from outside modules |
 | `0013_u64_view_casts` | `chain.u64_bigint` (text to bigint, values past the bigint range read as its maximum); `marketplace.pools` (`expires_at`, `period_secs`), `marketplace.secondary_listings` (`expires_at`) and `claims.lists` (`expires_at`, `deadline`) read through it, so a far expiry chosen on chain no longer stops the views |
+| `0014_claim_list_closed` | `claims.lists` reads ClaimMinter `list_closed`: `closed`, `closed_ledger`, `closed_at` and `effective_expires_at` (when claims stop), and `opened_in_setup` (opened before the ClaimMinter launched), added after the existing columns |
 | `0015_known_role_owner` | `manager.created_modules` (every module the Manager created, with the DAO it created it for); `manager.manager_modules` reads it; `manager.module_registrations` gives a known role only when the registering DAO is the one the module was created for, so a DAO that registers another DAO's module sees it as role `module` |
 
 Launch model: every module emits its own launch event (`token_launched`,

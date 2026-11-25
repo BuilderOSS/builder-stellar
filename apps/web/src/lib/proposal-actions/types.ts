@@ -49,6 +49,7 @@ export type ProposalActionType =
   | 'treasury-authorize'
   | 'treasury-buy-listing'
   | 'open-claim-list'
+  | 'close-claim-list'
   | 'set-token-metadata'
   | 'transfer-dao-token'
   | 'change-dao-slug'
@@ -108,6 +109,10 @@ export interface FormContext {
   balancesError?: string;
   /** True once the auction has taken a bid, which fixes its payment asset; undefined when unknown. */
   auctionPaymentTokenLocked?: boolean;
+  /** Whether the tribe's ClaimMinter has `close_list` (after 0.5.0); undefined while it is read. */
+  claimsCanCloseLists?: boolean;
+  /** The read of `claimsCanCloseLists` failed. */
+  claimsCanCloseListsError?: boolean;
   // Allow custom extensions per action type
   [key: string]: any;
 }
