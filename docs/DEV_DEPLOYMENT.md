@@ -138,8 +138,10 @@ uploads on dev, doesn't reach the other. When this page was written, `builder-st
 production's key; replace it as follows.
 
 1. In the Pinata dashboard, create a key named for the deployment (for example `tribes-dev`) with the same
-   scopes as production's key: the upload routes sign uploads, look files up by CID and create one-use upload
-   keys (`apps/web/src/lib/pinata-service.ts`). A separate Pinata account for dev also separates storage and
+   scopes as production's key: the upload routes sign uploads, look files up by CID, and create, list and
+   revoke one-use upload keys (`apps/web/src/lib/pinata-service.ts`), so it needs key management (an admin
+   key). Without the list and revoke scopes, uploads still work but used keys are not revoked
+   (`[pinata-upload-keys]` errors in the log). A separate Pinata account for dev also separates storage and
    billing.
 2. Set it as `PINATA_JWT` on `builder-stellar-dev` (Production and Preview), and redeploy.
 3. Upload one image on dev.tribes.build to check it.
@@ -147,6 +149,10 @@ production's key; replace it as follows.
    get dev's key, so a pull request preview never holds production's.
 
 Replacing a key later is the same, then revoke the old key in Pinata ([key custody](KEY_CUSTODY.md#web-app-secrets)).
+
+Folder upload keys are named `tribes-folder-upload-<deadline>`, and the app revokes them itself. Before this
+naming, the app made keys named `Single Use Upload JWT` and never revoked them. The sweep doesn't touch other
+names, so revoke those once in the Pinata dashboard (API Keys, filter by name).
 
 ## 5. Vercel: docs.tribes.build (`builder-stellar-docs`)
 

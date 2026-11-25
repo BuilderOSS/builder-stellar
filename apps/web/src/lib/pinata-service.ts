@@ -50,6 +50,32 @@ export class BackendFailedError extends PinataError {
 }
 
 /**
+ * Folder upload keys. Pinata has no expiry for API keys and publishes no cap on how many an
+ * account holds, so each key this app creates is single-use and named with its deadline
+ * (`tribes-folder-upload-<epoch seconds>`). The browser gives the upload two minutes; a key
+ * still unrevoked after UPLOAD_KEY_TTL_MS is revoked by the sweep.
+ */
+export const UPLOAD_KEY_PREFIX = 'tribes-folder-upload-';
+export const UPLOAD_KEY_TTL_MS = 15 * 60 * 1000;
+/** Pages of Pinata's key list one sweep reads, and keys it revokes, at most. */
+export const UPLOAD_KEY_SWEEP_PAGE_LIMIT = 5;
+export const UPLOAD_KEY_SWEEP_REVOKE_LIMIT = 50;
+const PINATA_KEY_CALL_TIMEOUT_MS = 10_000;
+const UPLOAD_KEY_NAME = /^tribes-folder-upload-(\d{1,12})$/;
+
+export type UploadKey = { jwt: string; keyId: string; expiresAt: Date };
+
+export function uploadKeyName(expiresAt: Date): string {
+  return `${UPLOAD_KEY_PREFIX}${Math.ceil(expiresAt.getTime() / 1000)}`;
+}
+
+/** The deadline (epoch milliseconds) in an upload key's name, or null for any other name. */
+export function uploadKeyDeadline(name: unknown): number | null {
+  const match = typeof name === 'string' ? UPLOAD_KEY_NAME.exec(name) : null;
+  return match ? Number(match[1]) * 1000 : null;
+}
+
+/**
  * Pinata API service for file uploads and IPFS pinning
  */
 export class PinataService {
@@ -153,10 +179,13 @@ export class PinataService {
   }
 
   /**
-   * Generates a single-use JWT for directory uploads to the legacy Pinata endpoint
-   * The JWT has restricted permissions (pinFileToIPFS only) and expires after one use
+   * Creates a Pinata key for one folder upload to the legacy `pinFileToIPFS` endpoint: that
+   * endpoint only, one use (`maxUses: 1`). Pinata keys have no expiry, so the key's deadline
+   * (UPLOAD_KEY_TTL_MS from now) is in its name, and `revokeExpiredUploadKeys` revokes it once
+   * the deadline passes; `pin-cid` revokes it sooner, when it confirms the upload.
    */
-  async generateUploadJwt(): Promise<string> {
+  async generateUploadKey(now = Date.now()): Promise<UploadKey> {
+    const expiresAt = new Date(now + UPLOAD_KEY_TTL_MS);
     try {
       const response = await fetch(`${this.apiUrl}/users/generateApiKey`, {
         method: 'POST',
@@ -165,7 +194,7 @@ export class PinataService {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          keyName: 'Single Use Upload JWT',
+          keyName: uploadKeyName(expiresAt),
           maxUses: 1, // Single use only
           permissions: {
             endpoints: {
@@ -188,16 +217,93 @@ export class PinataService {
         this.handleApiError(response.status, error);
       }
 
-      const data = await response.json();
-      if (!data.JWT) {
+      const data = (await response.json()) as { JWT?: unknown; pinata_api_key?: unknown };
+      if (typeof data.JWT !== 'string' || !data.JWT) {
         throw new BackendFailedError('JWT not returned from Pinata');
       }
+      if (typeof data.pinata_api_key !== 'string' || !data.pinata_api_key) {
+        throw new BackendFailedError('Key ID not returned from Pinata');
+      }
 
-      return data.JWT;
+      return { jwt: data.JWT, keyId: data.pinata_api_key, expiresAt };
     } catch (error) {
       if (error instanceof PinataError) throw error;
       throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to generate upload JWT');
     }
+  }
+
+  /** Revokes one Pinata key by its ID (`pinata_api_key`). */
+  async revokeUploadKey(keyId: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.apiUrl}/users/revokeApiKey`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${this.jwt}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey: keyId }),
+        signal: AbortSignal.timeout(PINATA_KEY_CALL_TIMEOUT_MS)
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        this.handleApiError(response.status, error);
+      }
+    } catch (error) {
+      if (error instanceof PinataError) throw error;
+      throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to revoke upload key');
+    }
+  }
+
+  /**
+   * Revokes this app's upload keys whose deadline has passed: the keys of uploads that never
+   * reached `pin-cid`. Reads Pinata's key list by name, a few pages at most, and revokes at most
+   * UPLOAD_KEY_SWEEP_REVOKE_LIMIT keys per call; a later call takes the rest. Keys with any
+   * other name are never touched. Returns how many keys it revoked.
+   */
+  async revokeExpiredUploadKeys(now = Date.now()): Promise<number> {
+    const seen = new Set<string>();
+    let revoked = 0;
+    let offset = 0;
+    for (let page = 0; page < UPLOAD_KEY_SWEEP_PAGE_LIMIT; page += 1) {
+      const url = new URL(`${this.apiUrl}/v3/api_keys`);
+      url.searchParams.set('name', UPLOAD_KEY_PREFIX);
+      url.searchParams.set('revoked', 'false');
+      if (offset) url.searchParams.set('offset', String(offset));
+      let keys: unknown[];
+      try {
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${this.jwt}` },
+          signal: AbortSignal.timeout(PINATA_KEY_CALL_TIMEOUT_MS)
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          this.handleApiError(response.status, error);
+        }
+        const body = (await response.json()) as { keys?: unknown; data?: { keys?: unknown } };
+        const listed = body.keys ?? body.data?.keys;
+        keys = Array.isArray(listed) ? listed : [];
+      } catch (error) {
+        if (error instanceof PinataError) throw error;
+        throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to list upload keys');
+      }
+
+      let unseen = 0;
+      for (const entry of keys) {
+        const { key, name, revoked: isRevoked } = (entry ?? {}) as { key?: unknown; name?: unknown; revoked?: unknown };
+        if (typeof key !== 'string' || !key || seen.has(key)) continue;
+        seen.add(key);
+        unseen += 1;
+        const deadline = uploadKeyDeadline(name);
+        if (isRevoked === true || deadline === null || deadline > now) continue;
+        await this.revokeUploadKey(key);
+        revoked += 1;
+        if (revoked >= UPLOAD_KEY_SWEEP_REVOKE_LIMIT) return revoked;
+      }
+      // An empty page, or one with only keys already seen, is the end of the list.
+      if (!unseen) break;
+      offset += keys.length;
+    }
+    return revoked;
   }
 
   /**

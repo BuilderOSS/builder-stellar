@@ -141,19 +141,37 @@ export function getAuthorization(uploadId: string, address: string): UploadAutho
 
 /**
  * A token `generate-jwt` returns with each upload key: `pin-cid` pins only for the account it was
- * issued to, within PIN_TOKEN_TTL_MS, so a session alone can't pin arbitrary content.
+ * issued to, within PIN_TOKEN_TTL_MS, so a session alone can't pin arbitrary content. It names the
+ * Pinata key it came with, so `pin-cid` can revoke that key; the signature stops a client from
+ * naming another key.
  */
-export function issuePinToken(address: string, now = Date.now()): string {
-  return signed({ kind: 'pin', address, expiresAt: now + PIN_TOKEN_TTL_MS });
+export function issuePinToken(address: string, now = Date.now(), keyId?: string): string {
+  return signed({ kind: 'pin', address, expiresAt: now + PIN_TOKEN_TTL_MS, ...(keyId ? { key: keyId } : {}) });
+}
+
+/**
+ * The grant behind a pin token for `address`: the Pinata key it came with (null for a token
+ * issued before tokens named their key). Null for a tampered, expired or someone else's token.
+ */
+export function readPinToken(token: string, address: string, now = Date.now()): { keyId: string | null } | null {
+  const parsed = verifySigned(token) as {
+    kind?: unknown;
+    address?: unknown;
+    expiresAt?: unknown;
+    key?: unknown;
+  } | null;
+  if (
+    !parsed ||
+    parsed.kind !== 'pin' ||
+    parsed.address !== address ||
+    typeof parsed.expiresAt !== 'number' ||
+    parsed.expiresAt <= now
+  ) {
+    return null;
+  }
+  return { keyId: typeof parsed.key === 'string' && parsed.key ? parsed.key : null };
 }
 
 export function verifyPinToken(token: string, address: string, now = Date.now()): boolean {
-  const parsed = verifySigned(token) as { kind?: unknown; address?: unknown; expiresAt?: unknown } | null;
-  return Boolean(
-    parsed &&
-    parsed.kind === 'pin' &&
-    parsed.address === address &&
-    typeof parsed.expiresAt === 'number' &&
-    parsed.expiresAt > now
-  );
+  return readPinToken(token, address, now) !== null;
 }

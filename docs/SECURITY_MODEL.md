@@ -371,8 +371,13 @@ the CID must be a file already in the operator's account (Pinata's file list), a
 `complete` checks its size against the token's limit; neither pins a CID the client
 names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
 within an hour. Each `generate-jwt` key is a Pinata key for one legacy
-`pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
-limit is checked in the browser). Upload and pin tokens are signed with
+`pinFileToIPFS` upload (`maxUses: 1`) with no size cap of its own (the 100 MB folder
+limit is checked in the browser). Pinata keys have no expiry, and Pinata states no limit
+on how many an account holds, so the app bounds their lifetime: the pin token names its
+key, `pin-cid` revokes that key once it has checked the upload, and the upload routes
+revoke any of this app's keys still live 15 minutes after they were made (at most every
+5 minutes per instance). There is no scheduled sweep, so an abandoned upload's key stays
+usable for one upload until the next upload call. Upload and pin tokens are signed with
 `UPLOAD_TOKEN_SECRET` when it is set, so either secret can rotate without the other.
 When it is unset they use a key derived from the current (highest-numbered)
 `IRON_PASSWORD` under its own label, never the session key itself. Changing the secret
