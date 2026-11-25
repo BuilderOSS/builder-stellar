@@ -1124,6 +1124,15 @@ impl ManagerContract {
     ///    and upgrades until launch. Founders and artwork must be in place
     ///    before.
     ///
+    /// The ClaimMinter holds members' payments, and the launch admin may have
+    /// upgraded it in Setup to any approved, registered code. So the drive
+    /// opens only on the code the platform deploys now (the current `claims`
+    /// implementation) or on the hash announced as the latest `ClaimMinter`
+    /// at least `upgrade_delay()` ledgers ago (`DriveCodeNotAllowed`). The
+    /// code the host runs is checked (`executable()`), not the hash the
+    /// contract reports. The freeze keeps that code in place until launch,
+    /// apart from `recover_claims` after a failed drive.
+    ///
     /// Returns the list id.
     ///
     /// # Errors
@@ -1133,6 +1142,8 @@ impl ManagerContract {
     /// * `PendingDaoUsesRevokedImplementation` - a contract runs revoked or
     ///   unregistered code
     /// * `NoClaimMinter` - the DAO has no registered ClaimMinter
+    /// * `DriveCodeNotAllowed` - the ClaimMinter runs code other than the
+    ///   current ClaimMinter or the latest one announced a notice ago
     /// * `InvalidPaymentAsset` - the recorded claims asset is not a Stellar
     ///   Asset Contract (possible only for a DAO created before the creation
     ///   check)
@@ -1172,6 +1183,7 @@ impl ManagerContract {
         let claim_minter = nft
             .module(&Symbol::new(&env, KIND_CLAIMS))
             .ok_or(ManagerError::NoClaimMinter)?;
+        Self::require_drive_code(&env, &claim_minter)?;
         let asset = pending
             .claims_payment_asset
             .clone()
@@ -1850,6 +1862,36 @@ impl ManagerContract {
         match get_persistent::<ImplementationVersion>(env, &ManagerKey::Implementation(hash)) {
             Some(record) if !record.revoked => Ok(()),
             _ => Err(ManagerError::PendingDaoUsesRevokedImplementation),
+        }
+    }
+
+    /// `DriveCodeNotAllowed` unless the drive's ClaimMinter runs the current
+    /// ClaimMinter implementation (`CurrentClaimsWasm`, what `create_dao`
+    /// deploys now) or the hash announced as the latest `ClaimMinter`
+    /// (`latest_pointer`) at least `upgrade_delay()` ledgers ago. The host
+    /// reports the code (`executable()`). Registration and revocation are
+    /// checked separately (`require_dao_code`).
+    fn require_drive_code(env: &Env, claim_minter: &Address) -> Result<(), ManagerError> {
+        let running = match claim_minter.executable() {
+            Some(Executable::Wasm(hash)) => hash,
+            _ => return Err(ManagerError::DriveCodeNotAllowed),
+        };
+        let current: Option<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&common::ns(env, ManagerKey::CurrentClaimsWasm));
+        if current.as_ref() == Some(&running) {
+            return Ok(());
+        }
+        let latest = Self::latest_pointer(env.clone(), String::from_str(env, "ClaimMinter"));
+        match latest {
+            Some(latest)
+                if latest.wasm_hash == running
+                    && common::upgrade::notice_passed(env, latest.set_ledger) =>
+            {
+                Ok(())
+            }
+            _ => Err(ManagerError::DriveCodeNotAllowed),
         }
     }
 

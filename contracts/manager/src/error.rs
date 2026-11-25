@@ -125,4 +125,9 @@ pub enum ManagerError {
     /// refuses, apart from `migrate`, `upgrade_manager` and the registry
     /// steps for the Manager's own upgrade
     StorageVersionMismatch = 7147,
+    /// `open_assurance`: the DAO's ClaimMinter runs neither the current
+    /// ClaimMinter implementation (what `create_dao` deploys now) nor the
+    /// hash announced as the latest ClaimMinter at least `upgrade_delay()`
+    /// ledgers ago
+    DriveCodeNotAllowed = 7148,
 }
