@@ -1,8 +1,8 @@
 ## In plain words
 
-A membership token is your membership card in a tribe. Holding one makes you a member, and each token is one vote. If you hold 3 tokens, you have 3 votes.
+A membership token is a record that you belong to a tribe. Holding one makes you a member, and each token is one vote. If you hold 3 tokens, you have 3 votes.
 
-Each token also has its own picture, drawn from the tribe's artwork, and a number, such as #12. The token sits in your wallet, and you can see it on the tribe's **Members** page and on its own token page.
+Each token also has its own picture, drawn from the tribe's artwork, and a number, such as #12. The token is held in your wallet, and you can see it on the tribe's **Members** page and on its own token page.
 
 ## The DAO term
 
@@ -18,11 +18,11 @@ When a token is created, the tribe's metadata contract picks one trait from each
 
 The image files are stored on IPFS, a public file network. The token's description, with its name, image link, and traits, is built on chain.
 
-Because traits are picked when a token is created, a tribe must add its artwork before it mints any tokens. See [Set up: artwork](/guides/setup/artwork).
+Because traits are picked when a token is created, a tribe should add its artwork before it mints any tokens. A token minted earlier has no traits until someone seeds it from the **Artwork** page. See [Set up: artwork](/guides/setup/artwork).
 
 ## How tokens are created
 
-New tokens come only from the tribe's own contracts. Tribe Builder creates tokens for nobody.
+New tokens come only from the tribe's own contracts. Tribe Builder does not create tokens for anyone.
 
 - **Founder tokens.** The [launch admin](/reference/glossary#launch-admin) mints these during Setup, before launch.
 - **Auction.** The auction creates one new token at a time and sells it to the highest bidder.
@@ -39,12 +39,12 @@ When you list a token for sale, the market holds it, so its vote leaves your cou
 
 ## Membership rules
 
-When a tribe is created, it chooses how memberships can change hands:
+When a tribe is created, it chooses how memberships can move from one holder to another:
 
 - **Open membership.** Members can sell, give, or delegate their tokens freely.
-- **Members-only club.** Memberships change hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example to rescue a lost key.
+- **Members-only club.** Memberships change hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example to recover a membership from a lost key.
 
-These are three separate switches under **Advanced settings**, and each can change later by vote. If the tribe locks transfers, you can still give your token back to the tribe, or approve the tribe to move it.
+Behind these two choices are three separate switches under **Advanced settings**: whether memberships are locked, whether votes can be delegated only to members, and whether the tribe can move any membership by vote. Each switch can change later by vote. If the tribe locks transfers, you can still give your token back to the tribe, or approve the tribe to move it.
 
 ## What a token is not
 
