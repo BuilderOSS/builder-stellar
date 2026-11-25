@@ -16,6 +16,10 @@ models in `apps/web/prisma/schema.prisma` map onto the views marked **Prisma**.
    and `manager.module_versions` also casts storage versions with
    `chain.try_int` (NULL for a value that is not a whole number in range), so
    the views ignore malformed values from outside modules instead of failing.
+   A u64 field with no upper bound on chain (an expiry, a pool period, an
+   assurance deadline) is cast with `chain.u64_bigint`: a value past the bigint
+   range reads as 9223372036854775807, still later than any ledger time, and
+   the exact value is on chain (migration 0013).
 
 All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
 by `dao_id` (the DAO token contract address).
@@ -123,9 +127,9 @@ and for > against) until `vote_end + 14d` and expired after, or defeated.
 | `auction.bids` **Prisma** | `bid_placed` with its `comment` |
 | `metadata.token_seeds` | `seed_generated` (single mint) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); a token is seeded once |
 | `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` |
-| `marketplace.pools` **Prisma** | `pool_opened` with running totals from `pool_restocked`, `pool_purchased`, `pool_swept`, closed by `pool_closed`; keyed by `pool_id`: terms (`price`, `asset`, `expires_at`, `size`, `max_per_buyer`, `max_sold_per_period`, `period_secs`), `stocked`, `sold`, `swept`, `in_stock`, `released`, `status`. An expired pool stays `open` until someone closes it: compare `expires_at` |
+| `marketplace.pools` **Prisma** | `pool_opened` with running totals from `pool_restocked`, `pool_purchased`, `pool_swept`, closed by `pool_closed`; keyed by `pool_id`: terms (`price`, `asset`, `expires_at`, `size`, `max_per_buyer`, `max_sold_per_period`, `period_secs`; `expires_at` and `period_secs` past the bigint range read as its maximum), `stocked`, `sold`, `swept`, `in_stock`, `released`, `status`. An expired pool stays `open` until someone closes it: compare `expires_at` |
 | `marketplace.pool_stock` **Prisma** | `pool_restocked`, `transfers` | the tokens a pool has in stock: every id a restock minted into the Marketplace that hasn't moved since (a sale sends it to the buyer, a sweep to the Treasury; a resold token escrowed again is a secondary listing, not stock). Which stock page holds an id is chain state: read `pool_stock(pool_id, page)` before buying |
-| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset`, `buyer` and `closed_*` once closed |
+| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `expires_at` (past the bigint range it reads as its maximum), `fee_bps`, `payment_asset`, `buyer` and `closed_*` once closed |
 | `marketplace.sales` **Prisma** | pool sales (`pool_id` set; no seller or fee, the price goes to the Treasury) and secondary purchases (`pool_id` NULL) |
 | `marketplace.listing_comments` **Prisma** | event-only threads per token (a token's thread carries over relistings); pools carry no comments |
 
@@ -141,7 +145,7 @@ these views are history and discovery.
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline`, `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
+| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
 | `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), the claimer's running `claimed` |
 | `claims.claimers` **Prisma** | `claimed`, `refunded` | each claimer's position per list: `claimed`, `paid`, `escrowed`, `refunded` |
 

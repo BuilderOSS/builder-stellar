@@ -67,6 +67,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | `0010_claims_views` | claim lists, claims (with paid and escrowed amounts), claimers per list |
 | `0011_vote_sources` | vote sources (`manager.vote_sources`), `governance.settings.vote_source` |
 | `0012_outside_module_casts` | `chain.try_int` (text to integer, NULL for anything else); `manager.module_versions` and `manager.module_launches` take upgrades, storage migrations and launch events only from the contracts the Manager deployed, so the views ignore malformed values from outside modules |
+| `0013_u64_view_casts` | `chain.u64_bigint` (text to bigint, values past the bigint range read as its maximum); `marketplace.pools` (`expires_at`, `period_secs`), `marketplace.secondary_listings` (`expires_at`) and `claims.lists` (`expires_at`, `deadline`) read through it, so a far expiry chosen on chain no longer stops the views |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,
