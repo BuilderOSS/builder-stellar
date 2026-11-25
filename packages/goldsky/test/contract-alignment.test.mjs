@@ -54,6 +54,7 @@ test('topic orders of new and changed events', () => {
   assert.deepEqual(t.PoolOpened, ['pool_id']);
   assert.deepEqual(t.PoolPurchased, ['pool_id', 'buyer']);
   assert.deepEqual(t.ListOpened, ['list_id']);
+  assert.deepEqual(t.ListClosed, ['list_id']);
   assert.deepEqual(t.Claimed, ['list_id', 'claimer']);
   assert.deepEqual(t.Refunded, ['list_id', 'claimer']);
   assert.deepEqual(t.ModuleCreated, ['token_address', 'kind']);
@@ -119,6 +120,7 @@ test('data fields of new and changed events match events.rs', () => {
   assert.deepEqual(e['token:DaoTransfer'].data, ['token_id', 'changed_by']);
   assert.deepEqual(e['token:AgentTransfer'].data, ['from', 'to', 'token_id']);
   assert.deepEqual(e['claims:ListOpened'].data, ['root', 'tree_uri', 'asset', 'price', 'expires_at', 'total', 'assurance']);
+  assert.deepEqual(e['claims:ListClosed'].data, ['minted', 'total']);
   assert.deepEqual(e['claims:Claimed'].data, ['amount', 'first_token_id', 'paid', 'escrowed', 'claimed']);
   assert.deepEqual(e['marketplace:PoolOpened'].data, ['price', 'asset', 'expires_at', 'size', 'max_per_buyer', 'max_sold_per_period', 'period_secs']);
   assert.deepEqual(e['marketplace:PoolPurchased'].data, ['token_id', 'price', 'asset']);

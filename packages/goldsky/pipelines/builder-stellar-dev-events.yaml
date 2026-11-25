@@ -546,7 +546,7 @@ transforms:
           // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
           ProfileUpdated: ['seq'], RendererBaseUpdated: [],
           // ClaimMinter (role claims): merkle claim lists, paid or free, with an optional assurance escrow.
-          ListOpened: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
+          ListOpened: ['list_id'], ListClosed: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
           // Marketplace
           MarketplaceInitialized: ['token', 'admin'], SecondaryListingCreated: ['token_id'],
           ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
@@ -631,7 +631,7 @@ transforms:
             var canonical = toCanonical(name);
             if (/^(MintBatchWithMinter|MetadataUpdated|DaoRecoveryChanged|DaoTransfer|TransfersLockChanged|MembersOnlyDelegationChanged|TransferAgentChanged|AgentTransfer)$/.test(canonical)) return 'token';
             if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PendingSlug|Slug|ModuleCreated|AssuranceOpened)/.test(canonical)) return 'manager';
-            if (/^(ListOpened|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
+            if (/^(ListOpened|ListClosed|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
             if (/^(Marketplace|Listing|Secondary|PaymentAsset|Pool)/.test(canonical)) return 'marketplace';
             if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
             if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
@@ -797,7 +797,8 @@ transforms:
           PoolOpened: true, PoolPurchased: true, PoolClosed: true,
           // The ClaimMinter's own rows tell the story of a claim; the token's MintBatchWithMinter in the
           // same call stays admin so a mint is not announced twice. Refunds are per-claimer side effects.
-          ListOpened: true, Claimed: true, EscrowReleased: true,
+          // Closing a list by proposal ends its claims early: news, like a pool closing.
+          ListOpened: true, ListClosed: true, Claimed: true, EscrowReleased: true,
           // An assurance drive opening, and its slug coming back when it fails.
           AssuranceOpened: true, SlugReleased: true,
           // A module joining or leaving changes who can mint and whose tokens vote: public.
@@ -899,6 +900,7 @@ transforms:
           ProfileUpdated: 'metadata.profile_updated',
           RendererBaseUpdated: 'metadata.renderer_base_updated',
           ListOpened: 'claims.list_opened',
+          ListClosed: 'claims.list_closed',
           Claimed: 'claims.claimed',
           EscrowReleased: 'claims.escrow_released',
           Refunded: 'claims.refunded',
@@ -1005,6 +1007,7 @@ transforms:
           ProfileUpdated: 'Community profile updated',
           RendererBaseUpdated: 'Renderer base updated',
           ListOpened: 'Claim list opened',
+          ListClosed: 'Claim list closed',
           Claimed: 'Tokens claimed',
           EscrowReleased: 'Assurance escrow released',
           Refunded: 'Claim refunded',
@@ -1224,6 +1227,10 @@ transforms:
             var assurance = pick(data, ['assurance']);
             return 'Claim list ' + (listId || '?') + ' opened: ' + (pick(data, ['total']) || '?') + ' tokens' +
               (Number(amount) > 0 ? ' at ' + amount + ' each' : ', free') + (assurance && assurance !== 'null' ? ', as an assurance drive' : '');
+          },
+          ListClosed: function() {
+            return 'Claim list ' + (listId || '?') + ' closed: ' + (pick(data, ['minted']) || '0') + ' of ' +
+              (pick(data, ['total']) || '?') + ' tokens claimed';
           },
           Claimed: function() {
             var count = pick(data, ['amount']);
