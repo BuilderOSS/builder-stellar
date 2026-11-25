@@ -41,3 +41,36 @@ describe('PinataService.createSignedUploadUrl', () => {
     expect((await policyFor('artwork-directory')).allow_mime_types).toEqual(['directory']);
   });
 });
+
+describe('PinataService.verifyCid', () => {
+  const fetchMock = vi.fn();
+  const CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+
+  beforeEach(() => {
+    vi.stubEnv('PINATA_JWT', 'test-jwt');
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    fetchMock.mockReset();
+  });
+
+  const files = (entries: unknown[]) =>
+    new Response(JSON.stringify({ data: { files: entries, next_page_token: '' } }), { status: 200 });
+
+  it('reads the account’s file list by CID and never pins', async () => {
+    fetchMock.mockResolvedValue(files([{ cid: CID, size: 1234, name: 'logo.png' }]));
+    await expect(new PinataService().verifyCid(CID)).resolves.toEqual({ size: 1234, name: 'logo.png' });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe(`https://api.pinata.cloud/v3/files/public?cid=${CID}&limit=10`);
+    expect(init?.method ?? 'GET').toBe('GET');
+    expect(String(url)).not.toContain('pin_by_cid');
+  });
+
+  it('is not found when the account holds no file with that CID', async () => {
+    fetchMock.mockResolvedValue(files([{ cid: 'bafyother', size: 1 }]));
+    await expect(new PinataService().verifyCid(CID)).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+  });
+});

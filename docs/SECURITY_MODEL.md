@@ -87,11 +87,11 @@ A launch admin can open the DAO's launch as an assurance drive: `manager.open_as
 
 Tokens held by the DAO's Treasury and its non-voting modules (Auction, Marketplace) carry no votes. The token reads custody from its registry (`non_voting`) and maps them to "no holder" in OpenZeppelin's `transfer_voting_units`: moving a token into one of them burns its voting unit and removes it from the `TotalSupply` checkpoint; moving it out mints the unit again for the receiver's delegate. Consequences:
 
-- The Governor's quorum (`ceil(voting_supply_at_snapshot * quorum_bps / 10_000)`) and the proposal-threshold check use the voting-capable supply. Unsold auction tokens piling up in the Treasury, the token on auction and escrowed listings never raise the quorum, so governance cannot drift into a permanent quorum lock.
+- The Governor's quorum (`ceil(voting_supply_at_snapshot * quorum_bps / 10_000)`) and the proposal-threshold check use the voting-capable supply. `propose` caps the threshold at that supply (never below 1), so a supply below the threshold never blocks proposals: the proposer then needs every vote. `votes_needed_to_propose()` returns that requirement; a Governor without the view (0.5.0 and earlier) has no cap. Unsold auction tokens piling up in the Treasury, the token on auction and escrowed listings never raise the quorum, so governance cannot drift into a permanent quorum lock.
 - System holders are never auto-delegated and can never vote (`ZeroVotingWeight`, 7512). A system holder calling `delegate` moves no votes, because it holds no voting units.
 - A holder whose token is escrowed in the Marketplace loses that vote until the token returns (cancel/expire) or is bought (the buyer's delegate gains it). The holder's delegation itself is unchanged.
 - Delegating *to* the Treasury is allowed; those units belong to a voting-capable holder and stay in the voting supply. The Treasury can only cast them through a passed proposal.
-- Votes are read at the ledger before `propose`, and the quorum is fixed when the proposal is created from the voting supply and rate at that moment (stored on the proposal, D33), so later transfers, listings, mints or rate changes never change a proposal's weights or quorum. Tokens minted earlier in the proposing ledger count toward the quorum supply but cannot vote, so the requirement can only be higher, never lower.
+- Votes are read at the ledger before `propose`, and the quorum is fixed when the proposal is created from the voting supply and rate at that moment (stored on the proposal, D33), so later transfers, listings, mints or rate changes never change a proposal's weights or quorum. Votes, the quorum supply and the threshold cap are all read at the previous ledger, so tokens minted in the proposing ledger count toward none of them.
 
 These behaviors are covered by `contracts/token` (`delegation_security`) and the e2e test `system_held_tokens_and_votes_through_a_real_proposal`.
 
@@ -145,7 +145,7 @@ Refunds to an outbid bidder are pushed; if the push fails, the amount is credite
 - The secondary fee is capped at 25% (`common::MAX_FEE_BPS` = 2,500; `InvalidFee`, 7709). It is snapshotted into each listing.
 - `list(token_id, seller, price, expires_at, max_fee_bps, payment_asset)`: the seller signs the worst fee and the asset they accept. If a fee or asset change lands between signing and inclusion, the listing fails (`FeeAboveMax`, 7714; `PaymentAssetMismatch`, 7712) instead of applying worse terms.
 - `buy(token_id, buyer, max_price)` and `buy_from_pool(pool_id, page, token_id, buyer, max_price)` fail with `PriceAboveMax` (7715) above the buyer's bound.
-- `expires_at` has no maximum; escrowed tokens stay in escrow until bought, cancelled (seller) or expired (anyone, after expiry).
+- `expires_at` has no maximum; escrowed tokens stay in escrow until bought, cancelled (seller) or expired (anyone, after expiry). The read model reads an expiry past the bigint range as the bigint maximum, so such a listing (or a pool or claim list with one) can't stop the marketplace and claims views from reading (migration 0013).
 - Quick-buy pools (`open_pool`, by proposal) sell new tokens at a fixed price into the Treasury, capped per buyer (`max_per_buyer`) and per period (`max_sold_per_period` every `period_secs`). Stock is minted into Marketplace custody by `restock` (anyone; it spends the Marketplace's allowance, which the opening proposal grants) and stored in pages of 64 ids. Closing (admin before expiry, anyone after) and `sweep_pool` send unsold stock back to the Treasury. **Each token sold adds a vote**: a pool larger than the voting supply can let buyers outvote today's members. The web shows the largest share one wallet could reach in the proposal draft. The per-buyer cap counts addresses, so it doesn't stop one person with many wallets.
 
 ## Batch minting
@@ -183,8 +183,9 @@ See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances a
 These are behaviors of the current contracts, not planned fixes.
 
 - Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. `regenerate(token_id)` only seeds a token without attributes (`AlreadySeeded` otherwise).
-- Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero and not above the voting supply. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
+- Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero, and not above the voting supply when it is set (the check is skipped while the supply is zero, so a launch admin can set it before minting). `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than locking proposals. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
 - Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches that fit the event budget) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
+- Unclaimed Setup lists. A free claim list the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` doesn't show until they are claimed, and they become votes as soon as they are. The DAO can end such a list by proposal (`close_list`, which sets its `expires_at` to now and emits `ListClosed`; ClaimMinters from the release that adds it, and the app's proposal composer offers it separately); a claim can still land before the proposal executes.
 - Treasury-held tokens never vote. Tokens the Treasury holds (unsold auctions, transfers to the Treasury) only regain voting power when a proposal transfers them out.
 - No veto once a proposal is queued. Only expiry (14 days after the ETA) stops it.
 - Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must check that `to_hash` is the published build of a release tag (`node scripts/verify-wasm.mjs <tag>`, see [Reproducible contract builds](REPRODUCIBLE_BUILDS.md)) and read any `authorize` trees.
@@ -196,7 +197,7 @@ These are behaviors of the current contracts, not planned fixes.
 - Issuer-controlled payment assets. A pool, claim list or escrow priced in an asset whose issuer can freeze, claw back or deauthorize holders can be frozen or drained by that issuer, including the escrow refunds depend on. DAOs should price in plain assets (see the payment-asset limitation above).
 - Modules can be delegates. A voting module holds voting units like any member and can receive delegations; if its code calls the Governor it can vote them. Manage → Membership shows the votes each module holds.
 - Outside modules. After launch the Treasury can register any contract as a module by proposal, under any kind, a built-in one included. Its mint allowance caps what it can mint, but the platform can't vouch for its code and its records are not covered by one-click renewal. A known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code: the indexer fills those roles only from the Manager's `DaoCreated` / `ModuleCreated`, and the read model takes a registration's role from the kind the Manager deployed it as (`manager.manager_modules`). Every other registered contract is role `module`: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` doesn't list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage → Membership badges it "Not deployed by the Manager".
-- Indexer allowlisting (accepted, review finding 3). The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO can't use this to inject rows into another DAO's views (identity is windowed per DAO), but a hostile contract can fill its own DAO's admin feed with noise. Remedies: the DAO unregisters it by vote, which ends its window in every view; or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, then re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop (whether a running pipeline notices a deleted row without that is unverified). Rows already indexed stay: the landing tables are append-only.
+- Indexer allowlisting (accepted, review finding 3). The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO can't use this to inject rows into another DAO's views (identity is windowed per DAO), but a hostile contract can fill its own DAO's admin feed with noise. The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` don't take an outside module's own upgrade, storage-migration or launch events (migration 0012), so such a contract's events can't stop a shared view from reading for every DAO. Remedies: the DAO unregisters it by vote, which ends its window in every view; or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, then re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop (whether a running pipeline notices a deleted row without that is unverified). Rows already indexed stay: the landing tables are append-only.
 - Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).
 
 ## Application trust boundaries
@@ -261,6 +262,26 @@ Creation/launch recovery saves finite signed envelopes separately from RPC
 acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
 nonce cannot be silently changed after freezing. Unknown acceptance is not proof
 of failure. Missing older envelopes cannot be safely rebroadcast.
+
+Uploads to IPFS go through the operator's Pinata account, so they cost the operator.
+Every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`,
+`/api/uploads/pinata-url`, `/api/uploads/complete`) needs a session on the
+deployment's network, then limits each account per route per 10 minutes, then
+requires that the account exists on that network (canonical Horizon; a failed or
+timed-out lookup refuses, it never passes; an unfunded result is remembered for a
+minute). A key costs nothing; a funded account holds the base reserve on mainnet, but
+on testnet Friendbot funds accounts for free, so there the funded check costs an
+abuser one Friendbot call per key and the limits are per account. There is no
+deployment-wide upload budget, and the checks and counts are per server instance.
+Upload tokens name the account they were issued to and only that account completes
+them, until they expire (they are not single-use). `complete` and `pin-cid` only read:
+the CID must be a file already in the operator's account (Pinata's file list), and
+`complete` checks its size against the token's limit; neither pins a CID the client
+names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
+within an hour. Each `generate-jwt` key is a Pinata key for one legacy
+`pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
+limit is checked in the browser). Upload tokens are signed with a key derived from
+`IRON_PASSWORD` under its own label, not with the session key.
 
 Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
 browser storage, not encrypted shared permissions or on-chain rights. Scope filters
