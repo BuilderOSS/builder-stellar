@@ -3,6 +3,7 @@ import './globals.css';
 
 import { fontVariables } from '@builder-stellar/design-tokens/fonts';
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 
 import { AgentationDevToolbar } from '@/components/agentation-dev-toolbar';
@@ -39,16 +40,19 @@ export const viewport: Viewport = {
   viewportFit: 'cover'
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: ReactNode;
 }>) {
+  // The Content-Security-Policy nonce (src/middleware.ts). Reading it renders every page per request.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html lang="en" className={fontVariables} data-theme="dark" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="dark light" />
-        <script dangerouslySetInnerHTML={{ __html: warmInkBootScript }} />
+        {/* Browsers hide a nonce attribute once the page loads, so the client sees nonce="". */}
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: warmInkBootScript }} />
       </head>
       <body>
         <WalletSessionProvider>
