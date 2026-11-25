@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 
-import { Button } from '@/components/ui';
+import { Button, FallbackImage } from '@/components/ui';
 import { UPLOADS_OFF_NOTE, uploadsEnabled } from '@/lib/uploads-enabled';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
@@ -67,16 +67,19 @@ export function DaoImageField() {
         disabled={busy}
         onClick={() => input.current?.click()}
       >
-        {/* Data previews and gateway URLs are deliberately not passed through the Next image optimizer. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={preview || (image === DEFAULT_DAO_IMAGE_URL ? LOCAL_DEFAULT_DAO_IMAGE_URL : image)}
-          alt="Tribe image preview"
-          onError={(event) => {
-            if (!event.currentTarget.src.endsWith(LOCAL_DEFAULT_DAO_IMAGE_URL))
-              event.currentTarget.src = LOCAL_DEFAULT_DAO_IMAGE_URL;
-          }}
-        />
+        {preview ? (
+          // A local data preview, not a gateway URL: shown as it is, never through the Next image optimizer.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="Tribe image preview" />
+        ) : (
+          // An uploaded image tries every IPFS gateway before the default image: a gateway that refuses
+          // the file (a dedicated gateway serves only its own account's files) is not the last word.
+          <FallbackImage
+            src={image === DEFAULT_DAO_IMAGE_URL ? LOCAL_DEFAULT_DAO_IMAGE_URL : image}
+            errorFallbackSrc={LOCAL_DEFAULT_DAO_IMAGE_URL}
+            alt="Tribe image preview"
+          />
+        )}
         <span>{preview ? 'Local preview' : 'Change image'}</span>
       </button>
       <input

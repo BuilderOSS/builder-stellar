@@ -3,17 +3,29 @@
  * imports, so the client, the server, and the middleware (Content-Security-Policy) share one list.
  */
 
-const DEFAULT_PINATA_GATEWAY = 'nouns-builder.mypinata.cloud';
+/**
+ * The gateway tried first when `NEXT_PUBLIC_PINATA_GATEWAY` is unset. Pinata's public gateway serves
+ * every public file, including the ones this app's uploads pin. A dedicated `*.mypinata.cloud` gateway
+ * serves only its own account's files (401, `ERR_ID:00024`, for any other), so set the variable to a
+ * dedicated gateway only when it belongs to the account behind `PINATA_JWT`.
+ */
+export const DEFAULT_PINATA_GATEWAY = 'gateway.pinata.cloud';
 
 export const IPFS_GATEWAYS = [
-  process.env.NEXT_PUBLIC_PINATA_GATEWAY || DEFAULT_PINATA_GATEWAY,
-  'ipfs.io',
-  'magic.decentralized-content.com',
-  'dweb.link',
-  'gateway.pinata.cloud',
-  'w3s.link',
-  'ipfs.decentralized-content.com'
-].map((gateway) => `https://${gateway.replace(/^https?:\/\//, '').replace(/\/$/, '')}`);
+  ...new Set(
+    [
+      process.env.NEXT_PUBLIC_PINATA_GATEWAY || DEFAULT_PINATA_GATEWAY,
+      DEFAULT_PINATA_GATEWAY,
+      'magic.decentralized-content.com',
+      'ipfs.io',
+      'dweb.link',
+      'w3s.link',
+      'ipfs.decentralized-content.com',
+      // Nouns Builder's dedicated gateway: it serves only files pinned in that account, so it is last.
+      'nouns-builder.mypinata.cloud'
+    ].map((gateway) => `https://${gateway.replace(/^https?:\/\//, '').replace(/\/$/, '')}`)
+  )
+];
 
 const CID_PATTERN = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|ba[A-Za-z0-9]{50,})$/;
 
