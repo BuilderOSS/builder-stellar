@@ -2809,10 +2809,9 @@ mod hardening {
                 .unwrap(),
             mismatch
         );
-        assert_eq!(
-            governor.try_proposal_state(&id).err().unwrap().unwrap(),
-            mismatch
-        );
+        // Views still answer: they read only the proposal records the
+        // recovery path relies on.
+        assert_eq!(governor.proposal_state(&id), ProposalState::Active);
         assert_eq!(
             governor.try_set_quorum_bps(&500).err().unwrap().unwrap(),
             mismatch
@@ -2870,6 +2869,83 @@ mod hardening {
             common::CommonError::NothingToMigrate.into()
         );
         assert_eq!(governor.storage_version(), crate::STORAGE_VERSION + 1);
+    }
+
+    /// While a migration is due, a recovery proposal (only `upgrade` and
+    /// `migrate` calls on this Governor or its Treasury) can still be made,
+    /// voted on and queued; a proposal with any other action cannot, and
+    /// neither can a vote on a proposal made before the migration was due.
+    #[test]
+    fn a_recovery_proposal_runs_while_a_migration_is_due() {
+        let (e, token, treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let earlier = governor.propose(
+            &vec![&e, target.address.clone()],
+            &vec![&e, symbol_short!("set_value")],
+            &proposal_args(&e),
+            &String::from_str(&e, "made before"),
+            &proposer,
+        );
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION + 1);
+        let mismatch: soroban_sdk::Error = CustomGovernorError::StorageVersionMismatch.into();
+        let hash = |e: &Env| BytesN::from_array(e, &[7u8; 32]);
+        let upgrade_args = || vec![&e, hash(&e).into_val(&e), hash(&e).into_val(&e)];
+        let targets = vec![
+            &e,
+            governor.address.clone(),
+            treasury.address.clone(),
+            governor.address.clone(),
+        ];
+        let functions = vec![
+            &e,
+            Symbol::new(&e, "upgrade"),
+            Symbol::new(&e, "upgrade"),
+            Symbol::new(&e, "migrate"),
+        ];
+        let args = vec![&e, upgrade_args(), upgrade_args(), Vec::<Val>::new(&e)];
+        let description = String::from_str(&e, "recover");
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+        // Anything else is refused: another target, another function, or a
+        // recovery action beside an ordinary one.
+        for (t, f) in [
+            (target.address.clone(), "upgrade"),
+            (governor.address.clone(), "set_quorum_bps"),
+        ] {
+            let r = governor.try_propose(
+                &vec![&e, governor.address.clone(), t],
+                &vec![&e, Symbol::new(&e, "upgrade"), Symbol::new(&e, f)],
+                &vec![&e, upgrade_args(), vec![&e, 1u32.into_val(&e)]],
+                &String::from_str(&e, "not recovery"),
+                &proposer,
+            );
+            assert_eq!(r.err().unwrap().unwrap(), mismatch, "{f}");
+        }
+
+        e.ledger().set_timestamp(2_301);
+        let reason = String::from_str(&e, "");
+        assert_eq!(
+            governor
+                .try_cast_vote(&earlier, &1, &reason, &proposer)
+                .err()
+                .unwrap()
+                .unwrap(),
+            mismatch
+        );
+        governor.cast_vote(&id, &1, &reason, &proposer);
+        e.ledger().set_timestamp(2_601);
+        governor.queue(
+            &targets,
+            &functions,
+            &args,
+            &description_hash(&e, &description),
+            &0,
+            &proposer,
+        );
+        assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
     }
 
     /// A proposal Active for voting, with one For vote cast by the proposer,

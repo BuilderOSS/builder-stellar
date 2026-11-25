@@ -568,6 +568,48 @@ fn execute_refuses_while_the_layout_is_out_of_step() {
     );
 }
 
+/// While a migration is due, `execute` still runs a recovery proposal (only
+/// `upgrade` and `migrate` calls on this Treasury or its Governor), so a
+/// Treasury whose migration fails can upgrade to fixed code; a proposal with
+/// any other action is refused.
+#[test]
+fn a_recovery_proposal_executes_while_a_migration_is_due() {
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let (treasury, _gov) = setup_live(&e, mgr.address.clone());
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    let from = BytesN::from_array(&e, &[1u8; 32]);
+    let to = empty_wasm(&e);
+    mgr.approve(&from, &to);
+    mgr.register(&to, &String::from_str(&e, "0.6.1"));
+    set_stored_layout(&e, &treasury.address, crate::storage::STORAGE_VERSION + 1);
+    let mismatch: soroban_sdk::Error = crate::error::TreasuryError::StorageVersionMismatch.into();
+    let upgrade_args = vec![&e, from.clone().into_val(&e), to.clone().into_val(&e)];
+
+    // An ordinary action, alone or beside a recovery action, is refused.
+    let r = treasury.try_execute(
+        &vec![&e, treasury.address.clone(), target.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade"), symbol_short!("set_value")],
+        &vec![&e, upgrade_args.clone(), vec![&e, 7_u32.into_val(&e)]],
+        &desc(&e),
+    );
+    assert_eq!(r.err().unwrap().unwrap(), mismatch);
+    assert_eq!(target.get_value(), 0);
+
+    // The upgrade alone runs.
+    treasury.execute(
+        &vec![&e, treasury.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade")],
+        &vec![&e, upgrade_args],
+        &desc(&e),
+    );
+    e.as_contract(&treasury.address, || {
+        assert_eq!(common::upgrade::current_hash(&e), to);
+    });
+}
+
 /// `launch` and `handoff` are behind the gate too.
 #[test]
 fn launch_and_handoff_refuse_while_the_layout_is_out_of_step() {

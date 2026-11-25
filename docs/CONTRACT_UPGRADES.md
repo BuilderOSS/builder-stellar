@@ -36,12 +36,18 @@ DAOs keep their addresses and history only through upgrades.
    - Yes, for the **Treasury**: the proposal runs `upgrade` alone. The Treasury runs a proposal on the code it
      started with, so a `migrate` action in the same proposal still runs the old code, fails `NothingToMigrate`
      (7012) and reverts the upgrade with it. After the upgrade proposal executes, anyone calls
-     `treasury.migrate()` (no authorization needed); until then `treasury.execute` refuses every proposal
-     (`StorageVersionMismatch`, 7607). See e2e `the_treasury_upgrades_then_migrates_in_two_steps`.
-   - Any migration for the Governor or the Treasury must be bounded and must not fail: once a migration is due,
-     they refuse proposals, so no proposal could upgrade them to fixed code. Rehearse it on a copy of production
-     (§2) before proposing the upgrade, and keep the Governor's `upgrade` and `migrate` in one proposal, so a
-     failing `migrate` reverts the upgrade.
+     `treasury.migrate()` (no authorization needed); until then `treasury.execute` runs only recovery
+     proposals (`StorageVersionMismatch`, 7607, for any other). See e2e
+     `the_treasury_upgrades_then_migrates_in_two_steps`.
+   - Rehearse every Governor or Treasury migration on a copy of production (§2) before proposing the upgrade,
+     and keep the Governor's `upgrade` and `migrate` in one proposal, so a failing `migrate` reverts the upgrade.
+   - If a migration fails anyway, the module stays on that release with its migration due, and accepts only a
+     **recovery proposal**: every action `upgrade` or `migrate` on the DAO's own Governor or Treasury. Build a
+     fixed release, register it and approve `broken -> fixed`, then propose `upgrade(broken, fixed)` and
+     `migrate()` for the Governor, or `upgrade(broken, fixed)` for the Treasury followed by a direct
+     `treasury.migrate()`. A release must keep the storage the recovery path reads unchanged
+     ([SECURITY_MODEL.md § Upgrade path and migrations](SECURITY_MODEL.md#upgrade-path-and-migrations)). See e2e
+     `a_governor_whose_migration_fails_recovers_by_proposal` and `a_treasury_whose_migration_fails_recovers_by_proposal`.
 2. Bump the module in [`releases/contracts.json`](../releases/contracts.json) (e.g. `"token": "0.2.0"`). This is the
    version registered for the new hash. **Registry records are write-once**: a wrong version can never be fixed.
    The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the
@@ -196,9 +202,9 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - **Code**: there is no downgrade button. To go back, the Manager admin approves the reverse path
   (`approve_upgrade(<new>, <old>)`; the old hash must not be revoked) and each DAO upgrades again (by proposal
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
-  Never roll the **Governor** or the **Treasury** back across a layout change: code with a lower
-  `STORAGE_VERSION` than the stored one refuses every call but `upgrade` (`StorageVersionMismatch`), and their
-  `upgrade` needs a proposal that they can then no longer execute.
+  Don't roll the **Governor** or the **Treasury** back across a layout change: code with a lower
+  `STORAGE_VERSION` than the stored one accepts only recovery proposals (`StorageVersionMismatch` for any other)
+  until a recovery proposal upgrades it to a release that matches the stored layout.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
 - **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
@@ -249,6 +255,6 @@ Manager admin: **approve only the paths the `migrate` code supports.** Approve v
 two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
 `upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone, one step per
 proposal, each followed by a separate `treasury.migrate()` call (e2e
-`dao_module_chains_two_upgrades_in_one_proposal`). Never approve a Governor or Treasury path to a lower
+`dao_module_chains_two_upgrades_in_one_proposal`). Don't approve a Governor or Treasury path to a lower
 `STORAGE_VERSION` (see Rolling back). `migrate()` refuses a no-op (`NothingToMigrate`), so include
 it only for steps that change the storage version.

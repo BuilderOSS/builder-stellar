@@ -126,6 +126,7 @@ until artwork exists, so the pages up to the minted count always exist and an ar
 | `Treasury`, `QueueDelay`, `Manager`, `ProposalCount` | instance | Wiring, settings, the proposal counter | | instance |
 | `ProposalTime(id)` | persistent | `(proposer, 49 packed bytes)`: snapshot, window, eta, state, seq and the quorum fixed at creation (D38) | ~270 B | Sweep while live |
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
+| `RecoveryProposal(id)` | persistent | Present for a recovery proposal made while a migration is due; read only by `cast_vote` | ~170 B | 120 days at `propose` (covers the voting delay and period) |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
 | OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
 | OZ `ProposalVote(id)` | persistent | Vote tallies; a vote renews it to the proposal's 120 days when fewer than 30 remain, so the first vote always does (it is read last at `queue`), the sweep to the full term while live | | Sweep while live, when present |

@@ -146,6 +146,11 @@ pub enum GovernorKey {
     /// (proposer-paid, ~60 bytes) and renewed with the proposal core, so a
     /// client can list proposals from chain state alone (D10).
     ProposalId(u32),
+    /// Persistent: present for a recovery proposal made while a migration
+    /// was due (only `upgrade` and `migrate` calls on this Governor or its
+    /// Treasury). `cast_vote` accepts votes on these alone until the layout
+    /// is current again.
+    RecoveryProposal(BytesN<32>),
 }
 
 /// Most ids `proposal_ids` returns per call (each is one persistent read).
@@ -228,7 +233,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 6;
+    pub const VARIANTS: usize = 7;
 
     pub fn index(key: &GovernorKey) -> usize {
         match key {
@@ -238,6 +243,7 @@ pub(crate) mod key_samples {
             GovernorKey::Manager => 3,
             GovernorKey::ProposalCount => 4,
             GovernorKey::ProposalId(_) => 5,
+            GovernorKey::RecoveryProposal(_) => 6,
         }
     }
 
@@ -253,6 +259,7 @@ pub(crate) mod key_samples {
             GovernorKey::Manager,
             GovernorKey::ProposalCount,
             GovernorKey::ProposalId(0),
+            GovernorKey::RecoveryProposal(id.clone()),
         ];
         common::testutils::assert_every_variant_sampled(
             "GovernorKey",

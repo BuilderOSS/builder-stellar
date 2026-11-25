@@ -104,11 +104,10 @@ impl DaoTreasuryContract {
     /// The Treasury runs a proposal on the code it started with until the
     /// proposal ends, so a `migrate` action after its own `upgrade` in the same
     /// proposal still runs the old code, finds nothing to do and reverts the
-    /// whole proposal. Once the upgrade proposal has executed, `execute`
-    /// refuses every proposal (`StorageVersionMismatch`) until this is called,
-    /// which is why it must not need a proposal. For the same reason a
-    /// Treasury migration must be bounded and must not fail: if it did, no
-    /// proposal could run again to upgrade the Treasury to fixed code.
+    /// whole proposal. Once the upgrade proposal has executed, `execute` runs
+    /// only recovery proposals (`StorageVersionMismatch` for any other) until
+    /// this is called, which is why it needs no proposal. If it fails, a
+    /// recovery proposal can still upgrade the Treasury to fixed code.
     pub fn migrate(e: &Env) {
         Self::do_migrate(e);
     }
@@ -163,7 +162,9 @@ impl DaoTreasuryContract {
     /// Executes a queued proposal. The Treasury is the top-level executor.
     ///
     /// Anyone may call this; authority comes from the Governor's approval.
-    /// Refuses to run while the stored layout differs from the code's
+    /// While the stored layout differs from the code's, runs only a recovery
+    /// proposal, whose every action is `upgrade` or `migrate` on this
+    /// Treasury or its Governor, and refuses any other
     /// (`StorageVersionMismatch`; see `migrate`).
     ///
     /// 1. `governor.consume(...)` (a returning call) checks the proposal is
@@ -200,10 +201,16 @@ impl DaoTreasuryContract {
         args: Vec<Vec<Val>>,
         description_hash: BytesN<32>,
     ) -> BytesN<32> {
-        Self::require_current_layout(e);
+        let governor = Self::governor(e);
+        // While a migration is due, only a recovery proposal runs, so a DAO
+        // whose migration fails can still upgrade to fixed code.
+        if !common::upgrade::is_current_layout(e, STORAGE_VERSION)
+            && !Self::is_recovery(e, &governor, &targets, &functions)
+        {
+            panic_with_error!(e, TreasuryError::StorageVersionMismatch);
+        }
         common::lifecycle::require_live(e);
         common::ttl::extend_instance(e);
-        let governor = Self::governor(e);
 
         let proposal_id = common::clients::GovernorConsumeClient::new(e, &governor).consume(
             &targets,
@@ -269,14 +276,40 @@ impl DaoTreasuryContract {
 
 impl DaoTreasuryContract {
     /// Panics `StorageVersionMismatch` unless the stored data layout is the
-    /// one this code expects, so this code never reads or writes data in a
-    /// layout it does not know. `upgrade`, `migrate`, and the views stay
-    /// outside it, so a migration that is due can always be completed by
-    /// anyone.
+    /// one this code expects, so this code never writes data in a layout it
+    /// does not know. Used by `launch` and `handoff`; `execute` also lets a
+    /// recovery proposal through (see `is_recovery`). `upgrade`, `migrate`,
+    /// and the views stay outside it.
     fn require_current_layout(e: &Env) {
         if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
             panic_with_error!(e, TreasuryError::StorageVersionMismatch);
         }
+    }
+
+    /// Whether every action is an `upgrade` or `migrate` call on this
+    /// Treasury or its Governor: the only proposals `execute` runs while a
+    /// migration is due. The path reads only the keys a release must keep
+    /// readable by both its code and the code before it: `Governor`,
+    /// `Manager`, and the admin, lifecycle and upgrade keys.
+    fn is_recovery(
+        e: &Env,
+        governor: &Address,
+        targets: &Vec<Address>,
+        functions: &Vec<Symbol>,
+    ) -> bool {
+        if targets.is_empty() || targets.len() != functions.len() {
+            return false;
+        }
+        let this = e.current_contract_address();
+        let upgrade = Symbol::new(e, "upgrade");
+        let migrate = Symbol::new(e, "migrate");
+        targets
+            .iter()
+            .zip(functions.iter())
+            .all(|(target, function)| {
+                (target == this || target == *governor)
+                    && (function == upgrade || function == migrate)
+            })
     }
 
     fn manager(e: &Env) -> Address {

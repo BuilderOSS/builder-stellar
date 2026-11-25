@@ -153,9 +153,10 @@ impl DaoGovernorContract {
     /// touched; if the new code expects a newer layout, call `migrate` next
     /// (the same proposal may do it, as its next action; if that `migrate`
     /// fails, the whole proposal reverts and the old code stays). Not behind
-    /// the storage-layout gate. Once live, though, it is reached only through
-    /// a proposal, which the gate refuses while the layout is out of step, so
-    /// a migration must be bounded and must not fail.
+    /// the storage-layout gate. Once live it is reached through a proposal;
+    /// while a migration is due, a recovery proposal (only `upgrade` and
+    /// `migrate` calls on this Governor or its Treasury) still runs, so a
+    /// release whose migration fails can be replaced by fixed code.
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         common::admin::require_admin(e);
         let manager = Self::manager(e);
@@ -168,9 +169,9 @@ impl DaoGovernorContract {
     ///
     /// Anyone may call it. It runs only the migration that the installed code
     /// defines, which the Manager approved and the module admin installed, and
-    /// only once per layout. It must stay open: while the layout is out of
-    /// step the Governor refuses proposals (`StorageVersionMismatch`), so a
-    /// migration that needed a proposal could never run.
+    /// only once per layout. It stays open so that a migration that is due
+    /// never waits for a proposal: until it runs, the Governor accepts only
+    /// recovery proposals (`StorageVersionMismatch` for any other).
     pub fn migrate(e: &Env) {
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
@@ -199,7 +200,6 @@ impl DaoGovernorContract {
     /// ends early at `proposal_count()`. An id entry archived after its
     /// proposal ended must be restored before it can be read.
     pub fn proposal_ids(e: &Env, start: u32, limit: u32) -> Vec<BytesN<32>> {
-        Self::require_current_layout(e);
         let end = start
             .saturating_add(limit.min(MAX_PROPOSAL_IDS_PAGE))
             .min(Self::next_proposal_seq(e));
@@ -216,7 +216,6 @@ impl DaoGovernorContract {
     /// The proposal's stored window, eta and sequence number, and its state
     /// now. Panics `ProposalNotFound` for an unknown id.
     pub fn proposal(e: &Env, proposal_id: BytesN<32>) -> ProposalInfo {
-        Self::require_current_layout(e);
         let core = Self::get_proposal(e, &proposal_id);
         let state = Self::proposal_state_internal(e, &proposal_id, &core);
         ProposalInfo {
@@ -354,7 +353,7 @@ impl DaoGovernorContract {
         args: Vec<Vec<Val>>,
         description_hash: BytesN<32>,
     ) -> BytesN<32> {
-        Self::require_current_layout(e);
+        Self::require_current_layout_or_recovery(e, &targets, &functions);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         Self::treasury(e).require_auth();
@@ -454,17 +453,61 @@ impl DaoGovernorContract {
     }
 
     /// Panics `StorageVersionMismatch` unless the stored data layout is the
-    /// one this code expects. Every state-changing entry point and every view
-    /// that decodes a stored proposal calls it first, so this code never
-    /// reads or writes data in a layout it does not know (after an upgrade
-    /// whose `migrate` has not run yet, or an upgrade to older code).
-    /// `upgrade`, `migrate`, and the upgrade views (`wasm_hash`,
-    /// `storage_version`, `version`, `admin`) stay outside it, so a migration
-    /// that is due can always be completed by anyone.
+    /// one this code expects. The state-changing entry points that a recovery
+    /// proposal does not need (`launch`, `handoff`, the setters, `comment`,
+    /// `cancel`) call it first, so this code never writes data in a layout it
+    /// does not know (after an upgrade whose `migrate` has not run yet, or an
+    /// upgrade to older code). `propose`, `queue` and `consume` use
+    /// `require_current_layout_or_recovery`, and `cast_vote` accepts only
+    /// recovery proposals while a migration is due. `upgrade`, `migrate`, and
+    /// the views stay outside the gate.
     fn require_current_layout(e: &Env) {
         if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
             panic_with_error!(e, CustomGovernorError::StorageVersionMismatch);
         }
+    }
+
+    /// The gate for `propose`, `queue` and `consume`: passes when the layout
+    /// is current, and otherwise only for a recovery proposal (see
+    /// `is_recovery`), so that a DAO whose migration fails can still upgrade
+    /// to fixed code. Returns whether a migration is due.
+    ///
+    /// The recovery path relies on the storage a release must keep readable
+    /// by both its code and the code before it: the proposal records
+    /// (`ProposalTime`, `ProposalId`, `ProposalCount`, `RecoveryProposal`),
+    /// the settings (`Treasury`, `Manager`, `QueueDelay` and OpenZeppelin's
+    /// voting settings, quorum checkpoints and vote tallies), the vote
+    /// source, and the admin, lifecycle and upgrade keys.
+    fn require_current_layout_or_recovery(
+        e: &Env,
+        targets: &Vec<Address>,
+        functions: &Vec<Symbol>,
+    ) -> bool {
+        let migration_due = !common::upgrade::is_current_layout(e, STORAGE_VERSION);
+        if migration_due && !Self::is_recovery(e, targets, functions) {
+            panic_with_error!(e, CustomGovernorError::StorageVersionMismatch);
+        }
+        migration_due
+    }
+
+    /// Whether every action is an `upgrade` or `migrate` call on this
+    /// Governor or its Treasury: the only proposals that run while a
+    /// migration is due.
+    fn is_recovery(e: &Env, targets: &Vec<Address>, functions: &Vec<Symbol>) -> bool {
+        if targets.is_empty() || targets.len() != functions.len() {
+            return false;
+        }
+        let this = e.current_contract_address();
+        let treasury = Self::treasury(e);
+        let upgrade = Symbol::new(e, "upgrade");
+        let migrate = Symbol::new(e, "migrate");
+        targets
+            .iter()
+            .zip(functions.iter())
+            .all(|(target, function)| {
+                (target == this || target == treasury)
+                    && (function == upgrade || function == migrate)
+            })
     }
 
     /// Refuses actions this Governor will not put to a vote:
@@ -833,7 +876,7 @@ impl Governor for DaoGovernorContract {
         _eta: u32,
         _operator: Address,
     ) -> BytesN<32> {
-        Self::require_current_layout(e);
+        Self::require_current_layout_or_recovery(e, &targets, &functions);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let proposal_id =
@@ -868,27 +911,23 @@ impl Governor for DaoGovernorContract {
     /// Queued, Expired, Executed or Canceled). Fails `ProposalNotFound` for
     /// an unknown id.
     fn proposal_state(e: &Env, proposal_id: BytesN<32>) -> ProposalState {
-        Self::require_current_layout(e);
         let proposal = Self::get_proposal(e, &proposal_id);
         Self::proposal_state_internal(e, &proposal_id, &proposal)
     }
 
     /// The ledger the proposal reads votes at: the ledger before `propose`.
     fn proposal_snapshot(e: &Env, proposal_id: BytesN<32>) -> u32 {
-        Self::require_current_layout(e);
         Self::get_proposal(e, &proposal_id).vote_snapshot
     }
 
     /// The account that made the proposal (the only one that may cancel it).
     fn proposal_proposer(e: &Env, proposal_id: BytesN<32>) -> Address {
-        Self::require_current_layout(e);
         Self::get_proposal(e, &proposal_id).proposer
     }
 
     /// When voting ends, in unix seconds (not a ledger number, as
     /// OpenZeppelin documents it).
     fn proposal_deadline(e: &Env, proposal_id: BytesN<32>) -> u32 {
-        Self::require_current_layout(e);
         // Convert u64 timestamp to u32 for trait compatibility
         // This is safe for practical purposes (works until year 2106)
         Self::get_proposal(e, &proposal_id)
@@ -923,7 +962,9 @@ impl Governor for DaoGovernorContract {
         description: String,
         proposer: Address,
     ) -> BytesN<32> {
-        Self::require_current_layout(e);
+        // While a migration is due, only a recovery proposal may be made
+        // (see `is_recovery`); it is marked so that votes on it are accepted.
+        let recovering = Self::require_current_layout_or_recovery(e, &targets, &functions);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         proposer.require_auth();
@@ -997,6 +1038,14 @@ impl Governor for DaoGovernorContract {
             .persistent()
             .set(&Self::proposal_id_key(e, seq), &proposal_id);
         Self::set_proposal(e, &proposal_id, &proposal, PROPOSAL_TTL_EXTEND_TO);
+        if recovering {
+            // Read only by `cast_vote`, within the voting delay and period
+            // (60 days at most), so one TTL covers it.
+            let key = common::ns(e, GovernorKey::RecoveryProposal(proposal_id.clone()));
+            let persistent = e.storage().persistent();
+            persistent.set(&key, &true);
+            persistent.extend_ttl(&key, PROPOSAL_TTL_EXTEND_TO, PROPOSAL_TTL_EXTEND_TO);
+        }
         let Some(next) = seq.checked_add(1) else {
             panic_with_error!(e, GovernorError::MathOverflow);
         };
@@ -1048,7 +1097,16 @@ impl Governor for DaoGovernorContract {
         reason: String,
         voter: Address,
     ) -> u128 {
-        Self::require_current_layout(e);
+        // While a migration is due, only recovery proposals made during it
+        // can be voted on.
+        if !common::upgrade::is_current_layout(e, STORAGE_VERSION)
+            && !e.storage().persistent().has(&common::ns(
+                e,
+                GovernorKey::RecoveryProposal(proposal_id.clone()),
+            ))
+        {
+            panic_with_error!(e, CustomGovernorError::StorageVersionMismatch);
+        }
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         voter.require_auth();

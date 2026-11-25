@@ -42,9 +42,11 @@
 //! - A proposal action cannot call `consume` (refused at `propose`, and by the
 //!   Treasury inside an `authorize` tree), and its mints must fit one
 //!   execution's event limit (refused at `propose`)
-//! - Every entry point that reads or writes proposal data refuses to run while
-//!   the stored layout differs from the code's (`StorageVersionMismatch`);
-//!   anyone can call `migrate` to complete a pending migration
+//! - While the stored layout differs from the code's, only a recovery
+//!   proposal (only `upgrade` and `migrate` calls on this Governor or its
+//!   Treasury) can be made, voted on, queued and executed; everything else
+//!   that changes state fails `StorageVersionMismatch`. Anyone can call
+//!   `migrate` to complete a pending migration
 
 #![no_std]
 

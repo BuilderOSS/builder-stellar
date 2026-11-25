@@ -31,3 +31,26 @@ checkout's build of them. `release_build_matches_production_and_dev` checks that
 with the three 0.5.0 hashes. Bytes depend on the compiler, so that test is ignored by default: run it with
 `--include-ignored` on a build made with rustc 1.95.0 and stellar-cli 28.0.0, the release toolchain.
 
+## Recovery releases (test-only, never deployed)
+
+Built from `fix/governance-hardening` (the recovery-path change on top of `3b7130c`) for
+`src/governance.rs`, which upgrades a live tribe to a release whose migration always fails and then
+recovers by proposal. Each is this checkout's Governor or Treasury with `STORAGE_VERSION = 2`; the
+"broken" ones also panic at the end of `migrate` (Treasury: `do_migrate`):
+
+```rust
+common::upgrade::migrate(e, STORAGE_VERSION);
+panic!("recovery fixture: this migration always fails");
+```
+
+Build: apply the change above to `contracts/{governor,treasury}/src`, then
+`stellar contract build --package <module> --out-dir <dir>`, and revert the change.
+
+| File | Module | Storage version | `migrate` | Hash (sha256) |
+| --- | --- | --- | --- | --- |
+| `governor-recovery-broken.wasm` | Governor | 2 | always fails | `22984b7b6be498724fbf1959b65434628934e3c2f8178581512ddc98a8afe599` |
+| `governor-recovery-fixed.wasm` | Governor | 2 | works | `0bdd3267bef65efcc3281953bb75e04d2a2396cece9d5ea078bd4ae3169406de` |
+| `treasury-recovery-broken.wasm` | Treasury | 2 | always fails | `a2b9ca357bf8c1f63b62119eeac8bfedffa0c0630d5227b4f10d333fb01a7d0c` |
+| `treasury-recovery-fixed.wasm` | Treasury | 2 | works | `afba127044fb89efb342b2e6b8c635d1d72bba5469f8fa1dad3e0c66e914dc22` |
+
+Rebuild them when the recovery path (`is_recovery` in either contract) changes.

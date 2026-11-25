@@ -19,8 +19,10 @@
 //! - **No `consume` actions**: no action, and no node of an `authorize` tree,
 //!   may call the Governor's `consume`, so a proposal cannot mark another one
 //!   Executed without running it
-//! - **Storage-layout gate**: `execute`, `launch`, and `handoff` refuse to run
-//!   while the stored layout differs from the code's (`StorageVersionMismatch`)
+//! - **Storage-layout gate**: while the stored layout differs from the
+//!   code's, `launch` and `handoff` refuse to run, and `execute` runs only a
+//!   recovery proposal (only `upgrade` and `migrate` calls on this Treasury
+//!   or its Governor; `StorageVersionMismatch` for any other)
 //! - **Admin of the DAO**: After launch the Treasury is the admin of every DAO
 //!   module, so every privileged change goes through a proposal
 //!

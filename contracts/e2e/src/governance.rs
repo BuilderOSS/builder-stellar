@@ -497,3 +497,158 @@ fn a_proposal_cannot_consume_another() {
     victim.execute_within_limits(&treasury, "execute (the victim)");
     assert_eq!(governor.proposal_state(&victim_id), ProposalState::Executed);
 }
+
+// Releases built from this branch with `STORAGE_VERSION = 2`: one whose
+// `migrate` always fails, and the fixed one (fixtures/README.md).
+const GOVERNOR_BROKEN: &[u8] = include_bytes!("../fixtures/governor-recovery-broken.wasm");
+const GOVERNOR_FIXED: &[u8] = include_bytes!("../fixtures/governor-recovery-fixed.wasm");
+const TREASURY_BROKEN: &[u8] = include_bytes!("../fixtures/treasury-recovery-broken.wasm");
+const TREASURY_FIXED: &[u8] = include_bytes!("../fixtures/treasury-recovery-fixed.wasm");
+
+/// Uploads the broken and fixed releases of `name` and approves the path
+/// running -> broken -> fixed. Returns `(broken, fixed)`.
+fn broken_and_fixed(
+    f: &DaoFixture,
+    name: &str,
+    running: &BytesN<32>,
+    broken: &[u8],
+    fixed: &[u8],
+) -> (BytesN<32>, BytesN<32>) {
+    let e = &f.e;
+    let upload = |bytes: &[u8]| {
+        e.deployer()
+            .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, bytes))
+    };
+    let (broken, fixed) = (upload(broken), upload(fixed));
+    for (hash, version) in [(&broken, "0.6.0"), (&fixed, "0.6.1")] {
+        f.manager.register_implementation(
+            &String::from_str(e, name),
+            &String::from_str(e, version),
+            hash,
+        );
+    }
+    f.manager.approve_upgrade(running, &broken);
+    f.manager.approve_upgrade(&broken, &fixed);
+    (broken, fixed)
+}
+
+fn renderer_change(e: &Env, f: &DaoFixture, description: &str) -> Draft {
+    Draft::new(e, description).call(
+        &f.dao.metadata,
+        "update_renderer_base",
+        vec![e, String::from_str(e, "https://after.example/").into_val(e)],
+    )
+}
+
+/// A Governor upgraded to a release whose `migrate` always fails refuses
+/// ordinary proposals, but the tribe can still propose, vote on, queue and
+/// execute a recovery proposal: an upgrade to the fixed release and its
+/// migration, in one proposal. Governance then runs as before.
+#[test]
+fn a_governor_whose_migration_fails_recovers_by_proposal() {
+    let f = launched_with_artwork();
+    let e = &f.e;
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    let running = governor.wasm_hash();
+    let (broken, fixed) =
+        broken_and_fixed(&f, "Governor", &running, GOVERNOR_BROKEN, GOVERNOR_FIXED);
+    let g = &f.dao.governor;
+
+    let install = Draft::new(e, "install 0.6.0").call(
+        g,
+        "upgrade",
+        vec![e, running.into_val(e), broken.clone().into_val(e)],
+    );
+    install.pass(&governor, &f.deployer);
+    install.execute_within_limits(&treasury, "execute (Governor 0.6.0)");
+    assert_eq!(governor.wasm_hash(), broken);
+    assert_eq!(governor.storage_version(), 1);
+
+    // The migration fails for everyone, and ordinary proposals are refused.
+    e.set_auths(&[]);
+    assert!(governor.try_migrate().is_err());
+    assert_eq!(governor.storage_version(), 1);
+    e.mock_all_auths();
+    let ordinary = renderer_change(e, &f, "ordinary");
+    advance(e, 1);
+    assert_eq!(
+        ordinary.try_propose(&governor, &f.deployer),
+        Err(governor::CustomGovernorError::StorageVersionMismatch.into())
+    );
+
+    // Recovery: the fixed release and its migration, in one proposal.
+    let recover = Draft::new(e, "recover with 0.6.1")
+        .call(
+            g,
+            "upgrade",
+            vec![e, broken.into_val(e), fixed.clone().into_val(e)],
+        )
+        .call(g, "migrate", Vec::new(e));
+    let recover_id = recover.pass(&governor, &f.deployer);
+    recover.execute_within_limits(&treasury, "execute (Governor recovery)");
+    assert_eq!(
+        governor.proposal_state(&recover_id),
+        ProposalState::Executed
+    );
+    assert_eq!(governor.wasm_hash(), fixed);
+    assert_eq!(governor.storage_version(), 2);
+
+    ordinary.pass(&governor, &f.deployer);
+    ordinary.execute_within_limits(&treasury, "execute (after the Governor recovery)");
+}
+
+/// A Treasury upgraded to a release whose `migrate` always fails refuses to
+/// execute ordinary proposals, but still executes a recovery proposal that
+/// upgrades it to the fixed release; anyone then runs the fixed migration
+/// (the Treasury's second step), and execution runs as before.
+#[test]
+fn a_treasury_whose_migration_fails_recovers_by_proposal() {
+    let f = launched_with_artwork();
+    let e = &f.e;
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    let running = treasury.wasm_hash();
+    let (broken, fixed) =
+        broken_and_fixed(&f, "Treasury", &running, TREASURY_BROKEN, TREASURY_FIXED);
+    let t = &f.dao.treasury;
+
+    let install = Draft::new(e, "install 0.6.0").call(
+        t,
+        "upgrade",
+        vec![e, running.into_val(e), broken.clone().into_val(e)],
+    );
+    install.pass(&governor, &f.deployer);
+    install.execute_within_limits(&treasury, "execute (Treasury 0.6.0)");
+    assert_eq!(treasury.wasm_hash(), broken);
+
+    e.set_auths(&[]);
+    assert!(treasury.try_migrate().is_err());
+    assert_eq!(treasury.storage_version(), 1);
+    e.mock_all_auths();
+    let ordinary = renderer_change(e, &f, "ordinary");
+    let ordinary_id = ordinary.pass(&governor, &f.deployer);
+    assert_eq!(
+        ordinary.try_execute(&treasury),
+        Err(treasury::TreasuryError::StorageVersionMismatch.into())
+    );
+
+    let recover = Draft::new(e, "recover with 0.6.1").call(
+        t,
+        "upgrade",
+        vec![e, broken.into_val(e), fixed.clone().into_val(e)],
+    );
+    recover.pass(&governor, &f.deployer);
+    recover.execute_within_limits(&treasury, "execute (Treasury recovery)");
+    assert_eq!(treasury.wasm_hash(), fixed);
+
+    e.set_auths(&[]);
+    treasury.migrate();
+    assert_eq!(treasury.storage_version(), 2);
+    e.mock_all_auths();
+    ordinary.execute_within_limits(&treasury, "execute (after the Treasury recovery)");
+    assert_eq!(
+        governor.proposal_state(&ordinary_id),
+        ProposalState::Executed
+    );
+}
