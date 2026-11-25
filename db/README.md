@@ -65,6 +65,8 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | `0008_marketplace_views` | quick-buy pools and their stock (a token is in stock only if it never moved after its mint into the pool), secondary listings (by `token_id`), sales (with `pool_id`), comments |
 | `0009_app_views` | activity feed (per-DAO by registration window, with platform events fanned out and revocations sent only to registered modules running the hash), proposal list/detail, feed status (health), indexer status |
 | `0010_claims_views` | claim lists, claims (with paid and escrowed amounts), claimers per list |
+| `0011_vote_sources` | vote sources (`manager.vote_sources`), `governance.settings.vote_source` |
+| `0012_outside_module_casts` | `chain.try_int` (text to integer, NULL for anything else); `manager.module_versions` and `manager.module_launches` take upgrades, storage migrations and launch events only from the contracts the Manager deployed, so the views ignore malformed values from outside modules |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,

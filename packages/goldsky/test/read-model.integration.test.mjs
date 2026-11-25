@@ -1069,3 +1069,69 @@ test('prisma schema matches the database views column for column', { skip }, () 
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Outside modules (migration 0012). Runs last: it lands more events, and the
+// tests above count the scenario's.
+// ---------------------------------------------------------------------------
+test('outside modules: malformed version and launch events leave the shared views readable', { skip }, () => {
+  assert.deepEqual(
+    one(`SELECT chain.try_int('2') AS small, chain.try_int('-7') AS negative, chain.try_int('2147483647') AS max,
+      chain.try_int('2147483648') AS over, chain.try_int('99999999999999999999') AS huge, chain.try_int('two') AS word,
+      chain.try_int('1.5') AS fraction, chain.try_int('') AS empty, chain.try_int(NULL) AS missing`),
+    { small: 2, negative: -7, max: 2147483647, over: null, huge: null, word: null, fraction: null, empty: null, missing: null }
+  );
+
+  const managerVersions = `SELECT * FROM manager.module_versions WHERE module_role <> 'module' ORDER BY dao_id, module_contract`;
+  const managerLaunches = `SELECT * FROM manager.module_launches WHERE module_role <> 'module' ORDER BY dao_id, module_contract`;
+  const otherFeeds = `SELECT activity_id, dao_id, event_name FROM app.activity_feed WHERE dao_id IS DISTINCT FROM 'CTOK4' ORDER BY activity_id`;
+  const before = { versions: rows(managerVersions), launches: rows(managerLaunches), feeds: rows(otherFeeds) };
+
+  // CEXTCLM: DAO 4 registered it by vote and the Manager never deployed it (role module, still
+  // registered). Its storage versions are out of range and text, its upgrade names a registered
+  // (and revoked) hash it does not run, and its launch flag is not a boolean.
+  const start = events.length;
+  emit('module', 'CEXTCLM', 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u64('99999999999') }, ledger: 320 });
+  emit('module', 'CEXTCLM', 'migrated', { data: { from_storage_version: u32(1), to_storage_version: str('two') }, ledger: 321 });
+  emit('module', 'CEXTCLM', 'upgraded', { topics: [bytes('x01'), bytes('bb')], data: { version: str('0.1.0') }, ledger: 322 });
+  emit('module', 'CEXTCLM', 'module_launched', { topics: [addr('CTRE4')], data: { started: str('maybe') }, ledger: 323 });
+  const raw = events.slice(start).map(rawScript);
+  const decodedRows = raw.map(decodeScript);
+  const activityRows = decodedRows.map(activityScript);
+  assert.ok([...raw, ...decodedRows, ...activityRows].every(Boolean), 'every event survives every transform');
+  for (const [schema, table, objects] of [['chain', 'raw_events', raw], ['chain', 'decoded_events', decodedRows], ['app', 'activity_feed_events', activityRows]]) {
+    const columns = tableColumns(schema, table).filter((c) => c !== 'ingested_at');
+    insertRows(`${schema}.${table}`, Object.keys(objects[0]).filter((key) => columns.includes(key)), objects);
+  }
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_events WHERE contract_id = 'CEXTCLM'`).n, 5, 'the events are in the DAO\'s window');
+  assert.throws(
+    () => psql(`SELECT (a ->> 'to_storage_version')::integer FROM manager.module_events WHERE contract_id = 'CEXTCLM' AND event_name = 'migrated'`),
+    /out of range|invalid input syntax/,
+    'the fixture really is malformed'
+  );
+
+  // Every view reads, deployment-wide, and nothing the Manager deployed changed.
+  assert.ok(rows(`SELECT * FROM manager.module_versions`).length > 0);
+  assert.ok(rows(`SELECT * FROM manager.module_launches`).length > 0);
+  assert.ok(rows(`SELECT * FROM app.activity_feed`).length > 0);
+  assert.deepEqual(rows(managerVersions), before.versions, 'every Manager-deployed module keeps its versions');
+  assert.deepEqual(rows(managerLaunches), before.launches);
+  assert.deepEqual(rows(otherFeeds), before.feeds, 'other DAOs\' feeds are unchanged');
+
+  // The outside module's own claims are ignored: no hash, version or launch from its events.
+  assert.deepEqual(
+    one(`SELECT current_hash, current_version, storage_version, upgrade_count FROM manager.module_versions WHERE module_contract = 'CEXTCLM'`),
+    { current_hash: null, current_version: null, storage_version: 1, upgrade_count: 0 }
+  );
+  assert.deepEqual(one(`SELECT is_live, started FROM manager.module_launches WHERE module_contract = 'CEXTCLM'`), { is_live: false, started: null });
+  assert.deepEqual(
+    rows(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'implementation_revoked'`).map((r) => r.dao_id),
+    ['CTOK1'],
+    'a module that only claims a revoked hash does not bring the notice to its DAO'
+  );
+  assert.deepEqual(
+    rows(`SELECT DISTINCT dao_id, visibility FROM app.activity_feed WHERE contract_id = 'CEXTCLM'`),
+    [{ dao_id: 'CTOK4', visibility: 'admin' }],
+    'its events stay in its own DAO\'s admin feed'
+  );
+});
