@@ -114,10 +114,13 @@ all use the same registration, allowance and upgrade path.
   - in Setup, only for the Manager (during `create_dao` / `create_module`);
   - once Live, only for the Treasury (by proposal; custom DAO code allowed).
 - **Only contracts can be modules.** `register_module` refuses any address that isn't a deployed Wasm contract:
-  `addr.executable()` must be `Some(Executable::Wasm(_))` (soroban-sdk 27; `NotAContract`). A wallet (account)
-  or a Stellar Asset Contract can never be registered, so no proposal can strip a holder's votes by marking
-  their wallet non-voting, and no wallet can hold an allowance.
-- **Unregistering** also sets the module's allowance to 0.
+  `addr.executable()` must be `Some(Executable::Wasm(_))` (soroban-sdk 27; `NotAContract`). An account wallet
+  or a Stellar Asset Contract can never be registered, and no account wallet can hold an allowance. A
+  smart-contract wallet is a Wasm contract, though, so a proposal can register a member's contract wallet as
+  non-voting custody and strip its votes (corrected 25 November 2026; see `docs/SECURITY_MODEL.md`, "Mint
+  allowances and modules").
+- **Unregistering** also sets the module's allowance to 0. A non-voting module must hold no tokens
+  (`ModuleHoldsTokens`, added 25 November 2026), so a locked DAO never strands tokens in a former module.
 - **Every registration is an event.** The Token emits `ModuleRegistered { kind, address, non_voting }` and
   `ModuleUnregistered { address }`. These event shapes are the contract's public API for the indexer, which
   allowlists modules from them, whether the Manager built them or not (R6; the full indexer design
@@ -132,18 +135,19 @@ all use the same registration, allowance and upgrade path.
   `non_voting = true` as holding no votes.
 - **Registration moves the votes of what the module already holds, so there's nothing to grief.**
   - Registering a non-voting module that already holds k tokens runs `transfer_voting_units(Some(addr), None, k)`.
-  - Unregistering it first calls `ensure_self_delegate(addr)`, then runs `transfer_voting_units(None, Some(addr),
-    k)`, the same order `mint` and `transfer` use today. Without the self-delegation, OZ would add
-    `k` to `TotalSupply` and credit nobody's checkpoint, because a module that only ever held tokens while
-    non-voting has no delegate. Quorum would then be harder to reach by `k` for no reason.
+  - Unregistering a non-voting module is refused while it holds any token (`ModuleHoldsTokens`; changed
+    25 November 2026). Once unregistered it would no longer be custody, so in a locked DAO the tokens it held
+    for others (escrowed listings, the auctioned token, pool stock) could never move out. As a result there
+    are no votes to move back when it leaves.
   - These are the same moves a transfer into or out of the Treasury makes today. So voting units always equal
     balances (zero for non-voting holders), and the account checkpoints always add up to `TotalSupply`.
-  - **Empty a module before unregistering it.** Tokens left in an unregistered module become that contract's
-    own votes, which nobody casts unless its code votes, and they still count toward quorum. The normal path is
-    to sweep them back to the Treasury first (for example `sweep_pool`). The web warns when an unregister
-    proposal targets a module that still holds tokens. Unregistering is not blocked, because anyone could send
-    the module an NFT to block it.
-  - Sending an NFT to a predicted or registered module address can't block anything.
+  - **Empty a module before unregistering it.** The DAO can always empty the Auction and Marketplace by
+    proposal: `cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token` for a token
+    someone sent the module directly. This replaces the earlier choice not to block removal because anyone
+    could send the module an NFT. One risk remains in a DAO whose transfers are not locked: a token sent to the
+    module after the removal proposal was drafted makes that proposal fail, so the DAO recovers it in the next
+    proposal. See `docs/SECURITY_MODEL.md`, "Known limitations".
+  - Sending an NFT to a predicted module address can't block anything.
   - A wallet can't be registered at all (see "Only contracts can be modules"), so registration can't be used to
     strip a holder's votes.
 - **One-click renewal covers every module (R3).** Every registered module implements
@@ -576,7 +580,7 @@ Unit tests live in each crate's `src/test.rs`; end-to-end tests run on the built
 | Success Criterion | Tests |
 |---|---|
 | No platform minting; allowance holders are modules | token `launch_refuses_a_grant…`, `increase_mint_allowance_requires_admin_auth`, `only_deployed_wasm_contracts_can_be_modules`, `the_treasury_is_never_a_module_even_with_an_empty_registry`; manager `launch_grants_exactly_the_canonical_mint_set` |
-| Vote counts stay exact (3 clauses; register/unregister of a holding module; module as delegate) | e2e `voting_units_match_balances_and_checkpoints_add_up` (each op, including registering and unregistering while holding, runs at least 20 times over 4 seeds); token `registry::*` (D2, A1) |
+| Vote counts stay exact (3 clauses; register/unregister of a holding module; module as delegate) | e2e `voting_units_match_balances_and_checkpoints_add_up` (each op, including registering while holding and refusing to unregister while holding, runs at least 20 times over 8 seeds); token `registry::*` (D2, A1) |
 | Allowances hold (cap, increases add, unregister zeroes, release lowers only one's own, only claims mints pre-launch) | token `allowances_add_subtract_and_release`, `module_mints_within_its_allowance…`, `before_launch_only_the_claims_module_mints`, `an_unlimited_allowance_is_never_spent`, `releasing_from_an_unlimited_allowance_keeps_it_unlimited`, `registry_and_allowance_changes_are_events`; e2e `a_claim_minter_stops_at_its_allowance` |
 | Assurance launch end to end (1,000 leaves, partial claims, anyone launches, both paths refused until Met and after failure, refund refused on Live, frozen setters and mints, DeadlineTooFar, recovery) | e2e `an_assurance_drive_of_a_thousand_leaves_meets_and_anyone_launches`, `a_failed_drive_refunds_recovers_and_frees_its_slug`, `a_pending_drive_is_covered_by_the_renewal_inventory`; manager `real_dao::a_met_drive_…`, `launch_dao_during_a_drive_uses_the_stored_config`, `a_failed_drive_refuses_every_launch_…` (paused factory, R1), `open_assurance_bounds_the_deadline_and_runs_once`, `recover_claims_waits_for_a_failed_drive_…` (Open and Met refused); minter `a_met_drive_…`, `a_missed_deadline_…`, `a_met_drive_that_misses_its_deadline_also_fails` |
 | Quick-buy (100-token pool, restocks, picks, caps, rate, close, sweep, allowance released) | e2e `a_hundred_token_pool_restocks_sells_closes_and_sweeps` (16-trait artwork, event budget); marketplace `pools::*` |

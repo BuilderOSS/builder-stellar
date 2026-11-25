@@ -20,7 +20,7 @@ The contract rules that shape the design:
 | The module is deployed at an address that is a pure function of tribe, kind and a module number, and `create_module` must be given that number (`StaleModuleIndex` if another module of the kind was added first). | Read the number and the predicted address from the Manager while drafting. Show the address up front. Re-check before submit and again when the proposal is queued. |
 | A module created after launch starts closed: the market is paused, the auction has not started, a claims module has no list. | "Open it when this passes" is a choice, and a closed module shows a row-level nudge. |
 | Each built-in kind appears at most once; 16 modules at most. | Tiles disable with their reason. |
-| Removing a module zeroes its allowance and its transfer-agent flag. Tokens it still holds become that contract's own votes. Removal is deliberately not blockable (anyone could send the module a token). | A readiness checklist that warns and offers the clean-up as steps, but never blocks. |
+| Removing a module zeroes its allowance and its transfer-agent flag. Since 25 November 2026 the Token refuses to remove a module without votes while it holds any token (`ModuleHoldsTokens`); before then, tokens it still held became that contract's own votes. | A readiness checklist that warns and offers the clean-up as steps. The removal check passes only when the chosen clean-up empties the module. |
 | Before launch only the Manager can register or unregister. | Add works directly for the launch admin (one signed transaction). Remove is disabled with its reason. |
 
 ## 2. Insight
@@ -45,7 +45,7 @@ Three methods from different families: structural (SIT subtraction: remove every
 | 4 | A general "check this whole proposal" step in the composer | Deferred. It is the right idea for every action, but dependent steps cannot be simulated alone, so a general version needs the contracts' help. The module flow gets the part that is possible. |
 | 5 | Goal-first copy ("sell new memberships", "run auctions") | Kept as tile wording: plain goal first, module name one line beneath. |
 | 6 | Hide the predicted address | Killed. It is the one concrete, checkable thing before a vote. |
-| 7 | Block removal while a module holds tokens | Killed. The contract does not block it, and a block can be griefed by sending the module a token. Warn, offer the clean-up, let the tribe decide. |
+| 7 | Block removal while a module holds tokens | Killed at first: the contract did not block it, and a block can be griefed by sending the module a token. Reversed on 25 November 2026: the Token now blocks it, so that a locked tribe never strands tokens in a former module, and `recover_token` lets the tribe take back a token someone sent. The sheet still warns and offers the clean-up. |
 | 8 | Attach as a separate page | Killed. The Modules card already exists and already owns allowances; a second place splits one subject. |
 
 Honest scores for the chosen direction (the skill's rubric; not a 9 and it should not pretend to be):

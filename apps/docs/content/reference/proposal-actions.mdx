@@ -50,8 +50,8 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 | Change the artwork renderer | Changes where token images are drawn from. Existing token images can change too. | Prepared in Manage → Artwork. |
 | Seed traits for a token | Gives artwork traits to a token minted before the artwork was added. | Prepared in Manage → Artwork. |
 | Add a module | Creates a new auction, market or claims module for the tribe. | Prepared in Manage → Membership. A tribe has at most one module of each kind. |
-| Register a module | Adds an existing contract to the tribe as a module. | Prepared in Manage → Membership. |
-| Remove a module | Removes a module from the tribe. | Prepared in Manage → Membership. |
+| Register a module | Adds an existing contract to the tribe as a module. | Prepared in Manage → Membership. Any deployed contract can be registered, a member's contract wallet included. See [Modules](/concepts/modules#modules-from-outside-tribe-builder). |
+| Remove a module | Removes a module from the tribe. | Prepared in Manage → Membership. An auction or market must hold no memberships first, so add its clean-up steps before it. See [Modules](/concepts/modules#removing-a-module). |
 
 ## Voting rules
 
