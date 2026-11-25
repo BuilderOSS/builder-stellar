@@ -8,12 +8,12 @@ This is the list of contract files and folders in the audit scope, with their si
 
 | | |
 | --- | --- |
-| Commit | `3ba78998335ab5f8b96884a5a07fbf22dc161f97` (2026-11-24), the latest commit that changed a file in scope |
-| `contracts/` tree | `e4abf5bbd7ac7b3ee53566a55415978c4cdae35a` |
+| Commit | `f51d301eb8b3de49b01463488e90eb2c8928d31f` (2026-11-25), the latest commit that changed a file in scope |
+| `contracts/` tree | `fa2fb4863c926215303c0caa7b29d9510b1deb34` |
 | Crates in scope | 9 |
-| Code lines in scope | 8,701 |
-| Unit tests in those crates | 468 |
-| Code lines including test-only blocks inside source files | 9,057 |
+| Code lines in scope | 9,263 |
+| Unit tests in those crates | 524 |
+| Code lines including test-only blocks inside source files | 9,623 |
 
 To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it prints the tree above. To regenerate for another commit or tag, run `node scripts/audit-scope.mjs --ref <tag>`; `--check` reports whether this file is current.
 
@@ -23,16 +23,16 @@ To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it 
 
 | Crate | Folder | What it is | Rust files | Code lines | Unit tests | Test code lines |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| auction | [`contracts/auction/`](../../contracts/auction) | Auction module: sells one new token per auction; refunds outbid bidders | 6 | 1,056 | 61 | 1,277 |
-| common | [`contracts/common/`](../../contracts/common) | Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget, and cross-contract clients | 8 | 547 | 19 | 693 |
-| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum, and the queue, on the OpenZeppelin governor | 5 | 979 | 76 | 2,010 |
-| manager | [`contracts/manager/`](../../contracts/manager) | Manager: factory, implementation registry, upgrade approvals, slugs, launch, and assurance drives | 5 | 2,005 | 95 | 3,266 |
-| marketplace | [`contracts/marketplace/`](../../contracts/marketplace) | Marketplace module: escrowed listings and quick-buy pools | 5 | 1,079 | 42 | 1,349 |
-| metadata | [`contracts/metadata/`](../../contracts/metadata) | Metadata: artwork, attributes, token URIs, and the DAO profile hash | 6 | 1,156 | 54 | 1,862 |
-| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds, and release | 5 | 623 | 24 | 957 |
-| token | [`contracts/token/`](../../contracts/token) | Token: the membership NFT with votes, mint allowances, the module registry, and membership switches | 5 | 933 | 76 | 2,089 |
-| treasury | [`contracts/treasury/`](../../contracts/treasury) | Treasury: holds DAO assets and executes queued proposals | 5 | 323 | 21 | 712 |
-| **Total** | | | **50** | **8,701** | **468** | **14,215** |
+| auction | [`contracts/auction/`](../../contracts/auction) | Auction module: sells one new token per auction; refunds outbid bidders | 6 | 1,108 | 68 | 1,428 |
+| common | [`contracts/common/`](../../contracts/common) | Shared library: admin, lifecycle, upgrades, TTL, module kinds, batch budget, and cross-contract clients | 8 | 567 | 21 | 732 |
+| governor | [`contracts/governor/`](../../contracts/governor) | Governor: proposals, voting, quorum, and the queue, on the OpenZeppelin governor | 5 | 1,120 | 88 | 2,665 |
+| manager | [`contracts/manager/`](../../contracts/manager) | Manager: factory, implementation registry, upgrade approvals, slugs, launch, and assurance drives | 5 | 2,047 | 102 | 3,603 |
+| marketplace | [`contracts/marketplace/`](../../contracts/marketplace) | Marketplace module: escrowed listings and quick-buy pools | 5 | 1,130 | 49 | 1,520 |
+| metadata | [`contracts/metadata/`](../../contracts/metadata) | Metadata: artwork, attributes, token URIs, and the DAO profile hash | 7 | 1,364 | 59 | 1,864 |
+| minter | [`contracts/minter/`](../../contracts/minter) | ClaimMinter module: Merkle claim lists, assurance escrow, refunds, and release | 5 | 632 | 31 | 1,216 |
+| token | [`contracts/token/`](../../contracts/token) | Token: the membership NFT with votes, mint allowances, the module registry, and membership switches | 5 | 930 | 80 | 2,178 |
+| treasury | [`contracts/treasury/`](../../contracts/treasury) | Treasury: holds DAO assets and executes queued proposals | 5 | 365 | 26 | 876 |
+| **Total** | | | **51** | **9,263** | **524** | **16,082** |
 
 8 crates build to their own WASM contract. `common` is a library: every contract compiles it in, so its code is reviewed once and ships in each of them.
 
@@ -42,11 +42,23 @@ To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it 
 | --- | --- |
 | soroban-sdk | `27.0.6` (crates.io), with the `experimental_spec_shaking_v2` feature |
 | OpenZeppelin `stellar-contracts` | [github.com/OpenZeppelin/stellar-contracts](https://github.com/OpenZeppelin/stellar-contracts) at rev `fbfde38`, commit `fbfde388e1b72afa93d6b1c922067879b20e81db` (from `Cargo.lock`). This is a git revision, not a tagged release |
-| Rust toolchain | Not pinned at this commit: there is no `rust-toolchain.toml`, and CI installs `stable` |
+| Rust toolchain | Pinned in [`rust-toolchain.toml`](../../rust-toolchain.toml) (below) |
 | WASM target | `wasm32v1-none` |
 | Stellar CLI | `28.0.0`, the version CI installs and checks by SHA-256 ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) |
 
-TODO: `docs/OPENZEPPELIN_PIN.md` will record why the project uses this OpenZeppelin revision and how it differs from the nearest release. It does not exist at this commit.
+```toml
+# The exact compiler every contract build uses. The WASM bytes, and so the hashes that upgrades
+# approve, depend on it: rustc 1.95.0 with stellar-cli 28.0.0 is the toolchain that built every
+# contract deployed so far. Change it only together with docker/wasm-build/Dockerfile and a new
+# releases/hashes.json (docs/REPRODUCIBLE_BUILDS.md).
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32v1-none"]
+profile = "minimal"
+```
+
+Why the project uses this OpenZeppelin revision, and how it differs from the nearest release, is recorded in [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md).
 
 ### OpenZeppelin packages and the modules used
 
@@ -113,119 +125,121 @@ Each crate's `Cargo.toml` is in scope with its sources, because it sets the depe
 | --- | --- |
 | [`Cargo.toml`](../../Cargo.toml) | The workspace members, the pinned dependencies, and the release profile |
 | [`Cargo.lock`](../../Cargo.lock) | The exact version and source of every dependency |
+| [`rust-toolchain.toml`](../../rust-toolchain.toml) | The Rust toolchain and target |
 
 ### auction (`contracts/auction/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/auction/src/contract.rs`](../../contracts/auction/src/contract.rs) | 533 | 402 |  |
-| [`contracts/auction/src/error.rs`](../../contracts/auction/src/error.rs) | 45 | 23 |  |
-| [`contracts/auction/src/events.rs`](../../contracts/auction/src/events.rs) | 307 | 259 |  |
-| [`contracts/auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs) | 338 | 265 |  |
-| [`contracts/auction/src/lib.rs`](../../contracts/auction/src/lib.rs) | 52 | 8 | Also 2 lines of test-only code |
-| [`contracts/auction/src/storage.rs`](../../contracts/auction/src/storage.rs) | 262 | 99 | Also 37 lines of test-only code |
+| [`contracts/auction/src/contract.rs`](../../contracts/auction/src/contract.rs) | 676 | 436 |  |
+| [`contracts/auction/src/error.rs`](../../contracts/auction/src/error.rs) | 50 | 25 |  |
+| [`contracts/auction/src/events.rs`](../../contracts/auction/src/events.rs) | 322 | 259 |  |
+| [`contracts/auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs) | 378 | 281 |  |
+| [`contracts/auction/src/lib.rs`](../../contracts/auction/src/lib.rs) | 55 | 8 | Also 2 lines of test-only code |
+| [`contracts/auction/src/storage.rs`](../../contracts/auction/src/storage.rs) | 261 | 99 | Also 37 lines of test-only code |
 | [`contracts/auction/Cargo.toml`](../../contracts/auction/Cargo.toml) | | | Manifest |
-| **Total** | **1,537** | **1,056** | |
+| **Total** | **1,742** | **1,108** | |
 
 ### common (`contracts/common/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/common/src/admin.rs`](../../contracts/common/src/admin.rs) | 76 | 48 |  |
-| [`contracts/common/src/clients.rs`](../../contracts/common/src/clients.rs) | 188 | 106 |  |
-| [`contracts/common/src/error.rs`](../../contracts/common/src/error.rs) | 59 | 34 |  |
-| [`contracts/common/src/lib.rs`](../../contracts/common/src/lib.rs) | 143 | 44 | Also 4 lines of test-only code |
-| [`contracts/common/src/lifecycle.rs`](../../contracts/common/src/lifecycle.rs) | 44 | 29 |  |
-| [`contracts/common/src/modules.rs`](../../contracts/common/src/modules.rs) | 135 | 73 |  |
+| [`contracts/common/src/admin.rs`](../../contracts/common/src/admin.rs) | 80 | 48 |  |
+| [`contracts/common/src/clients.rs`](../../contracts/common/src/clients.rs) | 220 | 106 |  |
+| [`contracts/common/src/error.rs`](../../contracts/common/src/error.rs) | 71 | 34 |  |
+| [`contracts/common/src/lib.rs`](../../contracts/common/src/lib.rs) | 197 | 61 | Also 4 lines of test-only code |
+| [`contracts/common/src/lifecycle.rs`](../../contracts/common/src/lifecycle.rs) | 47 | 29 |  |
+| [`contracts/common/src/modules.rs`](../../contracts/common/src/modules.rs) | 144 | 73 |  |
 | [`contracts/common/src/ttl.rs`](../../contracts/common/src/ttl.rs) | 85 | 37 |  |
-| [`contracts/common/src/upgrade.rs`](../../contracts/common/src/upgrade.rs) | 271 | 176 |  |
+| [`contracts/common/src/upgrade.rs`](../../contracts/common/src/upgrade.rs) | 318 | 179 |  |
 | [`contracts/common/Cargo.toml`](../../contracts/common/Cargo.toml) | | | Manifest |
-| **Total** | **1,001** | **547** | |
+| **Total** | **1,162** | **567** | |
 
 ### governor (`contracts/governor/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/governor/src/contract.rs`](../../contracts/governor/src/contract.rs) | 892 | 648 |  |
-| [`contracts/governor/src/error.rs`](../../contracts/governor/src/error.rs) | 40 | 21 |  |
-| [`contracts/governor/src/events.rs`](../../contracts/governor/src/events.rs) | 232 | 193 |  |
-| [`contracts/governor/src/lib.rs`](../../contracts/governor/src/lib.rs) | 56 | 11 | Also 2 lines of test-only code |
-| [`contracts/governor/src/storage.rs`](../../contracts/governor/src/storage.rs) | 299 | 106 | Also 39 lines of test-only code |
+| [`contracts/governor/src/contract.rs`](../../contracts/governor/src/contract.rs) | 1,190 | 777 |  |
+| [`contracts/governor/src/error.rs`](../../contracts/governor/src/error.rs) | 52 | 24 |  |
+| [`contracts/governor/src/events.rs`](../../contracts/governor/src/events.rs) | 242 | 193 |  |
+| [`contracts/governor/src/lib.rs`](../../contracts/governor/src/lib.rs) | 67 | 12 | Also 2 lines of test-only code |
+| [`contracts/governor/src/storage.rs`](../../contracts/governor/src/storage.rs) | 345 | 114 | Also 41 lines of test-only code |
 | [`contracts/governor/Cargo.toml`](../../contracts/governor/Cargo.toml) | | | Manifest |
-| **Total** | **1,519** | **979** | |
+| **Total** | **1,896** | **1,120** | |
 
 ### manager (`contracts/manager/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/manager/src/contract.rs`](../../contracts/manager/src/contract.rs) | 1,981 | 1,323 |  |
-| [`contracts/manager/src/error.rs`](../../contracts/manager/src/error.rs) | 115 | 49 |  |
-| [`contracts/manager/src/events.rs`](../../contracts/manager/src/events.rs) | 443 | 365 |  |
-| [`contracts/manager/src/lib.rs`](../../contracts/manager/src/lib.rs) | 52 | 13 | Also 2 lines of test-only code |
-| [`contracts/manager/src/storage.rs`](../../contracts/manager/src/storage.rs) | 439 | 255 | Also 69 lines of test-only code |
+| [`contracts/manager/src/contract.rs`](../../contracts/manager/src/contract.rs) | 2,164 | 1,364 |  |
+| [`contracts/manager/src/error.rs`](../../contracts/manager/src/error.rs) | 122 | 50 |  |
+| [`contracts/manager/src/events.rs`](../../contracts/manager/src/events.rs) | 469 | 365 |  |
+| [`contracts/manager/src/lib.rs`](../../contracts/manager/src/lib.rs) | 70 | 13 | Also 2 lines of test-only code |
+| [`contracts/manager/src/storage.rs`](../../contracts/manager/src/storage.rs) | 498 | 255 | Also 69 lines of test-only code |
 | [`contracts/manager/Cargo.toml`](../../contracts/manager/Cargo.toml) | | | Manifest |
-| **Total** | **3,030** | **2,005** | |
+| **Total** | **3,323** | **2,047** | |
 
 ### marketplace (`contracts/marketplace/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) | 848 | 701 |  |
-| [`contracts/marketplace/src/error.rs`](../../contracts/marketplace/src/error.rs) | 63 | 33 |  |
-| [`contracts/marketplace/src/events.rs`](../../contracts/marketplace/src/events.rs) | 204 | 174 |  |
-| [`contracts/marketplace/src/lib.rs`](../../contracts/marketplace/src/lib.rs) | 15 | 10 | Also 2 lines of test-only code |
-| [`contracts/marketplace/src/storage.rs`](../../contracts/marketplace/src/storage.rs) | 265 | 161 | Also 41 lines of test-only code |
+| [`contracts/marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) | 988 | 750 |  |
+| [`contracts/marketplace/src/error.rs`](../../contracts/marketplace/src/error.rs) | 69 | 35 |  |
+| [`contracts/marketplace/src/events.rs`](../../contracts/marketplace/src/events.rs) | 218 | 174 |  |
+| [`contracts/marketplace/src/lib.rs`](../../contracts/marketplace/src/lib.rs) | 33 | 10 | Also 2 lines of test-only code |
+| [`contracts/marketplace/src/storage.rs`](../../contracts/marketplace/src/storage.rs) | 289 | 161 | Also 41 lines of test-only code |
 | [`contracts/marketplace/Cargo.toml`](../../contracts/marketplace/Cargo.toml) | | | Manifest |
-| **Total** | **1,395** | **1,079** | |
+| **Total** | **1,597** | **1,130** | |
 
 ### metadata (`contracts/metadata/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/metadata/src/contract.rs`](../../contracts/metadata/src/contract.rs) | 790 | 522 |  |
-| [`contracts/metadata/src/error.rs`](../../contracts/metadata/src/error.rs) | 46 | 25 |  |
-| [`contracts/metadata/src/events.rs`](../../contracts/metadata/src/events.rs) | 154 | 127 |  |
-| [`contracts/metadata/src/json.rs`](../../contracts/metadata/src/json.rs) | 103 | 80 |  |
-| [`contracts/metadata/src/lib.rs`](../../contracts/metadata/src/lib.rs) | 49 | 12 | Also 2 lines of test-only code |
-| [`contracts/metadata/src/storage.rs`](../../contracts/metadata/src/storage.rs) | 574 | 390 | Also 47 lines of test-only code |
+| [`contracts/metadata/src/contract.rs`](../../contracts/metadata/src/contract.rs) | 924 | 522 |  |
+| [`contracts/metadata/src/error.rs`](../../contracts/metadata/src/error.rs) | 54 | 25 |  |
+| [`contracts/metadata/src/events.rs`](../../contracts/metadata/src/events.rs) | 167 | 127 |  |
+| [`contracts/metadata/src/json.rs`](../../contracts/metadata/src/json.rs) | 110 | 80 |  |
+| [`contracts/metadata/src/lib.rs`](../../contracts/metadata/src/lib.rs) | 51 | 12 | Also 2 lines of test-only code |
+| [`contracts/metadata/src/storage.rs`](../../contracts/metadata/src/storage.rs) | 641 | 408 | Also 49 lines of test-only code |
+| [`contracts/metadata/src/storage/page_properties.rs`](../../contracts/metadata/src/storage/page_properties.rs) | 237 | 190 |  |
 | [`contracts/metadata/Cargo.toml`](../../contracts/metadata/Cargo.toml) | | | Manifest |
-| **Total** | **1,716** | **1,156** | |
+| **Total** | **2,184** | **1,364** | |
 
 ### minter (`contracts/minter/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/minter/src/contract.rs`](../../contracts/minter/src/contract.rs) | 562 | 418 |  |
-| [`contracts/minter/src/errors.rs`](../../contracts/minter/src/errors.rs) | 59 | 28 |  |
-| [`contracts/minter/src/events.rs`](../../contracts/minter/src/events.rs) | 80 | 59 |  |
-| [`contracts/minter/src/lib.rs`](../../contracts/minter/src/lib.rs) | 32 | 9 | Also 2 lines of test-only code |
-| [`contracts/minter/src/storage.rs`](../../contracts/minter/src/storage.rs) | 211 | 109 | Also 34 lines of test-only code |
+| [`contracts/minter/src/contract.rs`](../../contracts/minter/src/contract.rs) | 707 | 427 |  |
+| [`contracts/minter/src/errors.rs`](../../contracts/minter/src/errors.rs) | 65 | 28 |  |
+| [`contracts/minter/src/events.rs`](../../contracts/minter/src/events.rs) | 87 | 59 |  |
+| [`contracts/minter/src/lib.rs`](../../contracts/minter/src/lib.rs) | 40 | 9 | Also 2 lines of test-only code |
+| [`contracts/minter/src/storage.rs`](../../contracts/minter/src/storage.rs) | 233 | 109 | Also 34 lines of test-only code |
 | [`contracts/minter/Cargo.toml`](../../contracts/minter/Cargo.toml) | | | Manifest |
-| **Total** | **944** | **623** | |
+| **Total** | **1,132** | **632** | |
 
 ### token (`contracts/token/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/token/src/contract.rs`](../../contracts/token/src/contract.rs) | 1,036 | 704 |  |
-| [`contracts/token/src/error.rs`](../../contracts/token/src/error.rs) | 52 | 25 |  |
+| [`contracts/token/src/contract.rs`](../../contracts/token/src/contract.rs) | 1,064 | 700 |  |
+| [`contracts/token/src/error.rs`](../../contracts/token/src/error.rs) | 57 | 26 |  |
 | [`contracts/token/src/events.rs`](../../contracts/token/src/events.rs) | 244 | 185 |  |
 | [`contracts/token/src/lib.rs`](../../contracts/token/src/lib.rs) | 38 | 7 | Also 2 lines of test-only code |
-| [`contracts/token/src/storage.rs`](../../contracts/token/src/storage.rs) | 86 | 12 | Also 41 lines of test-only code |
+| [`contracts/token/src/storage.rs`](../../contracts/token/src/storage.rs) | 87 | 12 | Also 41 lines of test-only code |
 | [`contracts/token/Cargo.toml`](../../contracts/token/Cargo.toml) | | | Manifest |
-| **Total** | **1,456** | **933** | |
+| **Total** | **1,490** | **930** | |
 
 ### treasury (`contracts/treasury/`)
 
 | File | Lines | Code | Notes |
 | --- | ---: | ---: | --- |
-| [`contracts/treasury/src/contract.rs`](../../contracts/treasury/src/contract.rs) | 322 | 231 |  |
-| [`contracts/treasury/src/error.rs`](../../contracts/treasury/src/error.rs) | 19 | 11 |  |
-| [`contracts/treasury/src/events.rs`](../../contracts/treasury/src/events.rs) | 69 | 56 |  |
-| [`contracts/treasury/src/lib.rs`](../../contracts/treasury/src/lib.rs) | 39 | 8 | Also 2 lines of test-only code |
-| [`contracts/treasury/src/storage.rs`](../../contracts/treasury/src/storage.rs) | 76 | 17 | Also 28 lines of test-only code |
+| [`contracts/treasury/src/contract.rs`](../../contracts/treasury/src/contract.rs) | 423 | 271 |  |
+| [`contracts/treasury/src/error.rs`](../../contracts/treasury/src/error.rs) | 26 | 13 |  |
+| [`contracts/treasury/src/events.rs`](../../contracts/treasury/src/events.rs) | 73 | 56 |  |
+| [`contracts/treasury/src/lib.rs`](../../contracts/treasury/src/lib.rs) | 48 | 8 | Also 2 lines of test-only code |
+| [`contracts/treasury/src/storage.rs`](../../contracts/treasury/src/storage.rs) | 81 | 17 | Also 28 lines of test-only code |
 | [`contracts/treasury/Cargo.toml`](../../contracts/treasury/Cargo.toml) | | | Manifest |
-| **Total** | **525** | **323** | |
+| **Total** | **651** | **365** | |
 
 ## Supporting material (not counted)
 
@@ -233,16 +247,16 @@ Unit tests and test helpers live next to the code they test. They are evidence f
 
 | File | Lines | Test code | `#[test]` functions |
 | --- | ---: | ---: | ---: |
-| [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) | 1,459 | 1,238 | 61 |
-| [`contracts/common/src/test.rs`](../../contracts/common/src/test.rs) | 463 | 405 | 19 |
+| [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) | 1,643 | 1,389 | 68 |
+| [`contracts/common/src/test.rs`](../../contracts/common/src/test.rs) | 518 | 444 | 21 |
 | [`contracts/common/src/testutils.rs`](../../contracts/common/src/testutils.rs) | 346 | 284 | 0 |
-| [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) | 2,377 | 1,969 | 76 |
-| [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) | 3,739 | 3,195 | 95 |
-| [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) | 1,435 | 1,306 | 42 |
+| [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) | 3,143 | 2,622 | 88 |
+| [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) | 4,158 | 3,532 | 102 |
+| [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) | 1,635 | 1,477 | 49 |
 | [`contracts/metadata/src/test.rs`](../../contracts/metadata/src/test.rs) | 2,074 | 1,813 | 54 |
-| [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) | 1,025 | 921 | 24 |
-| [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) | 2,388 | 2,046 | 76 |
-| [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) | 762 | 682 | 21 |
+| [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) | 1,347 | 1,180 | 31 |
+| [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) | 2,496 | 2,135 | 80 |
+| [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) | 958 | 846 | 26 |
 
 Other files in the crate folders:
 
@@ -254,6 +268,7 @@ Other files in the crate folders:
 - [`contracts/marketplace/README.md`](../../contracts/marketplace/README.md): the crate's reference documentation
 - [`contracts/metadata/README.md`](../../contracts/metadata/README.md): the crate's reference documentation
 - [`contracts/minter/README.md`](../../contracts/minter/README.md): the crate's reference documentation
+- [`contracts/minter/test-vectors/merkle-v1.json`](../../contracts/minter/test-vectors/merkle-v1.json): other
 - [`contracts/token/README.md`](../../contracts/token/README.md): the crate's reference documentation
 - [`contracts/treasury/README.md`](../../contracts/treasury/README.md): the crate's reference documentation
 
@@ -261,7 +276,7 @@ Other files in the crate folders:
 
 | Path | Why it is out of scope | Size |
 | --- | --- | --- |
-| [`contracts/e2e/`](../../contracts/e2e) | Integration tests (`dao-e2e`). They run the real contracts together in the in-memory host and are evidence for the audit, not deployed code. | 7 Rust files, 6,379 code lines, 104 tests |
+| [`contracts/e2e/`](../../contracts/e2e) | Integration tests (`dao-e2e`). They run the real contracts together in the in-memory host and are evidence for the audit, not deployed code. | 11 Rust files, 7,474 code lines, 118 tests |
 | [`contracts/vote-adapter-mock/`](../../contracts/vote-adapter-mock) | A vote source whose admin sets any weight. It exists for tests and testnet and must never be approved on mainnet (see its README). | 3 Rust files, 222 code lines, 5 tests |
 | The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. Whether the modules used are in scope is agreed in the scope letter. | |
 | `soroban-sdk` and the Soroban host | Platform code, trusted as released. | |
