@@ -6,8 +6,11 @@ import { createUploadAuthorization } from './pinata-upload';
 import {
   getAuthorization,
   issuePinToken,
+  MAX_STORED_AUTHORIZATIONS,
   PIN_TOKEN_TTL_MS,
+  readPinToken,
   storeAuthorization,
+  storedAuthorizationCount,
   verifyPinToken
 } from './pinata-upload-auth';
 
@@ -81,6 +84,17 @@ describe('upload authorization tokens', () => {
     expect(fresh.getAuthorization(uploadId, ALICE)).toBeNull();
   });
 
+  it('keeps at most MAX_STORED_AUTHORIZATIONS warm, and a dropped one still completes from its signature', () => {
+    process.env.IRON_PASSWORD = SESSION_SECRET;
+    const authorization = createUploadAuthorization('dao-image', 'https://uploads.example/sign');
+    const first = storeAuthorization(authorization.uploadId, authorization, 'GFIRST');
+    for (let i = 0; i < MAX_STORED_AUTHORIZATIONS + 50; i += 1) {
+      storeAuthorization(authorization.uploadId, authorization, `G${i}`);
+    }
+    expect(storedAuthorizationCount()).toBe(MAX_STORED_AUTHORIZATIONS);
+    expect(getAuthorization(first, 'GFIRST')?.uploadType).toBe('dao-image');
+  });
+
   it('decodes every upload type from the signature, a claim list included', async () => {
     process.env.IRON_PASSWORD = SESSION_SECRET;
     const authorization = createUploadAuthorization('claim-list', 'https://uploads.example/sign');
@@ -100,6 +114,22 @@ describe('pin tokens', () => {
     expect(verifyPinToken(token, BOB, now + 1)).toBe(false);
     expect(verifyPinToken(token, ALICE, now + PIN_TOKEN_TTL_MS)).toBe(false);
     expect(verifyPinToken(`${token}x`, ALICE, now + 1)).toBe(false);
+  });
+
+  it('name the Pinata key they came with, under the signature', () => {
+    process.env.IRON_PASSWORD = SESSION_SECRET;
+    const now = 1_000_000;
+    const token = issuePinToken(ALICE, now, 'key-1');
+    expect(readPinToken(token, ALICE, now + 1)).toEqual({ keyId: 'key-1' });
+    expect(readPinToken(token, BOB, now + 1)).toBeNull();
+    expect(readPinToken(issuePinToken(ALICE, now), ALICE, now + 1)).toEqual({ keyId: null });
+
+    // Naming another key in the payload breaks the signature, so a client can't revoke a key it wasn't given.
+    const [payload, signature] = token.split('.');
+    const swapped = Buffer.from(
+      JSON.stringify({ ...JSON.parse(Buffer.from(payload!, 'base64url').toString('utf8')), key: 'key-2' })
+    ).toString('base64url');
+    expect(readPinToken(`${swapped}.${signature}`, ALICE, now + 1)).toBeNull();
   });
 
   it('are not upload tokens, and upload tokens are not pin tokens', () => {

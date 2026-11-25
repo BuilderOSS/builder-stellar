@@ -22,11 +22,11 @@ every test with instrumentation, and writes to `coverage/contracts/` (ignored by
 | `README.txt` | The commit, the toolchain, and what the report leaves out |
 
 The report covers contract source only. It leaves out the e2e harness, the test-only vote adapter
-mock, each crate's test modules (`src/test.rs`), and `common/src/testutils.rs`. Dependencies,
+mock, each crate's test modules (such as `src/test.rs`), and `common/src/testutils.rs`. Dependencies,
 OpenZeppelin's crates included, are outside the workspace and never counted.
 
-Code that runs inside the Soroban VM is not instrumented: the e2e tests that drive the built WASM add
-assurance that these numbers do not show. The figures count each crate's native test runs.
+The figures count each crate's native test runs. Code that runs inside the Soroban VM is not
+instrumented, so the e2e tests that drive the built WASM exercise code these numbers do not show.
 
 ## Latest run
 

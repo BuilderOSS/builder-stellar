@@ -105,7 +105,8 @@ Protection (team login), and lifting that would make every PR preview public too
 | `IRON_PASSWORD` | its own 64-character secret (sensitive); a JSON map of numbered secrets while rotating, see below |
 | `UPLOAD_TOKEN_SECRET` | optional: its own 64-character secret (sensitive). Unset, upload tokens use a key derived from `IRON_PASSWORD` |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
+| `NEXT_PUBLIC_PINATA_GATEWAY` | unset (Pinata's public gateway), or a dedicated gateway (`<name>.mypinata.cloud`) whose allowed sites in Pinata include `https://dev.tribes.build`. Pinata matches the `Origin` header exactly, so each allowed site needs `https://` and no trailing slash. Any other request, including a link opened directly and a server fetch, gets 401 (`ERR_ID:00024`), and readers fall back to the public gateways |
 | `PINATA_JWT` | dev's own Pinata key, never production's (see [Pinata keys](#pinata-keys)), sensitive |
 | `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`) |
 
@@ -140,8 +141,10 @@ uploads on dev, doesn't reach the other. When this page was written, `builder-st
 production's key; replace it as follows.
 
 1. In the Pinata dashboard, create a key named for the deployment (for example `tribes-dev`) with the same
-   scopes as production's key: the upload routes sign uploads, look files up by CID and create one-use upload
-   keys (`apps/web/src/lib/pinata-service.ts`). A separate Pinata account for dev also separates storage and
+   scopes as production's key: the upload routes sign uploads, look files up by CID, and create, list and
+   revoke one-use upload keys (`apps/web/src/lib/pinata-service.ts`), so it needs key management (an admin
+   key). Without the list and revoke scopes, uploads still work but used keys are not revoked
+   (`[pinata-upload-keys]` errors in the log). A separate Pinata account for dev also separates storage and
    billing.
 2. Set it as `PINATA_JWT` on `builder-stellar-dev` (Production and Preview), and redeploy.
 3. Upload one image on dev.tribes.build to check it.
@@ -149,6 +152,10 @@ production's key; replace it as follows.
    get dev's key, so a pull request preview never holds production's.
 
 Replacing a key later is the same, then revoke the old key in Pinata ([key custody](KEY_CUSTODY.md#web-app-secrets)).
+
+Folder upload keys are named `tribes-folder-upload-<deadline>`, and the app revokes them itself. Before this
+naming, the app made keys named `Single Use Upload JWT` and never revoked them. The sweep doesn't touch other
+names, so revoke those once in the Pinata dashboard (API Keys, filter by name).
 
 ## 5. Vercel: docs.tribes.build (`builder-stellar-docs`)
 

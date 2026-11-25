@@ -1286,3 +1286,99 @@ test('claims: a closed list stops at its close, and Setup lists are marked', { s
     [{ kind: 'claims.list_closed', visibility: 'public' }]
   );
 });
+
+// ---------------------------------------------------------------------------
+// Casts in view conditions (migration 0016). Runs last, like the tests above:
+// it lands more events.
+// ---------------------------------------------------------------------------
+test('outside modules: a malformed value under another role leaves filtered reads readable on every plan', { skip }, () => {
+  assert.deepEqual(
+    one(`SELECT chain.try_numeric('25')::text AS small, chain.try_numeric('-7')::text AS negative,
+      chain.try_numeric(repeat('9', 78)) = repeat('9', 78)::numeric AS max, chain.try_numeric(repeat('9', 79)) AS over,
+      chain.try_numeric('many') AS word, chain.try_numeric('1.5') AS fraction, chain.try_numeric('') AS empty,
+      chain.try_numeric(NULL) AS missing`),
+    { small: '25', negative: '-7', max: true, over: null, word: null, fraction: null, empty: null, missing: null }
+  );
+
+  // Reads that filter on a cast column, as the app and its readers do. A filter on a view
+  // column becomes a condition on the event row the column is cast from.
+  const D = `deployment_id = '${DEPLOYMENT}'`;
+  const reads = {
+    scheduled: `SELECT proposal_id, vote_start_seconds, quorum_votes FROM governance.proposals WHERE ${D} AND vote_start_seconds > 0 ORDER BY proposal_id`,
+    quorum: `SELECT proposal_id FROM governance.proposals WHERE ${D} AND quorum_votes > 0 ORDER BY proposal_id`,
+    claimers: `SELECT dao_id, claimer, refunded FROM claims.claimers WHERE ${D} ORDER BY dao_id, claimer`,
+    holder: `SELECT token_id, owner FROM token.inventory WHERE ${D} AND dao_id = 'CTOK1' AND contract_id = 'CTOK1' AND token_id = 1`,
+    bids: `SELECT event_id FROM auction.bids WHERE ${D} AND dao_id = 'CTOK1' AND token_id = 7 ORDER BY event_id`,
+    pool: `SELECT event_id FROM marketplace.pools WHERE ${D} AND pool_id = 0 ORDER BY event_id`,
+    listing: `SELECT event_id FROM marketplace.secondary_listings WHERE ${D} AND token_id = 23 ORDER BY event_id`,
+    comments: `SELECT comment_event_id FROM marketplace.listing_comments WHERE ${D} AND token_id = 11 ORDER BY 1`,
+    seeds: `SELECT token_id FROM metadata.token_seeds WHERE ${D} AND token_id = 3`,
+    lists: `SELECT dao_id, list_id FROM claims.lists WHERE ${D} AND list_id = 0 ORDER BY dao_id`,
+    approvals: `SELECT token_id FROM token.approvals WHERE ${D} AND token_id = 3`
+  };
+  const before = Object.fromEntries(Object.entries(reads).map(([name, sql]) => [name, rows(sql)]));
+  for (const [name, found] of Object.entries(before)) assert.ok(found.length > 0, `${name} finds the fixture's rows`);
+
+  // CEXTCLM, DAO 4's outside module (role module, still registered), emits events with the
+  // names and fields of the Governor's, the ClaimMinter's, the Token's, the Auction's, the
+  // Marketplace's and the Metadata contract's, with a word where a number belongs.
+  const start = events.length;
+  const word = (ledger, name, topics, data) => emit('module', 'CEXTCLM', name, { topics, data, ledger });
+  word(350, 'proposal_scheduled', [bytes('p2')], { vote_start: str('soon'), vote_end: str('later'), snapshot_ledger: u32(1), quorum_votes: str('many') });
+  word(351, 'refunded', [str('first'), addr('GCAROL')], { amount: i128(25) });
+  word(352, 'transfer', [addr('GALICE'), addr('GBOB')], { token_id: str('one') });
+  word(353, 'bid_placed', [str('seven'), addr('GBOB')], { amount: str('lots'), extended: str('maybe'), new_end_time: str('later'), comment: str('') });
+  word(354, 'pool_opened', [str('zero')], { price: str('free'), asset: addr('CXLM'), expires_at: str('never'), size: str('big'), max_per_buyer: str('one'), max_sold_per_period: str('one'), period_secs: str('long') });
+  word(355, 'secondary_listing_created', [str('one')], { seller: addr('GBOB'), price: str('free'), expires_at: str('never'), fee_bps: str('none'), payment_asset: addr('CXLM') });
+  word(356, 'listing_commented', [str('eleven'), addr('GBOB')], { body: str('hello') });
+  word(357, 'seed_generated', [str('three')], { num_properties: str('two'), selections: vec(u32(0)) });
+  word(358, 'list_opened', [str('zero')], { root: bytes('rx'), tree_uri: str('ipfs://fake'), asset: addr('CXLM'), price: str('free'), expires_at: str('never'), total: str('all'), assurance: VOID });
+  word(359, 'approve', [addr('GALICE'), str('three')], { approved: addr('GOPER'), live_until_ledger: str('forever') });
+  const raw = events.slice(start).map(rawScript);
+  const decodedRows = raw.map(decodeScript);
+  const activityRows = decodedRows.map(activityScript);
+  assert.ok([...raw, ...decodedRows, ...activityRows].every(Boolean), 'every event survives every transform');
+  for (const [schema, table, objects] of [['chain', 'raw_events', raw], ['chain', 'decoded_events', decodedRows], ['app', 'activity_feed_events', activityRows]]) {
+    const columns = tableColumns(schema, table).filter((c) => c !== 'ingested_at');
+    insertRows(`${schema}.${table}`, Object.keys(objects[0]).filter((key) => columns.includes(key)), objects);
+  }
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_events WHERE contract_id = 'CEXTCLM' AND ledger_sequence >= 350`).n, 10, 'the events are in DAO 4\'s window');
+
+  // 0004's join (proposal_scheduled matched by contract and proposal through the join only)
+  // reaches the outside module's value on a hash join, so the fixture is the case 0016 closes.
+  const hashJoin = 'SET enable_nestloop = off; SET enable_mergejoin = off;';
+  assert.throws(
+    () => psql(`${hashJoin} SELECT count(*) FROM manager.module_events e
+      JOIN chain.events s ON s.deployment_id = e.deployment_id AND s.contract_id = e.contract_id
+       AND s.event_name = 'proposal_scheduled' AND s.topic_0 = e.topic_0
+      WHERE e.${D} AND e.contract_role = 'governor' AND e.event_name = 'proposal_created'
+        AND (s.a ->> 'vote_start')::bigint > 0`),
+    /invalid input syntax for type bigint/,
+    'the unguarded join raises on this fixture'
+  );
+
+  // The reads return the same rows as before on each plan shape, and every view reads in full
+  // (each row as text, so every column is computed). Hash and merge joins are where 0004's join
+  // raised; forcing them makes the lateral-heavy views slow, so those plans run only the
+  // governance.proposals reads, and the rest run on the default and sequential-scan plans.
+  const plans = [
+    ['default', '', Object.keys(reads)],
+    ['sequential scans', 'SET enable_indexscan = off; SET enable_bitmapscan = off; SET enable_indexonlyscan = off;', Object.keys(reads)],
+    ['hash joins', hashJoin, ['scheduled', 'quorum']],
+    ['merge joins', 'SET enable_nestloop = off; SET enable_hashjoin = off;', ['scheduled', 'quorum']]
+  ];
+  const rowsUnder = (settings, sql) =>
+    JSON.parse(psql(`${settings} SELECT coalesce(jsonb_agg(to_jsonb(_r)), '[]'::jsonb) FROM (${sql}) _r`).trim());
+  for (const [plan, settings, names] of plans) {
+    for (const name of names) assert.deepEqual(rowsUnder(settings, reads[name]), before[name], `${name}, ${plan}`);
+  }
+  const views = rows(`SELECT schemaname || '.' || viewname AS v FROM pg_views
+    WHERE schemaname IN ('manager', 'token', 'governance', 'auction', 'metadata', 'treasury', 'marketplace', 'claims', 'app')
+    ORDER BY 1`).map((r) => r.v);
+  for (const [plan, settings] of plans.slice(0, 2)) {
+    assert.doesNotThrow(
+      () => psql(`${settings} ${views.map((v) => `SELECT count(*), md5(coalesce(string_agg(_v::text, ''), '')) FROM ${v} _v;`).join('\n')}`),
+      `every view reads, ${plan}`
+    );
+  }
+});

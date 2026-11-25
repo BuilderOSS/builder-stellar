@@ -125,7 +125,7 @@ If its events stop a view from reading, follow the next section.
 ## A malformed indexer event
 
 Any contract a tribe registers can emit any value, and the landing tables can't be edited, so the views must
-read every value without raising (migrations 0012 and 0013 do this for the known cases).
+read every value without raising (migrations 0012, 0013 and 0016 do this for the known cases).
 
 **Signs.** `/api/health` reports `unhealthy` while the pipeline is current, or a page fails with a database
 error such as `invalid input syntax` or `out of range`.
@@ -135,8 +135,10 @@ error such as `invalid input syntax` or `out of range`.
 1. Find the view and the row: the error names the cast; query `manager.module_events` for that event name
    and recent ledgers as the owner.
 2. Fix it in the views, not the data: add a migration that reads the field through a safe cast
-   (`chain.try_int`, `chain.u64_bigint`, or a new helper of the same kind), or that reads it only from the
-   roles the Manager deployed. Add an integration test with the malformed event (see
+   (`chain.try_int`, `chain.u64_bigint`, `chain.try_numeric`, or a new helper of the same kind), or that
+   reads it only from the roles the Manager deployed. A cast in a `WHERE` or `JOIN` condition must sit on a
+   relation that has its own role condition ([Casts in conditions](DATABASE_SCHEMA.md#casts-in-conditions)).
+   Add an integration test with the malformed event (see
    `packages/goldsky/test/read-model.integration.test.mjs`) and run `./db/test-migrations.sh`.
 3. Apply it with `./db/migrate.sh` and `./db/grant-permissions.sh`. No replay is needed: the views change,
    the rows stay.
@@ -158,7 +160,7 @@ for the database name, typed in full ([db operations](../db/README.md#resetting-
 - anything a launched tribe does: proposals, votes and execution through its Treasury, auctions, the market,
   claims, token transfers, registering or removing modules by vote, and upgrades its members pass;
 - Setup work on a pending tribe's own contracts by its launch admin;
-- claims into an open assurance drive, and refunds;
+- claims into an open assurance drive, refunds, and a failed drive's `release_slug` and `recover_claims`;
 - the Manager admin's own calls: registering, approving and revoking code, and upgrading the Manager;
 - renewals, the indexer and the web app.
 

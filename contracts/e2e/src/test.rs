@@ -5867,3 +5867,6 @@ mod manager_hardening;
 
 #[path = "claims.rs"]
 mod claims;
+
+#[path = "audit_invariants.rs"]
+mod audit_invariants;

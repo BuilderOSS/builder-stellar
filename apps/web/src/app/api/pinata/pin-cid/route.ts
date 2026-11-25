@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { getPinataService, PinataError } from '@/lib/pinata-service';
-import { verifyPinToken } from '@/lib/pinata-upload-auth';
+import { readPinToken } from '@/lib/pinata-upload-auth';
+import { revokeUploadKeyQuietly, sweepExpiredUploadKeys } from '@/lib/pinata-upload-keys';
 import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
@@ -75,7 +76,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const { cid, pinToken } = validationResult.data;
-    if (!verifyPinToken(pinToken, session.address)) {
+    const grant = readPinToken(pinToken, session.address);
+    if (!grant) {
       return NextResponse.json(
         { error: 'This pin was not authorized for this account. Upload the folder again.', code: 'PIN_NOT_AUTHORIZED' },
         { status: 403 }
@@ -85,7 +87,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The upload key pinned the folder already: confirm it is in the operator's account (a read,
     // never a pin of a client-chosen CID).
     const pinataService = getPinataService();
-    await pinataService.verifyCid(cid);
+    try {
+      await pinataService.verifyCid(cid);
+    } finally {
+      // The key's one upload is over, confirmed or not: revoke it (the sweep retries a failure).
+      if (grant.keyId) await revokeUploadKeyQuietly(grant.keyId, pinataService);
+      await sweepExpiredUploadKeys(pinataService);
+    }
 
     return NextResponse.json(
       {

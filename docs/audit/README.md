@@ -10,14 +10,14 @@ This folder is the documentation package for an external security audit of the T
 | [STATE_MACHINES.md](STATE_MACHINES.md) | Diagrams, with transitions and guards, for the module lifecycle (Setup, handoff, Live), proposals, the assurance drive and claim lists, the auction, listings, and quick-buy pools |
 | [INVARIANTS.md](INVARIANTS.md) | The properties the code must keep, each linked to the tests that check it, with missing tests marked |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Accepted, documented behaviours, so they are not reported as new findings |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | The app and indexer tier: what a session proves, the cost of uploads, the indexer's trust in outside modules, the `goldsky_writer` role, per-instance replay and rate-limit state, and the response headers and server-side fetches |
+| [THREAT_MODEL.md](THREAT_MODEL.md) | The app and indexer tier: what a session proves, the cost of uploads, the indexer's trust in outside modules, the `goldsky_writer` role, per-instance replay and rate-limit state, what the app re-reads from chain, the response headers and server-side fetches, and what the wallet shows |
 | [SCOPE_LETTER.md](SCOPE_LETTER.md) | A template for the letter that agrees the scope with the audit firm |
 
 ## For auditors
 
 A suggested reading order:
 
-1. [SCOPE.md](SCOPE.md), for what to review and how to build it. It links the [reproducible build](../REPRODUCIBLE_BUILDS.md) and the [OpenZeppelin pin record](../OPENZEPPELIN_PIN.md), which says what the contracts use from OpenZeppelin, how the pinned revision differs from the nearby tags, and which OpenZeppelin audits cover it.
+1. [SCOPE.md](SCOPE.md), for what to review and how to build it. It links the [reproducible build](../REPRODUCIBLE_BUILDS.md) and the [OpenZeppelin pin record](../OPENZEPPELIN_PIN.md), which says what the contracts use from OpenZeppelin, how the pinned revision differs from the nearest tags, and which OpenZeppelin audits cover it.
 2. [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md), for roles, the admin model, the lifecycle, voting supply, the execution path, upgrades and migrations, and error codes. It also states design trade-offs outside its known limitations, for example in the membership switches, quick-buy pools, assurance launch, and slugs sections.
 3. [STATE_MACHINES.md](STATE_MACHINES.md), then [INVARIANTS.md](INVARIANTS.md).
 4. [KNOWN_ISSUES.md](KNOWN_ISSUES.md), before writing findings.
@@ -35,7 +35,7 @@ The Rust source is authoritative. Where any document here disagrees with the cod
    node scripts/build-wasm.mjs --write-hashes
    ```
 
-2. Tag that commit (`audit-<n>-freeze`). Pushing the tag runs the Contract release build workflow, which rebuilds it in the container and natively and attests the WASM files.
+2. Tag that commit (`audit-<n>-freeze`). Pushing the tag runs the Contract release build workflow, which rebuilds the tag in the container and natively, checks both builds against the published hashes, and attests the container build's WASM files.
 3. Regenerate the scope list from the tag and commit the result. `SCOPE.md` then states whether `releases/hashes.json` describes the contracts at the tag:
 
    ```bash
@@ -51,9 +51,9 @@ The Rust source is authoritative. Where any document here disagrees with the cod
 
 ## Status
 
-The pages were checked against `dev` at `f51d301`, which includes pull requests 118 to 130: the proposal lifetime and the storage-layout gate, the custody and payment-asset checks, the Manager's recovery notice and launch code checks, the ClaimMinter's threshold check and hashing vectors, the sign-in and session changes, the response headers and rate limits, the read-model role rule, and the reproducible build. Every placeholder marker from earlier versions is resolved. What the package still needs comes from the freeze itself:
+The pages were checked against `dev` at `f51d301`, which includes pull requests 118 to 130: the proposal lifetime and the storage-layout gate, the custody and payment-asset checks, the Manager's recovery notice and launch code checks, the ClaimMinter's threshold check and hashing vectors, the sign-in and session changes, the response headers and rate limits, the read-model role rule, and the reproducible build. Every placeholder marker from earlier versions is resolved. Pull requests 133 and 134 then added tests to [INVARIANTS.md](INVARIANTS.md) and updated [THREAT_MODEL.md](THREAT_MODEL.md). What the package still needs comes from the freeze itself:
 
-- `SCOPE.md` regenerated from the frozen tag. At `f51d301`, `releases/hashes.json` predates the contract changes, and `SCOPE.md` says so;
+- `SCOPE.md` regenerated from the frozen tag. Until new hashes are published, `releases/hashes.json` predates the contract changes, and `SCOPE.md` says so;
 - the published hashes and the release workflow's result for the frozen tag;
 - test and coverage results for the frozen commit ([`docs/COVERAGE.md`](../COVERAGE.md) records an earlier run, of the release 0.5.0 source);
 - a decision on the OpenZeppelin scope in the scope letter. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) finds that no published OpenZeppelin report covers the changes from `239a2a7` to the pinned `fbfde38`, so it recommends including the modules used, unless OpenZeppelin confirms that a published review covers them.

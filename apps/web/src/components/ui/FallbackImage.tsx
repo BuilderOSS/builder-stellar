@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 
 import { getFetchableUrls } from '@/lib/ipfs-client';
+import { isDedicatedPinataGateway } from '@/lib/ipfs-uri';
 
 type FallbackImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
   src?: string | null;
@@ -55,6 +56,9 @@ function FallbackImageContent({ src, errorFallbackSrc, className, ...props }: Fa
     // eslint-disable-next-line @next/next/no-img-element
     <img
       {...props}
+      // A dedicated Pinata gateway answers only requests that name an allowed site, and an image
+      // names its site only in CORS mode. Every public gateway here allows any site.
+      crossOrigin={isDedicatedPinataGateway(imageSrc) ? 'anonymous' : props.crossOrigin}
       alt={props.alt ?? ''}
       aria-busy={isLoading}
       className={cx(image, className)}
