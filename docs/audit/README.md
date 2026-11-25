@@ -55,5 +55,6 @@ The pages were checked against `dev` at `f51d301`, which includes pull requests 
 
 - `SCOPE.md` regenerated from the frozen tag. Until new hashes are published, `releases/hashes.json` predates the contract changes, and `SCOPE.md` says so;
 - the published hashes and the release workflow's result for the frozen tag;
-- test and coverage results for the frozen commit ([`docs/COVERAGE.md`](../COVERAGE.md) records an earlier run, of the release 0.5.0 source);
-- a decision on the OpenZeppelin scope in the scope letter. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) finds that no published OpenZeppelin report covers the changes from `239a2a7` to the pinned `fbfde38`, so it recommends including the modules used, unless OpenZeppelin confirms that a published review covers them.
+- test and coverage results for the frozen commit ([`docs/COVERAGE.md`](../COVERAGE.md) records an earlier run, of the release 0.5.0 source).
+
+The OpenZeppelin modules are out of scope: the pin is frozen at `fbfde38`, and the project relies on OpenZeppelin's published audits. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records the decision and the changes those audits do not name.
