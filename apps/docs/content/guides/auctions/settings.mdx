@@ -21,7 +21,7 @@ The payment asset, shown as **Paid in**, is fixed once the first bid is placed. 
 
 ## Steps
 
-1. **Open Manage, then Auction.** **Auction now** shows the current auction and whether it is **Running**, **Paused** or **Not launched yet**, with every current setting: **Starting price**, **Each auction runs for**, **A late bid adds**, **Minimum bid increase** and **Paid in**.
+1. **Open Manage, then Auction.** **Auction now** shows the current auction and whether it is **Running**, **Paused**, or **Not launched yet**, with every current setting: **Starting price**, **Each auction runs for**, **A late bid adds**, **Minimum bid increase**, and **Paid in**.
 
    <Shot id="auctions/settings/01" alt="The Manage Auction page with the Auction now card listing the current settings" />
 
@@ -44,7 +44,7 @@ The payment asset, shown as **Paid in**, is fixed once the first bid is placed. 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  The settings live in the tribe's Auction contract. Its setters are `set_reserve_price`, `set_duration`, `set_time_buffer` and `set_min_bid_increment`. Each one needs the module admin and works only while auctions are paused.
+  The settings live in the tribe's Auction contract. Its setters are `set_reserve_price`, `set_duration`, `set_time_buffer`, and `set_min_bid_increment`. Each one needs the module admin and works only while auctions are paused.
 
   Before launch, the module admin is the launch admin and the auction is paused, so each change is one transaction. After launch, the admin is the tribe's Treasury. A proposal runs `pause`, then the setters, then `unpause` if you chose **Resume auctions**, all in one execution after the vote passes and the [safety delay](/reference/glossary#safety-delay) ends.
 

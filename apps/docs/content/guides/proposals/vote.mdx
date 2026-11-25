@@ -23,7 +23,7 @@ Members decide each proposal by voting For, Against, or Abstain. This guide show
 
    <Shot id="proposals/vote/03" alt="The voting panel showing You have 2 votes on this proposal" />
 
-4. **Choose your vote.** Under **Your vote**, choose **For**, **Against** or **Abstain**.
+4. **Choose your vote.** Under **Your vote**, choose **For**, **Against**, or **Abstain**.
 
    <Shot id="proposals/vote/04" alt="The Your vote choices with For selected" />
 
@@ -59,11 +59,11 @@ Under **Discussion**, any connected wallet can post a comment on the proposal. E
 <Disclosure title="Contracts, fees and waits">
   Voting calls `cast_vote` on the tribe's Governor contract with your choice and your reason. The Governor counts your voting power at the proposal's snapshot ledger, which is the ledger before the proposal was made. A wallet with no votes at the snapshot can't vote. Each wallet can vote once on each proposal.
 
-  The quorum is stored with each proposal when it is made. It is a share of the voting supply at that moment. Tokens held by the tribe's Treasury, Auction and Marketplace don't count toward that supply.
+  The quorum is stored with each proposal when it is made. It is a share of the voting supply at that moment. Tokens held by the tribe's Treasury, Auction, and Marketplace don't count toward that supply.
 
   A reason or a comment can be up to 8,192 bytes. Comments are recorded as events and aren't stored in the contract.
 
-  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. Votes, voters, choices and reasons are public on chain once the transaction is confirmed. The app's list of votes reads from an index, which can be a few moments behind.
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee. Votes, voters, choices, and reasons are public on chain once the transaction is confirmed. The app's list of votes reads from an index, which can be a few moments behind.
 </Disclosure>
 
 ## If something goes wrong
