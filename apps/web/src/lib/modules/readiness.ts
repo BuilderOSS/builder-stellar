@@ -1,9 +1,10 @@
 /**
- * The "before you remove it" checklist (docs/designs/module-attach-ui.md § 4). Warnings never block:
- * the contract does not block a removal either, because anyone could stop one by sending the module
- * a token. Rows are plain data so the rules can be tested without the chain.
+ * The "before you remove it" checklist (docs/designs/module-attach-ui.md § 4). Warnings never block
+ * the sheet. The Token refuses to remove a module that holds memberships without votes while it holds
+ * any (7222, ModuleHoldsTokens), so those rows say the removal fails until the module is empty. Rows
+ * are plain data so the rules can be tested without the chain.
  */
-import { type ModuleKind, UNLIMITED_ALLOWANCE } from './kinds';
+import { holdsWithoutVotes, type ModuleKind, UNLIMITED_ALLOWANCE } from './kinds';
 import type { PoolState } from './plans';
 
 export type ModuleFacts = {
@@ -36,6 +37,23 @@ export type ReadinessRow = {
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
+/**
+ * Whether the chosen clean-up leaves the module holding nothing, which the Token requires before it
+ * removes a module without votes. A token no pool or running auction accounts for (an open listing, or
+ * one sent to the module directly) needs a step the plan cannot add, so the answer is then false.
+ */
+export function planEmptiesModule(facts: ModuleFacts, choices: { sweep: boolean; cancel: boolean }): boolean {
+  if (!holdsWithoutVotes(facts.kind)) return true;
+  if (facts.balance === 0) return true;
+  if (facts.kind === 'auction') return facts.auctionRunning && choices.cancel && facts.balance === 1;
+  if (facts.kind === 'marketplace') {
+    if (facts.openListings !== 0 || !choices.sweep) return false;
+    const pooled = facts.pools.reduce((sum, pool) => sum + pool.inStock, 0);
+    return facts.balance === pooled;
+  }
+  return false;
+}
+
 export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
   const rows: ReadinessRow[] = [];
   rows.push({
@@ -49,6 +67,10 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
   });
 
   const poolsToClean = facts.pools.filter((pool) => pool.open || pool.inStock > 0);
+  // A module without votes must be empty to be removed; a voting module keeps what it holds.
+  const heldDetail = holdsWithoutVotes(facts.kind)
+    ? 'The removal fails while it holds any. Add the clean-up steps first.'
+    : 'If they stay with the contract, their votes belong to it and no one can cast them. They still count toward quorum.';
   if (facts.kind === 'marketplace' && poolsToClean.length)
     rows.push({
       id: 'holds',
@@ -58,8 +80,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
         'membership',
         'memberships'
       )} in ${plural(poolsToClean.length, 'pool', 'pools')}`,
-      detail:
-        'If they stay with the contract, their votes belong to it and no one can cast them. They still count toward quorum.',
+      detail: heldDetail,
       cleanup: 'pools'
     });
   else if (facts.balance > 0)
@@ -67,8 +88,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
       id: 'holds',
       tone: 'warn',
       title: `Holds ${plural(facts.balance, 'membership', 'memberships')}`,
-      detail:
-        'If they stay with the contract, their votes belong to it and no one can cast them. They still count toward quorum.'
+      detail: heldDetail
     });
 
   if (facts.kind === 'marketplace' && facts.openListings !== null && facts.openListings > 0)
@@ -77,7 +97,7 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
       tone: 'warn',
       title: `${plural(facts.openListings, 'resale listing is', 'resale listings are')} open`,
       detail:
-        'Sellers keep their tokens, and each seller can still cancel. The listings disappear from the tribe’s market page. Wait for them to end, or ask the sellers to cancel first.'
+        'The removal fails while the market holds a listed token. Ask the sellers to cancel first, or wait for the listings to end and clear them.'
     });
 
   if (facts.kind === 'auction' && facts.auctionRunning)
@@ -85,7 +105,8 @@ export function moduleReadiness(facts: ModuleFacts): ReadinessRow[] {
       id: 'auction',
       tone: 'warn',
       title: 'An auction is running',
-      detail: 'Its token stays with the auction unless you cancel it first. Cancelling refunds the top bid.',
+      detail:
+        'The removal fails while the auction holds its token. Cancelling refunds the top bid and sends the token to the treasury.',
       cleanup: 'auction'
     });
 
