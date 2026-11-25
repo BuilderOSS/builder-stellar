@@ -137,12 +137,22 @@ export const NAV: DocSection[] = [
       guide('proposals', 'write', 'Write a proposal', 'Explain the reason, then add the actions.'),
       guide('proposals', 'actions', 'Choose actions', 'Payments, settings, and the other action groups.'),
       guide('proposals', 'vote', 'Vote', 'For, Against, or Abstain, with an optional reason.'),
-      guide('proposals', 'queue-and-execute', 'Queue and execute', 'Start the safety delay after a vote passes, then run the actions.'),
+      guide(
+        'proposals',
+        'queue-and-execute',
+        'Queue and execute',
+        'Start the safety delay after a vote passes, then run the actions.'
+      ),
       guide('proposals', 'cancel', 'Cancel a proposal', 'Who can cancel, and when.'),
       guide('auctions', 'bid', 'Bid in an auction', 'Place a bid, and what happens if you’re outbid.'),
       guide('auctions', 'settle', 'Settle an auction', 'End an auction and start the next.'),
       guide('auctions', 'refunds', 'Auction refunds', 'Claim a bid that could not be sent back automatically.'),
-      guide('auctions', 'settings', 'Auction settings', 'Starting price, duration, late-bid time, and minimum increase.'),
+      guide(
+        'auctions',
+        'settings',
+        'Auction settings',
+        'Starting price, duration, late-bid time, and minimum increase.'
+      ),
       guide('marketplace', 'sell', 'Sell a token', 'Approve, then list.'),
       guide('marketplace', 'buy', 'Buy a token', 'Buy a listed membership.'),
       guide('marketplace', 'cancel', 'Cancel a listing', 'Remove a token from sale.'),
