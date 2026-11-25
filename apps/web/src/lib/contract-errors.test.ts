@@ -30,6 +30,11 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('token', 7205)).toContain('43');
     expect(getContractErrorMessage('minter', 7803)).toContain('43');
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
+    expect(getContractErrorMessage('token', 7222)).toContain('ModuleHoldsTokens');
+    expect(getContractErrorMessage('auction', 7419)).toContain('NotStellarAsset');
+    expect(getContractErrorMessage('auction', 7420)).toContain('TokenInAuction');
+    expect(getContractErrorMessage('marketplace', 7728)).toContain('NotStellarAsset');
+    expect(getContractErrorMessage('marketplace', 7729)).toContain('NotPaused');
   });
 
   it('drops retired codes and words the governor lifecycle codes accurately', () => {

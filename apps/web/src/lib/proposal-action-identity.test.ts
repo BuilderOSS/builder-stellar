@@ -40,6 +40,12 @@ describe('proposal action identity', () => {
     );
   });
 
+  it('lets a pool be swept several times, since one sweep returns at most 25 tokens', () => {
+    const sweep = action({ id: 'a', type: 'sweep-pool', poolId: '0' });
+    const findings = analyzeProposalAction({ ...sweep, id: 'b' }, [sweep]);
+    expect(findings.filter((finding) => finding.severity === 'error')).toEqual([]);
+  });
+
   it('finds exact duplicates', () => {
     const existing = action({ value: '10' });
     const findings = analyzeProposalAction(action({ id: 'new', value: '10' }), [existing]);
