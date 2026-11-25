@@ -34,7 +34,7 @@ To confirm a checkout matches this list, run `git rev-parse HEAD:contracts`: it 
 | treasury | [`contracts/treasury/`](../../contracts/treasury) | Treasury: holds DAO assets and executes queued proposals | 5 | 323 | 21 | 712 |
 | **Total** | | | **50** | **8,668** | **464** | **14,097** |
 
-8 crates build to their own WASM contract. `common` is a library: 8 of them compile it in, so its code is reviewed once and ships in each.
+8 crates build to their own WASM contract. `common` is a library: every contract compiles it in, so its code is reviewed once and ships in each of them.
 
 ## Toolchain and dependencies
 

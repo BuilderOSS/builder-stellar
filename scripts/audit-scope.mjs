@@ -633,9 +633,12 @@ export function render(data) {
   p();
   const contractsBuilt = inScope.filter((c) => c.cdylib);
   const libraries = inScope.filter((c) => !c.cdylib);
-  p(
-    `${contractsBuilt.length} crates build to their own WASM contract.${libraries.map((l) => ` \`${l.packageName}\` is a library: ${inScope.filter((c) => c.dependencies.includes(l.packageName)).length} of them compile it in, so its code is reviewed once and ships in each.`).join('')}`
-  );
+  const librarySentence = (lib) => {
+    const users = inScope.filter((c) => c.dependencies.includes(lib.packageName)).length;
+    const who = users === contractsBuilt.length ? 'every contract compiles it in' : `${users} of them compile it in`;
+    return ` \`${lib.packageName}\` is a library: ${who}, so its code is reviewed once and ships in each of them.`;
+  };
+  p(`${contractsBuilt.length} crates build to their own WASM contract.${libraries.map(librarySentence).join('')}`);
   p();
   p('## Toolchain and dependencies');
   p();
@@ -865,5 +868,12 @@ function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  try {
+    main();
+  } catch (error) {
+    // A bad argument or an unknown ref: print the reason, not a stack trace.
+    const detail = error.stderr ? String(error.stderr).trim() : error.message;
+    process.stderr.write(`audit-scope: ${detail}\n`);
+    process.exit(2);
+  }
 }
