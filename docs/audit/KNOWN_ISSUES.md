@@ -74,7 +74,7 @@ This page was checked against `dev` at `f51d301`, which includes pull requests 1
 
 **Behaviour.** The chain checks that an upgrade's target hash is registered and approved, not what the code does. Voters must check that `to_hash` is the published build of a release tag, and must read any `authorize` trees a proposal carries, because each tree authorizes exactly the call it describes.
 
-**Guidance.** `node scripts/verify-wasm.mjs <tag>` rebuilds a tag in the pinned build and compares each contract with the hashes the tag publishes in [`releases/hashes.json`](../../releases/hashes.json); a proposal's `to_hash` should appear in its output. [`docs/REPRODUCIBLE_BUILDS.md`](../REPRODUCIBLE_BUILDS.md) explains the build, how to check a hash fetched from the network, and how to check a release workflow's attestation.
+**Guidance.** Run `node scripts/verify-wasm.mjs <tag>`; see [Reproducible contract builds](../REPRODUCIBLE_BUILDS.md).
 
 **Code.** [`common/src/upgrade.rs`](../../contracts/common/src/upgrade.rs) `apply`; [`treasury/src/contract.rs`](../../contracts/treasury/src/contract.rs) the `authorize` action and `check_authorization`; [`scripts/verify-wasm.mjs`](../../scripts/verify-wasm.mjs).
 

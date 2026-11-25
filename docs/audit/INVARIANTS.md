@@ -14,7 +14,7 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 | [INV-04](#inv-04-one-vote-per-account-and-only-the-proposer-cancels) | One vote per account, and only the proposer cancels | Partial |
 | [INV-05](#inv-05-mint-allowance-accounting) | Mint allowance accounting | Covered |
 | [INV-06](#inv-06-the-module-registry) | The module registry | Covered |
-| [INV-07](#inv-07-batch-mints-fit-the-event-budget) | Batch mints fit the event budget | Covered |
+| [INV-07](#inv-07-batch-mints-fit-the-event-budget) | Batch mints fit the event budget | Partial |
 | [INV-08](#inv-08-one-admin-per-contract) | One admin per contract | Partial |
 | [INV-09](#inv-09-launch-is-one-shot-and-manager-only) | Launch is one-shot and Manager-only | Covered |
 | [INV-10](#inv-10-a-failed-launch-changes-nothing) | A failed launch changes nothing | Partial |
@@ -50,7 +50,7 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 
 Each account's voting units equal its token balance, and are zero for the Treasury and the non-voting modules (Auction, Marketplace). The `TotalSupply` checkpoint equals the sum of all units, and the sum of `get_votes` equals `TotalSupply`.
 
-- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomised walk (eight fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomized walk (eight fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `system_holders_carry_no_votes_through_every_path`, `registering_a_holder_non_voting_removes_its_votes_from_its_delegate`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 
 **Covered.**
@@ -95,7 +95,7 @@ The admin mints without an allowance. Every other minter must be a registered mo
 
 ### INV-06: The module registry
 
-One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The Auction and the Marketplace can always be emptied by the admin while paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`).
+One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The admin can empty the Auction and the Marketplace while they are paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`); in an unlocked DAO a removal can still be delayed ([KI-19](KNOWN_ISSUES.md#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao)).
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `kinds_are_built_in_or_custom_and_unique`, `the_registry_is_capped`, `registration_needs_the_manager_in_setup_and_the_admin_once_live`, `the_treasury_is_never_a_module_even_with_an_empty_registry`, `a_non_voting_module_holding_tokens_cannot_be_unregistered_until_empty`, `unregistering_a_custody_module_holding_escrow_under_the_lock_is_refused`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 - [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `the_admin_returns_a_listing_to_its_seller_while_paused`, `only_the_admin_returns_a_listing`, `recover_token_moves_only_unrecorded_tokens_to_the_treasury`, `only_the_admin_recovers_a_token`.
@@ -106,16 +106,16 @@ One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the
 
 ### INV-07: Batch mints fit the event budget
 
-The Token refuses a batch over the `common::batch_mint_fits` estimate (`BatchTooLarge`, 7205), and every batch the estimate allows fits the 16 KiB per-transaction event limit. A claim of up to 43 tokens fits with its payment events. Because a proposal executes all its actions in one transaction, `propose` also refuses a proposal whose estimated execution events exceed `common::EXECUTION_EVENT_BUDGET` (`MintsTooLarge`, 7517), and every mint proposal the estimate allows executes within the live limits.
+The Token refuses a batch over the `common::batch_mint_fits` estimate (`BatchTooLarge`, 7205), and every batch the estimate allows fits the 16 KiB per-transaction event limit. A claim of up to 43 tokens fits with its payment events. Because a proposal executes all its actions in one transaction, `propose` also refuses a proposal whose estimated execution events exceed `common::EXECUTION_EVENT_BUDGET` (`MintsTooLarge`, 7517). The estimate counts mints by name and argument shape and allows 200 bytes for the own events of each other action.
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `batch_mint_respects_the_event_budget`: the token, recipient, and mixed edges, and `u32` overflow.
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `batches_at_the_event_budget_fit_one_transaction`: measured event bytes at the edge stay under 90% of the limit with 16-trait artwork.
 - [`contracts/e2e/src/claims.rs`](../../contracts/e2e/src/claims.rs) `the_largest_paid_claim_fits_the_event_limit`: a 43-token first claim on both payment paths.
 - [`contracts/common/src/test.rs`](../../contracts/common/src/test.rs) `execution_event_estimate_matches_its_documented_shapes`.
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `propose_refuses_mints_that_cannot_execute_together`, `other_mint_shapes_are_not_counted`.
-- [`contracts/e2e/src/governance.rs`](../../contracts/e2e/src/governance.rs) `the_largest_mint_proposals_the_governor_accepts_execute_within_the_live_limits`, `a_twenty_action_proposal_of_costly_actions_executes_within_the_live_limits`.
+- [`contracts/e2e/src/governance.rs`](../../contracts/e2e/src/governance.rs) `the_largest_mint_proposals_the_governor_accepts_execute_within_the_live_limits` (one 43-token batch beside two other actions, two batches of 21, ten single mints, and one batch to 18 recipients, each refused one step larger) and `a_twenty_action_proposal_of_costly_actions_executes_within_the_live_limits` (five mints and fifteen Governor setters).
 
-**Covered.** `batch_mint_fits` has no unit test of its own; it is tested through the Token. The Governor estimates events only, not CPU or memory; the 20-action e2e test measures those for one costly mix.
+**Partial:** the e2e suite executes the largest accepted shapes, not every proposal the estimate allows. An action whose own events exceed its 200-byte allowance can still make a passed proposal fail at execution, and the Governor does not estimate CPU or memory; the 20-action test measures those for one costly mix. `batch_mint_fits` has no unit test of its own; it is tested through the Token.
 
 ## Authority and lifecycle
 
@@ -361,7 +361,7 @@ Wherever a payment asset is set, it must be a Stellar Asset Contract: the Manage
 With `transfers_locked`, a token moves only out of DAO custody, back to the Treasury, or with the Treasury as spender, and approvals go only to the Treasury. With `members_only_delegation`, a new delegation names the delegator or a member. `dao_transfer` works only when Live, with recovery on, and never to or from a module. `agent_transfer` needs both the agent's and the owner's signatures, and unregistering a module revokes it as an agent.
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `a_locked_token_moves_only_along_the_dao_paths`, `approvals_on_a_locked_token_go_to_the_treasury_or_come_from_custody`, `dao_transfer_needs_recovery_takes_the_current_owner_and_never_touches_modules`, `transfer_agents_are_granted_by_the_registrar_and_need_both_signatures`, `agent_transfer_from_someone_other_than_the_owner_fails`, and the members-only delegation tests.
-- [`contracts/e2e/src/locked.rs`](../../contracts/e2e/src/locked.rs), and the randomised walk in [`voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs).
+- [`contracts/e2e/src/locked.rs`](../../contracts/e2e/src/locked.rs), and the randomized walk in [`voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs).
 
 **Covered.**
 
@@ -395,7 +395,7 @@ Storage keys do not collide; entry points extend their contract's instance; shar
 
 ## Test helpers
 
-- **Randomised walk:** [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) is a fixed-seed walk that also requires each operation, refusals included, to run a minimum number of times.
+- **Randomized walk:** [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) is a fixed-seed walk that also requires each operation, refusals included, to run a minimum number of times.
 - **Property tests:** [`contracts/metadata/src/storage/page_properties.rs`](../../contracts/metadata/src/storage/page_properties.rs) checks the attributes-page codec with fixed-seed generated input: round trips at the exact size, canonical encoding, malformed bytes refused without reading out of range, the public record form, and range writes against a map.
 - **Invariant helpers:** the Auction's `refunds` module (`assert_invariant`); the Token's `assert_voting_supply` and the registry's `assert_books`.
 - **Resource limits:** `assert_within_limits` in [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs), used by `largest_create_dao_and_propose_fit_the_live_limits`, `reference_dao_sweep_fits_one_transaction`, the 1,000-leaf drive in [`membership.rs`](../../contracts/e2e/src/membership.rs), the largest paid claim in [`claims.rs`](../../contracts/e2e/src/claims.rs), and the mint and 20-action proposals in [`governance.rs`](../../contracts/e2e/src/governance.rs); the Manager's scale tests; the Metadata worst-case tests.
