@@ -1,6 +1,6 @@
 # Legal entity export
 
-**Manage → Legal entity export** (`/dao/<tribe>/admin/legal`) collects what a DAO registrar asks for at intake. The first registrar in mind is MIDAO, for a Marshall Islands DAO LLC. The page exports it as two files:
+**Manage → Legal entity export** (`/dao/<tribe>/admin/legal`) collects what a DAO registrar asks for at intake. The first registrar it is designed for is MIDAO, for a Marshall Islands DAO LLC. The page exports it as two files:
 
 - `<legal-name>-<date>.json`: the machine-readable bundle (`$schema: https://tribes.build/schemas/legal-export/v2`).
 - `<legal-name>-<date>.md`: the same content as a readable summary.
@@ -31,7 +31,7 @@ Nothing is sent anywhere. The bundle is built in the browser from public data an
 3. **Review:** who a registrar would ask to verify, and what is taken from the chain.
 4. **Export:** a preview of the summary and the two downloads.
 
-The answers live only in the page's memory and are gone on reload. That's deliberate for contact details.
+The answers live only in the page's memory and are gone on reload. This is deliberate, because they include contact details.
 
 ## Where each part comes from
 
@@ -80,7 +80,9 @@ v2 (2026-11-18) changed:
 - category C wording;
 - the entity type's permanence;
 - management wording, from "Algorithmic" to "governance delegated to the smart contracts";
-- the operating agreement profile, Representative Agent, initial contributions, fee estimate, for-profit and non-profit details, contract live status, and sources. Amounts and voting power are strings (exact integers, or seven-decimal SAC balances). Durations are seconds. Quorum and shares are basis points. The source of truth is `buildBundle` in `apps/web/src/lib/legal-export/bundle.ts`, and its tests are in `bundle.test.ts`. Any change to a field's meaning bumps the schema version.
+- the operating agreement profile, Representative Agent, initial contributions, fee estimate, for-profit and non-profit details, contract live status, and sources.
+
+Amounts and voting power are strings (exact integers, or seven-decimal SAC balances). Durations are seconds. Quorum and shares are basis points. The source of truth is `buildBundle` in `apps/web/src/lib/legal-export/bundle.ts`, and its tests are in `bundle.test.ts`. Any change to a field's meaning bumps the schema version.
 
 ## Open with MIDAO
 

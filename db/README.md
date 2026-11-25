@@ -10,10 +10,10 @@ Soroban events ─▶ Goldsky pipeline ─▶ 3 landing tables ─▶ views ─�
                   (raw ▶ decoded ▶ activity transforms)    (all derived state)
 ```
 
-Goldsky writes exactly three landing tables; domain/app state is projected through
-views. Replay rebuilds the event-derived read model. Migration bookkeeping and
-Goldsky dynamic allowlists are separate objects, and incompatible decoder changes
-can still require a deliberate reset/replay.
+Goldsky writes exactly three landing tables; domain and app state is projected
+through views. A replay rebuilds the event-derived read model. Migration bookkeeping
+and Goldsky's dynamic allowlists are separate objects, and an incompatible decoder
+change can still require a deliberate reset and replay.
 
 | Table | Written by | Purpose |
 | --- | --- | --- |
@@ -25,9 +25,9 @@ Landing rows are append-only (triggers reject updates and deletes; an identical
 re-delivery is accepted so pipeline restarts are safe). A `BEFORE INSERT`
 trigger recovers `operation_index` / `event_index` from the dataset event id
 (`…-op-<n>-event-<m>`), because the pipeline source does not expose them and
-view ordering inside one transaction (e.g. a 20-token batch mint) depends on them.
+view ordering inside one transaction (for example a 20-token batch mint) depends on them.
 
-See [`docs/DATABASE_SCHEMA.md`](../docs/DATABASE_SCHEMA.md) for the view catalog
+See [`docs/DATABASE_SCHEMA.md`](../docs/DATABASE_SCHEMA.md) for the view catalogue
 and the contract event each view reads.
 
 ## Multi-tenancy
@@ -58,7 +58,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | Migration | Contents |
 | --- | --- |
 | `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`, `chain.jsonb_safe` for a stray `\u0000`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
-| `0002_manager_views` | `manager.module_role()`, DAO registry (with the claims column), module registrations and windowed identity, `manager.module_events`, launches (with the launch registry), assurance drives, `manager.daos` (with `claims_contract`, `assurance_outcome`), per-module launch status, implementations, module versions, Manager settings (admin, pending admin, factory pause) |
+| `0002_manager_views` | `manager.module_role()`, DAO registry (with the claims column), Manager-deployed modules (`manager.manager_modules`), module registrations and windowed identity, `manager.dao_modules`, `manager.module_events`, launches (with the launch registry), assurance drives, previous slugs (`manager.dao_previous_slugs`), `manager.daos` (with `claims_contract`, `assurance_outcome`), per-module launch status, implementations, module versions, Manager settings (admin, pending admin, factory pause) |
 | `0003_token_views` | transfers, inventory, delegate state (custody-aware), members, mint allowances, registered modules, supply (voting vs system-held; non-voting modules count as system), approvals, the membership switches (`token.settings`), transfer agents, managed transfers (DAO and agent), delegates |
 | `0004_governance_views` | votes, proposals (state from `proposal_scheduled` and the clock, tallies), settings, comments |
 | `0005_auction_views` | bids, `auction.auction_state()` (outcome and current bid state per auction), auctions, current auctions (newest per contract) |
@@ -86,7 +86,8 @@ Rules:
   on every redeploy, so the schema is kept as one clean set of files and edited
   in place (`reset-database.sh`, then `migrate.sh`). Once a database must be
   preserved, migrations become **append-only**: `migrate.sh` aborts if an
-  applied file's checksum changed, so add `0010_…` instead of editing.
+  applied file's checksum changed, so add the next numbered file instead of
+  editing.
 - No `CONCURRENTLY`, no grants. Roles and privileges live in `grant-permissions.sh`.
 - Every migration has a matching `rollback/NNNN_name_rollback.sql`.
 - Views never reference roles or deployment ids; they work for any deployment.
@@ -98,9 +99,9 @@ Rules:
 | `setup-roles.sh [--rotate <role>]` | once per database: create `goldsky_writer` and `app_server`; `--rotate` sets a new password for one of them |
 | `migrate.sh` | apply pending migrations (idempotent) |
 | `grant-permissions.sh` | (re)apply role privileges and the writer's DDL guard; run after every migrate |
-| `rollback.sh [--steps N] [--confirm-database NAME]` | roll back newest N (default all) migrations |
-| `reset-database.sh [--confirm-database NAME]` | drop every schema and the ledger: empty database |
-| `test-migrations.sh` | static checks; with `TEST_DATABASE_URL` also migrate → rollback → migrate, the destructive scripts' refusals, the grants and the writer's guard, and the read-model integration tests |
+| `rollback.sh [--steps N] [--confirm-database DB@HOST]` | roll back the newest N migrations (default: all) |
+| `reset-database.sh [--confirm-database DB@HOST]` | drop every schema and the ledger, leaving an empty database |
+| `test-migrations.sh` (`pnpm db:test` from the root) | static checks; with `TEST_DATABASE_URL` also migrate → rollback → migrate, the destructive scripts' refusals, the grants and the writer's guard, and the read-model integration tests |
 | `debug-database.sh` | inspect roles, schemas, ledger and privileges |
 
 **The database URL.** Every script reads it from `DATABASE_URL` only, and refuses
@@ -112,10 +113,13 @@ precedence over `PGHOST` and the other libpq variables, so a stray variable can'
 point a script at another database.
 
 **Destructive scripts.** `rollback.sh` and `reset-database.sh` show the target
-host, the database and the deployments it indexes, then ask for the database name,
-typed in full. `--yes` is refused. `--confirm-database NAME` is the
-non-interactive form for scratch databases and must name the database the URL
-connects to; without a terminal and without it, the scripts refuse.
+host, the database and the deployments it indexes, then ask for the database and
+host, typed in full as `<database>@<host>`. The host is the first label of the
+host name (`ep-example` for `ep-example.neon.tech`), an IP address or socket path in
+full, or `localhost` when the URL names none. `--yes` is refused.
+`--confirm-database <database>@<host>` is the non-interactive form for scratch
+databases and must name the database and host the URL connects to; without a
+terminal and without it, the scripts refuse.
 
 **Role passwords.** `setup-roles.sh` creates each role without LOGIN, then runs
 psql's `\password`: psql asks for the password twice on the terminal and sends
@@ -124,9 +128,9 @@ a command line, SQL text the server could log, or the script's output. The role
 gets LOGIN after that. A run interrupted in between finishes on the next run.
 Where to store each password: [key custody](../docs/KEY_CUSTODY.md).
 
-Privileges: `goldsky_writer` receives `SELECT/INSERT/UPDATE` on the three landing
-tables and `USAGE/CREATE` on `chain`/`app` for sink startup. Append-only triggers
-reject changed updates/deletes. Goldsky's dynamic-table backend also needs its
+Privileges: `goldsky_writer` receives `SELECT`, `INSERT` and `UPDATE` on the three
+landing tables, and `USAGE` and `CREATE` on `chain` and `app` for sink startup. The
+append-only triggers reject updates that change a row, and deletes. Goldsky's dynamic-table backend also needs its
 separate `streamling` setup; the landing grants do not prove that setup is complete.
 
 The writer keeps `CREATE` on the database (`setup-roles.sh`): the Goldsky sink and
@@ -141,6 +145,7 @@ as the database owner; the trigger is created last, so the other grants stand if
 fails. The guard is tested against PostgreSQL 16, not yet against Neon or a running
 Goldsky sink: after the first apply on a branch, check that the pipeline starts and
 its position moves (`goldsky turbo state list <pipeline>`).
+
 `app_server` is read-only on the view schemas and has **no** access to
 `chain.*` or the landing tables; views read them with their owner's privileges,
 which is why application checks use `app.indexer_status` or `app.activity_feed`,
@@ -159,16 +164,15 @@ export DATABASE_URL=postgres://admin:...@host/neondb     # admin role; set it in
 
 Reset is a destructive clean-start operation for a disposable deployment or an
 approved incompatible replay. A new Manager address alone does not require deleting
-other deployments' history. Confirm the intended database before proceeding.
-Order matters: stop the writer
-first so it cannot repopulate half-reset tables.
+other deployments' history. Confirm the intended database before proceeding. Order
+matters: stop the writer first, so it cannot repopulate half-reset tables.
 
 ```bash
 # 1. Stop the pipeline
 cd packages/goldsky && ./scripts/deploy.sh delete && cd ../..
 
 # 2. Reset and rebuild the schema
-./db/reset-database.sh          # type the database name
+./db/reset-database.sh          # type <database>@<host> when asked
 ./db/migrate.sh
 ./db/grant-permissions.sh
 
@@ -178,7 +182,8 @@ cd packages/goldsky && pnpm generate && ./scripts/deploy.sh deploy
 
 Goldsky's dynamic tables (the DAO module allowlists) live in the `streamling`
 schema of the same database and are not touched by the reset; they are append-only
-and are refilled from `DaoCreated` events on replay, so rows from an earlier run stay
+and are refilled from the replayed events (`DaoCreated`, `ModuleCreated`,
+`ModuleRegistered`), so rows from an earlier run stay
 (harmless: an obsolete address only lets its events through the filter; nothing
 downstream reads these tables). If the Manager address changed, drop that schema too
 (`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped, or the old DAOs'
@@ -206,6 +211,6 @@ matches the views column-for-column and type-for-type.
 
 These tests do not prove remote pipeline health or runtime role grants. Validate
 permissions separately with the role scripts and an approved test database.
-The web uses additional read-only Marketplace views and a parameterized execution
+The web uses additional read-only Marketplace views and a parameterised execution
 receipt query; local drafts/preferences do not add writable app tables. See
 [web reference](../apps/web/README.md).

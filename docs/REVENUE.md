@@ -86,7 +86,7 @@ On testnet multiply by 6.8. Rent is not a reason for a DAO to avoid Tribe Builde
 | Secondary sale (`buy`) | 2.5% of the price, on top of the DAO's own fee | seller and Treasury, as today |
 | Free claims, founder mints, Circle `join` | none | |
 
-The assurance drive is the Kickstarter model: a community pays only if it launches.
+The assurance drive is all or nothing: a community pays only if it launches.
 
 A DAO can avoid the fee by registering its own sale module by vote. That is intended: Tribe Builder is an open protocol.
 The fee is the price of using maintained, renewable, indexed modules, and should stay low enough that writing your
@@ -198,7 +198,7 @@ So two things matter more than the exact fee rate:
    grows per community and per event, so pricing can stay ahead of it.
 3. **Indexer and web.** Decode `ProtocolFeePaid` and `FeeTermsChanged` (one fixture each in
    `test/every-event.test.mjs`); a `platform.protocol_fees` view; the fee on every confirmation ("2.5% protocol fee:
-   1.25 XLM"); a public revenue page, which is the first piece of the `/platform` dashboard in TODOS.md.
+   1.25 XLM"); a public revenue page on the `/platform` dashboard.
 4. **Operations.** The managed-renewal keeper on `renew-dao.mjs`; the older-versions rule in the renewal inventory
    (`apps/web/src/lib/chain-reads/`, `renew-dao.mjs`) and in `renew-code-ttl.mjs`.
 5. **Docs.** SECURITY_MODEL (fee terms and the vault), CONTRACT_UPGRADES (RV-5), STORAGE_COSTS (mainnet rates, the

@@ -159,7 +159,7 @@ Manage → Storage renewal says so.
 | ClaimMinter `Config`, `NextListId`, `AssuranceList` | instance | Wiring and payment asset, the list counter, the assurance list | instance |
 | ClaimMinter `List(id)` | persistent | `ClaimList { root, tree_uri, asset, price, expires_at, total, minted, claimers, threshold_claimers, deadline, escrow }`; `tree_uri` is `ipfs://`, ≤ 256 B | Sweep |
 | ClaimMinter `Claim(id, claimer)` | persistent | `ClaimRecord { claimed, escrowed }`: progress and any escrowed payment | Holder |
-| Asset `Balance(treasury|module)` on every asset a module reports (`renewal_keys` `assets`), the auction's payment asset, and every open pool's or list's asset | persistent (SAC) | The DAO's funds and escrow in the assets it trades in | Sweep (holdings) |
+| Asset `Balance(treasury)` or `Balance(module)` on every asset a module reports (`renewal_keys` `assets`), the auction's payment asset, and every open pool's or list's asset | persistent (SAC) | The DAO's funds and escrow in the assets it trades in | Sweep (holdings) |
 | Asset `Balance(treasury)` on any other asset (donations, fees in a former payment asset) | persistent (SAC) | Funds the inventory cannot discover from chain | Restored when a proposal spends them (the proposal page restores before signing); add them to the sweep with `renew-dao.mjs --asset` |
 
 ### Manager (platform)
@@ -221,9 +221,9 @@ logic runs on the command line:
 node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <identity> [--dry-run]
 ```
 
-`--source` defaults to `RENEW_IDENTITY`, else `<network>-renewer`: a low-value payer, never the Manager admin
-([key custody](KEY_CUSTODY.md#renewal-payer)). The stellar CLI signs (`stellar tx sign`), so the payer's seed
-never enters the Node process.
+`--source` defaults to `RENEW_IDENTITY`, else `<network>-renewer`: a low-value payer, not the Manager admin (refused
+unless `--allow-admin-payer` is passed; [key custody](KEY_CUSTODY.md#renewal-payer)). The stellar CLI signs
+(`stellar tx sign`), so the payer's seed never enters the Node process.
 
 The e2e test `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` keeps an idle DAO alive with nothing but
 this sweep (and the platform renewal) every 150 days while archiving everything else that expires. After a year it
@@ -253,9 +253,10 @@ Code rent is the platform's largest cost: a dry run on 2026-10-12 quoted about 9
 to 170 days (Auction 264 XLM, Marketplace 251 XLM, Governor ~300 XLM). Every extension is simulated first; one
 whose resource fee would exceed 300 XLM (70 % of the u32 fee cap) is done in steps (the Governor's in that dry run:
 102 days for 178 XLM, then the rest). `deploy-manager.mjs` and `upgrade-contract.mjs` extend new code to 170 days
-at upload the same way, since new code is born at 7 days. A platform dashboard is deferred (TODOS.md).
+at upload the same way, since new code is born at 7 days. The `/platform` dashboard renews the same keys with the
+same quote before signing; the script stays as the command-line path.
 
-**Members: on use.** A member's ownership, balance, vote and claim entries renew for 30 days whenever they act.
+**Members: on use.** A member's ownership, balance, vote, and claim entries renew for 30 days whenever they act.
 
 ## Archived member state
 
@@ -279,8 +280,9 @@ shared code rent. It also refuses a transaction whose fee it can't read. The des
 legitimately costs about 10 XLM of instance rent on testnet. Before D27 a single code bump cost ~300 XLM, well
 above the guard. The Renewal tab passes the price the member already saw as the allowance.
 
-stellar-sdk 17.1.0 counted the resource fee twice when `AssembledTransaction.sign` rebuilt a transaction, which
-doubled every displayed Soroban fee and overflowed u32 above ~214 XLM. The app carried a pnpm patch until the upstream
+stellar-sdk 17.1.0 counted the resource fee twice when `AssembledTransaction.sign` rebuilt a transaction: it
+passed `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again. That doubled every displayed
+Soroban fee and overflowed u32 above ~214 XLM. The app carried a pnpm patch until the upstream
 fix ([stellar/js-stellar-sdk#1807](https://github.com/stellar/js-stellar-sdk/issues/1807),
 [#1808](https://github.com/stellar/js-stellar-sdk/pull/1808)) shipped; it now runs SDK 17.4.0 unpatched.
 `apps/web/src/lib/fee/sdk-sign-fee.test.ts` fails if a new SDK version brings it back.
