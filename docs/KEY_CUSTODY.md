@@ -202,3 +202,10 @@ Sessions already open with the old password stay connected until they close.
 
 The Goldsky CLI login can replace pipelines and secrets. Remove it from machines that no longer deploy, and
 replace the account's API key in the Goldsky dashboard when someone with access leaves.
+
+## Who reviews changes
+
+One maintainer reviews and merges changes today; no second person reviews them. The controls on what
+reaches a network are the required CI checks, the reproducible build with published hashes
+([reproducible builds](REPRODUCIBLE_BUILDS.md)), the Manager's upgrade notice, and the production admin key.
+A `CODEOWNERS` file is added when a second developer joins.
