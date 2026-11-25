@@ -11,7 +11,7 @@ A tribe with an auction sells one membership token at a time. The highest bid wh
 
 ## Steps
 
-1. **Open the Auction page.** Choose **Auction** in the tribe's navigation. The page shows the token being sold, its artwork, a **Live** label, the **Top bid** (or **Starting at** if no one has bid yet) and the time left under **Ends in**.
+1. **Open the Auction page.** Choose **Auction** in the tribe's navigation. The page shows the token being sold, its artwork, a **Live** label, the **Top bid** (or **Starting at** if no one has bid yet), and the time left under **Ends in**.
 
    <Shot id="auctions/bid/01" alt="The Auction page with a live auction, the token artwork, the starting price and the time left" />
 
@@ -48,14 +48,14 @@ A bid placed close to the end extends the auction, so other bidders have time to
 
   The payment asset is fixed once the first bid is placed. A comment can be up to 1,024 bytes.
 
-  You pay the Stellar network fee in XLM. Tribe Builder takes no fee on bids. Bids, amounts, bidders and comments are public on chain as soon as the transaction is confirmed. The app's list of bids reads from an index, which can be a few moments behind.
+  You pay the Stellar network fee in XLM. Tribe Builder takes no fee on bids. Bids, amounts, bidders, and comments are public on chain as soon as the transaction is confirmed. The app's list of bids reads from an index, which can be a few moments behind.
 </Disclosure>
 
 ## If something goes wrong
 
 - **The bid button is disabled.** Connect a wallet on the tribe's network. The page says "Connect a wallet on Testnet to bid, settle or claim a refund" until it's connected.
 - **"Enter at least … up to 7 decimals."** The amount is below the minimum, or has more than 7 decimal places. Use **Bid the minimum**, or enter a larger amount.
-- **"This auction isn't taking bids."** The auction has ended, been settled or been paused. An ended auction needs to be settled before the next one starts. See [Settle an auction](/guides/auctions/settle/).
+- **"This auction isn't taking bids."** The auction has ended, been settled, or been paused. An ended auction needs to be settled before the next one starts. See [Settle an auction](/guides/auctions/settle/).
 - **"The current auction changed. Review it again."** Another auction started, or the token changed, while you were reviewing. Nothing was signed. Refresh the page and bid again.
 - **Someone placed a higher bid shortly before you.** The contract rejects a bid that is no longer above the minimum, and nothing moves from your wallet. Enter a new amount.
 - **Your comment is too long.** Shorten it to one line under the limit.

@@ -5,7 +5,7 @@ The person who made a proposal can withdraw it before voting closes. A cancelled
 ## Before you start
 
 - Only the proposer can cancel. Connect the wallet that made the proposal. Testnet is the live network today.
-- The proposal must be **Voting soon** or **Voting**, and voting must not have closed. Once a proposal has passed, been queued or been executed, it can't be cancelled.
+- The proposal must be **Voting soon** or **Voting**, and voting must not have closed. Once a proposal has passed, been queued, or been executed, it can't be cancelled.
 - Have a small amount of XLM for the network fee.
 - The contract has no other way to cancel. Members can't cancel someone else's proposal. To stop a proposal you didn't make, vote Against it.
 
@@ -30,7 +30,7 @@ The person who made a proposal can withdraw it before voting closes. A cancelled
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Cancelling calls `cancel` on the tribe's Governor contract. The Governor accepts it only from the proposer's wallet, and only while the proposal is pending or active. It then marks the proposal as cancelled for good. Votes already cast stay on record, but the proposal can't pass, be queued or run.
+  Cancelling calls `cancel` on the tribe's Governor contract. The Governor accepts it only from the proposer's wallet, and only while the proposal is pending or active. It then marks the proposal as cancelled, which can't be undone. Votes already cast stay on record, but the proposal can't pass, be queued, or run.
 
   You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The cancellation is public on chain once confirmed.
 </Disclosure>
@@ -38,7 +38,7 @@ The person who made a proposal can withdraw it before voting closes. A cancelled
 ## If something goes wrong
 
 - **You don't see Cancel proposal.** You aren't connected with the proposer's wallet, or voting has closed.
-- **The button is disabled.** The app couldn't read the proposal's live state, or voting is about to close. Choose **Refresh** and try again.
+- **The button is disabled.** The app couldn't read the proposal's live state, or the voting end time has just passed. Choose **Refresh** and try again.
 - **"This proposal changed since you opened it. Refresh and try again."** Voting may have closed while the page was open. Nothing was signed.
 - **You want to change a proposal.** A proposal can't be edited after it is submitted. Cancel it, then [write a new one](/guides/proposals/write/).
 - **The transaction was signed but the page shows an error.** Check the transaction in the notification before you try again. If it was confirmed, the label changes to **Cancelled** shortly.

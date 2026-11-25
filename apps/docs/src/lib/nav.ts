@@ -119,7 +119,7 @@ export const NAV: DocSection[] = [
     title: 'Guides',
     intro: 'One guide for each thing you can do in the app.',
     pages: [
-      guide('create', 'identity', 'Create a tribe: identity', 'Name, symbol, image, and description.'),
+      guide('create', 'identity', 'Create a tribe: identity', 'Name, symbol, link, image, and description.'),
       guide('create', 'membership', 'Create a tribe: membership', 'How people join: auctions, sales, or invites.'),
       guide('create', 'voting', 'Create a tribe: voting rules', 'How long decisions take, and what can change later.'),
       guide(
@@ -131,18 +131,28 @@ export const NAV: DocSection[] = [
       guide('setup', 'artwork', 'Set up: artwork', 'Upload the layers your tokens are drawn from.'),
       guide('setup', 'founders', 'Set up: founders', 'Tokens for the people starting the tribe.'),
       guide('setup', 'slug', 'Set up: your link', 'Choose an available link for people to share.'),
-      guide('setup', 'contracts', 'Set up: contracts', 'Review the contracts your tribe runs on.'),
+      guide('setup', 'contracts', 'Set up: contracts', 'Check each contract’s release, and apply approved upgrades.'),
       guide('setup', 'launch', 'Launch your tribe', 'Pass control of every setting to the tribe.'),
       guide('setup', 'assurance-drives', 'Assurance drives', 'Launch only when enough people commit.'),
       guide('proposals', 'write', 'Write a proposal', 'Explain the reason, then add the actions.'),
       guide('proposals', 'actions', 'Choose actions', 'Payments, settings, and the other action groups.'),
-      guide('proposals', 'vote', 'Vote', 'For, Against, or Abstain, with a reason.'),
-      guide('proposals', 'queue-and-execute', 'Queue and execute', 'After a vote passes and the safety delay ends.'),
+      guide('proposals', 'vote', 'Vote', 'For, Against, or Abstain, with an optional reason.'),
+      guide(
+        'proposals',
+        'queue-and-execute',
+        'Queue and execute',
+        'Start the safety delay after a vote passes, then run the actions.'
+      ),
       guide('proposals', 'cancel', 'Cancel a proposal', 'Who can cancel, and when.'),
       guide('auctions', 'bid', 'Bid in an auction', 'Place a bid, and what happens if you’re outbid.'),
       guide('auctions', 'settle', 'Settle an auction', 'End an auction and start the next.'),
-      guide('auctions', 'refunds', 'Auction refunds', 'How to get your XLM back.'),
-      guide('auctions', 'settings', 'Auction settings', 'Reserve price, duration, and increments.'),
+      guide('auctions', 'refunds', 'Auction refunds', 'Claim a bid that could not be sent back automatically.'),
+      guide(
+        'auctions',
+        'settings',
+        'Auction settings',
+        'Starting price, duration, late-bid time, and minimum increase.'
+      ),
       guide('marketplace', 'sell', 'Sell a token', 'Approve, then list.'),
       guide('marketplace', 'buy', 'Buy a token', 'Buy a listed membership.'),
       guide('marketplace', 'cancel', 'Cancel a listing', 'Remove a token from sale.'),

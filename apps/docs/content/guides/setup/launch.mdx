@@ -20,11 +20,11 @@ Launching opens your tribe to members. In one transaction, control of every sett
 
    <Shot id="setup/launch/02" alt="The Review (optional) list with Auctions and Voting rules and their Edit buttons" />
 
-3. In the **Launch** card, under **What starts at launch**, choose what opens straight away:
+3. In the **Launch** card, under **What starts at launch**, choose what opens when the tribe launches:
    - **Start auctions**: the first token goes up for auction right away.
    - **Open the market**: members can list and buy tokens.
 
-   The switches start from the choices in your draft when the draft is in this browser. Check them before you launch. Anything you leave off stays closed until a vote opens it.
+   The card shows a switch for each of these modules your tribe has, and each switch starts on. Check them before you launch. Anything you leave off stays closed until a vote opens it.
 
    <Shot id="setup/launch/03" alt="The Launch card with the Start auctions switch on and the list of what launching does" />
 
@@ -53,7 +53,7 @@ Launching opens your tribe to members. In one transaction, control of every sett
 
   If any check fails, nothing launches and the tribe stays in setup.
 
-  If every check passes, the Manager launches the token, the governor, the treasury, each module, and the artwork and profile contract. Each contract's admin becomes the treasury, and the Manager keeps no authority over the tribe. A started auction can mint one token per auction for as long as it runs. Other sales, such as quick-buy pools and claim lists, mint only what a vote allows them. The link is claimed for your tribe.
+  If every check passes, the Manager launches the token, the Governor, the Treasury, each module, and the artwork and profile contract. Each contract's admin becomes the Treasury, and the Manager keeps no authority over the tribe. A started auction can mint one token per auction for as long as it runs. Other sales, such as quick-buy pools and claim lists, mint only what a vote allows them. The link is claimed for your tribe.
 
   You pay the Stellar network fee, which your wallet shows before you sign. The launch is public on the network as soon as it confirms.
 </Disclosure>
@@ -61,6 +61,7 @@ Launching opens your tribe to members. In one transaction, control of every sett
 ## If something goes wrong
 
 - **The launch button is unavailable.** Read the hint beside it, such as "Add your artwork first.", "Mint founder tokens first.", or "Connect the launch admin wallet to launch."
+- **"No one could propose after launch"**. You can still launch, but members hold fewer votes than a proposal needs, and every change after launch needs a proposal. Mint more founder tokens, or lower the votes needed to propose in **Voting rules**.
 - **"We couldn't confirm your launch rights"**. The factory contract has a different launch admin for this tribe. Refresh the page and check you are using the right wallet.
 - **"Token admin has moved"**. The membership token is no longer controlled by the launch admin, so the launch would be refused.
 - **"Payment assets changed"**. An auction or market no longer uses the asset chosen at creation. Restore it before you launch.
