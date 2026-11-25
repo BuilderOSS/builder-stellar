@@ -1,0 +1,9 @@
+# The exact compiler every contract build uses. The WASM bytes, and so the hashes that upgrades
+# approve, depend on it: rustc 1.95.0 with stellar-cli 28.0.0 is the toolchain that built every
+# contract deployed so far. Change it only together with docker/wasm-build/Dockerfile and a new
+# releases/hashes.json (docs/REPRODUCIBLE_BUILDS.md).
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32v1-none"]
+profile = "minimal"
