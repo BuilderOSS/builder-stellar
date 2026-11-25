@@ -28,6 +28,22 @@
 **Priority:** P3
 **Depends on:** quick-buy pools (docs/designs/membership-models.md §4), shipped on testnet in 0.4.0
 
+### Clean-up steps for listings and stray tokens when removing a market or auction
+
+**What:** In Manage → Membership → Remove, offer two more clean-up steps for the same proposal: "Return a listing" (`marketplace.return_listing(token_id)`, one per open listing, after "Pause the market") and "Recover a token sent to the module" (`marketplace.recover_token` or `auction.recover_token`, to the Treasury). Add both to the proposal-action catalog.
+
+**Why:** The Token now refuses to unregister a non-voting module that holds any token (`ModuleHoldsTokens`, 7222). The Remove sheet adds close-and-sweep for pools (enough sweeps for each pool's largest possible stock) and pause-and-cancel for a running auction, and its chain check passes when those steps empty the module. A market with open listings, or a module someone sent a token to directly, can only be emptied with these two calls, which the app doesn't offer, so for those the sheet shows the 7222 message and can't add the removal.
+
+**Context:**
+- `apps/web/src/lib/modules/plans.ts` (`buildDetachPlan`), `readiness.ts` (`planEmptiesModule` decides whether the chosen steps empty the module), `use-module-reads.ts` (`checkDetach` skips simulating the removal alone when they do).
+- The listings to return come from the market index; stray tokens are tokens the module holds that no listing, pool page, or running auction records.
+- Both calls need the module paused first; `recover_token` on the market also needs every pool swept (`PoolOpen`).
+- In a tribe whose transfers aren't locked, a token sent to the module after drafting still makes the proposal fail; the sheet can only check what the module holds now.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** the contract release that adds `return_listing` and `recover_token`
+
 ## Token
 
 ### Verify `data:` token URIs in Stellar wallets

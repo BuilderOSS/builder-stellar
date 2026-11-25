@@ -12,7 +12,7 @@ close_pool(pool_id); sweep_pool(pool_id) -> u32 (pages left)
 get_pool(pool_id); pool_stock(pool_id, page) -> Vec<u32>; pool_purchases(pool_id, buyer); open_pools(); next_pool_id()
 ```
 
-A proposal grants the Marketplace a mint allowance (`token.increase_mint_allowance`) and opens a pool (admin, Live, unpaused). Each pool reserves `size` of the allowance for itself: the allowance not reserved by other open pools must cover it (`AllowanceNotReserved`), so closing one pool never starves another. At most `MAX_OPEN_POOLS` (8) pools are open at once (`TooManyPools`); price, size, buyer cap, sales rate and period must be positive (`InvalidPrice`, `InvalidPool`).
+A proposal grants the Marketplace a mint allowance (`token.increase_mint_allowance`) and opens a pool (admin, Live, unpaused). The pool's asset must be a Stellar Asset Contract (`NotStellarAsset`, 7728). Each pool reserves `size` of the allowance for itself: the allowance not reserved by other open pools must cover it (`AllowanceNotReserved`), so closing one pool never starves another. At most `MAX_OPEN_POOLS` (8) pools are open at once (`TooManyPools`); price, size, buyer cap, sales rate, and period must be positive (`InvalidPrice`, `InvalidPool`).
 
 Anyone calls `restock`, which mints up to `common::MAX_RESTOCK` (42) tokens into custody per call and appends the ids to stock pages of up to 64 (`PoolStock(pool, page)`), until the pool has stocked its size (`PoolFullyStocked`). Custody holds no votes. A buyer picks a specific id with `buy_from_pool` (buyer auth, unpaused). It pays the pool price to the Treasury and sends the token. It refuses when the pool is closed or expired (`PoolClosed`), past `max_per_buyer` (`BuyerLimitReached`), past `max_sold_per_period` in the current period (`PoolRateLimited`), above `max_price` (`PriceAboveMax`), or for an id not on that page (`NotInPool`).
 
@@ -26,17 +26,21 @@ list(token_id: u32, seller: Address, price: i128, expires_at: u64,
 buy(token_id: u32, buyer: Address, max_price: i128)
 cancel(token_id: u32, seller: Address)
 expire(token_id: u32)
+return_listing(token_id: u32)       // admin, while paused
+recover_token(token_id: u32)        // admin, while paused
 get_listing(token_id: u32) -> Option<Listing>
 ```
 
 The seller approves the Marketplace (`Token.approve`), then lists with seller auth. `max_fee_bps` and `payment_asset` are the terms the seller signed for: the listing fails with `FeeAboveMax` or `PaymentAssetMismatch` if the current config is worse, so a fee or asset change between signing and inclusion cannot apply. Listing escrows the token (its vote leaves the seller's delegate until it returns or is bought) and snapshots the fee and asset. `buy` fails with `PriceAboveMax` above `max_price`, splits payment between seller and Treasury, and delivers the token. Seller cancellation and permissionless expiry return the token to the seller.
 
+The DAO can empty the escrow without the sellers, which it must do before unregistering the Marketplace (the Token refuses while it holds tokens, `ModuleHoldsTokens`). Both calls need the admin and a paused marketplace (`NotPaused`, 7729), and no payment moves. `return_listing` sends a listing's token back to its seller and emits `ListingCancelled`. `recover_token` sends a token that no listing or pool records, one someone transferred here directly, to the Treasury; it refuses a listed token (`ListingExists`) and any token while a pool is not yet swept empty (`PoolOpen`).
+
 ## State and administration
 
 Price must be positive; expiry must be future, with no maximum. The fee is 0–2,500 bps (25%, `common::MAX_FEE_BPS`; `InvalidFee`).
 
-The constructor receives Token, the admin (launch admin), Treasury, payment asset, Manager, current hash and default secondary fee. It implements the Manager's `DaoModule` interface (`common::clients::DaoModuleApi`): Manager-only `launch(treasury, open)` checks the wiring, hands the admin to the Treasury (`AdminChanged`, unless `handoff` already did), sets open/paused state and emits `MarketplaceLaunched`; Manager-only `handoff(treasury)` hands the admin over early and stays in Setup; `payment_asset()` is compared by the Manager with the asset recorded at `create_dao` before launch; `renewal_keys(cursor, limit)` pages `Listing(0..minted)`, then each open pool's `Pool(id)` and `PoolStock(id, 0..pages)`, from instance storage only, and reports the token and payment balances it holds. `PoolBuyer(pool, buyer)` counts belong to buyers (holder class).
+The constructor receives Token, the admin (launch admin), Treasury, payment asset, Manager, current hash, and default secondary fee. The payment asset must be a Stellar Asset Contract (`NotStellarAsset`), here and in `set_payment_asset`. It implements the Manager's `DaoModule` interface (`common::clients::DaoModuleApi`): Manager-only `launch(treasury, open)` checks the wiring, hands the admin to the Treasury (`AdminChanged`, unless `handoff` already did), sets open/paused state and emits `MarketplaceLaunched`; Manager-only `handoff(treasury)` hands the admin over early and stays in Setup; `payment_asset()` is compared by the Manager with the asset recorded at `create_dao` before launch; `renewal_keys(cursor, limit)` pages `Listing(0..minted)`, then each open pool's `Pool(id)` and `PoolStock(id, 0..pages)`, from instance storage only, and reports the token and payment balances it holds. `PoolBuyer(pool, buyer)` counts belong to buyers (holder class).
 
-Admin functions (`pause`, `unpause`, `set_payment_asset`, `set_secondary_fee_bps`, `upgrade`, `migrate`) require the launch admin in setup and the Treasury after launch; their events carry the admin as `changed_by`. Pausing blocks new listings/purchases, not cancellation or expiry. Terminal listings are deleted; history lives in events/indexed views. Listing TTL is extended to 30 days when fewer than 7 remain.
+Admin functions (`pause`, `unpause`, `set_payment_asset`, `set_secondary_fee_bps`, `upgrade`, `migrate`) require the launch admin in setup and the Treasury after launch; their events carry the admin as `changed_by`. Pausing blocks new listings, purchases, and pools, not cancellation, expiry, restocking, closing, or sweeping. Terminal listings are deleted; history lives in events/indexed views. Listing TTL is extended to 30 days when fewer than 7 remain.
 
 Errors: block 7700. [Events](src/events.rs), [implementation](src/contract.rs), [storage](src/storage.rs). `cargo test -p marketplace`; cross-contract sales tests live in [dao-e2e](../e2e/README.md).

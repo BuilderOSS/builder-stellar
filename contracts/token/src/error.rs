@@ -49,4 +49,9 @@ pub enum TokenError {
     ModuleCustody = 7220,
     /// Members-only delegation: the delegatee holds no token or holds no votes
     DelegateNotMember = 7221,
+    /// `unregister_module` on a non-voting module that still holds tokens.
+    /// Empty it first (settle or cancel the auction, return listings, sweep
+    /// pools): once unregistered it is no longer DAO custody, so in a locked
+    /// DAO it could not move those tokens out
+    ModuleHoldsTokens = 7222,
 }

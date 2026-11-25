@@ -80,6 +80,8 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7416 | You have no refund waiting. | Nothing to do. Refunds usually return to your wallet as soon as you're outbid. See [Auction refunds](/guides/auctions/refunds). |
 | 7417 | The extra time a late bid adds is outside 1 second to 1 day. | Choose a value in that range. |
 | 7418 | A bid comment is longer than 1,024 bytes. | Shorten it. |
+| 7419 | The payment asset is not a Stellar asset contract. | Choose a Stellar asset, such as XLM or USDC. |
+| 7420 | That token is in the auction that is running, so it can't be sent to the treasury. | Settle or cancel the auction first. |
 
 ## Market
 
@@ -87,7 +89,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 |---|---|---|
 | 7702 | The price is not valid. | Enter a price above zero. |
 | 7703 | The listing or pool end time is not valid. | Choose a time in the future. |
-| 7704 | This token is already listed. | Cancel the existing listing first. See [Cancel a listing](/guides/marketplace/cancel). |
+| 7704 | This token is already listed. | Cancel the existing listing first. See [Cancel a listing](/guides/marketplace/cancel). A listed token goes back to its seller, not to the treasury. |
 | 7705 | The listing can't be found. It may have sold or been cancelled. | Refresh the market. |
 | 7706 | The listing has expired. | Choose another listing. The seller can list it again. |
 | 7707 | The listing is still active, so it can't be cleared. | Wait until it expires. |
@@ -106,9 +108,11 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7722 | The pool has sold its limit for this period. | Try again when the period resets. |
 | 7723 | That token is no longer in the pool. | Pick another token. |
 | 7724 | Too many pools are open (the limit is 8). | Close and sweep a pool first. |
-| 7725 | The pool is still open, so it can't be swept. | Close it first, in an earlier action. |
+| 7725 | A pool is still open, so it can't be swept, or a token can't be sent to the treasury yet. | Close the pool first, in an earlier action, and sweep every pool before sending tokens to the treasury. |
 | 7726 | A pool setting is zero. | Pool size, the limit per wallet, the sales rate and the period must all be above zero. |
 | 7727 | The pool is already fully stocked. | Nothing to do. |
+| 7728 | The payment asset is not a Stellar asset contract. | Choose a Stellar asset, such as XLM or USDC. |
+| 7729 | The market must be paused for this. | Add "Pause the market" before it in the same proposal. |
 
 ## Claims
 
@@ -158,6 +162,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7219 | This module is not a transfer agent. | Make it one by proposal first. |
 | 7220 | A recovery can't move a token that a module holds, for example a token in an auction or a pool. | Choose a token held by a member. |
 | 7221 | Votes can only be delegated to members of this tribe. | Choose a delegate who holds a membership. |
+| 7222 | The module still holds memberships, so it can't be removed. | Empty it first. In the same proposal, cancel the running auction, or close and sweep the pools. Before the proposal runs, open listings must be cancelled, or must end and be cleared. See [Modules](/concepts/modules#removing-a-module). |
 
 ## Artwork and profile
 

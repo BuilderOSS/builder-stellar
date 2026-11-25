@@ -20,8 +20,8 @@ import {
   UNLIMITED_ALLOWANCE,
   validateModuleConfig
 } from './kinds';
-import { actionCount, buildAttachPlan, buildDetachPlan, type PlanStep } from './plans';
-import { type ModuleFacts, moduleReadiness } from './readiness';
+import { actionCount, buildAttachPlan, buildDetachPlan, type PlanStep, sweepsFor } from './plans';
+import { type ModuleFacts, moduleReadiness, planEmptiesModule } from './readiness';
 import { planActions } from './requests';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));
@@ -171,6 +171,21 @@ describe('detach plans', () => {
     ]);
   });
 
+  it('sweeps as often as the largest stock needs, since one sweep returns at most 25', () => {
+    expect(sweepsFor({ id: '0', open: false, inStock: 0 })).toBe(1);
+    expect(sweepsFor({ id: '0', open: false, inStock: 25 })).toBe(1);
+    expect(sweepsFor({ id: '0', open: false, inStock: 26 })).toBe(2);
+    // An open pool can be restocked before the proposal runs.
+    expect(sweepsFor({ id: '0', open: true, inStock: 10, maxStock: 100 })).toBe(4);
+    const steps = buildDetachPlan({
+      kind: 'marketplace',
+      address: PREDICTED,
+      pools: [{ id: '3', open: false, inStock: 42 }]
+    });
+    expect(steps.map((s) => s.type)).toEqual(['sweep-pool', 'sweep-pool', 'unregister-module']);
+    expect(steps[1]!.title).toBe('Sweep pool 3 (2 of 2)');
+  });
+
   it('pauses before cancelling a running auction, and only when asked', () => {
     expect(buildDetachPlan({ kind: 'auction', address: PREDICTED, cancelAuction: true }).map((s) => s.type)).toEqual([
       'pause-auction',
@@ -217,6 +232,9 @@ describe('removal checklist', () => {
     expect(byId.holds).toMatchObject({ tone: 'warn', cleanup: 'pools' });
     expect(byId.holds!.title).toBe('Holds 3 memberships in 1 pool');
     expect(byId.listings!.title).toBe('2 resale listings are open');
+    // A market must be empty to be removed (the Token's ModuleHoldsTokens).
+    expect(byId.holds!.detail).toMatch(/removal fails/);
+    expect(byId.listings!.detail).toMatch(/removal fails/);
     expect(byId.agent!.title).toBe('Can move memberships');
   });
 
@@ -230,6 +248,33 @@ describe('removal checklist', () => {
     const lists = moduleReadiness({ ...base, openLists: 1 }).find((r) => r.id === 'lists')!;
     expect(lists.title).toBe('1 claim list is open');
     expect(lists.cleanup).toBeUndefined();
+  });
+
+  it('knows when the chosen clean-up empties a module without votes', () => {
+    const both = { sweep: true, cancel: true };
+    const auction = { ...base, kind: 'auction' as const, auctionRunning: true, balance: 1 };
+    expect(planEmptiesModule(auction, both)).toBe(true);
+    expect(planEmptiesModule(auction, { ...both, cancel: false })).toBe(false);
+    // A second token, sent to the auction directly, needs a step the plan cannot add.
+    expect(planEmptiesModule({ ...auction, balance: 2 }, both)).toBe(false);
+    const market = {
+      ...base,
+      kind: 'marketplace' as const,
+      balance: 3,
+      pools: [{ id: '0', open: true, inStock: 3 }]
+    };
+    expect(planEmptiesModule(market, both)).toBe(true);
+    expect(planEmptiesModule(market, { ...both, sweep: false })).toBe(false);
+    expect(planEmptiesModule({ ...market, openListings: 1, balance: 4 }, both)).toBe(false);
+    expect(planEmptiesModule({ ...market, openListings: null }, both)).toBe(false);
+    // Empty already, or a voting module: nothing to wait for.
+    expect(planEmptiesModule({ ...market, balance: 0, pools: [] }, both)).toBe(true);
+    expect(planEmptiesModule({ ...base, balance: 5 }, both)).toBe(true);
+  });
+
+  it('says a voting module keeps what it holds', () => {
+    const held = moduleReadiness({ ...base, balance: 2 }).find((r) => r.id === 'holds')!;
+    expect(held.detail).toMatch(/votes belong to it/);
   });
 
   it('never invents a warning for facts it could not read', () => {
