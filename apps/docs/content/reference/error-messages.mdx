@@ -216,6 +216,7 @@ These come from the Manager.
 | 7143 | A transfer agent must be a module the tribe is created with. | Choose one of the tribe's modules. |
 | 7144 | That vote source is not approved by the platform, or its approval was withdrawn. | Choose an approved vote source. See [Vote sources](/concepts/vote-sources). |
 | 7145 | That contract doesn't answer as a vote source. | Check the address. |
+| 7146 | A payment asset is not a Stellar asset contract. | Choose one of the assets the app offers, such as XLM or USDC. |
 
 ## Upgrades and storage
 
@@ -228,8 +229,8 @@ These come from the Manager.
 | 7012 | The contract's storage is already up to date. | Nothing to do. |
 | 7103 | The version can't be found, or it was withdrawn. | Choose another release. |
 | 7105 | This upgrade path is not allowed. | Upgrade to a release the platform lists for your current version. |
-| 7130 | The Manager's own upgrade was approved too recently. Its upgrade notice hasn't passed. | Wait for the notice to pass. See [Upgrades](/concepts/upgrades). |
-| 7131 | The Manager can only upgrade to its announced latest release. | Use the latest release. |
+| 7130 | An upgrade's notice hasn't passed. This is the Manager's own upgrade, or the recovery of a failed assurance drive's claims module, which also waits at least seven days after the drive's deadline. | Wait for the notice to pass. See [Upgrades](/concepts/upgrades). |
+| 7131 | The upgrade isn't to the announced latest release. This applies to the Manager's own upgrade and to the recovery of a failed assurance drive's claims module. | Use the latest release. |
 | 7602 | A proposal may only call upgrade or migrate on the Treasury itself. | Remove the other Treasury action. |
 | 7603 | A Treasury upgrade or migration action has invalid arguments. | Prepare it again from Manage → Contract upgrades. |
 | 7604 | The proposal's targets, functions and arguments don't line up. | Prepare the proposal again in the app. |

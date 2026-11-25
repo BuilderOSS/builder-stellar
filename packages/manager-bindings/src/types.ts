@@ -118,11 +118,15 @@ export const ManagerError = {
    */
   7129 : { message: "SlugUnchanged" },
   /**
-   * The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+   * The upgrade notice has not passed: `upgrade_manager` less than
+   * `upgrade_delay()` ledgers after the approval or the announcement, or
+   * `recover_claims` before that notice has also passed since the drive's
+   * deadline
    */
   7130 : { message: "UpgradeDelayNotElapsed" },
   /**
-   * `upgrade_manager` to a hash that is not the latest Manager implementation.
+   * `upgrade_manager` or `recover_claims` to a hash that is not the one
+   * announced as latest for its name (`latest_pointer`)
    */
   7131 : { message: "UpgradeNotLatest" },
   /**
@@ -185,13 +189,19 @@ export const ManagerError = {
    * The address does not answer the vote source interface
    * (`common::clients::VoteSourceApi`)
    */
-  7145 : { message: "InvalidVoteSource" }
+  7145 : { message: "InvalidVoteSource" },
+  /**
+   * A payment asset is not a Stellar Asset Contract (`create_dao`,
+   * `create_module`, `open_assurance`)
+   */
+  7146 : { message: "InvalidPaymentAsset" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
 
 /**
- * Event: DaoCreated
+ * Emitted by `create_dao`: the DAO's addresses, the code it was deployed
+ * from and its requested slug. Creators verify `wasm_hashes` before launch.
  */
 export interface DaoCreatedEvent {
   name: "DaoCreated";
@@ -213,7 +223,8 @@ export interface DaoCreatedEvent {
 }
 
 /**
- * Event: DaoLaunched
+ * Emitted by `launch_dao` and `launch_when_ready`: every contract is Live
+ * with the Treasury as admin, and the Manager holds no further authority.
  */
 export interface DaoLaunchedEvent {
   name: "DaoLaunched";
@@ -245,8 +256,9 @@ export interface SlugChangedEvent {
 }
 
 /**
- * Emitted by `launch_dao` when the DAO's slug becomes its unique id (it can
- * later change by vote, see `SlugChanged`).
+ * Emitted when the DAO's slug becomes its unique id: at launch, or earlier
+ * when `open_assurance` reserves it (it can later change by vote, see
+ * `SlugChanged`, or be freed after a failed drive, see `SlugReleased`).
  */
 export interface SlugClaimedEvent {
   name: "SlugClaimed";
@@ -257,7 +269,7 @@ export interface SlugClaimedEvent {
 }
 
 /**
- * Event: AdminChanged
+ * Emitted by `accept_admin`.
  */
 export interface AdminChangedEvent {
   name: "AdminChanged";
@@ -279,7 +291,7 @@ export interface SlugReleasedEvent {
 }
 
 /**
- * Event: AdminProposed
+ * Emitted by `propose_admin`; the handover completes at `accept_admin`.
  */
 export interface AdminProposedEvent {
   name: "AdminProposed";
@@ -290,7 +302,7 @@ export interface AdminProposedEvent {
 }
 
 /**
- * Event: FactoryPaused
+ * Emitted by `pause_factory`.
  */
 export interface FactoryPausedEvent {
   name: "FactoryPaused";
@@ -331,7 +343,7 @@ export interface AssuranceOpenedEvent {
 }
 
 /**
- * Event: FactoryUnpaused
+ * Emitted by `unpause_factory`.
  */
 export interface FactoryUnpausedEvent {
   name: "FactoryUnpaused";
@@ -341,7 +353,7 @@ export interface FactoryUnpausedEvent {
 }
 
 /**
- * Event: ManagerUpgraded
+ * Emitted by `upgrade_manager`, before the Manager's code is swapped.
  */
 export interface ManagerUpgradedEvent {
   name: "ManagerUpgraded";
@@ -355,7 +367,7 @@ export interface ManagerUpgradedEvent {
 }
 
 /**
- * Event: UpgradeApproved
+ * Emitted by `approve_upgrade` (once per path: re-approving emits nothing).
  */
 export interface UpgradeApprovedEvent {
   name: "UpgradeApproved";
@@ -367,7 +379,7 @@ export interface UpgradeApprovedEvent {
 }
 
 /**
- * Event: ManagerInitialized
+ * Emitted by the constructor.
  */
 export interface ManagerInitializedEvent {
   name: "ManagerInitialized";
@@ -402,7 +414,7 @@ export interface VoteSourceApprovedEvent {
 }
 
 /**
- * Event: ImplementationRevoked
+ * Emitted by `revoke_implementation`.
  */
 export interface ImplementationRevokedEvent {
   name: "ImplementationRevoked";
@@ -413,7 +425,7 @@ export interface ImplementationRevokedEvent {
 }
 
 /**
- * Event: AdminProposalCancelled
+ * Emitted by `cancel_pending_admin`.
  */
 export interface AdminProposalCancelledEvent {
   name: "AdminProposalCancelled";
@@ -436,7 +448,7 @@ export interface LatestImplementationSetEvent {
 }
 
 /**
- * Event: ImplementationRegistered
+ * Emitted by `register_implementation`.
  */
 export interface ImplementationRegisteredEvent {
   name: "ImplementationRegistered";
@@ -449,7 +461,8 @@ export interface ImplementationRegisteredEvent {
 }
 
 /**
- * Event: CurrentImplementationsUpdated
+ * Emitted by `set_current_implementations`: the hashes new DAOs and modules
+ * deploy from.
  */
 export interface CurrentImplementationsUpdatedEvent {
   name: "CurrentImplementationsUpdated";
@@ -469,7 +482,13 @@ export interface CurrentImplementationsUpdatedEvent {
  * launch config every launch path uses.
  */
 export interface Assurance {
+  /**
+   * The DAO's ClaimMinter holding the escrow.
+   */
   claim_minter: string;
+  /**
+   * Ledger timestamp after which an unlaunched drive has failed.
+   */
   deadline: bigint;
   launch_config: LaunchConfig;
   list_id: number;
@@ -485,11 +504,11 @@ export interface Assurance {
   { tag: "Claims"; values: readonly [ClaimsConfig] };
 
 /**
- * The only factory state retained until the launch administrator finalizes a DAO.
+ * The only factory state retained until the launch administrator finalises a DAO.
  *
- * Module WASM hashes are deliberately NOT stored: `launch_dao` reads each
- * module's current `wasm_hash()` and checks it against the registry, so a
- * pre-launch admin `upgrade` is honored and a revoked hash is rejected.
+ * Module WASM hashes are deliberately NOT stored: launch reads the code each
+ * contract runs now (`executable()`) and checks it against the registry, so
+ * a pre-launch admin `upgrade` is honoured and a revoked hash is rejected.
  */
 export interface PendingDao {
   addresses: DaoAddresses;
@@ -500,23 +519,30 @@ export interface PendingDao {
    */
   auction_payment_asset: string | null;
   claims_payment_asset: string | null;
+  /**
+   * The only address that may launch, rename, open a drive or recover.
+   */
   launch_admin: string;
   marketplace_payment_asset: string | null;
   /**
-   * Requested slug; claimed at `launch_dao`, changeable with `update_pending_slug`.
+   * Requested slug; claimed at `launch_dao` (or reserved by
+   * `open_assurance`), changeable with `update_pending_slug` until a
+   * drive opens.
    */
   slug: string;
 }
 
 /**
- * ClaimMinter creation config: the asset Setup lists are priced in.
+ * ClaimMinter creation config: the asset Setup lists are priced in, which
+ * must be a Stellar Asset Contract.
  */
 export interface ClaimsConfig {
   payment_asset: string;
 }
 
 /**
- * Struct: DaoAddresses
+ * A DAO's contract addresses (returned by `create_dao`, emitted in
+ * `DaoCreated` and `DaoLaunched`).
  */
 export interface DaoAddresses {
   /**
@@ -534,7 +560,8 @@ export interface DaoAddresses {
 }
 
 /**
- * Struct: LaunchConfig
+ * What launch opens. An assurance drive stores this at `open_assurance`
+ * and every launch path then uses the stored copy.
  */
 export interface LaunchConfig {
   /**
@@ -548,12 +575,24 @@ export interface LaunchConfig {
 }
 
 /**
- * Struct: AuctionConfig
+ * Auction creation config. Every payment asset must be a Stellar Asset
+ * Contract (`InvalidPaymentAsset`).
  */
 export interface AuctionConfig {
+  /**
+   * Seconds per auction (`common::MIN_AUCTION_DURATION ..=
+   * common::MAX_AUCTION_DURATION`).
+   */
   duration: bigint;
   payment_asset: string;
+  /**
+   * Lowest first bid, at least `common::MIN_RESERVE_PRICE`.
+   */
   reserve_price: bigint;
+  /**
+   * Seconds a late bid extends the auction to (1 ..=
+   * `common::MAX_AUCTION_TIME_BUFFER`).
+   */
   time_buffer: bigint;
 }
 
@@ -572,11 +611,21 @@ export interface DaoWasmHashes {
 }
 
 /**
- * Struct: GovernanceConfig
+ * The Governor's settings at creation. `create_dao` checks the bounds; the
+ * launch admin may change them in Setup.
  */
 export interface GovernanceConfig {
+  /**
+   * Votes needed to propose; at least 1.
+   */
   proposal_threshold: bigint;
+  /**
+   * Seconds between queueing and the earliest execution (same bounds).
+   */
   queue_delay: number;
+  /**
+   * Quorum in basis points of the voting supply, 1 ..= 10,000.
+   */
   quorum_bps: number;
   /**
    * Where voting power comes from: `None` (or the DAO's own token) for
@@ -585,25 +634,43 @@ export interface GovernanceConfig {
    * (docs/designs/governance-adapter.md).
    */
   vote_source: string | null;
+  /**
+   * Seconds from `propose` to the start of voting
+   * (`common::MIN_GOVERNANCE_DELAY ..= common::MAX_GOVERNANCE_DELAY`).
+   */
   voting_delay: number;
+  /**
+   * Seconds voting stays open (same bounds).
+   */
   voting_period: number;
 }
 
 /**
- * Struct: DaoCreationParams
+ * `create_dao`'s input. Both `deployer` and `launch_admin` authorise it.
  */
 export interface DaoCreationParams {
+  /**
+   * Salts the addresses with `nonce`, so each deployer has its own
+   * address space (`predict_addresses`).
+   */
   deployer: string;
   initial_config: InitialDaoConfigValues;
+  /**
+   * Admin of every contract in Setup; consents to being named.
+   */
   launch_admin: string;
   nonce: bigint;
 }
 
 /**
- * Struct: MarketplaceConfig
+ * Marketplace creation config. The payment asset must be a Stellar Asset
+ * Contract.
  */
 export interface MarketplaceConfig {
   payment_asset: string;
+  /**
+   * The DAO's cut of secondary sales, at most `common::MAX_FEE_BPS`.
+   */
   secondary_fee_bps: number;
 }
 
@@ -624,25 +691,42 @@ export interface AssuranceListParams {
    * Price per token (0 for a free drive that still needs its threshold).
    */
   price: bigint;
+  /**
+   * Merkle root of the claim list.
+   */
   root: Uint8Array;
   /**
    * Distinct claimers needed before the DAO may launch.
    */
   threshold_claimers: number;
+  /**
+   * Tokens the list may mint; also the mint allowance granted.
+   */
   total: number;
+  /**
+   * Where the full tree is published (`ipfs://...`).
+   */
   tree_uri: string;
 }
 
 /**
- * Struct: ImplementationVersion
+ * A registry record (`register_implementation`). Immutable once written,
+ * except that `revoke_implementation` sets `revoked`, permanently.
  */
 export interface ImplementationVersion {
+  /**
+   * The slot name (`Token`, `Governor`, `ClaimMinter`, `Manager`, ...);
+   * an upgrade path joins two hashes of the same name only.
+   */
   name: string;
   /**
    * Ledger sequence of the registration.
    */
   published_ledger: bigint;
   revoked: boolean;
+  /**
+   * Release version, which contracts running this hash report.
+   */
   version: string;
   wasm_hash: Uint8Array;
 }
@@ -661,7 +745,8 @@ export interface CurrentImplementations {
 }
 
 /**
- * Struct: InitialDaoConfigValues
+ * What `create_dao` builds: the collection, profile, slug, governance,
+ * modules and membership switches.
  */
 export interface InitialDaoConfigValues {
   governance: GovernanceConfig;
@@ -687,12 +772,18 @@ export interface InitialDaoConfigValues {
    * slug by vote (`change_slug`).
    */
   slug: string;
+  /**
+   * Collection name, 1 to 40 bytes.
+   */
   token_name: string;
   /**
    * The membership switches the Token starts with
    * (docs/designs/locked-tokens.md); all off is an open DAO.
    */
   token_settings: TokenSettings;
+  /**
+   * Collection symbol, 1 to 10 bytes.
+   */
   token_symbol: string;
   /**
    * Kinds in `modules` whose module becomes a transfer agent at creation

@@ -315,7 +315,11 @@ all use the same registration, allowance and upgrade path.
     code. It calls ClaimMinter's Manager-only `recovery_upgrade(from, to)`, which checks only the
     Manager's authorization and that it is still in Setup (it must never run on a Live module); it doesn't consult
     its own state machine. The window opens only once nothing can be launched any more, so the upgrade can't
-    change the drive's outcome; it can only unblock refunds.
+    change the drive's outcome. It can change who receives the escrow, since the new code holds it, so the
+    target must also be the hash announced as latest for `ClaimMinter`, and the Manager's upgrade notice must
+    have passed since the approval, the announcement and the deadline (never less than seven days after the
+    deadline): members have that time to take their refunds with the code they paid into (SECURITY_MODEL,
+    Assurance launch).
   - `refund` and `release` never need an allowance, so cutting a buggy module's allowance to zero never strands
     escrow.
 - **Same indexer route as every module.** ClaimMinter events route through the Token's `ModuleRegistered` and
@@ -378,7 +382,7 @@ all use the same registration, allowance and upgrade path.
 | Actor | Before launch | After launch |
 |---|---|---|
 | Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
-| Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
+| Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash announced as latest, after the upgrade notice. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
 | Treasury | Can't act | Mints without a limit; manages allowances and registrations |
 
 Modules can also be **delegates**. `non_voting` zeroes what a module *holds*, but `Votes::delegate` is public
@@ -563,7 +567,7 @@ Choices made while building. Each refines the design without changing what it gu
 - **ClaimMinter releases its own escrow in `launch` (R4).** The Manager launches the Token first and then every module, so the ClaimMinter's `launch` sees a Live Token and moves the assurance escrow to the Treasury in the same transaction. `release` stays public.
 - **No `ManagerRequired` error.** Soroban can't tell a contract who invoked it, so a launch admin's direct `open_list` with a price or assurance terms fails the Manager's `require_auth` (an authorization error) instead of a named code.
 - **Claim records are holder class.** `Claim(list, claimer)` belongs to the claimer; their next claim or refund restores it (automatic since protocol 23). `renewal_keys` lists the DAO-owned `List(id)` entries and the escrow balance. Read the renewal Success Criterion as "lists and escrow balances".
-- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash.
+- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash (and, on the Manager's side, the latest-only rule and the notice).
 - **Storage shapes.** A `#[contracttype]` field can't hold `Option<struct>`, so a `ClaimList` stores its assurance terms flattened (a threshold of 0 means none). The Manager keeps a drive under its own `Assurance(token)` key rather than inside `PendingDao`, and drops it at launch.
 - **`open_assurance` takes `AssuranceListParams`** without an asset: the list is priced in the `claims_payment_asset` recorded at creation.
 - **`DaoLaunched.registry`** is the launch-time module list (`Vec<ModuleEntry>`). `modules` keeps the `DaoAddresses`, whose module fields are now optional, so optional modules changed no shape.

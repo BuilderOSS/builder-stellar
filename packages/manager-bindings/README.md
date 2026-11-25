@@ -65,13 +65,14 @@ A DAO requests a slug in `create_dao` (`initial_config.slug`): 4-63 characters o
 stored in `PendingDao` and is not unique; `launch_dao` claims it (unique, permanent,
 event `SlugClaimed`) and fails with `SlugTaken` if another DAO launched with it
 first. The launch admin renames a pending request with `update_pending_slug`.
-`get_dao_by_slug` / `get_slug` resolve launched DAOs only; the indexer exposes
-`manager.daos.slug`, `slug_claimed` and `manager.dao_slugs`.
+An assurance drive reserves the slug when it opens (`open_assurance`, `SlugClaimed`),
+and `release_slug` frees it after a failed drive (`SlugReleased`).
+`get_dao_by_slug` / `get_slug` resolve launched DAOs and DAOs whose drive reserved a
+slug; the indexer exposes `manager.daos.slug`, `slug_claimed` and `manager.dao_slugs`.
 
-Slug storage is persistent and expires if untouched. `bump_slug_ttl(slug)` is
-permissionless, so DAO operators or the platform admin can call it periodically
-(the network caps each extension at roughly 180 days). `get_dao_by_slug` does not
-extend the TTL.
+Slug storage is persistent and expires if untouched. The DAO's storage sweep renews
+the slug entries with the rest of its storage (no contract call). Neither read
+extends the TTL.
 
 ## Errors
 
