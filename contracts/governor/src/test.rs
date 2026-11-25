@@ -2375,3 +2375,769 @@ fn proposal_threshold_is_checked_against_the_adapter_supply() {
     );
     governor.set_proposal_threshold(&10);
 }
+
+// ============================================================================
+// Proposal lifetime, refused actions, the storage-layout gate, and vote and
+// cancel errors
+// ============================================================================
+
+mod hardening {
+    use super::*;
+    use crate::storage::{GovernorKey, PROPOSAL_TTL_EXTEND_TO};
+    use soroban_sdk::{testutils::storage::Persistent as _, Symbol};
+    use stellar_governance::governor::GovernorError;
+
+    /// Testnet's entry TTL limits (2026-10-12), so TTLs behave as on chain.
+    fn network_ttls(e: &Env) {
+        e.ledger().with_mut(|l| {
+            l.max_entry_ttl = 3_110_400;
+            l.min_persistent_entry_ttl = 120_960;
+        });
+    }
+
+    /// Moves the clock by `seconds` and the ledger by the ledgers that close
+    /// in that time at `ledger_ms` milliseconds per ledger.
+    /// ... and archives the Governor's expired entries.
+    fn elapse(e: &Env, governor: &Address, seconds: u64, ledger_ms: u64) {
+        e.ledger().with_mut(|l| {
+            l.timestamp += seconds;
+            l.sequence_number += (seconds * 1_000 / ledger_ms) as u32;
+        });
+        archive_expired(e, governor);
+    }
+
+    /// Deletes every persistent or temporary entry of `contract` whose TTL
+    /// has run out. The test host does not archive; on the network a call
+    /// that reads an archived entry fails, and here the read finds nothing,
+    /// so a proposal that archived fails `ProposalNotFound`. Only the
+    /// Governor's entries are archived: the Token's votes are renewed by the
+    /// DAO's sweep, and the proposal must not depend on that.
+    fn archive_expired(e: &Env, contract: &Address) {
+        use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScVal};
+        use soroban_sdk::TryFromVal;
+        let now = e.ledger().sequence();
+        for (key, (_, live_until)) in e.to_ledger_snapshot().ledger_entries.iter() {
+            let (Some(live_until), LedgerKey::ContractData(d)) = (live_until, key.as_ref()) else {
+                continue;
+            };
+            if *live_until >= now
+                || d.contract != soroban_sdk::xdr::ScAddress::from(contract)
+                || d.key == ScVal::LedgerKeyContractInstance
+                || matches!(d.key, ScVal::LedgerKeyNonce(_))
+            {
+                continue;
+            }
+            let owner = Address::try_from_val(e, &ScVal::Address(d.contract.clone())).unwrap();
+            let k = Val::try_from_val(e, &d.key).unwrap();
+            e.as_contract(&owner, || match d.durability {
+                ContractDataDurability::Persistent => e.storage().persistent().remove(&k),
+                ContractDataDurability::Temporary => e.storage().temporary().remove(&k),
+            });
+        }
+    }
+
+    fn proposal_ttl(e: &Env, governor: &DaoGovernorContractClient, key: GovernorKey) -> u32 {
+        e.as_contract(&governor.address, || {
+            e.storage().persistent().get_ttl(&common::ns(e, key))
+        })
+    }
+
+    fn set_stored_layout(e: &Env, contract: &Address, version: u32) {
+        e.as_contract(contract, || {
+            e.storage().instance().set(
+                &common::ns(e, common::upgrade::UpgradeKey::StorageVersion),
+                &version,
+            );
+        });
+    }
+
+    /// Runs a proposal with the longest timings through its whole lifecycle,
+    /// touching it only to propose, vote once, queue at the last moment and
+    /// execute at the last moment, with ledgers closing every `ledger_ms`.
+    fn run_longest_lifecycle(ledger_ms: u64) {
+        let (e, token, treasury, governor, target, owner) = setup();
+        network_ttls(&e);
+        governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+        governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+        governor.set_queue_delay(&crate::MAX_QUEUE_DELAY);
+        // The target's instance lives as long as any real contract's would.
+        e.as_contract(&target.address, || {
+            e.storage().instance().extend_ttl(1, 3_000_000)
+        });
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        elapse(&e, &governor.address, 10, ledger_ms);
+
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "Longest lifecycle");
+        let hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+        elapse(
+            &e,
+            &governor.address,
+            crate::MAX_VOTING_DELAY as u64,
+            ledger_ms,
+        );
+        governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+        // The last second the Succeeded proposal can still be queued.
+        elapse(
+            &e,
+            &governor.address,
+            crate::MAX_VOTING_PERIOD as u64 + crate::storage::PROPOSAL_EXPIRATION_PERIOD - 1,
+            ledger_ms,
+        );
+        governor.queue(&targets, &functions, &args, &hash, &0, &proposer);
+        // The last second of the execution window.
+        elapse(
+            &e,
+            &governor.address,
+            crate::MAX_QUEUE_DELAY as u64 + crate::storage::PROPOSAL_EXPIRATION_PERIOD - 1,
+            ledger_ms,
+        );
+        treasury.execute(&targets, &functions, &args, &hash);
+        assert_eq!(target.get_value(), 42);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+    }
+
+    /// A proposal at the 118-day maximum lifetime (30-day voting delay,
+    /// voting period and queue delay, queued and executed at the last
+    /// second) is still live at execution, at the nominal 5-second ledgers
+    /// and when ledgers close 10% faster. With only the TTL from `propose`,
+    /// the faster ledgers archive it around day 108, inside its execution
+    /// window.
+    #[test]
+    fn a_proposal_lives_through_its_maximum_lifetime() {
+        assert_eq!(crate::MAX_PROPOSAL_LIFETIME, 118 * 86_400);
+        run_longest_lifecycle(5_000);
+        run_longest_lifecycle(4_500);
+    }
+
+    /// `queue` renews the proposal and its id entry to the full TTL, even
+    /// when the TTL left from `propose` is above the renewal threshold.
+    #[test]
+    fn queue_renews_the_proposal_for_the_rest_of_its_life() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        network_ttls(&e);
+        governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+        governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        elapse(&e, &governor.address, 10, 5_000);
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "Renewed at queue");
+        let hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+        elapse(&e, &governor.address, crate::MAX_VOTING_DELAY as u64, 5_000);
+        governor.cast_vote(&id, &1, &String::from_str(&e, ""), &proposer);
+        elapse(
+            &e,
+            &governor.address,
+            crate::MAX_VOTING_PERIOD as u64 + crate::storage::PROPOSAL_EXPIRATION_PERIOD - 1,
+            5_000,
+        );
+        // 74 days in: about 46 days of TTL left, above the 30-day threshold.
+        let left = proposal_ttl(&e, &governor, GovernorKey::ProposalTime(id.clone()));
+        assert!(left > crate::storage::PROPOSAL_TTL_THRESHOLD, "{left}");
+        governor.queue(&targets, &functions, &args, &hash, &0, &proposer);
+        assert_eq!(
+            proposal_ttl(&e, &governor, GovernorKey::ProposalTime(id.clone())),
+            PROPOSAL_TTL_EXTEND_TO
+        );
+        assert_eq!(
+            proposal_ttl(&e, &governor, GovernorKey::ProposalId(0)),
+            PROPOSAL_TTL_EXTEND_TO
+        );
+    }
+
+    fn consume_args(e: &Env, target: &Address) -> Vec<Val> {
+        vec![
+            e,
+            vec![e, target.clone()].into_val(e),
+            vec![e, symbol_short!("set_value")].into_val(e),
+            proposal_args(e).into_val(e),
+            BytesN::from_array(e, &[9u8; 32]).into_val(e),
+        ]
+    }
+
+    /// An action aimed at the Governor's own `consume` is refused at
+    /// `propose`, alone or after other actions.
+    #[test]
+    fn propose_refuses_an_action_that_calls_consume() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        let consume = Symbol::new(&e, "consume");
+        let cases = [
+            (
+                vec![&e, governor.address.clone()],
+                vec![&e, consume.clone()],
+                vec![&e, consume_args(&e, &target.address)],
+            ),
+            (
+                vec![&e, target.address.clone(), governor.address.clone()],
+                vec![&e, symbol_short!("set_value"), consume.clone()],
+                vec![
+                    &e,
+                    vec![&e, 1u32.into_val(&e)],
+                    consume_args(&e, &target.address),
+                ],
+            ),
+        ];
+        for (targets, functions, args) in cases {
+            let r = governor.try_propose(
+                &targets,
+                &functions,
+                &args,
+                &String::from_str(&e, "consume another"),
+                &proposer,
+            );
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                CustomGovernorError::CannotConsume.into()
+            );
+        }
+        assert_eq!(governor.proposal_count(), 0);
+        // A function named `consume` on another contract is an ordinary action.
+        governor.propose(
+            &vec![&e, target.address.clone()],
+            &vec![&e, consume],
+            &vec![&e, Vec::<Val>::new(&e)],
+            &String::from_str(&e, "consume elsewhere"),
+            &proposer,
+        );
+        assert_eq!(governor.proposal_count(), 1);
+    }
+
+    fn batch_mint_args(e: &Env, minter: &Address, recipients: u32, each: u32) -> Vec<Val> {
+        let mut to = Vec::new(e);
+        let mut amounts = Vec::new(e);
+        for _ in 0..recipients {
+            to.push_back(Address::generate(e));
+            amounts.push_back(each as u128);
+        }
+        vec![
+            e,
+            minter.clone().into_val(e),
+            to.into_val(e),
+            amounts.into_val(e),
+        ]
+    }
+
+    fn try_propose_calls(
+        e: &Env,
+        governor: &DaoGovernorContractClient,
+        proposer: &Address,
+        target: &Address,
+        calls: &[(&str, Vec<Val>)],
+        description: &str,
+    ) -> Result<(), soroban_sdk::Error> {
+        let mut targets = Vec::new(e);
+        let mut functions = Vec::new(e);
+        let mut args = Vec::new(e);
+        for (function, call_args) in calls {
+            targets.push_back(target.clone());
+            functions.push_back(Symbol::new(e, function));
+            args.push_back(call_args.clone());
+        }
+        match governor.try_propose(
+            &targets,
+            &functions,
+            &args,
+            &String::from_str(e, description),
+            proposer,
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.unwrap()),
+        }
+    }
+
+    /// Mints that each fit the Token's per-call budget but could not publish
+    /// their events together in one `treasury.execute` are refused at
+    /// `propose`; the largest accepted shapes are accepted.
+    #[test]
+    fn propose_refuses_mints_that_cannot_execute_together() {
+        let (e, token, treasury, governor, _target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        let minter = treasury.address.clone();
+        let t = token.address.clone();
+        let max = common::MAX_BATCH_MINT;
+        let too_large: soroban_sdk::Error = CustomGovernorError::MintsTooLarge.into();
+        let mint = || {
+            vec![
+                &e,
+                minter.clone().into_val(&e),
+                Address::generate(&e).into_val(&e),
+            ]
+        };
+        let other = || ("set_value", vec![&e, 1u32.into_val(&e)]);
+
+        // Refused: two near-maximum batches, a maximum batch beside three
+        // other actions, eleven single mints, six mints among 20 actions.
+        let two_max = [
+            ("batch_mint", batch_mint_args(&e, &minter, 1, max)),
+            ("batch_mint", batch_mint_args(&e, &minter, 1, max - 1)),
+        ];
+        let mut max_and_three = std::vec![("batch_mint", batch_mint_args(&e, &minter, 1, max))];
+        max_and_three.extend((0..3).map(|_| other()));
+        let eleven: std::vec::Vec<_> = (0..11).map(|_| ("mint", mint())).collect();
+        let mut six_of_twenty: std::vec::Vec<_> = (0..6).map(|_| ("mint", mint())).collect();
+        six_of_twenty.extend((0..14).map(|_| other()));
+        for (i, calls) in [two_max.to_vec(), max_and_three, eleven, six_of_twenty]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                try_propose_calls(&e, &governor, &proposer, &t, calls, &std::format!("no {i}")),
+                Err(too_large),
+                "case {i}"
+            );
+        }
+
+        // Accepted: one maximum batch beside two other actions, two batches
+        // of 21, ten single mints, five mints among 20 actions, one batch to
+        // the most recipients.
+        let mut max_and_two = std::vec![("batch_mint", batch_mint_args(&e, &minter, 1, max))];
+        max_and_two.extend((0..2).map(|_| other()));
+        let two_21 = std::vec![
+            ("batch_mint", batch_mint_args(&e, &minter, 1, 21)),
+            ("batch_mint", batch_mint_args(&e, &minter, 1, 21)),
+        ];
+        let ten: std::vec::Vec<_> = (0..10).map(|_| ("mint", mint())).collect();
+        let mut five_of_twenty: std::vec::Vec<_> = (0..5).map(|_| ("mint", mint())).collect();
+        five_of_twenty.extend((0..15).map(|_| other()));
+        let widest = std::vec![(
+            "batch_mint",
+            batch_mint_args(&e, &minter, common::MAX_BATCH_RECIPIENTS, 1)
+        )];
+        for (i, calls) in [max_and_two, two_21, ten, five_of_twenty, widest]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                try_propose_calls(&e, &governor, &proposer, &t, calls, &std::format!("ok {i}")),
+                Ok(()),
+                "case {i}"
+            );
+        }
+    }
+
+    /// Only calls shaped like the Token's mints are counted: twenty
+    /// Stellar Asset Contract `mint(to, amount)` actions, or `batch_mint`
+    /// actions with other arguments, are ordinary actions.
+    #[test]
+    fn other_mint_shapes_are_not_counted() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        let sac_mint: std::vec::Vec<_> = (0..20)
+            .map(|_| {
+                (
+                    "mint",
+                    vec![&e, Address::generate(&e).into_val(&e), 5i128.into_val(&e)],
+                )
+            })
+            .collect();
+        assert_eq!(
+            try_propose_calls(&e, &governor, &proposer, &target.address, &sac_mint, "sac"),
+            Ok(())
+        );
+        let odd_batches: std::vec::Vec<_> = (0..20)
+            .map(|_| ("batch_mint", vec![&e, 43u32.into_val(&e)]))
+            .collect();
+        assert_eq!(
+            try_propose_calls(
+                &e,
+                &governor,
+                &proposer,
+                &target.address,
+                &odd_batches,
+                "odd"
+            ),
+            Ok(())
+        );
+    }
+
+    /// While the stored layout is behind the code's (a skipped migration),
+    /// the Governor refuses every proposal entry point; anyone can run the
+    /// migration, with no authorization, and proposals work again.
+    #[test]
+    fn a_skipped_migration_halts_proposals_until_anyone_migrates() {
+        let (e, token, treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "before the upgrade");
+        let hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION - 1);
+        let mismatch: soroban_sdk::Error = CustomGovernorError::StorageVersionMismatch.into();
+        let reason = String::from_str(&e, "");
+        e.ledger().set_timestamp(2_301);
+        assert_eq!(
+            governor
+                .try_cast_vote(&id, &1, &reason, &proposer)
+                .err()
+                .unwrap()
+                .unwrap(),
+            mismatch
+        );
+        assert_eq!(
+            governor
+                .try_propose(
+                    &targets,
+                    &functions,
+                    &args,
+                    &String::from_str(&e, "new"),
+                    &proposer
+                )
+                .err()
+                .unwrap()
+                .unwrap(),
+            mismatch
+        );
+        // Views still answer: they read only the proposal records the
+        // recovery path relies on.
+        assert_eq!(governor.proposal_state(&id), ProposalState::Active);
+        assert_eq!(
+            governor.try_set_quorum_bps(&500).err().unwrap().unwrap(),
+            mismatch
+        );
+        assert_eq!(
+            governor
+                .try_cancel(&targets, &functions, &args, &hash, &proposer)
+                .err()
+                .unwrap()
+                .unwrap(),
+            mismatch
+        );
+        // The upgrade views still answer.
+        assert_eq!(governor.storage_version(), crate::STORAGE_VERSION - 1);
+        assert_eq!(governor.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
+
+        // No authorization at all: anyone completes the migration.
+        e.set_auths(&[]);
+        governor.migrate();
+        assert_eq!(governor.storage_version(), crate::STORAGE_VERSION);
+        e.mock_all_auths();
+        governor.cast_vote(&id, &1, &reason, &proposer);
+        e.ledger().set_timestamp(2_601);
+        governor.queue(&targets, &functions, &args, &hash, &0, &proposer);
+        e.ledger().set_timestamp(2_901);
+        treasury.execute(&targets, &functions, &args, &hash);
+        assert_eq!(target.get_value(), 42);
+    }
+
+    /// Code older than the stored layout (an upgrade to an earlier release)
+    /// refuses to run, and `migrate` cannot move the layout backwards.
+    #[test]
+    fn code_older_than_the_layout_refuses_to_run() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION + 1);
+        assert_eq!(
+            governor
+                .try_propose(
+                    &vec![&e, target.address.clone()],
+                    &vec![&e, symbol_short!("set_value")],
+                    &proposal_args(&e),
+                    &String::from_str(&e, "newer layout"),
+                    &proposer,
+                )
+                .err()
+                .unwrap()
+                .unwrap(),
+            CustomGovernorError::StorageVersionMismatch.into()
+        );
+        assert_eq!(
+            governor.try_migrate().err().unwrap().unwrap(),
+            common::CommonError::NothingToMigrate.into()
+        );
+        assert_eq!(governor.storage_version(), crate::STORAGE_VERSION + 1);
+    }
+
+    /// While a migration is due, a recovery proposal (only `upgrade` and
+    /// `migrate` calls on this Governor or its Treasury) can still be made,
+    /// voted on and queued; a proposal with any other action cannot, and
+    /// neither can a vote on a proposal made before the migration was due.
+    #[test]
+    fn a_recovery_proposal_runs_while_a_migration_is_due() {
+        let (e, token, treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let earlier = governor.propose(
+            &vec![&e, target.address.clone()],
+            &vec![&e, symbol_short!("set_value")],
+            &proposal_args(&e),
+            &String::from_str(&e, "made before"),
+            &proposer,
+        );
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION + 1);
+        let mismatch: soroban_sdk::Error = CustomGovernorError::StorageVersionMismatch.into();
+        let hash = |e: &Env| BytesN::from_array(e, &[7u8; 32]);
+        let upgrade_args = || vec![&e, hash(&e).into_val(&e), hash(&e).into_val(&e)];
+        let targets = vec![
+            &e,
+            governor.address.clone(),
+            treasury.address.clone(),
+            governor.address.clone(),
+        ];
+        let functions = vec![
+            &e,
+            Symbol::new(&e, "upgrade"),
+            Symbol::new(&e, "upgrade"),
+            Symbol::new(&e, "migrate"),
+        ];
+        let args = vec![&e, upgrade_args(), upgrade_args(), Vec::<Val>::new(&e)];
+        let description = String::from_str(&e, "recover");
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+        // Anything else is refused: another target, another function, or a
+        // recovery action beside an ordinary one.
+        for (t, f) in [
+            (target.address.clone(), "upgrade"),
+            (governor.address.clone(), "set_quorum_bps"),
+        ] {
+            let r = governor.try_propose(
+                &vec![&e, governor.address.clone(), t],
+                &vec![&e, Symbol::new(&e, "upgrade"), Symbol::new(&e, f)],
+                &vec![&e, upgrade_args(), vec![&e, 1u32.into_val(&e)]],
+                &String::from_str(&e, "not recovery"),
+                &proposer,
+            );
+            assert_eq!(r.err().unwrap().unwrap(), mismatch, "{f}");
+        }
+
+        e.ledger().set_timestamp(2_301);
+        let reason = String::from_str(&e, "");
+        assert_eq!(
+            governor
+                .try_cast_vote(&earlier, &1, &reason, &proposer)
+                .err()
+                .unwrap()
+                .unwrap(),
+            mismatch
+        );
+        governor.cast_vote(&id, &1, &reason, &proposer);
+        e.ledger().set_timestamp(2_601);
+        governor.queue(
+            &targets,
+            &functions,
+            &args,
+            &description_hash(&e, &description),
+            &0,
+            &proposer,
+        );
+        assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+    }
+
+    /// The Governor's own `consume` lets a recovery proposal through while a
+    /// migration is due, and refuses a proposal queued before it: here a
+    /// proposal of only `governor.migrate()` completes the migration through
+    /// `treasury.execute`, while an ordinary queued proposal waits.
+    #[test]
+    fn consume_runs_only_recovery_proposals_while_a_migration_is_due() {
+        let (e, token, treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let reason = String::from_str(&e, "");
+        let ordinary_targets = vec![&e, target.address.clone()];
+        let ordinary_functions = vec![&e, symbol_short!("set_value")];
+        let ordinary_args = proposal_args(&e);
+        let ordinary_description = String::from_str(&e, "queued before");
+        let ordinary = governor.propose(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_description,
+            &proposer,
+        );
+        e.ledger().set_timestamp(2_301);
+        governor.cast_vote(&ordinary, &1, &reason, &proposer);
+        e.ledger().set_timestamp(2_601);
+        let ordinary_hash = description_hash(&e, &ordinary_description);
+        governor.queue(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_hash,
+            &0,
+            &proposer,
+        );
+
+        set_stored_layout(&e, &governor.address, crate::STORAGE_VERSION - 1);
+        let targets = vec![&e, governor.address.clone()];
+        let functions = vec![&e, Symbol::new(&e, "migrate")];
+        let args = vec![&e, Vec::<Val>::new(&e)];
+        let description = String::from_str(&e, "migrate by proposal");
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+        e.ledger().set_timestamp(2_902);
+        governor.cast_vote(&id, &1, &reason, &proposer);
+        e.ledger().set_timestamp(3_203);
+        let hash = description_hash(&e, &description);
+        governor.queue(&targets, &functions, &args, &hash, &0, &proposer);
+        e.ledger().set_timestamp(3_504);
+
+        // Real authorization: only the Treasury's own reaches the targets.
+        e.set_auths(&[]);
+        assert_eq!(
+            treasury
+                .try_execute(
+                    &ordinary_targets,
+                    &ordinary_functions,
+                    &ordinary_args,
+                    &ordinary_hash
+                )
+                .err()
+                .unwrap()
+                .unwrap(),
+            CustomGovernorError::StorageVersionMismatch.into()
+        );
+        treasury.execute(&targets, &functions, &args, &hash);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+        assert_eq!(governor.storage_version(), crate::STORAGE_VERSION);
+
+        // In step again: the ordinary proposal runs.
+        treasury.execute(
+            &ordinary_targets,
+            &ordinary_functions,
+            &ordinary_args,
+            &ordinary_hash,
+        );
+        assert_eq!(target.get_value(), 42);
+    }
+
+    /// A proposal Active for voting, with one For vote cast by the proposer,
+    /// and a second holder (`voter`) who has not voted.
+    fn active_with_vote() -> (
+        Env,
+        DaoGovernorContractClient<'static>,
+        BytesN<32>,
+        Address,
+        Address,
+    ) {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        let voter = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        token.mint(&owner, &voter);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let id = governor.propose(
+            &vec![&e, target.address.clone()],
+            &vec![&e, symbol_short!("set_value")],
+            &proposal_args(&e),
+            &String::from_str(&e, "vote errors"),
+            &proposer,
+        );
+        e.ledger().set_timestamp(2_301);
+        governor.cast_vote(&id, &1, &String::from_str(&e, ""), &proposer);
+        (e, governor, id, proposer, voter)
+    }
+
+    /// A second vote by the same voter fails `AlreadyVoted` (5016), whatever
+    /// its type, and the tally keeps only the first.
+    #[test]
+    fn a_second_vote_fails_already_voted() {
+        let (e, governor, id, proposer, _voter) = active_with_vote();
+        for vote_type in [0u32, 1, 2] {
+            let r = governor.try_cast_vote(&id, &vote_type, &String::from_str(&e, ""), &proposer);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::AlreadyVoted.into()
+            );
+        }
+        let counts = e.as_contract(&governor.address, || {
+            stellar_governance::governor::get_proposal_vote_counts(&e, &id)
+        });
+        assert_eq!(
+            (counts.for_votes, counts.against_votes, counts.abstain_votes),
+            (1, 0, 0)
+        );
+    }
+
+    /// A vote type other than 0 (Against), 1 (For) or 2 (Abstain) fails
+    /// `InvalidVoteType` (5017) and records nothing.
+    #[test]
+    fn an_unknown_vote_type_fails_invalid_vote_type() {
+        let (e, governor, id, _proposer, voter) = active_with_vote();
+        for vote_type in [3u32, 4, u32::MAX] {
+            let r = governor.try_cast_vote(&id, &vote_type, &String::from_str(&e, ""), &voter);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::InvalidVoteType.into()
+            );
+        }
+        assert!(!governor.has_voted(&id, &voter));
+        // The same voter can still cast a valid vote.
+        governor.cast_vote(&id, &0, &String::from_str(&e, ""), &voter);
+        assert!(governor.has_voted(&id, &voter));
+    }
+
+    /// Only the proposer can cancel. Another account fails
+    /// `ProposalNotCancellable` (5009) even with its own authorization, and
+    /// the proposal is unchanged.
+    #[test]
+    fn only_the_proposer_can_cancel() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        let other = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        token.mint(&owner, &other);
+        e.ledger().set_sequence_number(200);
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "cancel by another");
+        let hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+        // `other` authorizes its own call and still cannot cancel.
+        e.mock_auths(&[MockAuth {
+            address: &other,
+            invoke: &MockAuthInvoke {
+                contract: &governor.address,
+                fn_name: "cancel",
+                args: (
+                    targets.clone(),
+                    functions.clone(),
+                    args.clone(),
+                    hash.clone(),
+                    other.clone(),
+                )
+                    .into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        let r = governor.try_cancel(&targets, &functions, &args, &hash, &other);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            GovernorError::ProposalNotCancellable.into()
+        );
+        assert_eq!(governor.proposal_state(&id), ProposalState::Pending);
+
+        // The proposer can.
+        e.mock_all_auths();
+        governor.cancel(&targets, &functions, &args, &hash, &proposer);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Canceled);
+    }
+}

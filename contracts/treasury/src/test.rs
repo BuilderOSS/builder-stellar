@@ -481,6 +481,162 @@ fn self_dispatch_migrate_requires_a_newer_layout() {
     );
 }
 
+fn set_stored_layout(e: &Env, treasury: &Address, version: u32) {
+    e.as_contract(treasury, || {
+        e.storage().instance().set(
+            &common::ns(e, common::upgrade::UpgradeKey::StorageVersion),
+            &version,
+        );
+    });
+}
+
+fn consume_call_args(e: &Env) -> Vec<Val> {
+    vec![
+        e,
+        Vec::<Address>::new(e).into_val(e),
+        Vec::<Symbol>::new(e).into_val(e),
+        Vec::<Vec<Val>>::new(e).into_val(e),
+        BytesN::from_array(e, &[4u8; 32]).into_val(e),
+    ]
+}
+
+/// An action aimed at the Governor's `consume` is refused even for a
+/// proposal the Governor consumed (one made before the Governor refused such
+/// actions at `propose`): with the Treasury as invoker it would mark another
+/// queued proposal Executed. A `consume` on any other contract is dispatched
+/// as usual.
+#[test]
+fn execute_refuses_an_action_that_calls_the_governors_consume() {
+    let e = Env::default();
+    let (treasury, governor) = setup_live(&e, Address::generate(&e));
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    let r = treasury.try_execute(
+        &vec![&e, target.address.clone(), governor.address.clone()],
+        &vec![&e, symbol_short!("set_value"), Symbol::new(&e, "consume")],
+        &vec![&e, vec![&e, 7_u32.into_val(&e)], consume_call_args(&e)],
+        &desc(&e),
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TreasuryError::CannotConsume.into()
+    );
+    assert_eq!(target.get_value(), 0);
+
+    let elsewhere = e.register(MockGovernor, ());
+    treasury.execute(
+        &vec![&e, elsewhere],
+        &vec![&e, Symbol::new(&e, "consume")],
+        &vec![&e, consume_call_args(&e)],
+        &desc(&e),
+    );
+}
+
+/// While the stored layout differs from the code's, `execute` refuses to
+/// run. A layout behind the code (the second step of a Treasury upgrade)
+/// is brought in step by anyone, with no authorization; a layout ahead of
+/// the code cannot be migrated back.
+#[test]
+fn execute_refuses_while_the_layout_is_out_of_step() {
+    let e = Env::default();
+    let (treasury, _gov) = setup_live(&e, Address::generate(&e));
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    let run = || {
+        treasury.try_execute(
+            &vec![&e, target.address.clone()],
+            &vec![&e, symbol_short!("set_value")],
+            &vec![&e, vec![&e, 7_u32.into_val(&e)]],
+            &desc(&e),
+        )
+    };
+    let mismatch: soroban_sdk::Error = crate::error::TreasuryError::StorageVersionMismatch.into();
+    let code = crate::storage::STORAGE_VERSION;
+
+    set_stored_layout(&e, &treasury.address, code - 1);
+    assert_eq!(run().err().unwrap().unwrap(), mismatch);
+    assert_eq!(target.get_value(), 0);
+    e.set_auths(&[]);
+    treasury.migrate();
+    assert_eq!(treasury.storage_version(), code);
+    assert!(run().is_ok());
+    assert_eq!(target.get_value(), 7);
+
+    set_stored_layout(&e, &treasury.address, code + 1);
+    assert_eq!(run().err().unwrap().unwrap(), mismatch);
+    assert_eq!(
+        treasury.try_migrate().err().unwrap().unwrap(),
+        common::CommonError::NothingToMigrate.into()
+    );
+}
+
+/// While a migration is due, `execute` still runs a recovery proposal (only
+/// `upgrade` and `migrate` calls on this Treasury or its Governor), so a
+/// Treasury whose migration fails can upgrade to fixed code; a proposal with
+/// any other action is refused.
+#[test]
+fn a_recovery_proposal_executes_while_a_migration_is_due() {
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let (treasury, _gov) = setup_live(&e, mgr.address.clone());
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    let from = BytesN::from_array(&e, &[1u8; 32]);
+    let to = empty_wasm(&e);
+    mgr.approve(&from, &to);
+    mgr.register(&to, &String::from_str(&e, "0.6.1"));
+    set_stored_layout(&e, &treasury.address, crate::storage::STORAGE_VERSION + 1);
+    let mismatch: soroban_sdk::Error = crate::error::TreasuryError::StorageVersionMismatch.into();
+    let upgrade_args = vec![&e, from.clone().into_val(&e), to.clone().into_val(&e)];
+
+    // An ordinary action, alone or beside a recovery action, is refused.
+    let r = treasury.try_execute(
+        &vec![&e, treasury.address.clone(), target.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade"), symbol_short!("set_value")],
+        &vec![&e, upgrade_args.clone(), vec![&e, 7_u32.into_val(&e)]],
+        &desc(&e),
+    );
+    assert_eq!(r.err().unwrap().unwrap(), mismatch);
+    assert_eq!(target.get_value(), 0);
+
+    // The upgrade alone runs.
+    treasury.execute(
+        &vec![&e, treasury.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade")],
+        &vec![&e, upgrade_args],
+        &desc(&e),
+    );
+    e.as_contract(&treasury.address, || {
+        assert_eq!(common::upgrade::current_hash(&e), to);
+    });
+}
+
+/// `launch` and `handoff` are behind the gate too.
+#[test]
+fn launch_and_handoff_refuse_while_the_layout_is_out_of_step() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            Address::generate(&e),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[1u8; 32]),
+        ),
+    );
+    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    set_stored_layout(&e, &treasury_id, crate::storage::STORAGE_VERSION - 1);
+    let mismatch: soroban_sdk::Error = crate::error::TreasuryError::StorageVersionMismatch.into();
+    assert_eq!(
+        treasury.try_handoff(&treasury_id).err().unwrap().unwrap(),
+        mismatch
+    );
+    assert_eq!(
+        treasury.try_launch(&treasury_id).err().unwrap().unwrap(),
+        mismatch
+    );
+}
+
 mod nested_authorization {
     use super::*;
     use crate::{error::TreasuryError, AuthNode, MAX_AUTH_DEPTH, MAX_AUTH_NODES};
@@ -659,6 +815,46 @@ mod nested_authorization {
             r.err().unwrap().unwrap(),
             TreasuryError::InvalidAuthorization.into()
         );
+    }
+
+    /// An `authorize` tree may not hold a node for the Governor's `consume`,
+    /// at any depth: it would let a contract the proposal calls consume
+    /// another proposal with the Treasury's authority. `check_authorization`
+    /// refuses it the same way.
+    #[test]
+    fn an_authorization_tree_for_consume_is_refused() {
+        let w = world();
+        let consume = AuthNode {
+            contract: w.treasury.governor(),
+            fn_name: Symbol::new(&w.e, "consume"),
+            args: consume_call_args(&w.e),
+            sub: Vec::new(&w.e),
+        };
+        let mut nested = debit_node(&w, 5);
+        nested.sub = vec![&w.e, consume.clone()];
+        for nodes in [vec![&w.e, consume], vec![&w.e, nested]] {
+            let cannot: soroban_sdk::Error = TreasuryError::CannotConsume.into();
+            assert_eq!(
+                w.treasury
+                    .try_check_authorization(&nodes)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                cannot
+            );
+            let r = w.treasury.try_execute(
+                &vec![&w.e, w.treasury.address.clone(), w.vault.clone()],
+                &vec![
+                    &w.e,
+                    Symbol::new(&w.e, "authorize"),
+                    Symbol::new(&w.e, "pull"),
+                ],
+                &vec![&w.e, authorize_args(&w, nodes), pull_args(&w, 5)],
+                &desc(&w.e),
+            );
+            assert_eq!(r.err().unwrap().unwrap(), cannot);
+        }
+        assert_eq!(w.ledger.debited(), 0);
     }
 
     #[test]

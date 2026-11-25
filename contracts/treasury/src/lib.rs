@@ -13,7 +13,16 @@
 //!   an `authorize` action can add the deeper authorization trees a call
 //!   needs (see `AuthNode`)
 //! - **Self calls**: A proposal may call the Treasury's own `upgrade` and
-//!   `migrate` (allowlisted)
+//!   `migrate` (allowlisted). A layout-changing upgrade migrates in a second
+//!   step: anyone calls `migrate` after the upgrade proposal has executed,
+//!   because the proposal itself keeps running the old code
+//! - **No `consume` actions**: no action, and no node of an `authorize` tree,
+//!   may call the Governor's `consume`, so a proposal cannot mark another one
+//!   Executed without running it
+//! - **Storage-layout gate**: while the stored layout differs from the
+//!   code's, `launch` and `handoff` refuse to run, and `execute` runs only a
+//!   recovery proposal (only `upgrade` and `migrate` calls on this Treasury
+//!   or its Governor; `StorageVersionMismatch` for any other)
 //! - **Admin of the DAO**: After launch the Treasury is the admin of every DAO
 //!   module, so every privileged change goes through a proposal
 //!
@@ -33,7 +42,7 @@ mod storage;
 
 pub use contract::*;
 pub use error::TreasuryError;
-pub use storage::{AuthNode, MAX_AUTH_DEPTH, MAX_AUTH_NODES};
+pub use storage::{AuthNode, MAX_AUTH_DEPTH, MAX_AUTH_NODES, STORAGE_VERSION};
 
 #[cfg(test)]
 mod test;

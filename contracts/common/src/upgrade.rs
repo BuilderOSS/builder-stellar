@@ -14,6 +14,20 @@
 //! proposal runs `upgrade` and then `migrate` as consecutive actions; the new
 //! code is active for the second call.
 //!
+//! The Treasury is the exception: it runs a proposal on the code it started
+//! with until the proposal ends, so a `migrate` action after its own
+//! `upgrade` still runs the old code and fails `NothingToMigrate`. Its
+//! migration is a second step, a separate `treasury.migrate()` call after the
+//! upgrade proposal has executed.
+//!
+//! A module that checks [`is_current_layout`] at its entry points, and fails
+//! with its own `StorageVersionMismatch` error when it is false, refuses to
+//! run while the stored layout differs from its code's, so new code never
+//! reads data it has not migrated, and old code never reads data a newer
+//! release rewrote. Such a module must keep `upgrade`, `migrate` and the
+//! upgrade views outside the gate, so a skipped migration can still be
+//! completed. The Governor and the Treasury do this.
+//!
 //! Storage: two instance entries (`CurrentHash`: 32 bytes, `StorageVersion`:
 //! u32). The release version is not stored: [`version`] looks `CurrentHash` up
 //! in the Manager registry on every read, so the version string lives once, in
@@ -25,10 +39,14 @@ use soroban_sdk::{contractevent, contracttype, panic_with_error, Address, BytesN
 
 use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 
+/// Instance keys of the upgrade state (wrapped with [`crate::ns`]).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpgradeKey {
+    /// Instance: WASM hash of the running code, kept in step by [`apply`].
     CurrentHash,
+    /// Instance: layout version of the stored data, set at construction and
+    /// advanced only by [`migrate`].
     StorageVersion,
     /// Instance (platform contracts): ledgers between a Manager approval and
     /// the earliest upgrade. See [`delay`].
@@ -46,7 +64,9 @@ pub enum UpgradeKey {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LatestPointer {
+    /// The hash announced as latest.
     pub wasm_hash: BytesN<32>,
+    /// The ledger it was announced at; the notice counts from here or later.
     pub set_ledger: u64,
 }
 
@@ -55,7 +75,9 @@ pub struct LatestPointer {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingUpgradeDelay {
+    /// The lowered notice, in ledgers.
     pub ledgers: u32,
+    /// The ledger from which it applies.
     pub effective_ledger: u32,
 }
 
@@ -63,7 +85,7 @@ pub struct PendingUpgradeDelay {
 /// constructor argument of the platform contracts (short on testnet).
 pub const RECOMMENDED_UPGRADE_DELAY: u32 = 7 * crate::ttl::DAY_IN_LEDGERS;
 
-/// Record the notice at construction.
+/// Record the notice at construction (platform contracts only).
 pub fn init_delay(e: &Env, ledgers: u32) {
     e.storage()
         .instance()
@@ -128,10 +150,13 @@ pub fn notice_passed(e: &Env, approved_ledger: u64) -> bool {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Upgraded {
+    /// The code hash before the upgrade.
     #[topic]
     pub from_hash: BytesN<32>,
+    /// The code hash after it.
     #[topic]
     pub to_hash: BytesN<32>,
+    /// The registry's release version for `to_hash`.
     pub version: String,
 }
 
@@ -142,16 +167,22 @@ pub struct Upgraded {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpgradeDelayChanged {
+    /// The notice in force before the change, in ledgers.
     pub from_ledgers: u32,
+    /// The requested notice, in ledgers.
     pub to_ledgers: u32,
+    /// The ledger from which `to_ledgers` applies.
     pub effective_ledger: u32,
 }
 
-/// Emitted by `migrate`.
+/// Emitted by [`migrate`] when the stored layout moves forward. The emitting
+/// contract address is the event's contract id.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Migrated {
+    /// The layout version before the migration.
     pub from_storage_version: u32,
+    /// The layout version after it (the code's `STORAGE_VERSION`).
     pub to_storage_version: u32,
 }
 
@@ -171,6 +202,20 @@ pub fn storage_version(e: &Env) -> u32 {
         .instance()
         .get(&crate::ns(e, UpgradeKey::StorageVersion))
         .unwrap_or_else(|| panic_with_error!(e, CommonError::StorageVersionNotSet))
+}
+
+/// Whether the stored layout version equals `code_storage_version`, the
+/// layout the running code was written for. Panics `StorageVersionNotSet` if
+/// none was recorded.
+///
+/// A WASM upgrade swaps the code and leaves the data as it was, so between an
+/// upgrade and its `migrate`, or after an upgrade to code with an older
+/// layout, the code and the data disagree. Reading or writing data in a
+/// layout the code does not know could misread it or corrupt it, so a gated
+/// entry point refuses instead, with the module's own error (each crate keeps
+/// its error codes in its own block). One read of the already-loaded instance.
+pub fn is_current_layout(e: &Env, code_storage_version: u32) -> bool {
+    storage_version(e) == code_storage_version
 }
 
 /// Advance the stored layout version to `code_storage_version` and emit
@@ -195,6 +240,8 @@ pub fn migrate(e: &Env, code_storage_version: u32) -> u32 {
     from
 }
 
+/// WASM hash of the running code. Panics `CurrentHashNotSet` if the module
+/// was never initialized.
 pub fn current_hash(e: &Env) -> BytesN<32> {
     e.storage()
         .instance()

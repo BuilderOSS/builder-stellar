@@ -12,9 +12,11 @@ use soroban_sdk::{contractevent, contracttype, Address, Env};
 
 use crate::error::{require, CommonError};
 
+/// Instance key of the module admin (wrapped with [`crate::ns`]).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AdminKey {
+    /// The current admin.
     Admin,
 }
 
@@ -25,8 +27,10 @@ pub enum AdminKey {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdminChanged {
+    /// The admin before the handoff (the launch admin).
     #[topic]
     pub old_admin: Address,
+    /// The admin after it (the Treasury).
     #[topic]
     pub new_admin: Address,
 }

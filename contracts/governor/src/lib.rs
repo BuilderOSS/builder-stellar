@@ -25,7 +25,8 @@
 //! 1. **Creation**: A holder with at least `votes_needed_to_propose` votes (the
 //!    `proposal_threshold`, capped at the voting supply) proposes targets, functions
 //!    and arguments; votes are read at the ledger before `propose`
-//! 2. **Voting Delay**: Short delay before voting starts
+//! 2. **Voting Delay**: A notice period before voting starts. It does not move
+//!    the snapshot, so delegating during it does not change this proposal's votes
 //! 3. **Active Voting**: Token holders vote For/Against/Abstain based on snapshot
 //! 4. **Success/Defeat**: Determined by quorum and majority at vote end
 //! 5. **Queue**: Successful proposals queued with execution timestamp (ETA)
@@ -36,7 +37,16 @@
 //!
 //! - CEI pattern (Checks-Effects-Interactions) prevents reentrancy
 //! - Proposal hashing prevents tampering with queued proposals
-//! - TTL management ensures proposals persist through governance lifecycle
+//! - TTL management keeps a proposal live for its whole lifecycle (up to 118
+//!   days): `propose` and `queue` each set the TTL for the stage that follows
+//! - A proposal action cannot call `consume` (refused at `propose`, and by the
+//!   Treasury inside an `authorize` tree), and its mints must fit one
+//!   execution's event limit (refused at `propose`)
+//! - While the stored layout differs from the code's, only a recovery
+//!   proposal (only `upgrade` and `migrate` calls on this Governor or its
+//!   Treasury) can be made, voted on, queued and executed; everything else
+//!   that changes state fails `StorageVersionMismatch`. Anyone can call
+//!   `migrate` to complete a pending migration
 
 #![no_std]
 
@@ -48,8 +58,9 @@ mod storage;
 pub use contract::*;
 pub use error::CustomGovernorError;
 pub use storage::{
-    ProposalInfo, MAX_PROPOSAL_ACTIONS, MAX_PROPOSAL_IDS_PAGE, MAX_QUEUE_DELAY, MAX_VOTING_DELAY,
-    MAX_VOTING_PERIOD,
+    ProposalInfo, MAX_PROPOSAL_ACTIONS, MAX_PROPOSAL_IDS_PAGE, MAX_PROPOSAL_LIFETIME,
+    MAX_QUEUED_LIFETIME, MAX_QUEUE_DELAY, MAX_UNQUEUED_LIFETIME, MAX_VOTING_DELAY,
+    MAX_VOTING_PERIOD, PROPOSAL_TTL_EXTEND_TO, STORAGE_VERSION,
 };
 
 #[cfg(test)]

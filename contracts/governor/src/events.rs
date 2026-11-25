@@ -12,6 +12,8 @@
 
 use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
+/// Emitted once, by the constructor, with every setting the Governor starts
+/// with. `token_contract` is the vote source (the Token or an adapter).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GovernorInitialized {
@@ -43,6 +45,8 @@ pub struct ProposalScheduled {
     pub quorum_votes: u128,
 }
 
+/// Emitted by `queue`. `eta` is the unix time (seconds) from which
+/// `treasury.execute` can run the proposal, until 14 days after it.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalQueued {
@@ -51,6 +55,7 @@ pub struct ProposalQueued {
     pub eta: u64,
 }
 
+/// Emitted by `set_queue_delay` (seconds). `changed_by` is the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueueDelayChanged {
@@ -60,6 +65,7 @@ pub struct QueueDelayChanged {
     pub new_value: u32,
 }
 
+/// Emitted by `set_voting_delay` (seconds). `changed_by` is the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VotingDelayChanged {
@@ -69,6 +75,7 @@ pub struct VotingDelayChanged {
     pub new_value: u32,
 }
 
+/// Emitted by `set_voting_period` (seconds). `changed_by` is the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VotingPeriodChanged {
@@ -78,6 +85,7 @@ pub struct VotingPeriodChanged {
     pub new_value: u32,
 }
 
+/// Emitted by `set_proposal_threshold` (votes). `changed_by` is the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalThresholdChanged {
@@ -87,6 +95,7 @@ pub struct ProposalThresholdChanged {
     pub new_value: u128,
 }
 
+/// Emitted by `set_quorum_bps` (basis points). `changed_by` is the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuorumBpsChanged {
@@ -96,7 +105,8 @@ pub struct QuorumBpsChanged {
     pub new_value: u32,
 }
 
-/// A comment on a proposal. Event-only: the body is never stored on-chain.
+/// Emitted by `comment`: a comment on a proposal, by an author who
+/// authorized it. Event-only: the body is never stored on-chain.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalCommented {

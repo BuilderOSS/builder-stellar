@@ -24,12 +24,25 @@ export const TreasuryError = {
    * An `authorize` action is malformed, too large, or not followed by an
    * external call it can apply to
    */
-  7605 : { message: "InvalidAuthorization" }
+  7605 : { message: "InvalidAuthorization" },
+  /**
+   * A proposal action, or an authorization tree, calls the Governor's
+   * `consume`. Only `execute` consumes a proposal, and only the one it runs
+   */
+  7606 : { message: "CannotConsume" },
+  /**
+   * The stored data layout differs from the one this code expects: a
+   * migration is due (anyone may call `migrate`), or the code is older
+   * than the data
+   */
+  7607 : { message: "StorageVersionMismatch" }
 }
 
 /**
- * Emitted for every executed proposal action, including self calls and
- * `authorize` actions.
+ * Emitted by `execute` after each proposal action runs, including self
+ * calls and `authorize` actions, in order. All of a proposal's `Execute`
+ * events share one transaction with the Governor's `ProposalExecuted`; if
+ * any action fails, none of them is published.
  */
 export interface ExecuteEvent {
   name: "Execute";
@@ -56,7 +69,8 @@ export interface TreasuryLaunchedEvent {
 }
 
 /**
- * Event: TreasuryInitialized
+ * Emitted once, by the constructor: the setup-phase admin and the Governor
+ * whose proposals this Treasury executes (fixed).
  */
 export interface TreasuryInitializedEvent {
   name: "TreasuryInitialized";
@@ -79,9 +93,21 @@ export interface TreasuryInitializedEvent {
  * id and voters approve them with the rest of the proposal.
  */
 export interface AuthNode {
+  /**
+   * The exact arguments of the call; any other arguments are not authorized.
+   */
   args: Array<any>;
+  /**
+   * The contract the authorized call is made to.
+   */
   contract: string;
+  /**
+   * The function called; it may not be the Governor's `consume`.
+   */
   fn_name: string;
+  /**
+   * Calls made below this one that also need the Treasury's authorization.
+   */
   sub: Array<AuthNode>;
 }
 
@@ -94,7 +120,13 @@ export interface AuthNode {
 export interface AdminChangedEvent {
   name: "AdminChanged";
   data: {
+    /**
+     * The admin before the handoff (the launch admin).
+     */
     old_admin: string;
+    /**
+     * The admin after it (the Treasury).
+     */
     new_admin: string;
   };
 }
@@ -158,12 +190,19 @@ export const CommonError = {
 }
 
 /**
- * Emitted by `migrate`.
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
  */
 export interface MigratedEvent {
   name: "Migrated";
   data: {
+    /**
+     * The layout version before the migration.
+     */
     from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
     to_storage_version?: number;
   };
 }
@@ -174,8 +213,17 @@ export interface MigratedEvent {
 export interface UpgradedEvent {
   name: "Upgraded";
   data: {
+    /**
+     * The code hash before the upgrade.
+     */
     from_hash: Uint8Array;
+    /**
+     * The code hash after it.
+     */
     to_hash: Uint8Array;
+    /**
+     * The registry's release version for `to_hash`.
+     */
     version?: string;
   };
 }
