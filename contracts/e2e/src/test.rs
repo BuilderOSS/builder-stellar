@@ -5829,3 +5829,6 @@ mod vote_adapter;
 
 #[path = "governance.rs"]
 mod governance;
+
+#[path = "claims.rs"]
+mod claims;

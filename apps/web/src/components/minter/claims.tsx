@@ -14,6 +14,7 @@ import {
   Button,
   ButtonLink,
   Callout,
+  ConfirmAction,
   Disclosure,
   Field,
   FieldLabel,
@@ -31,18 +32,28 @@ import { claimMinterClient } from '@/lib/minter/client';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
 import {
   claimAmountLabel,
+  claimListEndText,
   claimPriceLabel,
   formatClaimDate,
   listPhase,
   nextClaimCount,
   remainingAllocation
 } from '@/lib/minter/display';
-import { claimFetch, useClaimHistory, useCurrentClaims } from '@/lib/minter/hooks';
+import {
+  claimFetch,
+  useClaimHistory,
+  useClaimMinterCanCloseLists,
+  useCurrentClaims,
+  useOpenClaimLists
+} from '@/lib/minter/hooks';
 import { assertPreparedIdentity } from '@/lib/minter/identity';
 import { MAX_CLAIM_PER_CALL } from '@/lib/minter/limits';
 import { parseProofFile, verifyClaimProof } from '@/lib/minter/proof';
 import { assertClaimEnvelope } from '@/lib/minter/transaction';
 import type { ClaimAction, ClaimListView, ClaimState, PreparedClaim } from '@/lib/minter/types';
+import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { useProposeAction } from '@/lib/proposal-actions/use-propose-action';
 import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -52,6 +63,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { ClaimListDraftForm } from './allocation-draft';
 import styles from './claims-styles';
+import { FounderSupply } from './founder-supply';
 
 type Entry = { amount: string; proof: string[] };
 type Review = { action: ClaimAction; prepared: PreparedClaim; list: ClaimListView };
@@ -77,6 +89,10 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   const current = useCurrentClaims(config.tokenContractId, address);
   const [page, setPage] = useState(0);
   const history = useClaimHistory(config.tokenContractId, page);
+  // Closing a list early needs a ClaimMinter release after 0.5.0 (`close_list`).
+  const canCloseLists = useClaimMinterCanCloseLists(config, admin).data === true;
+  const indexedLists = useOpenClaimLists(config.tokenContractId, Boolean(config.claimsContractId));
+  const { propose: proposeAction } = useProposeAction();
   const { mutate } = useSWRConfig();
   const tx = useTransactionFeedback(config.name);
   const [proofText, setProofText] = useState('');
@@ -279,6 +295,44 @@ export function Claims({ admin = false }: { admin?: boolean }) {
     );
   }
 
+  /**
+   * Close a list early: by proposal once the tribe is Live; in Setup the launch admin signs it. The
+   * launch drive can't be closed before launch (its refunds and release depend on it).
+   */
+  function closeList(list: ClaimListView) {
+    if (!data?.claimsContractId || !address) return;
+    const name = list.assurance ? 'the launch drive' : `claim list ${list.listId + 1}`;
+    if (data.live) {
+      const handler = getActionHandler('close-claim-list');
+      const draft = { listId: String(list.listId), claimsContractId: data.claimsContractId };
+      const context = { config, session: { address, kit: null } };
+      const left = Math.max(0, list.total - list.minted);
+      const result = proposeAction({
+        actions: [handler.serialize(draft, context)],
+        source: ACTION_SOURCES.claims,
+        note: `Close ${name} now. Claims on it stop, and its ${left.toLocaleString()} unclaimed ${left === 1 ? 'token' : 'tokens'} can no longer be minted from it.`
+      });
+      if (result.outcome === 'invalid') setMessage(result.message);
+      return;
+    }
+    const client = claimMinterClient(walletClientOptions(config, address, data.claimsContractId));
+    void direct(`Close ${name}`, async () =>
+      sendAndConfirm(await client.close_list({ list_id: list.listId }), config.rpcUrl)
+    );
+  }
+
+  /** Who can close this list from here, and how; null when nobody can. */
+  function closeMode(list: ClaimListView): 'proposal' | 'direct' | null {
+    if (!admin || !canCloseLists || !data?.claimsContractId || listPhase(list) !== 'open') return null;
+    if (data.live) return canManage && signedIn ? 'proposal' : null;
+    return !list.assurance && signedIn && data.admin === address ? 'direct' : null;
+  }
+
+  const setupListIds = new Set(
+    (indexedLists.data?.lists ?? [])
+      .filter((list) => list.openedInSetup && !list.isAssurance)
+      .map((list) => list.listId)
+  );
   const openLists = data?.lists.filter((list) => listPhase(list) === 'open') ?? [];
 
   return (
@@ -320,6 +374,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           <Callout variant="error" title="Claims didn't load" description={current.error.message} />
         ) : null}
         {data && !data.claimsContractId ? <Callout variant="info" title="This tribe has no claims module" /> : null}
+        {data?.claimsContractId ? (
+          <FounderSupply daoId={config.tokenContractId} allowance={data.allowance} live={data.live} showError={admin} />
+        ) : null}
         {data && !data.authenticated && !admin ? (
           <p>Connect the wallet that is on a claim list to see your tokens, or to take back a payment.</p>
         ) : null}
@@ -362,6 +419,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                 list={list}
                 state={data}
                 admin={admin}
+                openedInSetup={setupListIds.has(list.listId)}
+                closeMode={closeMode(list)}
+                onCloseList={() => closeList(list)}
                 disabled={!canClaim || busy || Boolean(hash)}
                 onClaim={(entry) => void prepare(list, entry)}
                 onRefund={() => refund(list)}
@@ -570,6 +630,9 @@ function ClaimListCard({
   list,
   state,
   admin,
+  openedInSetup,
+  closeMode,
+  onCloseList,
   disabled,
   onClaim,
   onRefund,
@@ -578,6 +641,10 @@ function ClaimListCard({
   list: ClaimListView;
   state: ClaimState;
   admin: boolean;
+  /** A free list opened in Setup: what is left on it is founder supply. */
+  openedInSetup: boolean;
+  closeMode: 'proposal' | 'direct' | null;
+  onCloseList: () => void;
   disabled: boolean;
   onClaim: (entry: Entry) => void;
   onRefund: () => void;
@@ -589,6 +656,7 @@ function ClaimListCard({
   const next = nextClaimCount(list);
   const escrowed = BigInt(list.escrowed ?? 0);
   const drive = list.assurance;
+  const left = Math.max(0, list.total - list.minted);
   return (
     <section className={styles.panel} aria-label={listName(list)}>
       <div className={styles.row}>
@@ -599,8 +667,8 @@ function ClaimListCard({
       </div>
       <p>
         {claimPriceLabel(config.name, list)} · {list.minted.toLocaleString()} of {list.total.toLocaleString()} tokens
-        claimed by {list.claimers.toLocaleString()} {list.claimers === 1 ? 'person' : 'people'} · closes{' '}
-        {formatClaimDate(list.expiresAt)}
+        claimed by {list.claimers.toLocaleString()} {list.claimers === 1 ? 'person' : 'people'} ·{' '}
+        {claimListEndText(list.expiresAt)}
       </p>
       {drive ? (
         <>
@@ -612,7 +680,9 @@ function ClaimListCard({
                 ? state.live
                   ? 'Enough people claimed and the tribe launched.'
                   : 'Enough people have claimed. Anyone can launch the tribe now.'
-                : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed by ${formatClaimDate(drive.deadline)}. Payments are held until launch.`}
+                : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed${
+                    formatClaimDate(drive.deadline) ? ` by ${formatClaimDate(drive.deadline)}` : ', with no deadline'
+                  }. Payments are held until launch.`}
           </p>
           {drive.state === 'met' && !state.live ? (
             <>
@@ -668,6 +738,34 @@ function ClaimListCard({
         </div>
       ) : !admin && phase === 'failed' && BigInt(list.price) > 0n && (list.claimed ?? 0) > 0 ? (
         <p className={styles.muted}>Your payment has been returned.</p>
+      ) : null}
+      {openedInSetup && phase === 'open' && left > 0 ? (
+        <p className={styles.muted}>
+          Opened during setup: its {left.toLocaleString()} unclaimed {left === 1 ? 'token is' : 'tokens are'} founder
+          supply, not yet in the token supply.
+        </p>
+      ) : null}
+      {closeMode === 'proposal' ? (
+        <div>
+          <Button variant="secondary" size="sm" disabled={disabled} onClick={onCloseList}>
+            Close in proposal
+          </Button>
+        </div>
+      ) : closeMode === 'direct' ? (
+        <div>
+          <ConfirmAction
+            trigger={
+              <Button variant="secondary" size="sm" disabled={disabled}>
+                Close this list
+              </Button>
+            }
+            title={`Close ${listName(list).toLowerCase()}?`}
+            description={`Claims on this list stop now. Its ${left.toLocaleString()} unclaimed ${left === 1 ? 'token' : 'tokens'} can no longer be minted from it, and the list cannot be opened again.`}
+            confirmLabel="Close the list"
+            onConfirm={onCloseList}
+            busy={disabled}
+          />
+        </div>
       ) : null}
       {drive ? <ReleaseSlug disabled={disabled} /> : null}
       <Disclosure title="List details">

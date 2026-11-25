@@ -37,7 +37,8 @@ export function yourListingState(listing: MarketplaceListing) {
     return { label: 'Updating', meta: 'Confirmed. The market can take a few seconds to show it.' };
   if (listing.status === 'awaiting-expiry')
     return { label: 'Ended', meta: 'Ended without a sale. The market still holds your token until you return it.' };
-  return { label: 'For sale', meta: `Ends ${formatListingEnd(listing.expiresAt)}` };
+  const end = formatListingEnd(listing.expiresAt);
+  return { label: 'For sale', meta: end ? `Ends ${end}` : 'No end date' };
 }
 
 /**

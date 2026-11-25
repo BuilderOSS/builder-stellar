@@ -131,6 +131,7 @@ export function defaultSourceKey(type: ProposalActionType): ActionSourceKey {
     case 'migrate-dao-module':
       return 'upgrades';
     case 'open-claim-list':
+    case 'close-claim-list':
       return 'claims';
     default:
       return 'membership';

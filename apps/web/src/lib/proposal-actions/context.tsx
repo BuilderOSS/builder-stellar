@@ -6,6 +6,7 @@ import { createContext, type ReactNode, useContext, useMemo } from 'react';
 
 import { useAuctionPaymentTokenLocked } from '@/lib/chain-reads/auction-payment-lock';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { useClaimMinterCanCloseLists } from '@/lib/minter/hooks';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
 import type { FormContext } from './types';
@@ -25,6 +26,7 @@ export interface ActionFormProviderProps {
 export function ActionFormProvider({ children, config, session }: ActionFormProviderProps) {
   const { data: balances, isLoading: balancesLoading, error: balancesError } = useTreasuryBalances(config);
   const { data: auctionPaymentTokenLocked } = useAuctionPaymentTokenLocked(config);
+  const { data: claimsCanCloseLists, error: closeListError } = useClaimMinterCanCloseLists(config);
 
   const contextValue = useMemo<FormContext>(
     () => ({
@@ -33,9 +35,20 @@ export function ActionFormProvider({ children, config, session }: ActionFormProv
       balances,
       balancesLoading,
       balancesError: balancesError?.message,
-      auctionPaymentTokenLocked
+      auctionPaymentTokenLocked,
+      claimsCanCloseLists,
+      claimsCanCloseListsError: Boolean(closeListError)
     }),
-    [config, session, balances, balancesLoading, balancesError, auctionPaymentTokenLocked]
+    [
+      config,
+      session,
+      balances,
+      balancesLoading,
+      balancesError,
+      auctionPaymentTokenLocked,
+      claimsCanCloseLists,
+      closeListError
+    ]
   );
 
   return <ActionFormContext.Provider value={contextValue}>{children}</ActionFormContext.Provider>;

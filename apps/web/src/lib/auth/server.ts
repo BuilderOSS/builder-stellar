@@ -1,17 +1,37 @@
 import { Keypair } from '@stellar/stellar-sdk';
-import { getIronSession, type SessionOptions } from 'iron-session';
+import { getIronSession, type IronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 import { SITE_NAME } from '@/lib/site';
 
+import { getSessionPasswords } from './secrets';
 import type { AuthSession } from './types';
 
 export const AUTH_CHALLENGE_TTL_MS = 5 * 60 * 1000;
-export const AUTH_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+/**
+ * Idle limit: a session ends this long after its cookie was last issued. Sign-in issues it, and the
+ * app's session check on each page load re-issues it (at most once per AUTH_SESSION_REFRESH_MS), so
+ * a session in use keeps going and an abandoned one ends.
+ */
+export const AUTH_SESSION_IDLE_SECONDS = 24 * 60 * 60;
+/** Absolute limit: a session ends this long after sign-in, however often it is used. */
+export const AUTH_SESSION_MAX_AGE_SECONDS = 3 * 24 * 60 * 60;
+/** An active session's cookie is re-issued at most this often, so not every request writes one. */
+export const AUTH_SESSION_REFRESH_MS = 15 * 60 * 1000;
 export const SEP10_CHALLENGE_TTL_SECONDS = 5 * 60;
 
+/** Server clocks differ slightly between instances; a sign-in time this far ahead still counts. */
+const CLOCK_SKEW_MS = 60 * 1000;
+const SESSION_COOKIE = 'stellar-auth';
+
+/**
+ * Challenges being verified or already used, so one challenge signs in once. This is in the memory
+ * of one server instance: another instance doesn't see it. Sign-in also deletes the challenge from
+ * the session cookie it returns, so replaying a challenge means replaying the older cookie, within
+ * the challenge's 5 minutes, to a different instance. There is no shared store.
+ */
 const challengeClaims = new Map<string, { state: 'pending' | 'consumed'; expiresAt: number }>();
 
 export class AuthError extends Error {
@@ -23,6 +43,7 @@ export class AuthError extends Error {
       | 'INVALID_SIGNATURE'
       | 'NETWORK_MISMATCH'
       | 'DOMAIN_MISMATCH'
+      | 'INSUFFICIENT_SIGNER_WEIGHT'
       | 'UNAUTHENTICATED',
     message: string
   ) {
@@ -31,31 +52,119 @@ export class AuthError extends Error {
   }
 }
 
-function getSessionPassword() {
-  const password = process.env.IRON_PASSWORD;
-  if (!password || password.length < 32) {
-    throw new Error('IRON_PASSWORD must be configured with at least 32 characters.');
-  }
-  return password;
+/** The session cookie's name. Only a Secure cookie may carry the `__Host-` prefix. */
+export function sessionCookieName(secure: boolean) {
+  return secure ? `__Host-${SESSION_COOKIE}` : SESSION_COOKIE;
 }
 
+/** iron-session options for the sign-in cookie, read from the environment on each call. */
 export function getSessionOptions(): SessionOptions {
+  const secure = process.env.NODE_ENV === 'production';
   return {
-    cookieName: 'stellar-auth',
-    password: getSessionPassword(),
-    ttl: AUTH_SESSION_TTL_SECONDS,
+    // With `__Host-`, browsers accept the cookie only when it is Secure, has no Domain and has Path
+    // `/`, so a sibling subdomain or a plain-HTTP response can't set or shadow the session. Browsers
+    // allow Secure cookies only over HTTPS and on localhost, so development keeps the bare name.
+    cookieName: sessionCookieName(secure),
+    // A map of numbered secrets, so IRON_PASSWORD can be rotated (see ./secrets).
+    password: getSessionPasswords(),
+    // iron-session seals this expiry into the cookie and refuses the cookie after it, so a stolen
+    // cookie stops working once the session has been idle this long, even if the browser keeps it.
+    ttl: AUTH_SESSION_IDLE_SECONDS,
     cookieOptions: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure,
       sameSite: 'lax',
       path: '/',
-      maxAge: AUTH_SESSION_TTL_SECONDS
+      maxAge: AUTH_SESSION_IDLE_SECONDS
     }
   };
 }
 
+/** Drop the signed-in account from a session (in memory; a later `save` writes it). */
+export function clearSessionAccount(session: AuthSession) {
+  delete session.address;
+  delete session.network;
+  delete session.authMethod;
+  delete session.authenticatedAt;
+  delete session.refreshedAt;
+}
+
+/** Whether a signed-in session is still within AUTH_SESSION_MAX_AGE_SECONDS of its sign-in. */
+export function withinSessionLifetime(session: AuthSession, now = Date.now()) {
+  const signedInAt = session.authenticatedAt;
+  return (
+    typeof signedInAt === 'number' &&
+    Number.isFinite(signedInAt) &&
+    signedInAt <= now + CLOCK_SKEW_MS &&
+    now - signedInAt < AUTH_SESSION_MAX_AGE_SECONDS * 1000
+  );
+}
+
+/**
+ * The visitor's session. A session past its absolute lifetime reads as signed out here, for every
+ * caller, because re-issuing the cookie only ever extends the idle limit.
+ */
 export async function getAuthSession() {
-  return getIronSession<AuthSession>(await cookies(), getSessionOptions());
+  const session = await getIronSession<AuthSession>(await cookies(), getSessionOptions());
+  if (session.address && !withinSessionLifetime(session)) clearSessionAccount(session);
+  return session;
+}
+
+/** Mark a session as signed in to `address` from now on. The caller saves it. */
+export function startSessionAccount(
+  session: AuthSession,
+  account: { address: string; network: string; authMethod: NonNullable<AuthSession['authMethod']> },
+  now = Date.now()
+) {
+  delete session.challenge;
+  session.address = account.address;
+  session.network = account.network;
+  session.authMethod = account.authMethod;
+  session.authenticatedAt = now;
+  session.refreshedAt = now;
+}
+
+/**
+ * Re-issue a signed-in session's cookie so its idle limit starts again (sliding expiry), at most
+ * once per AUTH_SESSION_REFRESH_MS. The absolute limit is unchanged. Only `GET /api/auth/session`
+ * calls this. A response to a request sent before a logout can restore the cookie, so the refresh
+ * stays on that one route, which the app calls on page load, and not on routes it polls.
+ */
+export async function refreshAuthSession(session: IronSession<AuthSession>, now = Date.now()) {
+  if (!session.address) return;
+  const last = session.refreshedAt;
+  if (typeof last === 'number' && last <= now + CLOCK_SKEW_MS && now - last < AUTH_SESSION_REFRESH_MS) return;
+  session.refreshedAt = now;
+  await session.save();
+}
+
+function isSameOriginRequest(request: Request) {
+  const site = request.headers.get('sec-fetch-site');
+  // A sibling subdomain (dev.tribes.build next to tribes.build) is same-site and gets the Lax
+  // cookie, so only the app's own pages count.
+  if (site) return site === 'same-origin';
+  // Browsers without Fetch Metadata still send Origin on a POST.
+  const origin = request.headers.get('origin');
+  if (!origin) return true;
+  try {
+    return origin === getAuthOrigin(request);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refuse a sign-in request that another page started. These routes change who is signed in, so a
+ * form post from another site, or from a sibling subdomain, could otherwise replace or clear a
+ * visitor's session and sign them out. A request with neither Sec-Fetch-Site nor Origin is not
+ * from a browser page, so it carries no visitor's cookie.
+ */
+export function rejectCrossSiteRequest(request: Request) {
+  if (isSameOriginRequest(request)) return null;
+  return NextResponse.json(
+    { code: 'CROSS_SITE_REQUEST', message: 'Sign-in requests must come from this site.' },
+    { status: 403, headers: { 'Cache-Control': 'no-store' } }
+  );
 }
 
 export function getConfiguredNetwork() {
@@ -128,6 +237,7 @@ export function releaseAuthChallenge(nonce: string) {
   if (claim?.state === 'pending') challengeClaims.delete(nonce);
 }
 
+/** The signed-in account, for routes that act for it. Throws UNAUTHENTICATED without a live session. */
 export async function requireAuthenticatedSession() {
   const session = await getAuthSession();
   if (!session.address || !session.network) {

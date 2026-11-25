@@ -71,6 +71,9 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
     case 'open-claim-list':
       // Every list is its own (non-idempotent) resource, even with an identical payload.
       return `claims:${action.claimsContractId}:list:${action.id}`;
+    case 'close-claim-list':
+      // A list closes once: a second close of it in the same proposal would fail (ListExpired).
+      return `claims:${action.claimsContractId}:close:${String(action.listId ?? '').trim()}`;
     case 'change-mint-allowance':
       // Allowance changes add up: two for one module are two resources.
       return `token:allowance:${String(action.module || action.recipient)
