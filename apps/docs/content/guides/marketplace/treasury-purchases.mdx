@@ -37,7 +37,7 @@ After execution, the token is held by the Treasury. Tokens the Treasury holds ca
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   The proposal makes two calls, in order, when it is executed.
 
   First, the Treasury calls its own `authorize` with a list of the exact payments it allows: a transfer of the resale fee to the Treasury, and a transfer of the price minus the fee to the seller, both in the listing's payment asset. A listing with no fee has one transfer. The Treasury allows nothing else.

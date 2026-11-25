@@ -34,7 +34,7 @@ A tribe pauses its auctions by proposal, usually to change a setting. A running 
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   The button calls `settle_and_create_new` on the tribe's Auction contract, or `settle_auction` while auctions are paused. Both are open to any account, and both fail with `AuctionActive` before the end time.
 
   Settling marks the auction as settled first, then transfers the token from the Auction contract to the winner and the winning bid to the Treasury. With no bids, the token goes to the Treasury. `settle_and_create_new` then mints the next token to the Auction contract and starts a new auction, whose end time is the current time plus the tribe's auction duration.

@@ -45,7 +45,7 @@ See [Approvals](/guides/members/approvals/) for how the approval works.
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Send** and **Give back** call `transfer` on the tribe's Token contract, signed by you. The token's voting unit moves from your delegate to the recipient's delegate. A recipient with no delegate is delegated to themselves. Any single-token approval on the token is cleared when it moves.
 
   When a tribe locks memberships, the Token refuses transfers between members with `TransfersLocked`. It allows a token to move back to the Treasury, out of the tribe's own contracts (for example, auction settlement), and by `transfer_from` when the Treasury is the approved spender, which is how a passed proposal moves it. The lock is a tribe setting. It changes only by a vote.

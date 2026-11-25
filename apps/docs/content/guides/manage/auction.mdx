@@ -42,7 +42,7 @@
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Each setting is changed on the tribe's Auction contract: `set_reserve_price`, `set_min_bid_increment`, `set_duration`, and `set_time_buffer`. The contract accepts these only while auctions are paused. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch they run only as part of a proposal that passes and is executed.
 
   While auctions are paused, nobody can bid. The current auction can still be settled. Resuming starts a new auction if the last one was settled. Cancelling the current auction refunds the top bidder and sends the token to the Treasury.

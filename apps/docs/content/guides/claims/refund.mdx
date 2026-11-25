@@ -30,7 +30,7 @@ Most claim lists need no refunds. Tokens are minted only when someone claims the
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   The button calls `refund` on the tribe's ClaimMinter for that list and your account. It works only on the launch drive (the assurance list), only once the drive has failed, and only if you have a payment held. It returns your whole held amount.
 
   "Failed" is not a stored flag. The contract works it out each time: the deadline has passed and the tribe's Token is not live. Because of that, the contract never allows both a refund and a release of the held payments to the Treasury. A tribe that launched has no refunds. A failed drive can't release funds.

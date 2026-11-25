@@ -40,7 +40,7 @@ The same page also has a section for the Treasury to buy a listed token. See [Tr
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   These actions call the tribe's Marketplace contract: `set_payment_asset`, `set_secondary_fee_bps`, `pause`, `unpause`, `open_pool`, `close_pool`, and `sweep_pool`. After launch the Treasury is the market's admin, so each call runs only as part of a proposal that passes and is executed.
 
   The resale fee is stored in basis points, at most 2,500 (25%). A new fee or payment asset applies to listings made afterwards.

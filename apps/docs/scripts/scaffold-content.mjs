@@ -26,7 +26,7 @@ Each step will have one screenshot from the app, in your theme.
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
 Which contracts are called, what it costs, how long it takes, and who can see it.
 </Disclosure>
 

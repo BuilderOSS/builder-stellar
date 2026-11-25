@@ -40,7 +40,7 @@ To sell at a different price, you don't need to cancel first. Use **Change price
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Cancelling calls `cancel` on the tribe's Marketplace contract with the token and your address. The contract checks that you are the seller, removes the listing, and moves the token back to you. No payment is made, and no resale fee is charged.
 
   Returning a token from an ended listing calls `expire`. It works only once the end time has passed, and anyone can call it. The contract removes the listing and moves the token to the seller.

@@ -42,7 +42,7 @@ The Platform page is the operator's view of Tribe Builder itself: the shared sto
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Registry, factory, and admin changes are calls to the Manager contract, signed by the platform admin. They are rare and high-privilege, and each one emits an event that is public on chain.
 
   Shared contract code is the platform's to renew, and nothing renews it automatically. A tribe's contracts extend their own code by only 4 days, which is why a renewal must be longer than that. If the platform's renewal lapses, a tribe with no activity for 4 days has its code archived, and its calls fail until someone restores it. The renewal is one or more `ExtendFootprintTTL` transactions, plus a restore for anything archived. Any funded account can run the same renewal with the script in the repository.
