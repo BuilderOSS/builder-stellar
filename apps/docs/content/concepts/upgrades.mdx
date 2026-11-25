@@ -48,6 +48,8 @@ The Manager itself can also be upgraded. Its upgrade applies only after a notice
 
 The chain checks that an upgrade path is approved. It doesn't check what the new code does. An upgrade action names the new code by its hash, a fingerprint of the exact code. Read the release note. If you can, compare the hash with a published build of that release before you vote.
 
+For crypto natives: each release tag publishes its contracts' hashes in `releases/hashes.json`, and anyone with git and Docker can rebuild the tag and compare with `node scripts/verify-wasm.mjs <tag>`. The [reproducible builds guide](https://github.com/BuilderOSS/builder-stellar/blob/dev/docs/REPRODUCIBLE_BUILDS.md#verify-a-release) explains the steps.
+
 ## Related
 
 - [Proposals](/concepts/proposals)

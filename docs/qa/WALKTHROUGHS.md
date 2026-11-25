@@ -49,7 +49,7 @@ Playwright (Node, apps/e2e)                     Browser (Chromium)
 
 ## One-time setup
 
-Prerequisites: Node 23+, pnpm 10, the Stellar CLI 28 (`stellar --version`), and Playwright's
+Prerequisites: Node 24+, pnpm 10, the Stellar CLI 28 (`stellar --version`), and Playwright's
 Chromium.
 
 ```bash
@@ -311,7 +311,8 @@ storage version bump is the only change members could observe, and it is there o
 release then needs `migrate()`, so W16 covers the upgrade and the migration in one proposal. It lives
 on the local throwaway branch `test-only/w16-metadata-0.4.1-candidate` and as
 [`w16-metadata-candidate.patch`](w16-metadata-candidate.patch); it is never merged. Rebuild it on a
-throwaway worktree of the commit the dev Manager runs (the build is reproducible):
+throwaway worktree of the commit the dev Manager runs (the build is reproducible on the same platform, a Mac
+on Apple silicon; see [reproducible builds](../REPRODUCIBLE_BUILDS.md)):
 
 ```bash
 git worktree add -b test-only/w16-candidate ../w16-candidate HEAD

@@ -14,11 +14,11 @@
   },
   "peerDependencies": {
     "@pandacss/dev": "1.11.5",
-    "next": "^15.4.0"
+    "next": "^15.5.29"
   },
   "devDependencies": {
     "@pandacss/dev": "1.11.5",
-    "next": "^15.4.0",
+    "next": "^15.5.29",
     "typescript": "^5.8.0"
   }
 }

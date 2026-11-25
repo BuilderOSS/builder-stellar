@@ -35,7 +35,17 @@ DAOs keep their addresses and history only through upgrades.
    The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the
    build or the hash. Each Manager keeps its own records, so the same hash can carry different labels on two
    Managers (release 0.5.0 registers on tribes.build the hashes dev.tribes.build records as 0.4.0).
-3. Build: `pnpm contracts:build`. Note the new hash: `shasum -a 256 target/wasm32v1-none/release/<module>.wasm`.
+3. Commit the change and the version bump, then build the release in the pinned container and publish its
+   hashes ([reproducible builds](REPRODUCIBLE_BUILDS.md)):
+   ```sh
+   node scripts/build-wasm.mjs --write-hashes   # prints each module's new hash
+   git add releases/hashes.json && git commit -m "release: contract hashes" && git tag release-<n>
+   ```
+   The WASM files are in `target/wasm-build/<built-commit>/wasm/`. Upload those, not a `pnpm contracts:build`
+   output: the bytes depend on the build platform, and the published hashes are the container's `linux/amd64`
+   build.
+   Pushing the tag (with sign-off) runs the Contract release build workflow, which rebuilds the tag twice and
+   fails unless both builds match `releases/hashes.json`.
 4. Know exactly what ships: the new code is everything since the deployed build, not just your change.
    ```sh
    C=$(jq -r .sourceCommit deploys/<label>-<network>-manager.json)
@@ -128,6 +138,12 @@ then each DAO.
       ```sh
       node scripts/upgrade-contract.mjs <module> configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
       ```
+      Run it from the pushed release tag with `WASM_DIR=target/wasm-build/<built-commit>/wasm` (default
+      `target/wasm32v1-none/release`). Before it sends anything, it refuses a checkout without a release tag
+      that `origin` has, uncommitted changes to the build inputs (`contracts/`, `Cargo.*`,
+      `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/`, and `releases/`), contract changes made after
+      `releases/hashes.json` was written, and a WASM whose sha256 is not the one that file publishes for the
+      module ([reproducible builds](REPRODUCIBLE_BUILDS.md#what-the-upload-script-checks)).
       Argument order for DAO modules is **DAO config, then network config**. The DAO config's `nonce` must
       have an artifact (`deploys/<label>-<network>-dao-<nonce>.json`; each artifact's `.config` is the config
       it was deployed with). For a platform release, pass a **launched** DAO: a DAO still in setup is
@@ -173,6 +189,8 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 stellar contract invoke --id <module-address> --network <network> --source-account <any> --send no -- wasm_hash  # <to-hash>
 ```
 
+- Anyone can rebuild the release and compare it with the hash the proposal names:
+  `node scripts/verify-wasm.mjs <tag>` ([reproducible builds](REPRODUCIBLE_BUILDS.md#verify-a-release)).
 - Read model: `manager.module_versions` shows the new hash/version and `upgrade_count`; the activity feed shows
   "Contract upgraded to version …".
 - Exercise the new behaviour once on the upgraded DAO (e.g. rename) and confirm it reaches the app after indexing.

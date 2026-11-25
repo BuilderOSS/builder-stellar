@@ -12,7 +12,7 @@ pnpm contracts:bindings        # stellar contract build + generate all 7 package
 pnpm --filter @builder-stellar/<name>-bindings build   # auction|governor|manager|marketplace|metadata|token|treasury
 ```
 
-`pnpm contracts:build` (alias for `stellar contract build`) builds the WASMs only.
+`pnpm contracts:build` (alias for `stellar contract build --locked`) builds the WASMs only.
 
 The seven clients cover six DAO modules plus Manager. The shared Minter has no
 generated package in this script. `src/index.ts` exports `Client`, implemented in

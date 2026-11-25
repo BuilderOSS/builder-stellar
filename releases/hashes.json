@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "toolchain": {
+    "rustc": "1.95.0",
+    "stellarCli": "28.0.0",
+    "image": "rust:1.95.0-slim-trixie@sha256:e14e87345b4d5964ddcc3491d27ee046a0f23820f340c3c1e24da6880141f7c0",
+    "platform": "linux/amd64",
+    "host": "x86_64-unknown-linux-gnu"
+  },
+  "contracts": {
+    "auction": {
+      "sha256": "699e0f3e536b73d580177c137c46e646ff517f5ce0947acf655934b70cc0ba6e",
+      "bytes": 29739
+    },
+    "governor": {
+      "sha256": "e8369deaa8c05f4906f69353c835c4fd7d4ba7d79328db3bb300ef24391c0cd7",
+      "bytes": 39286
+    },
+    "manager": {
+      "sha256": "898ded4ef1bbc04403a415f0f9976e0389fe0405aba08df0c1e8b331dd6b5a5d",
+      "bytes": 71907
+    },
+    "marketplace": {
+      "sha256": "4411da846d745b9c54e74be75bf60fdc289ddfbcdc34cda3fd2cbf439092936e",
+      "bytes": 36696
+    },
+    "metadata": {
+      "sha256": "f87133bbe292b512688f9ccbccf8cc87bd027f331eabe1cf6fca5f1d83811b73",
+      "bytes": 33578
+    },
+    "minter": {
+      "sha256": "08aa96b9a120b2dcd61c7437b8fd94a513657075a19aa8be53c711f8a2fd0f33",
+      "bytes": 28542
+    },
+    "token": {
+      "sha256": "5a78846659cbf3c2b4dd730cf5ea1c76715aea71667cce0e486895644a74552c",
+      "bytes": 51117
+    },
+    "treasury": {
+      "sha256": "597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d",
+      "bytes": 14375
+    }
+  }
+}
