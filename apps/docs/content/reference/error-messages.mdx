@@ -57,7 +57,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7513 | The proposal is queued, but its safety delay hasn't ended. | Wait until the time shown on the proposal, then execute. |
 | 7514 | A comment or vote reason is empty. | Write a comment, or vote without one. |
 | 7515 | A comment or vote reason is longer than 8,192 bytes. | Shorten it. |
-| 7516 | An action in the proposal calls the Governor's `consume`, which would mark another proposal as run without running it. | Remove that action. Another proposal can't cancel a queued one. |
+| 7516 | An action in the proposal calls the Governor's `consume`, which would mark another proposal as run without running it. | Remove that action. |
 | 7517 | The proposal mints more tokens than one transaction can record, together with its other actions. | Split the mints over several proposals. See [Limits and timings](/reference/limits-and-timings). |
 | 7518 | The Governor's code and its stored data are from different releases: a migration is due after an upgrade. | Run the Governor's migration once. Anyone can run it, and it needs no proposal. See [Upgrades](/concepts/upgrades). |
 

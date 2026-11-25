@@ -106,7 +106,9 @@ impl DaoTreasuryContract {
     /// proposal still runs the old code, finds nothing to do and reverts the
     /// whole proposal. Once the upgrade proposal has executed, `execute`
     /// refuses every proposal (`StorageVersionMismatch`) until this is called,
-    /// which is why it must not need a proposal.
+    /// which is why it must not need a proposal. For the same reason a
+    /// Treasury migration must be bounded and must not fail: if it did, no
+    /// proposal could run again to upgrade the Treasury to fixed code.
     pub fn migrate(e: &Env) {
         Self::do_migrate(e);
     }
@@ -124,8 +126,8 @@ impl DaoTreasuryContract {
 
     /// Storage-layout version of the data held by this contract. While it
     /// differs from the code's `STORAGE_VERSION`, `execute`, `launch` and
-    /// `handoff` fail `StorageVersionMismatch` until `migrate` (or an upgrade)
-    /// brings the two back in step.
+    /// `handoff` fail `StorageVersionMismatch` until `migrate` brings the two
+    /// back in step (or, during setup only, the launch admin upgrades again).
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -268,8 +270,9 @@ impl DaoTreasuryContract {
 impl DaoTreasuryContract {
     /// Panics `StorageVersionMismatch` unless the stored data layout is the
     /// one this code expects, so this code never reads or writes data in a
-    /// layout it does not know. `upgrade`, `migrate` and the views stay
-    /// outside it, so the layout can always be brought back in step.
+    /// layout it does not know. `upgrade`, `migrate`, and the views stay
+    /// outside it, so a migration that is due can always be completed by
+    /// anyone.
     fn require_current_layout(e: &Env) {
         if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
             panic_with_error!(e, TreasuryError::StorageVersionMismatch);
@@ -296,6 +299,10 @@ impl DaoTreasuryContract {
 
     /// Allowlisted calls a proposal may aim at the Treasury itself. Authorized
     /// by the proposal (already consumed from the Governor), so no admin auth.
+    /// The `migrate` self-call cannot complete a migration: after the
+    /// Treasury's own `upgrade` in the same proposal it still runs the old
+    /// code (`NothingToMigrate`), and while a migration is due `execute` is
+    /// refused. A migration is completed by calling `migrate` directly.
     fn self_dispatch(e: &Env, function: &Symbol, args: &Vec<Val>) {
         if *function == Symbol::new(e, "upgrade") {
             if args.len() != 2 {

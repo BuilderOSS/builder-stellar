@@ -31,7 +31,7 @@ Source: `contracts/common/src/lib.rs` (`MIN_GOVERNANCE_DELAY`, `MAX_GOVERNANCE_D
 | Who can cancel | Only the person who made it, before voting ends |
 | Minting in one proposal | One 43-token action with up to two other actions, two actions of 21 tokens, ten single mints, or five mints among 20 actions |
 
-Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay and 14 days to execute.
+Pending, active and defeated proposals don't expire. The longest a proposal can take from start to finish is 118 days: a 30-day wait before voting, 30 days of voting, 14 days to queue, a 30-day safety delay, and 14 days to execute.
 
 A proposal runs all its actions in one transaction, which can publish only a limited amount of event data. The contracts refuse a proposal whose mints, with its other actions, could not run together. Split the mints over several proposals.
 

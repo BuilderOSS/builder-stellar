@@ -151,9 +151,11 @@ impl DaoGovernorContract {
     /// `from_hash` must be the running code's hash and the Manager must
     /// approve `from_hash -> to_hash` (`common::upgrade::apply`). Data is not
     /// touched; if the new code expects a newer layout, call `migrate` next
-    /// (the same proposal may do it, as its next action). Not behind the
-    /// storage-layout gate, so a module whose layout is out of step can still
-    /// move to fixed code.
+    /// (the same proposal may do it, as its next action; if that `migrate`
+    /// fails, the whole proposal reverts and the old code stays). Not behind
+    /// the storage-layout gate. Once live, though, it is reached only through
+    /// a proposal, which the gate refuses while the layout is out of step, so
+    /// a migration must be bounded and must not fail.
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         common::admin::require_admin(e);
         let manager = Self::manager(e);
@@ -180,8 +182,8 @@ impl DaoGovernorContract {
 
     /// Storage-layout version of the data held by this contract. While it
     /// differs from the code's `STORAGE_VERSION`, every gated entry point
-    /// fails `StorageVersionMismatch` until `migrate` (or an upgrade) brings
-    /// the two back in step.
+    /// fails `StorageVersionMismatch` until `migrate` brings the two back in
+    /// step (or, during setup only, the launch admin upgrades again).
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -456,9 +458,9 @@ impl DaoGovernorContract {
     /// that decodes a stored proposal calls it first, so this code never
     /// reads or writes data in a layout it does not know (after an upgrade
     /// whose `migrate` has not run yet, or an upgrade to older code).
-    /// `upgrade`, `migrate` and the upgrade views (`wasm_hash`,
-    /// `storage_version`, `version`, `admin`) stay outside it, so the layout
-    /// can always be brought back in step.
+    /// `upgrade`, `migrate`, and the upgrade views (`wasm_hash`,
+    /// `storage_version`, `version`, `admin`) stay outside it, so a migration
+    /// that is due can always be completed by anyone.
     fn require_current_layout(e: &Env) {
         if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
             panic_with_error!(e, CustomGovernorError::StorageVersionMismatch);
@@ -470,8 +472,8 @@ impl DaoGovernorContract {
     /// - an action aimed at this Governor's `consume` (`CannotConsume`).
     ///   Run by `treasury.execute`, it would mark another queued proposal
     ///   Executed, with `ProposalExecuted`, without running that proposal's
-    ///   actions. Nothing legitimate needs it: `consume` only ever has a
-    ///   purpose for the proposal `treasury.execute` is running;
+    ///   actions. No supported flow uses it: `consume` has a purpose only for
+    ///   the proposal `treasury.execute` is running;
     /// - `mint` and `batch_mint` actions that could not all publish their
     ///   events in one `treasury.execute` (`MintsTooLarge`). The Token bounds
     ///   each call (`common::batch_mint_fits`), but a proposal runs all its
@@ -814,6 +816,7 @@ impl Governor for DaoGovernorContract {
     /// `_eta` and `_operator` are ignored. Sets the ETA to now plus the queue
     /// delay: `treasury.execute` can run the proposal from the ETA until 14
     /// days after it (`PROPOSAL_EXPIRATION_PERIOD`). Fails
+    /// `ProposalAlreadyExecuted` for an Executed proposal and
     /// `ProposalNotSuccessful` in any other state, including a Succeeded
     /// proposal whose 14-day queue window has passed (Expired).
     ///

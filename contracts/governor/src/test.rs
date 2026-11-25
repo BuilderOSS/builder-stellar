@@ -2506,7 +2506,8 @@ mod hardening {
     /// voting period and queue delay, queued and executed at the last
     /// second) is still live at execution, at the nominal 5-second ledgers
     /// and when ledgers close 10% faster. With only the TTL from `propose`,
-    /// the faster ledgers archive it two weeks before it can execute.
+    /// the faster ledgers archive it around day 108, inside its execution
+    /// window.
     #[test]
     fn a_proposal_lives_through_its_maximum_lifetime() {
         assert_eq!(crate::MAX_PROPOSAL_LIFETIME, 118 * 86_400);

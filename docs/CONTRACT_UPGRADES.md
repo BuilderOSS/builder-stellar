@@ -38,6 +38,10 @@ DAOs keep their addresses and history only through upgrades.
      (7012) and reverts the upgrade with it. After the upgrade proposal executes, anyone calls
      `treasury.migrate()` (no authorization needed); until then `treasury.execute` refuses every proposal
      (`StorageVersionMismatch`, 7607). See e2e `the_treasury_upgrades_then_migrates_in_two_steps`.
+   - Any migration for the Governor or the Treasury must be bounded and must not fail: once a migration is due,
+     they refuse proposals, so no proposal could upgrade them to fixed code. Rehearse it on a copy of production
+     (§2) before proposing the upgrade, and keep the Governor's `upgrade` and `migrate` in one proposal, so a
+     failing `migrate` reverts the upgrade.
 2. Bump the module in [`releases/contracts.json`](../releases/contracts.json) (e.g. `"token": "0.2.0"`). This is the
    version registered for the new hash. **Registry records are write-once**: a wrong version can never be fixed.
    The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the

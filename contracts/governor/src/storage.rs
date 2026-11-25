@@ -40,10 +40,10 @@ pub const MAX_QUEUED_LIFETIME: u64 = MAX_QUEUE_DELAY as u64 + PROPOSAL_EXPIRATIO
 /// Longest a proposal stays live, in seconds (118 days).
 pub const MAX_PROPOSAL_LIFETIME: u64 = MAX_UNQUEUED_LIFETIME + MAX_QUEUED_LIFETIME;
 
-// Each stage fits the TTL even if ledgers close 25% faster than the
-// 5 seconds `DAY_IN_LEDGERS` assumes: stage seconds × 1.25 ≤ TTL ledgers × 5.
-const _: () = assert!(MAX_UNQUEUED_LIFETIME * 5 <= PROPOSAL_TTL_EXTEND_TO as u64 * 5 * 4);
-const _: () = assert!(MAX_QUEUED_LIFETIME * 5 <= PROPOSAL_TTL_EXTEND_TO as u64 * 5 * 4);
+// Each stage fits the TTL even if ledgers close every 4 seconds rather than
+// the 5 seconds `DAY_IN_LEDGERS` assumes: stage seconds ≤ TTL ledgers × 4.
+const _: () = assert!(MAX_UNQUEUED_LIFETIME <= PROPOSAL_TTL_EXTEND_TO as u64 * 4);
+const _: () = assert!(MAX_QUEUED_LIFETIME <= PROPOSAL_TTL_EXTEND_TO as u64 * 4);
 const _: () = assert!(MAX_PROPOSAL_LIFETIME == 118 * 86_400);
 
 // Basis points constants for quorum calculation

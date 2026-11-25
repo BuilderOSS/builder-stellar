@@ -44,7 +44,7 @@ Choose **Cancel token approval** ("Remove permission to transfer this token"), t
 
   **Cancel token approval** calls `approve` again with an expiration of 0, which removes the single-token approval. It doesn't change collection-wide operator approvals (`approve_for_all`), which this page doesn't create.
 
-  In a tribe with locked memberships, the Token refuses an approval to any spender except the Treasury (`TransfersLocked`). The approval to the Treasury lasts about 120 days. The longest possible proposal timeline is 118 days: up to 30 days each for the voting delay, voting period and safety delay, plus 14 days to queue and 14 days to run.
+  In a tribe with locked memberships, the Token refuses an approval to any spender except the Treasury (`TransfersLocked`). The approval to the Treasury lasts about 120 days. The longest possible proposal timeline is 118 days: up to 30 days each for the voting delay, voting period, and safety delay, plus 14 days to queue and 14 days to run.
 
   You pay the Stellar network fee in XLM. Approvals are public on chain.
 </Disclosure>

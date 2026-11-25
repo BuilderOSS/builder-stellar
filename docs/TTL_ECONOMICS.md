@@ -128,7 +128,7 @@ until artwork exists, so the pages up to the minted count always exist and an ar
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
 | OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
-| OZ `ProposalVote(id)` | persistent | Vote tallies; each vote renews it to the proposal's 120 days (it is read last at `queue`), the sweep to the full term while live | | Sweep while live, when present |
+| OZ `ProposalVote(id)` | persistent | Vote tallies; a vote renews it to the proposal's 120 days when fewer than 30 remain, so the first vote always does (it is read last at `queue`), the sweep to the full term while live | | Sweep while live, when present |
 | OZ `HasVoted(id, voter)` | persistent | One vote record, 30 days | | Holder |
 
 Each proposal stores its quorum when it is created, from the voting supply at the previous ledger (the snapshot

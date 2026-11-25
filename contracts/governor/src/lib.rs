@@ -39,8 +39,9 @@
 //! - Proposal hashing prevents tampering with queued proposals
 //! - TTL management keeps a proposal live for its whole lifecycle (up to 118
 //!   days): `propose` and `queue` each set the TTL for the stage that follows
-//! - A proposal action cannot call `consume`, and its mints must fit one
-//!   execution's event limit; both are refused at `propose`
+//! - A proposal action cannot call `consume` (refused at `propose`, and by the
+//!   Treasury inside an `authorize` tree), and its mints must fit one
+//!   execution's event limit (refused at `propose`)
 //! - Every entry point that reads or writes proposal data refuses to run while
 //!   the stored layout differs from the code's (`StorageVersionMismatch`);
 //!   anyone can call `migrate` to complete a pending migration
