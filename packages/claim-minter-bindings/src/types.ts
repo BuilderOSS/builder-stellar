@@ -141,6 +141,19 @@ export interface RefundedEvent {
 }
 
 /**
+ * A list closed early by the admin (`close_list`): no claims after this.
+ * `minted` of `total` were claimed; the rest can no longer be minted from it.
+ */
+export interface ListClosedEvent {
+  name: "ListClosed";
+  data: {
+    list_id: number;
+    minted?: number;
+    total?: number;
+  };
+}
+
+/**
  * A list opened: its root, where the full tree is published, and its terms.
  */
 export interface ListOpenedEvent {
@@ -408,5 +421,5 @@ export interface UpgradedEvent {
     version?: string;
   };
 }
-    export type ContractEvent = ClaimedEvent | RefundedEvent | ListOpenedEvent | EscrowReleasedEvent | ClaimMinterLaunchedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
+    export type ContractEvent = ClaimedEvent | RefundedEvent | ListClosedEvent | ListOpenedEvent | EscrowReleasedEvent | ClaimMinterLaunchedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
     

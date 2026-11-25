@@ -49,11 +49,19 @@ test('Lamplight: set up and launch', async ({ page, wallet }) => {
     });
     // The folder is pinned by fixtures/showcase/pin-art.mjs: this deployment's Pinata key can't mint
     // the short-lived upload key the browser asks for. The browser's upload is answered with the
-    // pinned folder's CID; the app's own pin check (/api/pinata/pin-cid) still runs on the server.
+    // pinned folder's CID, and its folder check (/api/pinata/pin-cid), which needs the key's pin token, too.
     const artCid = showcaseState().artCid as string | undefined;
     if (!artCid) throw new Error('Pin the artwork first: node apps/e2e/fixtures/showcase/pin-art.mjs');
     await page.route('**/api/pinata/generate-jwt', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jwt: 'capture' }) })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jwt: 'capture', pinToken: 'capture' })
+      })
+    );
+    // No real pin token exists here, so the server's check of the folder is answered too.
+    await page.route('**/api/pinata/pin-cid', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, cid: artCid }) })
     );
     await page.route('https://api.pinata.cloud/pinning/pinFileToIPFS', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ IpfsHash: artCid }) })

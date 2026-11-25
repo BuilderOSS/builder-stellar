@@ -219,6 +219,38 @@ impl ClaimMinter {
         Ok(list_id)
     }
 
+    /// Close a list early (the admin): claims stop at once.
+    ///
+    /// A list stays claimable until its `expires_at`, including after launch,
+    /// so a free list the launch admin opened in Setup can still mint once
+    /// the DAO is Live (up to this module's allowance). This is how the DAO,
+    /// by proposal, ends such a list. The assurance list can't be closed
+    /// before launch, since its refunds and release depend on it
+    /// (`AssuranceNotAllowed`); a list already past its expiry fails with
+    /// `ListExpired`. The list keeps its record; only `expires_at` moves to
+    /// now.
+    pub fn close_list(e: &Env, list_id: u32) -> Result<(), Error> {
+        common::ttl::extend_instance(e);
+        common::admin::require_admin(e);
+        let mut list = get_list(e, list_id).ok_or(Error::ListNotFound)?;
+        let now = e.ledger().timestamp();
+        if now >= list.expires_at {
+            return Err(Error::ListExpired);
+        }
+        if assurance_list(e) == Some(list_id) && !common::lifecycle::is_live(e) {
+            return Err(Error::AssuranceNotAllowed);
+        }
+        list.expires_at = now;
+        set_list(e, list_id, &list);
+        ListClosed {
+            list_id,
+            minted: list.minted,
+            total: list.total,
+        }
+        .publish(e);
+        Ok(())
+    }
+
     /// Claim `mint_now` tokens of the leaf `(claimer, leaf_amount)`.
     ///
     /// The proof covers the full leaf; a claimer may claim it in parts,

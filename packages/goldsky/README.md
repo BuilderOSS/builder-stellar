@@ -290,6 +290,7 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `PoolPurchased` | marketplace | `pool_id`, `buyer` | `token_id`, `price`, `asset` | public |
 | `PoolClosed` / `PoolSwept` | marketplace | `pool_id` | `released` / `count`, `pages_left` | public / admin |
 | `ListOpened` | claims | `list_id` | `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `assurance` | public |
+| `ListClosed` | claims | `list_id` | `minted`, `total` | public |
 | `Claimed` | claims | `list_id`, `claimer` | `amount`, `first_token_id`, `paid`, `escrowed` (bool), `claimed` | public |
 | `EscrowReleased` / `Refunded` | claims | `list_id` (+`claimer`) | `treasury`, `amount` / `amount` | public / admin (a refund is a per-claimer side effect) |
 | `ClaimMinterLaunched` | claims | `treasury` | none | admin, like every `<role>.launched` |

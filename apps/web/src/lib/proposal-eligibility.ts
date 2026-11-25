@@ -1,10 +1,30 @@
 'use client';
 
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import useSWR from 'swr';
+
 import { useGovernorSettings } from '@/lib/admin-queries';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
-import { formatVotes } from '@/lib/vote-source';
+import { formatVotes, isMissingFunction } from '@/lib/vote-source';
 import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
+
+type VotesNeededKey = readonly ['votes-needed-to-propose', string, string, string];
+
+/**
+ * The votes a proposal made now needs, from the Governor's `votes_needed_to_propose` (the
+ * threshold capped at the voting supply). Null for a Governor without the view, which has no cap:
+ * its plain `proposal_threshold` applies.
+ */
+async function fetchVotesNeeded([, governor, rpcUrl, passphrase]: VotesNeededKey): Promise<bigint | null> {
+  try {
+    const client = new GovernorClient({ contractId: governor, rpcUrl, networkPassphrase: passphrase });
+    return (await client.votes_needed_to_propose()).result;
+  } catch (error) {
+    if (isMissingFunction(error)) return null;
+    throw error;
+  }
+}
 
 function isMember(member: ReturnType<typeof useGoldskyMember>['data']) {
   if (!member?.item) return false;
@@ -48,10 +68,23 @@ export function useProposalEligibility(config: DaoNetworkConfig, address: string
     enabled ? address || undefined : undefined
   );
 
-  const loading = enabled && Boolean(address) && (memberLoading || votingPowerLoading || settingsLoading);
-  const error = enabled ? memberError || votingPowerError || settingsError : undefined;
+  const {
+    data: votesNeededNow,
+    error: votesNeededError,
+    isLoading: votesNeededLoading
+  } = useSWR(
+    enabled && address && config.governorContractId
+      ? (['votes-needed-to-propose', config.governorContractId, config.rpcUrl, config.passphrase] as const)
+      : null,
+    fetchVotesNeeded
+  );
+  const votesNeeded = votesNeededNow ?? settings?.proposalThreshold;
+
+  const loading =
+    enabled && Boolean(address) && (memberLoading || votingPowerLoading || settingsLoading || votesNeededLoading);
+  const error = enabled ? memberError || votingPowerError || settingsError || votesNeededError : undefined;
   const memberFound = isMember(member);
-  const hasEnoughVotes = Boolean(votingPower && settings && votingPower.votes >= settings.proposalThreshold);
+  const hasEnoughVotes = Boolean(votingPower && votesNeeded !== undefined && votingPower.votes >= votesNeeded);
   const eligible = Boolean(enabled && address && !loading && !error && memberFound && hasEnoughVotes);
 
   let message: string | undefined;
@@ -60,7 +93,7 @@ export function useProposalEligibility(config: DaoNetworkConfig, address: string
   else if (loading) message = 'Loading your voting power…';
   else if (error) message = error.message;
   else if (!memberFound) message = 'Only DAO members can create proposals.';
-  else if (!hasEnoughVotes) message = formatProposalEligibilityMessage(votingPower, settings?.proposalThreshold);
+  else if (!hasEnoughVotes) message = formatProposalEligibilityMessage(votingPower, votesNeeded);
 
   return {
     member,
