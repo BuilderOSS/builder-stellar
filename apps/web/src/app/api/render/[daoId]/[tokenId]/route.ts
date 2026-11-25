@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 
+import { limitApiRequest } from '@/lib/api-rate-limit';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
 import { fetchSafeImage, MAX_INPUT_PIXELS, withSignal } from '@/lib/safe-image-fetch';
@@ -38,6 +39,9 @@ function fallbackSvg() {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
+  // Composition fetches every layer from IPFS and runs sharp; /api/render?contract= counts here too.
+  const limited = await limitApiRequest(request, 'render');
+  if (limited) return limited;
   const { daoId, tokenId } = await params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

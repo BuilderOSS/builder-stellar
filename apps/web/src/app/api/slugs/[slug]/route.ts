@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { internalErrorResponse } from '@/lib/api-error';
 import { isValidSlug } from '@/lib/create-dao-schema';
 import { prisma } from '@/lib/prisma';
 
@@ -27,9 +28,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
-    return NextResponse.json(
-      { slug, valid: true, message: error instanceof Error ? error.message : 'Slug lookup unavailable' },
-      { status: 503 }
-    );
+    return internalErrorResponse('slug', error, {
+      slug,
+      valid: true,
+      message: 'Name availability could not be checked. Try again.'
+    });
   }
 }

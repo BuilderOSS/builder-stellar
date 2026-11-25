@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { getDaoConfigFromDatabase } from '@/lib/dao-db';
+import { internalErrorResponse } from '@/lib/api-error';
+import { getDaoConfigFromDatabase, isDaoNotFound } from '@/lib/dao-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'DAO lookup unavailable';
-    const status = message.startsWith('DAO not found:') ? 404 : 503;
-
-    return NextResponse.json({ message }, { status, headers: { 'Cache-Control': 'no-store' } });
+    if (isDaoNotFound(error))
+      return NextResponse.json(
+        { message: 'Tribe not found.' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      );
+    return internalErrorResponse('dao', error, { message: 'Tribe details are unavailable. Try again.' });
   }
 }

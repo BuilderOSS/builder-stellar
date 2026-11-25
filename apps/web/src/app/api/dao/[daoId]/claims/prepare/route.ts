@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
+import { limitApiRequest } from '@/lib/api-rate-limit';
 import { AuthError, getAuthOrigin, requireAuthenticatedSession } from '@/lib/auth/server';
 import { ClaimError } from '@/lib/minter/identity';
 import { claimActionSchema, prepareClaim } from '@/lib/minter/service';
 import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
+  // Each preparation simulates a transaction on RPC.
+  const limited = await limitApiRequest(request, 'prepare');
+  if (limited) return limited;
   const headers = { 'Cache-Control': 'private, no-store' };
   try {
     if (request.headers.get('origin') !== getAuthOrigin(request))

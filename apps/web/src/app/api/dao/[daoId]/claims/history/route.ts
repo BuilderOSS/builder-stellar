@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 
+import { limitApiRequest } from '@/lib/api-rate-limit';
 import { claimHistory } from '@/lib/minter/service';
 
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
+  const limited = await limitApiRequest(request, 'claims');
+  if (limited) return limited;
   const headers = { 'Cache-Control': 'no-store' };
   const value = new URL(request.url).searchParams.get('offset') ?? '0';
   if (!/^\d{1,6}$/.test(value) || Number(value) > 100000)

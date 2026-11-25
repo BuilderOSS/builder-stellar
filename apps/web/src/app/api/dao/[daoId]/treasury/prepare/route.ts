@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { limitApiRequest } from '@/lib/api-rate-limit';
 import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 import { prepareTreasuryFunding } from '@/lib/treasury-service/funding';
 import { treasuryActor, treasuryFailure, treasuryResponse, treasurySameOrigin } from '@/lib/treasury-service/http';
@@ -7,6 +8,9 @@ import { TreasuryError } from '@/lib/treasury-service/service';
 import { fundingSchema } from '@/lib/treasury-service/values';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
+  // Each preparation simulates a transaction on RPC.
+  const limited = await limitApiRequest(request, 'prepare');
+  if (limited) return limited;
   try {
     treasurySameOrigin(request);
     const actor = await treasuryActor();

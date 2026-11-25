@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
 import { chainProposalPage } from '@/lib/chain-reads/proposals';
 import { rpcProposalReader } from '@/lib/chain-reads/proposals-rpc';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { isDaoNotFound } from '@/lib/dao-db';
 import { getGoldskyProposalList } from '@/lib/goldsky';
 import { parseProposalMetadata, type ProposalMetadata } from '@/lib/proposal-metadata';
 import {
@@ -35,7 +37,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   const limit = Math.max(1, parseLimit(url.searchParams.get('limit'), 24));
   const offset = parseNonNegativeInteger(url.searchParams.get('offset'), 0);
   const status = url.searchParams.get('status') ?? undefined;
-  const config = await getDaoNetworkConfigById(daoId);
+  let config: Awaited<ReturnType<typeof getDaoNetworkConfigById>>;
+  try {
+    config = await getDaoNetworkConfigById(daoId);
+  } catch (error) {
+    if (isDaoNotFound(error))
+      return NextResponse.json(
+        { message: 'Tribe not found.' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      );
+    return internalErrorResponse('proposals', error, {
+      items: [],
+      generatedAt: new Date().toISOString(),
+      message: 'Proposals are unavailable. Try again.'
+    });
+  }
 
   if (!config.governorContractId) {
     return NextResponse.json(
@@ -117,14 +133,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );
-    } catch {
-      return NextResponse.json(
-        {
-          items: [],
-          generatedAt: new Date().toISOString(),
-          message: error instanceof Error ? error.message : 'Proposal list unavailable'
-        },
-        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    } catch (chainError) {
+      return internalErrorResponse(
+        'proposals',
+        { indexer: error, chain: chainError },
+        { items: [], generatedAt: new Date().toISOString(), message: 'Proposals are unavailable. Try again.' }
       );
     }
   }
