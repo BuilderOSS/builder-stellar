@@ -16,7 +16,9 @@ against the original testnet Manager, and nothing here touches it.
 | Docs | `builder-stellar-docs` (production branch `dev`), docs.tribes.build, one site for both | |
 
 Both run on Stellar testnet. The Manager admin for both is `testnet-admin`
-(`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`).
+(`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`): one key for both Managers, so a leak of it gives
+the holder both. [Key custody](KEY_CUSTODY.md#separate-dev-and-production-admins) has the steps to give dev
+its own admin.
 
 ## Which Manager a build indexes
 
@@ -97,12 +99,29 @@ Protection (team login), and lifting that would make every PR preview public too
 | `IRON_PASSWORD` | its own 64-character secret (sensitive) |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
-| `PINATA_JWT`, `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`); the JWT was added by hand, since a sensitive value can't be copied |
+| `PINATA_JWT` | dev's own Pinata key, never production's (see [Pinata keys](#pinata-keys)), sensitive |
+| `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`) |
 
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
 Its Ignored Build Step `[ "$VERCEL_GIT_COMMIT_REF" = "dev" ] && exit 0 || exit 1` skips `dev`,
 which `builder-stellar-dev` builds; `main` and PR previews still build there.
+
+### Pinata keys
+
+Production and dev each have their own Pinata API key, so a leak of one deployment's variables, or a burst of
+uploads on dev, doesn't reach the other. When this page was written, `builder-stellar-dev` still held
+production's key; replace it as follows.
+
+1. In the Pinata dashboard, create a key named for the deployment (for example `tribes-dev`), with only the
+   scopes the upload routes use: signed uploads (`/v3/files/sign`) and pinning by CID
+   (`/v3/files/public/pin_by_cid`). A separate Pinata account for dev also separates storage and billing.
+2. Set it as `PINATA_JWT` on `builder-stellar-dev` (Production and Preview), and redeploy.
+3. Upload one image on dev.tribes.build to check it.
+4. On `builder-stellar-web`, keep production's key on the Production environment only. Preview deployments
+   get dev's key, so a pull request preview never holds production's.
+
+Replacing a key later is the same, then revoke the old key in Pinata ([key custody](KEY_CUSTODY.md#web-app-secrets)).
 
 ## 5. Vercel: docs.tribes.build (`builder-stellar-docs`)
 
