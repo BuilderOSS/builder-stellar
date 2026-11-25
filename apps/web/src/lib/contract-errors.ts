@@ -158,12 +158,17 @@ const ERRORS: Record<number, string> = {
   7513: 'This proposal is queued but its execution time has not arrived yet.',
   7514: 'A comment cannot be empty (CommentEmpty).',
   7515: 'A comment can be at most 8,192 bytes (CommentTooLong).',
+  7516: "A proposal action cannot call the Governor's consume (CannotConsume).",
+  7517: 'The proposal mints more than one execution can record. Split the mints over several proposals (MintsTooLarge).',
+  7518: 'The Governor code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // treasury
   7601: 'Treasury mismatch.',
   7602: 'Proposals may only call upgrade or migrate on the Treasury itself (UnknownSelfCall).',
   7603: 'Invalid arguments for a Treasury self-call.',
   7604: 'Proposal targets, functions and arguments must have the same length.',
   7605: 'An authorize action is malformed, too large, or not followed by the call it applies to.',
+  7606: "A proposal action or authorize action cannot call the Governor's consume (CannotConsume).",
+  7607: 'The Treasury code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // marketplace
   7701: 'The marketplace is not initialised.',
   7702: 'Invalid price.',

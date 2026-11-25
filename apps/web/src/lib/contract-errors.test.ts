@@ -30,6 +30,11 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('token', 7205)).toContain('43');
     expect(getContractErrorMessage('minter', 7803)).toContain('43');
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
+    expect(getContractErrorMessage('governor', 7516)).toContain('CannotConsume');
+    expect(getContractErrorMessage('governor', 7517)).toContain('MintsTooLarge');
+    expect(getContractErrorMessage('treasury', 7606)).toContain('CannotConsume');
+    expect(getContractErrorMessage('governor', 7518)).toContain('StorageVersionMismatch');
+    expect(getContractErrorMessage('treasury', 7607)).toContain('StorageVersionMismatch');
   });
 
   it('drops retired codes and words the governor lifecycle codes accurately', () => {
