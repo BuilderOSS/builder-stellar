@@ -279,15 +279,16 @@ fn a_failed_drive_refunds_recovers_and_frees_its_slug() {
     let first = leaves[0].0.clone();
     assert_eq!(claims.refund(&0, &first), PRICE * 3);
     assert_eq!(pay.balance(&first), 1_000);
-    // Refunds come first: no recovery until the upgrade notice has also
-    // passed since the deadline.
+    // Refunds come first: no recovery until the refund time (the upgrade
+    // notice, at least seven days) has also passed since the deadline.
     assert_eq!(
         f.manager.try_recover_claims(&f.dao.token, &from, &to),
         Err(Ok(M::UpgradeDelayNotElapsed))
     );
     e.ledger().with_mut(|l| {
         l.sequence_number += TEST_UPGRADE_DELAY;
-        l.timestamp += TEST_UPGRADE_DELAY as u64 * manager::SECONDS_PER_LEDGER;
+        l.timestamp += (TEST_UPGRADE_DELAY as u64 * manager::SECONDS_PER_LEDGER)
+            .max(manager::MIN_RECOVERY_REFUND_WINDOW);
     });
 
     // Only the recorded launch admin recovers, to the approved hash.

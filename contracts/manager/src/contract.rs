@@ -51,6 +51,12 @@ pub const MAX_ASSURANCE_WINDOW: u64 = 90 * 86_400;
 /// (a failed drive's deadline, in `recover_claims`): 86,400 seconds over
 /// `common::ttl::DAY_IN_LEDGERS`.
 pub const SECONDS_PER_LEDGER: u64 = 86_400 / common::ttl::DAY_IN_LEDGERS as u64;
+/// Shortest time members have after a failed drive's deadline to take their
+/// refunds before a recovery upgrade can apply (7 days, seconds). A lowered
+/// upgrade notice takes effect only after the old one, but before the
+/// deadline members cannot act on that warning, so the refund time has its
+/// own floor.
+pub const MIN_RECOVERY_REFUND_WINDOW: u64 = 7 * 86_400;
 
 #[contractimpl]
 impl ManagerContract {
@@ -1229,10 +1235,11 @@ impl ManagerContract {
     ///   and is the hash announced as latest for its name (`latest_pointer`).
     /// - The Manager's upgrade notice (`upgrade_delay()` ledgers) has passed
     ///   since the approval and since the announcement, and the same notice,
-    ///   in seconds (`SECONDS_PER_LEDGER` each), has passed since the drive's
-    ///   deadline. Members therefore have the whole notice after the drive
-    ///   fails to take their refunds with the code they paid into, and the
-    ///   only possible recovery target is visible for that time.
+    ///   in seconds (`SECONDS_PER_LEDGER` each) and never less than
+    ///   `MIN_RECOVERY_REFUND_WINDOW`, has passed since the drive's deadline.
+    ///   Members therefore have at least that long after the drive fails to
+    ///   take their refunds with the code they paid into, and the only
+    ///   possible recovery target is visible for that time.
     ///
     /// # Errors
     ///
@@ -1242,7 +1249,7 @@ impl ManagerContract {
     ///   revoked or named differently
     /// * `UpgradeNotLatest` - `to_hash` is not the latest for its name
     /// * `UpgradeDelayNotElapsed` - the notice has not passed since the
-    ///   approval, the announcement or the deadline
+    ///   approval or the announcement, or the refund time since the deadline
     pub fn recover_claims(
         env: Env,
         token_address: Address,
@@ -1261,7 +1268,7 @@ impl ManagerContract {
             get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
                 .ok_or(ManagerError::NoAssurance)?;
         // Once the drive has failed nothing can launch, so the upgrade cannot
-        // change the outcome, only how refunds are paid.
+        // change whether the DAO launches.
         if !Self::drive_failed(&env, &token_address, &assurance) {
             return Err(ManagerError::AssuranceNotFailed);
         }
@@ -1289,11 +1296,12 @@ impl ManagerContract {
         if !common::upgrade::notice_passed(&env, approved.max(latest.set_ledger)) {
             return Err(ManagerError::UpgradeDelayNotElapsed);
         }
-        // The notice also counts from the deadline: refunds open only when
-        // the drive fails, so a target announced long before it would
-        // otherwise race the first refunds.
-        let refund_window =
-            (common::upgrade::delay(&env) as u64).saturating_mul(SECONDS_PER_LEDGER);
+        // The notice also counts from the deadline, with a floor: refunds
+        // open only when the drive fails, so a target announced (or a notice
+        // lowered) long before it would otherwise race the first refunds.
+        let refund_window = (common::upgrade::delay(&env) as u64)
+            .saturating_mul(SECONDS_PER_LEDGER)
+            .max(MIN_RECOVERY_REFUND_WINDOW);
         if env.ledger().timestamp() <= assurance.deadline.saturating_add(refund_window) {
             return Err(ManagerError::UpgradeDelayNotElapsed);
         }
@@ -1804,7 +1812,8 @@ impl ManagerContract {
 
     /// The upgrade notice in force, in ledgers, for `upgrade_manager` and for
     /// `recover_claims` (which also measures it from the drive's deadline,
-    /// at `SECONDS_PER_LEDGER` seconds per ledger).
+    /// at `SECONDS_PER_LEDGER` seconds per ledger and never less than
+    /// `MIN_RECOVERY_REFUND_WINDOW`).
     pub fn upgrade_delay(env: Env) -> u32 {
         common::upgrade::delay(&env)
     }

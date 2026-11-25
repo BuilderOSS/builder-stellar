@@ -2393,6 +2393,38 @@ mod real_dao {
         });
     }
 
+    /// Lowering the upgrade notice long before the deadline does not shorten
+    /// the time members have to take their refunds.
+    #[test]
+    fn a_lowered_notice_still_leaves_members_the_refund_floor() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let ((alice, pa), _) = drive(&dao, cfg(env, true, true));
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        let deadline = dao.client.get_assurance(token).unwrap().deadline;
+        let to = empty_wasm(env);
+        let from = announce_recovery(&dao, &to);
+        // The notice drops to nothing once the notice in force has passed,
+        // all before the deadline.
+        dao.client.set_upgrade_delay(&0);
+        move_to(env, TEST_UPGRADE_DELAY, deadline + 1);
+        assert_eq!(dao.client.upgrade_delay(), 0);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, 0, deadline + crate::MIN_RECOVERY_REFUND_WINDOW);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        assert_eq!(dao.claims.refund(&0, &alice), 10);
+        move_to(env, 1, deadline + crate::MIN_RECOVERY_REFUND_WINDOW + 1);
+        dao.client.recover_claims(token, &from, &to);
+    }
+
     /// A target registered after the drive failed applies only once it is
     /// the announced latest and the notice has passed since the approval and
     /// the announcement.
@@ -3708,10 +3740,10 @@ fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
     );
 }
 
-/// The notice `recover_claims` measures from the drive's deadline, in
-/// seconds.
+/// The refund time `recover_claims` measures from the drive's deadline, in
+/// seconds: the notice in seconds, never less than the floor.
 fn recovery_window_seconds() -> u64 {
-    TEST_UPGRADE_DELAY as u64 * crate::SECONDS_PER_LEDGER
+    (TEST_UPGRADE_DELAY as u64 * crate::SECONDS_PER_LEDGER).max(crate::MIN_RECOVERY_REFUND_WINDOW)
 }
 
 #[test]
