@@ -1,10 +1,21 @@
-import { Keypair } from '@stellar/stellar-sdk';
+import { readFileSync } from 'node:fs';
+
+import { Address, Keypair } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 
-import { verifyClaimProof } from './proof';
-import { buildClaimTree, type ClaimEntry, MAX_TREE_CLAIMS, validateClaimEntries, verifyClaimTree } from './tree';
+import { claimLeaf, verifyClaimProof } from './proof';
+import {
+  buildClaimTree,
+  type ClaimEntry,
+  MAX_TREE_CLAIMS,
+  TREE_FORMAT,
+  TREE_LEAF,
+  TREE_NODE,
+  validateClaimEntries,
+  verifyClaimTree
+} from './tree';
 
 const NETWORK = 'Test SDF Network ; September 2015';
 const TOKEN = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4';
@@ -58,5 +69,66 @@ describe('published claim trees', () => {
     expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT + 1) }])).not.toThrow();
     expect(() => validateClaimEntries([{ ...a!, amount: '4294967296' }])).toThrow('more than a list can hold');
     expect(MAX_TREE_CLAIMS).toBe(10_000);
+  });
+});
+
+/** Shared with the contract's tests (contracts/minter/src/test.rs), which check the same file. */
+type MerkleVectors = {
+  format: string;
+  leafRule: string;
+  nodeRule: string;
+  leaves: {
+    name: string;
+    address: string;
+    amount: string;
+    scvalXdr: string;
+    preimageBytes: number;
+    leaf: string;
+    claimable: boolean;
+  }[];
+  tree: { claims: ClaimEntry[]; merkleRoot: string; proofs: Record<string, string[]> };
+};
+const VECTORS = JSON.parse(
+  readFileSync(new URL('../../../../../contracts/minter/test-vectors/merkle-v1.json', import.meta.url), 'utf8')
+) as MerkleVectors;
+
+describe('shared merkle vectors (contracts/minter/test-vectors/merkle-v1.json)', () => {
+  it('describe the format this builder publishes', () => {
+    expect(VECTORS.format).toBe(TREE_FORMAT);
+    expect(VECTORS.leafRule).toBe(TREE_LEAF);
+    expect(VECTORS.nodeRule).toBe(TREE_NODE);
+  });
+
+  it('hash every leaf as the contract does, for account, contract, and muxed addresses', () => {
+    for (const vector of VECTORS.leaves) {
+      const xdr = Buffer.from(new Address(vector.address).toScVal().toXDR());
+      expect(xdr.toString('hex'), vector.name).toBe(vector.scvalXdr);
+      expect(xdr.length + 16, vector.name).toBe(vector.preimageBytes);
+      expect(claimLeaf(vector.address, vector.amount).toString('hex'), vector.name).toBe(vector.leaf);
+    }
+    expect(VECTORS.leaves.map((vector) => vector.address[0])).toEqual(expect.arrayContaining(['G', 'C', 'M']));
+  });
+
+  it('only claimable leaves differ in length from a node (64 bytes)', () => {
+    for (const vector of VECTORS.leaves) expect(vector.preimageBytes === 64, vector.name).toBe(!vector.claimable);
+  });
+
+  it('build the same root and proofs, whatever the input order', () => {
+    const scope = { network: NETWORK, token: TOKEN, list: 0 };
+    for (const claims of [VECTORS.tree.claims, [...VECTORS.tree.claims].reverse()]) {
+      const tree = buildClaimTree(claims, scope);
+      expect(tree.merkleRoot).toBe(VECTORS.tree.merkleRoot);
+      for (const { address, amount } of claims) {
+        expect(tree.claims[address]!.proof).toEqual(VECTORS.tree.proofs[address]);
+        expect(verifyClaimProof(address, amount, VECTORS.tree.proofs[address]!, VECTORS.tree.merkleRoot)).toBe(true);
+      }
+    }
+  });
+
+  it('refuse the muxed claimer, which the contract cannot accept', () => {
+    for (const vector of VECTORS.leaves.filter(({ claimable }) => !claimable))
+      expect(() => validateClaimEntries([{ address: vector.address, amount: vector.amount }])).toThrow(
+        'not a Stellar address'
+      );
   });
 });

@@ -41,6 +41,14 @@ export function inspectProposalAdminCall(
       ]
     };
   }
+  if (config.claimsContractId && target === config.claimsContractId && fn === 'close_list') {
+    const listId = Number(scValToNative(encodeSupportedCall(target, fn, args, config)[0]!));
+    return {
+      title: `Close claim list ${listId + 1}`,
+      risk: 'Stops claims on this list when the proposal runs. Tokens already claimed stay with their holders; the rest can no longer be minted from this list. The call fails if the list has already ended, or if the claims module is a release without close_list (0.5.0 and earlier).',
+      fields: [{ label: 'List ID', value: String(listId) }]
+    };
+  }
   const modules = [
     ['token', config.tokenContractId],
     ['governor', config.governorContractId],

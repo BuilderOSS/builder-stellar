@@ -1,36 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthError, authErrorResponse } from '@/lib/auth/server';
 import { AuthenticationError, getPinataService, PinataError } from '@/lib/pinata-service';
+import { issuePinToken } from '@/lib/pinata-upload-auth';
+import { requireUploadAccount, UploadAccessError, uploadAccessErrorResponse } from '@/lib/upload-access';
 import { uploadsDisabledResponse } from '@/lib/uploads-disabled-response';
 import { uploadsEnabled } from '@/lib/uploads-enabled';
-
-/**
- * Simple in-memory rate limiter for JWT generation
- * Rate limit: 20 requests per 60 seconds per user (generous to avoid blocking legitimate use)
- */
-const jwtLimiter = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(key: string, maxPerMinute: number = 20): { allowed: boolean; reason?: string } {
-  const now = Date.now();
-  const limit = jwtLimiter.get(key);
-
-  if (!limit || limit.resetAt < now) {
-    // Reset window
-    jwtLimiter.set(key, { count: 1, resetAt: now + 60 * 1000 });
-    return { allowed: true };
-  }
-
-  if (limit.count >= maxPerMinute) {
-    return {
-      allowed: false,
-      reason: `Rate limit exceeded. Maximum ${maxPerMinute} requests per minute.`
-    };
-  }
-
-  limit.count++;
-  return { allowed: true };
-}
 
 /**
  * POST /api/pinata/generate-jwt
@@ -49,29 +24,13 @@ function checkRateLimit(key: string, maxPerMinute: number = 20): { allowed: bool
  * - 429: Rate limit exceeded
  * - 500: Service error
  */
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(_request: NextRequest): Promise<NextResponse> {
   try {
     // The deployment's upload switch covers directory uploads too.
     if (!uploadsEnabled()) return uploadsDisabledResponse();
 
-    // Check authentication
-    const session = await requireAuthenticatedSession();
-
-    // Apply rate limiting
-    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const rateLimitKey = `jwt:${session.address}:${clientIp}`;
-    const rateLimit = checkRateLimit(rateLimitKey);
-
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: rateLimit.reason,
-          code: 'RATE_LIMIT_EXCEEDED',
-          retryAfter: 60
-        },
-        { status: 429, headers: { 'Retry-After': '60' } }
-      );
-    }
+    // A funded account, and a few keys per account at a time: each key is a paid upload.
+    const session = await requireUploadAccount('generate-jwt');
 
     // Generate JWT from Pinata service
     const pinataService = getPinataService();
@@ -104,6 +63,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         jwt,
+        // pin-cid pins the uploaded directory only with this token, for this account.
+        pinToken: issuePinToken(session.address),
         expiresAt: expiresAt.toISOString()
       },
       { status: 200 }
@@ -111,6 +72,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof AuthError) {
       return authErrorResponse(error);
+    }
+
+    if (error instanceof UploadAccessError) {
+      return uploadAccessErrorResponse(error);
     }
 
     if (error instanceof PinataError) {

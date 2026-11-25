@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
+import { enforceAuthRateLimit, getClientKey } from '@/lib/auth/rate-limit';
 
 /**
  * Per-client limits for public routes that cost the operator RPC calls, IPFS fetches, image
@@ -25,31 +25,20 @@ export type LimitedRoute = keyof typeof API_RATE_LIMITS;
 
 export const RATE_LIMITED_MESSAGE = 'Too many requests. Wait a minute, then try again.';
 
-const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
-
-/**
- * A request from the server's own machine: `next dev` and `next start` set x-forwarded-for from
- * the socket when no proxy did, so local development and the walkthrough suite arrive as loopback.
- * Vercel always sends x-vercel-forwarded-for, which this never treats as local.
- */
-function fromThisMachine(request: Request) {
-  if (request.headers.get('x-vercel-forwarded-for')?.trim()) return false;
-  const first = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return first !== undefined && LOOPBACK.has(first);
-}
-
 /**
  * Count one request to `route`. Returns the response to send when the client is over its limit
  * (429 with Retry-After), or null to continue. The sign-in limiter's own 429 text is replaced,
  * since it speaks of sign-in.
  *
- * Requests from this machine, and requests with no client address, are let through uncounted
- * (sign-in refuses the latter). On Vercel neither happens. Elsewhere the forwarded-for header
- * comes from the client unless a proxy sets it, so a client could forge either case anyway; the
- * deployment's proxy has to supply the address for these limits to hold there.
+ * The client is identified exactly as sign-in identifies it (`getClientKey`: Vercel's
+ * x-vercel-forwarded-for, or the header TRUSTED_CLIENT_IP_HEADER names). A request with no trusted
+ * address, and local development, are let through uncounted, where sign-in refuses the former:
+ * these routes are public reads and preparations, so they stay available, and the limits apply
+ * wherever the platform supplies the address.
  */
 export async function limitApiRequest(request: Request, route: LimitedRoute): Promise<Response | null> {
-  if (fromThisMachine(request)) return null;
+  const client = getClientKey(request);
+  if (!client || client === 'localhost-dev') return null;
   const { limit, windowMs } = API_RATE_LIMITS[route];
   const blocked = await enforceAuthRateLimit(request, `api:${route}`, limit, windowMs);
   if (!blocked || blocked.status !== 429) return null;

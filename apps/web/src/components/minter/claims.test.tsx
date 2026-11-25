@@ -10,7 +10,11 @@ const state = vi.hoisted(() => ({
   claims: undefined as unknown,
   history: undefined as unknown,
   config: {} as Record<string, unknown>,
-  canManage: false
+  canManage: false,
+  address: 'GALICE',
+  canClose: undefined as boolean | undefined,
+  openLists: undefined as unknown,
+  propose: vi.fn()
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -21,7 +25,7 @@ vi.mock('@/contexts/dao-context', () => ({
 vi.mock('@/stores/auth-session-store', () => ({
   useAuthSessionStore: Object.assign(
     () => ({
-      address: 'GALICE',
+      address: state.address,
       authStatus: 'authenticated',
       walletNetworkIssue: '',
       walletNetworkPassphrase: 'Test SDF Network ; September 2015'
@@ -32,8 +36,11 @@ vi.mock('@/stores/auth-session-store', () => ({
 vi.mock('@/lib/minter/hooks', () => ({
   claimFetch: vi.fn(),
   useCurrentClaims: () => ({ data: state.claims, isLoading: false, error: undefined, mutate: vi.fn() }),
-  useClaimHistory: () => ({ data: state.history, isLoading: false, error: undefined, mutate: vi.fn() })
+  useClaimHistory: () => ({ data: state.history, isLoading: false, error: undefined, mutate: vi.fn() }),
+  useClaimMinterCanCloseLists: () => ({ data: state.canClose }),
+  useOpenClaimLists: () => ({ data: state.openLists, error: undefined })
 }));
+vi.mock('@/lib/proposal-actions/use-propose-action', () => ({ useProposeAction: () => ({ propose: state.propose }) }));
 vi.mock('@/lib/transaction-feedback', () => ({
   useTransactionFeedback: () => ({ start: vi.fn(), submitted: vi.fn(), success: vi.fn(), fail: vi.fn() })
 }));
@@ -163,5 +170,94 @@ describe('Past claims', () => {
     expect(html).toContain('1 token from Claim list 1');
     expect(html).toContain('3 tokens from Claim list 1');
     expect(html).not.toContain('1 tokens');
+  });
+});
+
+describe('Closing a claim list early', () => {
+  const open = { ...baseList, assurance: null, expiresAt: Math.floor(Date.now() / 1000) + 86_400 };
+  beforeEach(() => {
+    state.address = ALICE;
+    state.canManage = true;
+    state.canClose = true;
+    state.claims = claimsState([open]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, status: 'operational' };
+  });
+  afterAll(() => {
+    state.address = 'GALICE';
+    state.canClose = undefined;
+  });
+
+  it('is a proposal action for members once the tribe is live', () => {
+    state.claims = { ...claimsState([open]), live: true };
+    const html = render(true);
+    expect(html).toContain('Close in proposal');
+    expect(html).not.toContain('Close this list');
+    // Only on the manage view.
+    expect(render()).not.toContain('Close in proposal');
+  });
+
+  it('is not offered for a ClaimMinter without close_list (0.5.0), or while that is unknown', () => {
+    state.claims = { ...claimsState([open]), live: true };
+    state.canClose = false;
+    expect(render(true)).not.toContain('Close in proposal');
+    state.canClose = undefined;
+    expect(render(true)).not.toContain('Close in proposal');
+  });
+
+  it('is the launch admin’s own call in Setup, except for the launch drive', () => {
+    state.claims = { ...claimsState([open]), admin: ALICE };
+    expect(render(true)).toContain('Close this list');
+    const drive = { ...open, assurance: { thresholdClaimers: 5, deadline: open.expiresAt, state: 'open' as const } };
+    state.claims = { ...claimsState([drive]), admin: ALICE };
+    expect(render(true)).not.toContain('Close this list');
+  });
+
+  it('is not offered for a list that has ended', () => {
+    state.claims = { ...claimsState([{ ...open, expiresAt: deadline }]), live: true };
+    expect(render(true)).not.toContain('Close in proposal');
+  });
+});
+
+describe('Founder supply on the claims page', () => {
+  const open = { ...baseList, listId: 0, assurance: null, expiresAt: Math.floor(Date.now() / 1000) + 86_400 };
+  const indexed = (setupUnclaimed: number) => ({
+    lists: [{ listId: 0, isAssurance: false, openedInSetup: true }],
+    setupUnclaimed,
+    setupLists: 1
+  });
+  beforeEach(() => {
+    state.claims = { ...claimsState([open]), live: true, allowance: 7 };
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, claimsContractId: 'CCLAIMS' };
+  });
+  afterAll(() => {
+    state.openLists = undefined;
+  });
+
+  it('shows what Setup lists can still mint, and marks the list', () => {
+    state.openLists = indexed(6);
+    const html = render();
+    expect(html).toContain('Founder supply: 6 tokens can still be minted');
+    expect(html).toContain('A proposal can close a list early to stop this.');
+    expect(html).toContain('Opened during setup: its 7 unclaimed tokens are founder');
+  });
+
+  it('caps it at the claims module’s allowance', () => {
+    state.openLists = indexed(12);
+    expect(render()).toContain('Founder supply: 7 tokens can still be minted');
+  });
+
+  it('shows nothing when no Setup list has tokens left', () => {
+    state.openLists = { lists: [], setupUnclaimed: 0, setupLists: 0 };
+    expect(render()).not.toContain('Founder supply');
+  });
+});
+
+describe('A claim list open until u64::MAX', () => {
+  it('reads as having no closing date', () => {
+    state.claims = claimsState([{ ...baseList, assurance: null, expiresAt: Number('18446744073709551615') }]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN };
+    const html = render();
+    expect(html).toContain('no closing date');
+    expect(html).not.toContain('Invalid Date');
   });
 });

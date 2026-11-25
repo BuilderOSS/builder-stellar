@@ -14,9 +14,15 @@ export function hashBytes(value: string): Buffer {
   return Buffer.from(value, 'hex');
 }
 
-/** contracts/minter/src/contract.rs:258-272: Address::to_xdr is ScVal XDR,
- * NOT ScAddress XDR, a StrKey string, or a raw ed25519 key. SHA-256, not Keccak.
- * This verifies supplied proofs; it never generates allocation trees/proofs. */
+/**
+ * The leaf the ClaimMinter hashes (`leaf_hash` in contracts/minter/src/contract.rs):
+ * SHA-256, not Keccak, of the address as ScVal XDR (not ScAddress XDR, a StrKey
+ * string or a raw ed25519 key) followed by the amount as a 16-byte big-endian u128.
+ * An account leaf hashes 60 bytes and a contract leaf 56, never the 64 bytes of a
+ * node. A muxed (M…) address would hash 64, but the contract can't take one as a
+ * claimer, and `validateClaimEntries` refuses it. Shared test vectors:
+ * contracts/minter/test-vectors/merkle-v1.json.
+ */
 export function claimLeaf(recipient: string, amount: string): Buffer {
   const integer = claimAmount(amount);
   const be128 = Buffer.from(integer.toString(16).padStart(32, '0'), 'hex');

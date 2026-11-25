@@ -77,6 +77,14 @@ describe('listing end presets', () => {
     expect(text).toContain('November 2026');
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
   });
+  it('has no date for an end past what a Date can hold, such as u64::MAX', () => {
+    // The contract takes any future u64; the read model caps one past the bigint range at its maximum.
+    expect(formatListingEnd('18446744073709551615', 'en-GB')).toBeNull();
+    expect(formatListingEnd('9223372036854775807', 'en-GB')).toBeNull();
+    expect(formatListingEnd(8_640_000_000_001, 'en-GB')).toBeNull();
+    expect(formatListingEnd('soon', 'en-GB')).toBeNull();
+    expect(formatListingEnd(8_640_000_000_000, 'en-GB')).toContain('275760');
+  });
 });
 
 describe('the guided sell sequence', () => {

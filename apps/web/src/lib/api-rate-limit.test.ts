@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { API_RATE_LIMITS, limitApiRequest, RATE_LIMITED_MESSAGE } from './api-rate-limit';
 
@@ -9,7 +9,10 @@ function client() {
   return () => new Request('https://tribes.build/api/render/x/1', { headers: { 'x-vercel-forwarded-for': ip } });
 }
 
-describe('limitApiRequest', () => {
+describe('limitApiRequest on Vercel', () => {
+  beforeEach(() => vi.stubEnv('VERCEL', '1'));
+  afterEach(() => vi.unstubAllEnvs());
+
   it('answers 429 with Retry-After once a client passes the route limit', async () => {
     const request = client();
     for (let i = 0; i < API_RATE_LIMITS.prepare.limit; i += 1) {
@@ -30,28 +33,37 @@ describe('limitApiRequest', () => {
     expect(await limitApiRequest(client()(), 'health')).toBeNull();
   });
 
-  it('does not count requests from this machine (next dev, next start, the walkthrough suite)', async () => {
-    for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
-      const local = () => new Request('http://localhost:4242/api/health', { headers: { 'x-forwarded-for': address } });
-      for (let i = 0; i <= API_RATE_LIMITS.health.limit; i += 1) {
-        expect(await limitApiRequest(local(), 'health'), address).toBeNull();
-      }
-    }
-  });
-
-  it('never treats a Vercel request as local', async () => {
+  it('identifies the client only by the platform header, never by a forged x-forwarded-for', async () => {
+    let n = 0;
     const forged = () =>
       new Request('https://tribes.build/api/health', {
-        headers: { 'x-vercel-forwarded-for': '198.51.100.250', 'x-forwarded-for': '127.0.0.1' }
+        headers: { 'x-vercel-forwarded-for': '198.51.100.250', 'x-forwarded-for': `127.0.0.${++n}` }
       });
     for (let i = 0; i < API_RATE_LIMITS.health.limit; i += 1) await limitApiRequest(forged(), 'health');
     expect((await limitApiRequest(forged(), 'health'))?.status).toBe(429);
   });
+});
 
-  it('lets a request with no client address through uncounted', async () => {
-    const anonymous = () => new Request('https://tribes.build/api/health');
+describe('limitApiRequest without a trusted client address', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('lets the request through uncounted, where sign-in refuses it', async () => {
+    vi.stubEnv('VERCEL', '');
+    // Off Vercel with no TRUSTED_CLIENT_IP_HEADER, no header is trusted, a client-sent one included.
+    const request = () =>
+      new Request('https://tribes.build/api/health', {
+        headers: { 'x-vercel-forwarded-for': '198.51.100.251', 'x-forwarded-for': '198.51.100.251' }
+      });
     for (let i = 0; i <= API_RATE_LIMITS.health.limit; i += 1) {
-      expect(await limitApiRequest(anonymous(), 'health')).toBeNull();
+      expect(await limitApiRequest(request(), 'health')).toBeNull();
+    }
+  });
+
+  it('does not count local development', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const local = () => new Request('http://localhost:4242/api/health');
+    for (let i = 0; i <= API_RATE_LIMITS.health.limit; i += 1) {
+      expect(await limitApiRequest(local(), 'health')).toBeNull();
     }
   });
 });

@@ -376,6 +376,7 @@ const newEventCases = [
   ['PoolClosed', 'marketplace', 'marketplace.pool_closed', 'Pool closed', 'public'],
   ['PoolRestocked', 'marketplace', 'marketplace.pool_restocked', 'Pool restocked', 'admin'],
   ['ListOpened', 'claims', 'claims.list_opened', 'Claim list opened', 'public'],
+  ['ListClosed', 'claims', 'claims.list_closed', 'Claim list closed', 'public'],
   ['Claimed', 'claims', 'claims.claimed', 'Tokens claimed', 'public'],
   ['Refunded', 'claims', 'claims.refunded', 'Claim refunded', 'admin'],
   ['ClaimMinterLaunched', 'claims', 'claims.launched', 'Claim minter launched', 'admin'],

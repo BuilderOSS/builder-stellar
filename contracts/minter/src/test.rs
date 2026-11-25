@@ -3,17 +3,20 @@ extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl,
-    testutils::{Address as _, Events, Ledger, MockAuth, MockAuthInvoke},
+    testutils::{
+        Address as _, Events, IssuerFlags, Ledger, MockAuth, MockAuthInvoke, StellarAssetContract,
+    },
     token::{StellarAssetClient, TokenClient},
     vec,
     xdr::ToXdr,
-    Address, Bytes, BytesN, Env, Event, IntoVal, String, Symbol, Val, Vec,
+    Address, Bytes, BytesN, Env, Event, IntoVal, MuxedAddress, String, Symbol, TryFromVal, Val,
+    Vec,
 };
 use token::{DaoTokenContract, DaoTokenContractClient};
 
 use crate::{
     AssuranceState, AssuranceTerms, ClaimMinter, ClaimMinterClient, ClaimMinterError as E,
-    ClaimRecord, Claimed, EscrowReleased, ListOpened, Refunded,
+    ClaimRecord, Claimed, EscrowReleased, ListClosed, ListOpened, Refunded,
 };
 use common::testutils::{MockManager, MockManagerClient};
 
@@ -44,6 +47,8 @@ struct Dao {
     launch_admin: Address,
     treasury: Address,
     asset: Address,
+    /// The payment asset's Stellar Asset Contract, for its issuer flags.
+    sac: StellarAssetContract,
 }
 
 impl Dao {
@@ -70,9 +75,8 @@ impl Dao {
                 common::modules::TokenSettings::default(),
             ),
         );
-        let asset = env
-            .register_stellar_asset_contract_v2(Address::generate(&env))
-            .address();
+        let sac = env.register_stellar_asset_contract_v2(Address::generate(&env));
+        let asset = sac.address();
         let cm_id = env.register(
             ClaimMinter,
             (
@@ -95,6 +99,7 @@ impl Dao {
             launch_admin,
             treasury,
             asset,
+            sac,
             env,
         }
     }
@@ -452,6 +457,35 @@ fn open_list_validates_its_terms() {
 }
 
 #[test]
+fn an_assurance_threshold_above_the_list_total_is_refused() {
+    // Each distinct claimer mints at least one token, so more claimers than
+    // tokens can never claim: such a drive could only fail.
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    let tree = Tree::new(&d.env, &[(&alice, 1)]);
+    let open = |total: u32, threshold: u32| {
+        d.cm.try_open_list(
+            &tree.root,
+            &uri(&d.env),
+            &d.asset,
+            &10,
+            &(NOW + 30 * DAY),
+            &total,
+            &terms(threshold),
+        )
+    };
+    assert_eq!(open(10, 11).err().unwrap().unwrap(), E::InvalidAssurance);
+    assert_eq!(
+        open(1, u32::MAX).err().unwrap().unwrap(),
+        E::InvalidAssurance
+    );
+    assert_eq!(d.cm.next_list_id(), 0);
+    // A threshold equal to the total is the largest that can be met.
+    let id = open(10, 10).unwrap().unwrap();
+    assert_eq!(d.cm.get_list(&id).unwrap().threshold_claimers, 10);
+}
+
+#[test]
 fn claims_check_the_proof_the_list_and_the_batch_size() {
     let d = Dao::new();
     let alice = Address::generate(&d.env);
@@ -546,6 +580,81 @@ fn claims_need_the_claimer() {
         .cm
         .try_claim(&id, &alice, &1, &1, &tree.proofs[0], &0)
         .is_err());
+}
+
+#[test]
+fn the_dao_closes_a_setup_list_after_launch() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    // A free list the launch admin opens in Setup stays claimable after launch.
+    let (id, tree) = d.open(&[(&alice, 5)], 0, None);
+    d.launch();
+    d.cm.claim(&id, &alice, &5, &1, &tree.proofs[0], &0);
+
+    // The admin is now the Treasury: a proposal closes the list.
+    d.env.ledger().set_timestamp(NOW + DAY);
+    d.cm.close_list(&id);
+    assert!(d.env.events().all().events().contains(
+        &ListClosed {
+            list_id: id,
+            minted: 1,
+            total: 100,
+        }
+        .to_xdr(&d.env, &d.cm.address)
+    ));
+    assert_eq!(d.env.auths()[0].0, d.treasury);
+    assert_eq!(d.cm.get_list(&id).unwrap().expires_at, NOW + DAY);
+    assert_eq!(
+        d.cm.try_claim(&id, &alice, &5, &1, &tree.proofs[0], &0)
+            .err()
+            .unwrap()
+            .unwrap(),
+        E::ListExpired
+    );
+    assert_eq!(d.token.balance(&alice), 1);
+    // Closing twice fails like any expired list.
+    assert_eq!(
+        d.cm.try_close_list(&id).err().unwrap().unwrap(),
+        E::ListExpired
+    );
+}
+
+#[test]
+fn close_list_is_the_admins_and_spares_an_open_drive() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    assert_eq!(
+        d.cm.try_close_list(&7).err().unwrap().unwrap(),
+        E::ListNotFound
+    );
+    let (free, _) = d.open(&[(&alice, 1)], 0, None);
+    let (drive, _) = d.open(&[(&alice, 1)], 10, terms(1));
+    // The drive's refunds and release depend on it until launch.
+    assert_eq!(
+        d.cm.try_close_list(&drive).err().unwrap().unwrap(),
+        E::AssuranceNotAllowed
+    );
+
+    // Only the admin (the launch admin in Setup) can close a list.
+    let stranger = Address::generate(&d.env);
+    let args: Vec<Val> = (free,).into_val(&d.env);
+    d.env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &d.cm.address,
+            fn_name: "close_list",
+            args,
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(d.cm.try_close_list(&free).is_err());
+    d.env.mock_all_auths();
+    d.cm.close_list(&free);
+    assert_eq!(d.env.auths()[0].0, d.launch_admin);
+
+    // After launch the drive's list can be closed like any other.
+    d.launch();
+    d.cm.close_list(&drive);
 }
 
 // ============================================================================
@@ -947,4 +1056,292 @@ fn storage_keys_do_not_collide() {
         ),
         ("common", common_key_shapes(&e)),
     ]);
+}
+
+// ============================================================================
+// Shared merkle vectors (test-vectors/merkle-v1.json). The web's tree builder
+// checks the same file in apps/web/src/lib/minter/tree.test.ts.
+// ============================================================================
+
+const VECTORS: &str = include_str!("../test-vectors/merkle-v1.json");
+
+fn vectors() -> serde_json::Value {
+    serde_json::from_str(VECTORS).unwrap()
+}
+
+fn text(value: &serde_json::Value) -> &str {
+    value.as_str().unwrap()
+}
+
+fn unhex(hex: &str) -> std::vec::Vec<u8> {
+    assert_eq!(hex.len() % 2, 0);
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .collect()
+}
+
+fn hash32(env: &Env, hex: &str) -> BytesN<32> {
+    BytesN::from_array(env, &unhex(hex).try_into().unwrap())
+}
+
+fn amount(value: &serde_json::Value) -> u128 {
+    text(value).parse().unwrap()
+}
+
+#[test]
+fn the_contract_hashes_the_shared_leaf_vectors() {
+    let env = Env::default();
+    let v = vectors();
+    assert_eq!(text(&v["format"]), "builder-stellar-merkle-v1");
+    let leaves = v["leaves"].as_array().unwrap();
+    for vector in leaves.iter().filter(|l| l["claimable"] == true) {
+        let claimer = Address::from_str(&env, text(&vector["address"]));
+        let xdr = claimer.clone().to_xdr(&env);
+        let expected = unhex(text(&vector["scvalXdr"]));
+        assert_eq!(
+            xdr,
+            Bytes::from_slice(&env, &expected),
+            "{}",
+            vector["name"]
+        );
+        assert_eq!(
+            u64::from(xdr.len()) + 16,
+            vector["preimageBytes"].as_u64().unwrap()
+        );
+        let n = amount(&vector["amount"]);
+        let want = hash32(&env, text(&vector["leaf"]));
+        assert_eq!(crate::contract::leaf_hash(&env, &claimer, n), want);
+        // The test's own copy of the rule agrees.
+        assert_eq!(leaf(&env, &claimer, n), want);
+    }
+    // Both claimer kinds and the largest amount are covered.
+    assert!(leaves.iter().any(|l| text(&l["address"]).starts_with('G')));
+    assert!(leaves.iter().any(|l| text(&l["address"]).starts_with('C')));
+    assert!(leaves
+        .iter()
+        .any(|l| amount(&l["amount"]) == u128::MAX && l["claimable"] == true));
+}
+
+#[test]
+fn the_contract_accepts_the_web_builders_proofs() {
+    // The tree in the vectors was built by the web's `buildClaimTree` (sorted
+    // leaves, an odd node carried up a level), with G and C claimers.
+    let d = Dao::new();
+    let v = vectors();
+    let tree = &v["tree"];
+    let claims = tree["claims"].as_array().unwrap();
+    let root = hash32(&d.env, text(&tree["merkleRoot"]));
+    let total: u128 = claims.iter().map(|c| amount(&c["amount"])).sum();
+    let id = d.cm.open_list(
+        &root,
+        &uri(&d.env),
+        &d.asset,
+        &0,
+        &(NOW + DAY),
+        &(total as u32),
+        &None,
+    );
+    for c in claims {
+        let address = text(&c["address"]);
+        let claimer = Address::from_str(&d.env, address);
+        let n = amount(&c["amount"]);
+        let mut proof: Vec<BytesN<32>> = Vec::new(&d.env);
+        for sibling in tree["proofs"][address].as_array().unwrap() {
+            proof.push_back(hash32(&d.env, text(sibling)));
+        }
+        // Another amount does not verify; the leaf's own amount does.
+        assert_eq!(
+            d.cm.try_claim(&id, &claimer, &(n + 1), &1, &proof, &0)
+                .err()
+                .unwrap()
+                .unwrap(),
+            E::MerkleProofInvalid
+        );
+        d.cm.claim(&id, &claimer, &n, &1, &proof, &0);
+        assert_eq!(d.cm.get_claim(&id, &claimer).claimed, 1);
+    }
+    assert_eq!(d.cm.get_list(&id).unwrap().claimers, claims.len() as u32);
+}
+
+/// A muxed address gives a 64-byte leaf preimage, the length of a node's.
+/// The contract never hashes one: `claim` takes an `Address`, and a muxed
+/// address does not convert to one, so the call fails before the function
+/// body runs. Account and contract leaves hash 60 and 56 bytes.
+#[test]
+fn a_muxed_address_leaf_is_node_sized_but_can_never_be_claimed() {
+    let d = Dao::new();
+    let env = &d.env;
+    let v = vectors();
+    let vector = v["leaves"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["claimable"] == false)
+        .unwrap();
+    let muxed = MuxedAddress::from_str(env, text(&vector["address"]));
+    assert_eq!(muxed.id(), Some(1234));
+
+    // The muxed leaf: 48 bytes of address XDR plus the amount is 64 bytes.
+    let xdr = muxed.to_val().to_xdr(env);
+    assert_eq!(
+        xdr,
+        Bytes::from_slice(env, &unhex(text(&vector["scvalXdr"])))
+    );
+    let mut preimage = xdr.clone();
+    preimage.extend_from_array(&amount(&vector["amount"]).to_be_bytes());
+    assert_eq!(preimage.len(), 64);
+    let muxed_leaf: BytesN<32> = env.crypto().sha256(&preimage).into();
+    assert_eq!(muxed_leaf, hash32(env, text(&vector["leaf"])));
+    // An account or contract leaf is never node-sized.
+    let account = muxed.address();
+    let contract = Address::generate(env);
+    assert_eq!(account.clone().to_xdr(env).len() + 16, 60);
+    assert_eq!(contract.to_xdr(env).len() + 16, 56);
+
+    // A list whose root is the muxed leaf: the proof is empty.
+    let id = d.cm.open_list(
+        &muxed_leaf,
+        &uri(env),
+        &d.asset,
+        &0,
+        &(NOW + DAY),
+        &10,
+        &None,
+    );
+    // The same raw call, once with the account's `Address` and once with the
+    // muxed address as the claimer.
+    let raw_claim = |claimer: Val| {
+        let args: Vec<Val> = vec![
+            env,
+            id.into_val(env),
+            claimer,
+            1u128.into_val(env),
+            1u32.into_val(env),
+            Vec::<BytesN<32>>::new(env).into_val(env),
+            0i128.into_val(env),
+        ];
+        env.try_invoke_contract::<Vec<u32>, soroban_sdk::Error>(
+            &d.cm.address,
+            &Symbol::new(env, "claim"),
+            args,
+        )
+    };
+    // The account reaches the proof check: its 60-byte leaf is not the root.
+    assert_eq!(
+        raw_claim(account.to_val()).err().unwrap().unwrap(),
+        soroban_sdk::Error::from_contract_error(E::MerkleProofInvalid as u32)
+    );
+    // A muxed address does not convert to an `Address` at all ...
+    assert!(Address::try_from_val(env, &muxed.to_val()).is_err());
+    // ... so the call with it fails at that conversion, before the function
+    // body (and its contract errors) can run, and no leaf is hashed.
+    let refused = raw_claim(muxed.to_val()).err().unwrap().unwrap();
+    assert!(!refused.is_type(soroban_sdk::xdr::ScErrorType::Contract));
+}
+
+// ============================================================================
+// Known behaviour, documented in docs/SECURITY_MODEL.md
+// ============================================================================
+
+/// One allowance serves every list. A free Setup list stays claimable during
+/// a drive and can use allowance that `open_assurance` granted for the drive,
+/// so drive claimers can meet the Token's `AllowanceExceeded` before the
+/// drive's `total` is reached. Nobody can add allowance until launch.
+#[test]
+fn free_lists_share_the_drives_allowance() {
+    let d = Dao::new();
+    d.token.decrease_mint_allowance(&d.cm.address, &1_000);
+    let alice = Address::generate(&d.env);
+    let bob = Address::generate(&d.env);
+    d.fund(&bob, 100);
+    // A free list opened without allowance of its own.
+    let (free, free_tree) = d.open(&[(&alice, 3)], 0, None);
+    // The drive, as `open_assurance` opens it: the list, an allowance of its
+    // total, and the freeze.
+    let tree = Tree::new(&d.env, &[(&bob, 3)]);
+    let drive = d.cm.open_list(
+        &tree.root,
+        &uri(&d.env),
+        &d.asset,
+        &10,
+        &(NOW + 30 * DAY),
+        &3,
+        &terms(1),
+    );
+    d.token.increase_mint_allowance(&d.cm.address, &3);
+    d.cm.handoff(&d.treasury);
+
+    d.cm.claim(&free, &alice, &3, &3, &free_tree.proofs[0], &0);
+    assert_eq!(d.token.mint_allowance(&d.cm.address), 0);
+    // The Token's `AllowanceExceeded` propagates.
+    assert_eq!(
+        d.cm.try_claim(&drive, &bob, &3, &1, &tree.proofs[0], &10)
+            .err()
+            .unwrap(),
+        Err(soroban_sdk::InvokeError::Contract(
+            token::TokenError::AllowanceExceeded as u32
+        ))
+    );
+    assert_eq!(d.cm.get_list(&drive).unwrap().minted, 0);
+    assert_eq!(d.balance(&bob), 100);
+}
+
+/// A refund goes only to the address that paid. While that address can't
+/// receive the asset (here the asset's issuer deauthorized it), the refund
+/// fails and the payment stays in escrow; no call sends it elsewhere.
+#[test]
+fn a_refund_waits_for_the_claimer_who_paid() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    d.fund(&alice, 100);
+    let (id, tree) = d.open(&[(&alice, 3)], 10, terms(2));
+    d.cm.claim(&id, &alice, &3, &3, &tree.proofs[0], &10);
+    d.env.ledger().set_timestamp(NOW + 10 * DAY + 1);
+    assert_eq!(d.cm.assurance_state(&id), AssuranceState::Failed);
+
+    d.sac.issuer().set_flag(IssuerFlags::RevocableFlag);
+    let admin = StellarAssetClient::new(&d.env, &d.asset);
+    admin.set_authorized(&alice, &false);
+    assert!(d.cm.try_refund(&id, &alice).is_err());
+    assert_eq!(d.cm.get_claim(&id, &alice).escrowed, 30);
+    assert_eq!(d.cm.get_list(&id).unwrap().escrow, 30);
+    assert_eq!(d.balance(&d.cm.address), 30);
+
+    admin.set_authorized(&alice, &true);
+    assert_eq!(d.cm.refund(&id, &alice), 30);
+    assert_eq!(d.balance(&alice), 100);
+}
+
+/// Assets sent to the ClaimMinter outside `claim` are in no list's escrow:
+/// `release` and `refund` move only recorded escrow, and no other function
+/// moves assets, so such transfers stay here.
+#[test]
+fn assets_sent_directly_stay_in_the_claim_minter() {
+    let launched = Dao::new();
+    let failed = Dao::new();
+    for d in [&launched, &failed] {
+        let alice = Address::generate(&d.env);
+        let stranger = Address::generate(&d.env);
+        d.fund(&alice, 100);
+        d.fund(&stranger, 7);
+        let (id, tree) = d.open(&[(&alice, 1)], 10, terms(1));
+        d.cm.claim(&id, &alice, &1, &1, &tree.proofs[0], &10);
+        TokenClient::new(&d.env, &d.asset).transfer(&stranger, &d.cm.address, &7);
+        assert_eq!(d.balance(&d.cm.address), 17);
+        if core::ptr::eq(d, &launched) {
+            d.launch();
+            assert_eq!(d.balance(&d.treasury), 10);
+            assert_eq!(d.cm.release(&id), 0);
+        } else {
+            d.env.ledger().set_timestamp(NOW + 10 * DAY + 1);
+            assert_eq!(d.cm.refund(&id, &alice), 10);
+            assert_eq!(
+                d.cm.try_refund(&id, &stranger).err().unwrap().unwrap(),
+                E::NothingToRefund
+            );
+        }
+        assert_eq!(d.balance(&d.cm.address), 7);
+        assert_eq!(d.cm.get_list(&id).unwrap().escrow, 0);
+    }
 }

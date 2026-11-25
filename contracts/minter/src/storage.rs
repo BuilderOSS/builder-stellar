@@ -17,10 +17,11 @@ pub const STORAGE_VERSION: u32 = 1;
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;
 
-/// Wiring fixed at construction.
+/// Wiring fixed at construction; no function changes it.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimsConfig {
+    /// The DAO's Token: mints every claim and says whether the DAO is Live.
     pub token: Address,
     /// Receives every payment once the DAO is Live, and the assurance escrow
     /// at launch. Fixed here, so nobody can redirect the escrow.
@@ -36,14 +37,19 @@ pub struct ClaimsConfig {
 
 pub use common::modules::{AssuranceState, AssuranceTerms};
 
-/// One claim list: a merkle root of `(claimer, amount)` leaves.
+/// One claim list: a merkle root of `(claimer, amount)` leaves, its terms and
+/// its running totals. The terms are fixed at `open_list`; only `close_list`
+/// moves `expires_at` earlier.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimList {
+    /// Root of the `(claimer, amount)` tree (see the hashing notes in
+    /// `contract.rs`).
     pub root: BytesN<32>,
     /// `ipfs://<cid>` of the full tree (`builder-stellar-merkle-v1`). A hint:
     /// consumers recompute the root from it before offering a claim.
     pub tree_uri: String,
+    /// The asset claims pay in (the configured payment asset for Setup lists).
     pub asset: Address,
     /// Price per token in `asset`, 0 for a free list.
     pub price: i128,
@@ -51,14 +57,19 @@ pub struct ClaimList {
     pub expires_at: u64,
     /// Most tokens this list mints across all claimers.
     pub total: u32,
+    /// Tokens minted from this list so far, at most `total`.
     pub minted: u32,
     /// Distinct addresses that claimed at least once.
     pub claimers: u32,
     /// Assurance terms, flattened: a threshold of 0 means none (see
     /// [`ClaimList::assurance`]).
     pub threshold_claimers: u32,
+    /// The assurance deadline (ledger timestamp), or 0 for no assurance.
     pub deadline: u64,
-    /// Payments held until launch (assurance list in Setup only).
+    /// Payments held until launch (assurance list in Setup only). Before
+    /// `release`, the sum of its claimers' `ClaimRecord::escrowed`;
+    /// `release` sets it to zero and leaves the records. Only this amount is
+    /// released or refunded.
     pub escrow: i128,
 }
 
@@ -72,7 +83,7 @@ impl ClaimList {
     }
 }
 
-/// A claimer's progress on one list.
+/// A claimer's progress on one list (zero before their first claim).
 #[contracttype]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ClaimRecord {
@@ -82,6 +93,7 @@ pub struct ClaimRecord {
     pub escrowed: i128,
 }
 
+/// Storage keys of the ClaimMinter, namespaced with `common::ns`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClaimsKey {
@@ -112,6 +124,7 @@ fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &ClaimsKe
     common::ttl::extend_persistent(env, &key);
 }
 
+/// The wiring set by the constructor.
 pub fn get_config(env: &Env) -> ClaimsConfig {
     env.storage()
         .instance()
@@ -119,12 +132,14 @@ pub fn get_config(env: &Env) -> ClaimsConfig {
         .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet))
 }
 
+/// Store the wiring (constructor only).
 pub fn set_config(env: &Env, config: &ClaimsConfig) {
     env.storage()
         .instance()
         .set(&common::ns(env, ClaimsKey::Config), config);
 }
 
+/// The id the next list receives (0 before the first list).
 pub fn next_list_id(env: &Env) -> u32 {
     env.storage()
         .instance()
@@ -141,30 +156,37 @@ pub fn take_list_id(env: &Env) -> u32 {
     id
 }
 
+/// The assurance list's id, once one is opened.
 pub fn assurance_list(env: &Env) -> Option<u32> {
     env.storage()
         .instance()
         .get(&common::ns(env, ClaimsKey::AssuranceList))
 }
 
+/// Record the assurance list (`open_list`, at most once).
 pub fn set_assurance_list(env: &Env, list_id: u32) {
     env.storage()
         .instance()
         .set(&common::ns(env, ClaimsKey::AssuranceList), &list_id);
 }
 
+/// A list's record, renewing its TTL when present.
 pub fn get_list(env: &Env, list_id: u32) -> Option<ClaimList> {
     get(env, &ClaimsKey::List(list_id))
 }
 
+/// Store a list's record and renew its TTL.
 pub fn set_list(env: &Env, list_id: u32, list: &ClaimList) {
     set(env, &ClaimsKey::List(list_id), list);
 }
 
+/// A claimer's record on a list (zero when absent), renewing its TTL when
+/// present.
 pub fn get_claim(env: &Env, list_id: u32, claimer: &Address) -> ClaimRecord {
     get(env, &ClaimsKey::Claim(list_id, claimer.clone())).unwrap_or_default()
 }
 
+/// Store a claimer's record on a list and renew its TTL.
 pub fn set_claim(env: &Env, list_id: u32, claimer: &Address, record: &ClaimRecord) {
     set(env, &ClaimsKey::Claim(list_id, claimer.clone()), record);
 }

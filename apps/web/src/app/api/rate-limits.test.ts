@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Nothing past the limiter may run: these would show it did.
 const work = vi.hoisted(() =>
@@ -69,6 +69,9 @@ describe.each<[string, LimitedRoute, (ip: string) => Promise<Response>]>([
   ['GET claims/history', 'claims', (ip) => claimHistory(get(ip), dao)],
   ['GET /api/goldsky/health', 'health', (ip) => goldskyHealth(get(ip))]
 ])('%s', (_name, route, call) => {
+  beforeEach(() => vi.stubEnv('VERCEL', '1'));
+  afterEach(() => vi.unstubAllEnvs());
+
   it(`answers 429 once the client has used its ${route} limit, before any work`, async () => {
     const ip = `198.18.0.${nextIp++}`;
     for (let i = 0; i < API_RATE_LIMITS[route].limit; i += 1) await limitApiRequest(get(ip), route);

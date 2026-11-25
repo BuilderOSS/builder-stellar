@@ -21,6 +21,7 @@ const get = (ip = '203.0.113.10') =>
 
 describe('GET /api/health', () => {
   beforeEach(() => {
+    vi.stubEnv('VERCEL', '1');
     clearServerCache();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.stubGlobal(
@@ -32,6 +33,7 @@ describe('GET /api/health', () => {
     mocks.pipeline.mockResolvedValue({ configured: true, status: 'RUNNING', errors: [SECRET_ERROR], lastLedger: 999 });
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

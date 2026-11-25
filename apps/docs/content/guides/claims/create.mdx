@@ -36,6 +36,19 @@ A claim list sets aside membership tokens for specific wallets. Each wallet on t
 
    <Shot id="claims/create/06" alt="The new claim list card marked Open, showing it is free, its total and its closing date" />
 
+## Close a list early
+
+A list stays open until its closing date, including after launch. So a free list opened during setup can still mint its unclaimed tokens once the tribe is live, up to the claims module's mint allowance. The claims page and Manage → Membership show these tokens as **Founder supply**, and the card of each such list says it was opened during setup. They are not in the token supply until someone claims them.
+
+To stop claims on a list before its closing date:
+
+- **After launch:** on the list's card in Manage → Claim lists, choose **Close in proposal**. This adds **Close a claim list** to your proposal draft. You can also add it in the proposal composer, under Membership, and choose the list there. The list closes if members vote for it.
+- **Before launch:** the launch admin chooses **Close this list** on the list's card, confirms, and signs. The launch drive can't be closed before launch, because its refunds and the launch depend on it.
+
+Closing a list can't be undone. Tokens already claimed stay with their holders, and the list's unclaimed tokens can no longer be minted from it. The card then reads **Closed**.
+
+Closing needs a claims module release that has `close_list`. Earlier releases don't, and the app offers the action only when the module has it. Upgrade the claims module first, in Manage → Contract upgrades.
+
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
@@ -48,6 +61,10 @@ A claim list sets aside membership tokens for specific wallets. Each wallet on t
   Payments for claims on a list opened after launch go to the Treasury. A launch drive is the only list whose payments are held until launch.
 
   The launch admin pays the network fees in XLM for the direct transactions. The list, its root and every claim are public.
+
+  Closing a list calls `close_list` on the ClaimMinter with the list's ID. It moves the list's closing time to the current ledger time and records a `ListClosed` event with how many of the list's tokens were claimed. After launch, the Treasury makes the call when the proposal runs. Before launch, the launch admin signs it and pays the network fee. The app checks that the claims module has `close_list` by simulating the call, which signs and sends nothing.
+
+  Founder supply is read from the tribe's index. It counts the unclaimed tokens on open lists opened before the claims module launched, other than the launch drive, and at most the claims module's remaining mint allowance.
 </Disclosure>
 
 ## If something goes wrong
@@ -57,6 +74,8 @@ A claim list sets aside membership tokens for specific wallets. Each wallet on t
 - **Rows need fixing.** Nothing is published until every row reads cleanly. Fix the rows named in the preview and upload the file again.
 - **Signing failed after the list was published.** Try again. The app reuses the list it already published to IPFS, so it isn't uploaded twice.
 - **"The tribe or your account changed. Refresh and try again."** The tribe launched, or you switched wallets, while the form was open. Refresh the page.
+- **"This tribe's claims module is an earlier release that cannot close lists."** The claims module doesn't have `close_list`. Upgrade it in Manage → Contract upgrades, then close the list.
+- **A proposal that closes a list failed when it ran.** The list reached its closing date before the proposal ran, so there was nothing left to close, and the whole proposal reverted. Make a new proposal without that action.
 
 ## Related
 

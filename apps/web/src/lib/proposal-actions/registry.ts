@@ -32,7 +32,7 @@ import {
   updateDaoProfileHandler
 } from './artwork-admin-actions';
 import { membershipHandlers } from './membership-actions';
-import { openClaimListHandler } from './minter-actions';
+import { closeClaimListHandler, openClaimListHandler } from './minter-actions';
 import { moduleHandlers } from './module-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
 import { reviewFixHandlers } from './review-fix-actions';
@@ -88,6 +88,7 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   ...artworkSettingHandlers,
   updateDaoProfileHandler,
   openClaimListHandler,
+  closeClaimListHandler,
   registeredModuleUpgradeHandler,
   ...reviewFixHandlers
 ];

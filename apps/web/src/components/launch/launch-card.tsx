@@ -68,6 +68,7 @@ export function LaunchDriveCard({
   // Re-read when the deadline passes, so the card flips to "ended" (and mounts ReleaseSlug) in place.
   const now = useDeadlineClock(deadline);
   const ended = launchDriveEnded(deadline, now);
+  const by = formatClaimDate(deadline);
   const { launch_auction: auction, launch_marketplace: market } = assurance.launch_config;
   return (
     <section className={card} aria-labelledby="launch-title">
@@ -77,8 +78,8 @@ export function LaunchDriveCard({
         </h2>
         <p className={muted}>
           {ended
-            ? `${name} did not reach enough claims by ${formatClaimDate(deadline)}, so it can't launch. Everyone who paid can take their payment back on the claims page.`
-            : `${name} launches once enough people claim, by ${formatClaimDate(deadline)}. Anyone can press launch on the claims page when the goal is met.`}
+            ? `${name} did not reach enough claims by ${by ?? 'its deadline'}, so it can't launch. Everyone who paid can take their payment back on the claims page.`
+            : `${name} launches once enough people claim${by ? `, by ${by}` : ''}. Anyone can press launch on the claims page when the goal is met.`}
         </p>
       </div>
       {ended ? null : (

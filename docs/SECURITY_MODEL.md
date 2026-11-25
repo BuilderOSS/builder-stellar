@@ -76,10 +76,12 @@ Transfer agents are registered modules the DAO names (`set_transfer_agent`; the 
 
 A launch admin can open the DAO's launch as an assurance drive: `manager.open_assurance(token, list, launch_config)` (docs/designs/membership-models.md § 2–3).
 
-- It opens the ClaimMinter's assurance list (price, `threshold_claimers`, `deadline` at most 90 days out, `DeadlineTooFar`), grants the allowance, reserves the slug, and hands every admin to the Treasury at once (early `handoff`). From then on nothing in Setup can change: settings, artwork, allowances and upgrades are frozen until launch.
+- It opens the ClaimMinter's assurance list (price, `threshold_claimers` from 1 to the list's `total`, `InvalidAssurance`, and a `deadline` at most 90 days out, `DeadlineTooFar`), grants the allowance, reserves the slug, and hands every admin to the Treasury at once (early `handoff`). From then on nothing in Setup can change: settings, artwork, allowances and upgrades are frozen until launch.
 - People on the list claim and pay into the ClaimMinter's per-list escrow. `assurance_state` is `Met` once enough distinct addresses have claimed, and `Failed` once the deadline passes with the Token not Live, whether the list was `Open` or `Met`.
+- **One allowance for every list.** The allowance `open_assurance` grants is added to the ClaimMinter's single Token allowance, which all of its lists draw on. A free list the launch admin opened earlier in Setup stays claimable during the drive and can use that allowance, so drive claimers can meet the Token's `AllowanceExceeded` (7215) before the drive's `total` is reached, and nobody can add allowance until launch. Before paying in, check the ClaimMinter's other open lists and its remaining allowance.
 - `launch_when_ready(token)` is open to anyone while the state is `Met` and the deadline hasn't passed; it runs every `launch_dao` check with the stored launch config and calls `release` in the same transaction, so the escrow reaches the Treasury with the launch.
 - After a failure, `refund(list_id, claimer)` (anyone may call it; funds go only to the claimer) returns each payment, and `release_slug` frees the slug. Claimers keep their tokens, which carry no power because the DAO never goes Live.
+- **Refunds go only to the address that paid.** The ClaimMinter's code has no way to redirect one. If that address can't receive the asset (the asset's issuer froze or deauthorized it, or an account removed its trustline), `refund` fails and the payment stays in escrow until a later call succeeds. Assets sent to the ClaimMinter directly, outside `claim`, are in no escrow: `release` and `refund` move only what `claim` recorded, and no other function moves assets, so such transfers stay in the contract. Only an upgrade (the DAO's own, or `recover_claims` after a failed drive) could change either rule.
 - **`recover_claims`.** If the ClaimMinter's own refund code is broken, the launch admin recorded in `PendingDao` can upgrade that DAO's ClaimMinter, only after the drive has failed by the Manager's rule (`deadline` passed and the Token not Live; ClaimMinter's state machine is never consulted), and only to a Manager-approved `claims` hash. The window opens only once nothing can launch, so the upgrade can't change the outcome; it can only unblock refunds.
 - **The platform can end a drive in refunds.** The Manager admin can pause the factory or revoke an implementation the DAO runs; either blocks `launch_when_ready` until the deadline passes, and the drive fails. Nobody loses funds (refunds stay open), but a `Met` drive can be denied its launch.
 
@@ -87,11 +89,11 @@ A launch admin can open the DAO's launch as an assurance drive: `manager.open_as
 
 Tokens held by the DAO's Treasury and its non-voting modules (Auction, Marketplace) carry no votes. The token reads custody from its registry (`non_voting`) and maps them to "no holder" in OpenZeppelin's `transfer_voting_units`: moving a token into one of them burns its voting unit and removes it from the `TotalSupply` checkpoint; moving it out mints the unit again for the receiver's delegate. Consequences:
 
-- The Governor's quorum (`ceil(voting_supply_at_snapshot * quorum_bps / 10_000)`) and the proposal-threshold check use the voting-capable supply. Unsold auction tokens piling up in the Treasury, the token on auction and escrowed listings never raise the quorum, so governance cannot drift into a permanent quorum lock.
+- The Governor's quorum (`ceil(voting_supply_at_snapshot * quorum_bps / 10_000)`) and the proposal-threshold check use the voting-capable supply. `propose` caps the threshold at that supply (never below 1), so a supply below the threshold never blocks proposals: the proposer then needs every vote. `votes_needed_to_propose()` returns that requirement; a Governor without the view (0.5.0 and earlier) has no cap. Unsold auction tokens piling up in the Treasury, the token on auction and escrowed listings never raise the quorum, so governance cannot drift into a permanent quorum lock.
 - System holders are never auto-delegated and can never vote (`ZeroVotingWeight`, 7512). A system holder calling `delegate` moves no votes, because it holds no voting units.
 - A holder whose token is escrowed in the Marketplace loses that vote until the token returns (cancel/expire) or is bought (the buyer's delegate gains it). The holder's delegation itself is unchanged.
 - Delegating *to* the Treasury is allowed; those units belong to a voting-capable holder and stay in the voting supply. The Treasury can only cast them through a passed proposal.
-- Votes are read at the ledger before `propose`, and the quorum is fixed when the proposal is created from the voting supply and rate at that moment (stored on the proposal, D33), so later transfers, listings, mints or rate changes never change a proposal's weights or quorum. Tokens minted earlier in the proposing ledger count toward the quorum supply but cannot vote, so the requirement can only be higher, never lower.
+- Votes are read at the ledger before `propose`, and the quorum is fixed when the proposal is created from the voting supply and rate at that moment (stored on the proposal, D33), so later transfers, listings, mints or rate changes never change a proposal's weights or quorum. Votes, the quorum supply and the threshold cap are all read at the previous ledger, so tokens minted in the proposing ledger count toward none of them.
 
 These behaviors are covered by `contracts/token` (`delegation_security`) and the e2e test `system_held_tokens_and_votes_through_a_real_proposal`.
 
@@ -145,14 +147,14 @@ Refunds to an outbid bidder are pushed; if the push fails, the amount is credite
 - The secondary fee is capped at 25% (`common::MAX_FEE_BPS` = 2,500; `InvalidFee`, 7709). It is snapshotted into each listing.
 - `list(token_id, seller, price, expires_at, max_fee_bps, payment_asset)`: the seller signs the worst fee and the asset they accept. If a fee or asset change lands between signing and inclusion, the listing fails (`FeeAboveMax`, 7714; `PaymentAssetMismatch`, 7712) instead of applying worse terms.
 - `buy(token_id, buyer, max_price)` and `buy_from_pool(pool_id, page, token_id, buyer, max_price)` fail with `PriceAboveMax` (7715) above the buyer's bound.
-- `expires_at` has no maximum; escrowed tokens stay in escrow until bought, cancelled (seller) or expired (anyone, after expiry).
+- `expires_at` has no maximum; escrowed tokens stay in escrow until bought, cancelled (seller) or expired (anyone, after expiry). The read model reads an expiry past the bigint range as the bigint maximum, so such a listing (or a pool or claim list with one) can't stop the marketplace and claims views from reading (migration 0013).
 - Quick-buy pools (`open_pool`, by proposal) sell new tokens at a fixed price into the Treasury, capped per buyer (`max_per_buyer`) and per period (`max_sold_per_period` every `period_secs`). Stock is minted into Marketplace custody by `restock` (anyone; it spends the Marketplace's allowance, which the opening proposal grants) and stored in pages of 64 ids. Closing (admin before expiry, anyone after) and `sweep_pool` send unsold stock back to the Treasury. **Each token sold adds a vote**: a pool larger than the voting supply can let buyers outvote today's members. The web shows the largest share one wallet could reach in the proposal draft. The per-buyer cap counts addresses, so it doesn't stop one person with many wallets.
 
 ## Batch minting
 
 A transaction may publish at most 16 KiB of contract events. A `batch_mint` emits OpenZeppelin `Mint` per token, one `MintBatchWithMinter` for the id range and one metadata `SeedsGenerated` carrying every token's selections, plus OpenZeppelin delegation events for each recipient without a delegate. Measured worst case (16-trait artwork, all recipients new): ~376 bytes per call, ~288 per token, ~436 per recipient.
 
-A ClaimMinter claim mints through `batch_mint` too, so one claim mints at most 43 tokens; `claim(list_id, claimer, leaf_amount, mint_now, proof, max_price)` records how much of the leaf is claimed, and a larger allocation is claimed over several transactions.
+A ClaimMinter claim mints through `batch_mint` too, so one claim mints at most 43 tokens; `claim(list_id, claimer, leaf_amount, mint_now, proof, max_price)` records how much of the leaf is claimed, and a larger allocation is claimed over several transactions. A paid claim adds the payment transfer and `Claimed` events to the mint's own. The measured worst case (a 43-token first claim by an account, against 16-trait artwork, into escrow or to the Treasury) publishes 13,888 bytes, 2,496 under the limit and above the 13,500-byte batch-mint budget (e2e `the_largest_paid_claim_fits_the_event_limit`). That holds for a payment asset that is a Stellar Asset Contract; another asset, which a list opened after launch may use, can emit transfer events of any size.
 
 Each call must satisfy `common::batch_mint_fits`: `300 × tokens + 450 × recipient entries ≤ 13,500` estimated bytes (`BatchTooLarge`, 7205), about 85% of the limit. That allows up to `MAX_BATCH_MINT` = 43 tokens to one recipient, `MAX_BATCH_RECIPIENTS` = 18 recipients with one token each, or mixes such as 35 tokens over 5 recipients. Entries are counted as new recipients even when they repeat or already delegate. Storage writes (2 per token, ~5 per new recipient, limit 200) and CPU stay well below their limits. The budget also bounds the metadata seeding hook, whose failure (including budget exhaustion) cannot be caught. The e2e suite mints batches at the budget edge against real 16-trait metadata; re-measure there if events change. Larger allocations are minted in several calls.
 
@@ -183,8 +185,9 @@ See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances a
 These are behaviors of the current contracts, not planned fixes.
 
 - Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. `regenerate(token_id)` only seeds a token without attributes (`AlreadySeeded` otherwise).
-- Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero and not above the voting supply. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
+- Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero, and not above the voting supply when it is set (the check is skipped while the supply is zero, so a launch admin can set it before minting). `propose` caps the threshold at the voting supply at the snapshot, so a threshold above the supply means a proposer needs every vote rather than locking proposals. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
 - Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches that fit the event budget) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
+- Unclaimed Setup lists. A free claim list the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` doesn't show until they are claimed, and they become votes as soon as they are. The claims page and Manage → Membership show this founder supply from the read model (`claims.lists.opened_in_setup`, migration 0014), capped at the ClaimMinter's remaining allowance, and mark each such list. The DAO can end such a list by proposal: the composer's "Close a claim list" action calls `close_list`, which sets the list's `expires_at` to now and emits `ListClosed`. Only ClaimMinters from the release that adds `close_list` have it, so the app simulates the call first and offers the action only when the function exists. A claim can still land before the proposal executes.
 - Treasury-held tokens never vote. Tokens the Treasury holds (unsold auctions, transfers to the Treasury) only regain voting power when a proposal transfers them out.
 - No veto once a proposal is queued. Only expiry (14 days after the ETA) stops it.
 - Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must verify `to_hash` against audited reproducible builds and read any `authorize` trees.
@@ -193,28 +196,81 @@ These are behaviors of the current contracts, not planned fixes.
 - Payment assets must be plain, non-regulated Stellar Asset Contracts. AUTH_REQUIRED, clawback, fee-on-transfer or rebasing assets can freeze or misprice settlement.
 - Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations and pause the factory. It holds no minting power over any DAO: every module that mints is the DAO's own, capped by an allowance the DAO sets, and upgrades only by the DAO's proposal (docs/designs/membership-models.md supersedes the shared Minter and STORAGE_DIET D41). **The Manager's own upgrade is visible for the full notice (D42):** it applies only `upgrade_delay()` ledgers after the approval and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement; re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule. Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`). The admin can also end an assurance drive in refunds (see [Assurance launch](#assurance-launch)).
 - Assurance proves a launch, not a community. A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs; the threshold counts addresses, not people.
+- A drive holds its slug until its deadline. `open_assurance` reserves the slug when the drive opens, and `release_slug` frees it only once the drive has failed. A drive nobody intends to meet can therefore keep a slug from other DAOs for up to 90 days (`MAX_ASSURANCE_WINDOW`).
+- Claim list hashing. Merkle leaves and nodes carry no tag, and a root is not bound to a list, a ClaimMinter, or a network. Tags would add no protection here: the contract computes every leaf itself from the claimer and amount, a leaf never has a node's length for any address `claim` accepts (a node hashes 64 bytes, an account leaf 60, and a contract leaf 56; a muxed address would make 64, but `claim` takes an `Address`, which a muxed address never converts to), and a root takes effect only when an admin opens a list with it. A root opened on two lists lets each listed address claim on both, as the admins chose. Changing the format would also cost more than it gives: binding the list id needs the id when the tree is built, but a proposal opens its list under the id current when it executes, and a hashing version recorded per list would depend on the code running at that moment unless `open_list` took the version as an argument. `contracts/minter/test-vectors/merkle-v1.json` pins the format for the contract and the web's tree builder.
 - Issuer-controlled payment assets. A pool, claim list or escrow priced in an asset whose issuer can freeze, claw back or deauthorize holders can be frozen or drained by that issuer, including the escrow refunds depend on. DAOs should price in plain assets (see the payment-asset limitation above).
 - Modules can be delegates. A voting module holds voting units like any member and can receive delegations; if its code calls the Governor it can vote them. Manage → Membership shows the votes each module holds.
 - Outside modules. After launch the Treasury can register any contract as a module by proposal, under any kind, a built-in one included. Its mint allowance caps what it can mint, but the platform can't vouch for its code and its records are not covered by one-click renewal. A known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code: the indexer fills those roles only from the Manager's `DaoCreated` / `ModuleCreated`, and the read model takes a registration's role from the kind the Manager deployed it as (`manager.manager_modules`). Every other registered contract is role `module`: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` doesn't list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage → Membership badges it "Not deployed by the Manager".
-- Indexer allowlisting (accepted, review finding 3). The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO can't use this to inject rows into another DAO's views (identity is windowed per DAO), but a hostile contract can fill its own DAO's admin feed with noise. Remedies: the DAO unregisters it by vote, which ends its window in every view; or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, then re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop (whether a running pipeline notices a deleted row without that is unverified). Rows already indexed stay: the landing tables are append-only.
+- Indexer allowlisting (accepted, review finding 3). The indexer follows every contract a DAO's Token registers (`ModuleRegistered`, into `streamling.dao_modules`), so a contract a DAO registers by proposal has its events indexed under that DAO as admin rows. A DAO can't use this to inject rows into another DAO's views (identity is windowed per DAO), but a hostile contract can fill its own DAO's admin feed with noise. The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` don't take an outside module's own upgrade, storage-migration or launch events (migration 0012), so such a contract's events can't stop a shared view from reading for every DAO. Remedies: the DAO unregisters it by vote, which ends its window in every view; or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, then re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`) and checks that new events stop (whether a running pipeline notices a deleted row without that is unverified). Rows already indexed stay: the landing tables are append-only.
 - Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).
 
 ## Application trust boundaries
 
 The app authenticates wallets with SEP-53 message signing and a SEP-10 fallback,
 then uses an encrypted `iron-session` cookie. Wallet connection alone is not an
-authenticated session. Challenge/replay/rate-limit bookkeeping is process-local;
-this reference does not claim a shared distributed replay store. Public DAO reads
-remain scoped to the configured deployment. Trading inventory/readiness derive the
-actor from the session, not a submitted address.
+authenticated session. Public DAO reads remain scoped to the configured deployment.
+Trading inventory/readiness derive the actor from the session, not a submitted address.
 
-SEP-10 reads current account signers/medium threshold from canonical Horizon and
-verifies their weighted signatures, excluding the server signer and requiring at
-least one positive client weight. Disabled-master/insufficient-threshold proofs
-cannot fall back. Master-key-only unfunded authentication is allowed only on an
-authoritative Horizon account-not-found 404 problem response, not generic 404 or
-network failure. Read/malformed-account failures return 503. Successful key-only
-sign-in does not establish funding or transaction readiness.
+Both sign-in paths read the account's current signers and medium threshold from
+canonical Horizon. The weight sign-in needs is the medium threshold, and never less
+than 1. SEP-53 checks the message signature first. That signature comes from the
+address's own (master) key, so for an existing account that key's current weight must
+reach the required weight: a master key that was disabled (weight 0), or outweighed
+after a move to other signers, can't sign in. SEP-10 first checks that the signed
+transaction is exactly the challenge it issued, then verifies the challenge's weighted
+signatures against the same weight, excluding the server signer. Neither path falls
+back to the master key alone for an existing account. An address with no account yet
+signs in with its own key's signature, as before, but only on an authoritative Horizon
+account-not-found 404 problem response, not a generic 404 or a network failure. That
+session proves possession of the key, not funding or transaction readiness. Read
+failures, timeouts (8 seconds) and malformed account responses return 503.
+
+Sessions are sealed cookies: `__Host-stellar-auth` in production, so the browser
+accepts it only when it is Secure, host-only and on path `/`, and `stellar-auth` in
+local development over HTTP. Both are `HttpOnly` and `SameSite=Lax`. A session ends
+24 hours after its cookie was last issued. The app's session check on each page load
+(`GET /api/auth/session`) re-issues it, at most every 15 minutes, so a session in use
+continues, but every session ends 3 days after sign-in. Only that route re-issues the
+cookie, because a response to a request sent before a logout could otherwise restore
+the session. The server keeps no list of sessions, so one session can't be revoked on
+its own: logout clears the cookie in that browser, and a copy taken earlier stays valid
+until one of those limits. `IRON_PASSWORD` may be a JSON map of numbered secrets, such
+as `{"2":"<new>","1":"<old>"}`. New cookies are sealed with the highest number and
+cookies sealed with any listed number still open, so adding a higher number rotates the
+secret without signing anyone out. Removing a number ends every session sealed with it,
+and replacing the map with one new secret under a new number ends every session.
+
+The routes that change who is signed in (both challenges, both verifies, and logout)
+accept only POST, and only from the app's own pages: they refuse a request whose
+`Sec-Fetch-Site` is anything but `same-origin`, which includes a sibling subdomain
+such as dev.tribes.build, and, from a browser that doesn't send that header, a request
+whose `Origin` is not `APP_URL`. So another page can't replace or clear a visitor's
+session. A request with neither header is not from a browser page and carries no
+visitor's cookie.
+
+Before the wallet signs a SEP-10 challenge, the browser checks it: a transaction on
+this network with sequence number 0, so it can never be applied on chain; from the
+server key that also signed this sign-in's SEP-53 message, as source and signer; with
+only manageData operations, the first one `<home domain> auth` for the connected
+address and the rest from the server key (apart from `client_domain`). The domains
+come from the same server response, and time bounds are left to the server, so a
+browser with a wrong clock can still sign in. Every transaction the wallet signs
+passes the fee guard, which also refuses a transaction whose fee it can't read.
+
+Challenge replay bookkeeping and the sign-in rate limits are kept in each server
+instance's memory. There is no shared store: another instance doesn't see a used
+challenge or a client's count, so the limits slow a client down rather than cap the
+deployment. Sign-in deletes the challenge from the cookie it returns, so a replay needs
+the older cookie, within the challenge's 5 minutes, on another instance. The limits
+count per client address, read from one trusted header: `x-vercel-forwarded-for` on
+Vercel, or the header named in `TRUSTED_CLIENT_IP_HEADER` behind another proxy. The
+app reads the last address in that header, the one the nearest proxy added, so name a
+header only when a proxy in front of the app sets or overwrites it: with no proxy,
+`next start` passes on whatever the client sent, and behind two proxies that both
+append to `X-Forwarded-For`, the last address is the outer proxy's and every client
+shares one count. Client-supplied `X-Forwarded-For`, `X-Real-IP` and
+`CF-Connecting-IP` are otherwise ignored, and a production request with no trusted
+address is refused with 503.
 
 Marketplace preparation checks same origin, session network, tenant/module/listing
 identity, live wiring/terms, ownership, and relevant account funds/trustlines. It
@@ -262,6 +318,29 @@ Creation/launch recovery saves finite signed envelopes separately from RPC
 acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
 nonce cannot be silently changed after freezing. Unknown acceptance is not proof
 of failure. Missing older envelopes cannot be safely rebroadcast.
+
+Uploads to IPFS go through the operator's Pinata account, so they cost the operator.
+Every upload route (`/api/pinata/generate-jwt`, `/api/pinata/pin-cid`,
+`/api/uploads/pinata-url`, `/api/uploads/complete`) needs a session on the
+deployment's network, then limits each account per route per 10 minutes, then
+requires that the account exists on that network (canonical Horizon; a failed or
+timed-out lookup refuses, it never passes; an unfunded result is remembered for a
+minute). A key costs nothing; a funded account holds the base reserve on mainnet, but
+on testnet Friendbot funds accounts for free, so there the funded check costs an
+abuser one Friendbot call per key and the limits are per account. There is no
+deployment-wide upload budget, and the checks and counts are per server instance.
+Upload tokens name the account they were issued to and only that account completes
+them, until they expire (they are not single-use). `complete` and `pin-cid` only read:
+the CID must be a file already in the operator's account (Pinata's file list), and
+`complete` checks its size against the token's limit; neither pins a CID the client
+names. `pin-cid` also needs the pin token `generate-jwt` returned to the same account
+within an hour. Each `generate-jwt` key is a Pinata key for one legacy
+`pinFileToIPFS` upload with no expiry and no size cap of its own (the 100 MB folder
+limit is checked in the browser). Upload and pin tokens are signed with
+`UPLOAD_TOKEN_SECRET` when it is set, so either secret can rotate without the other.
+When it is unset they use a key derived from the current (highest-numbered)
+`IRON_PASSWORD` under its own label, never the session key itself. Changing the secret
+ends the tokens already issued.
 
 Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
 browser storage, not encrypted shared permissions or on-chain rights. Scope filters
@@ -336,13 +415,13 @@ sign-in (`apps/web/src/lib/api-rate-limit.ts`):
 | `POST /api/csp-report` | 30 a minute |
 
 Over the limit, a route answers 429 with `Retry-After`. The limits leave room for a group that
-shares one network address, such as people claiming at an event. Requests from the server's own
-machine (local development and the walkthrough suite, where Next fills in the loopback address)
-and requests without a client address are not counted. On Vercel neither happens, since Vercel
-always supplies `x-vercel-forwarded-for`; elsewhere the proxy in front of the app must set the
-forwarded-for header, or a client can forge it. The limits stop one client from hammering a
-route; they don't stop a distributed flood, which needs the platform's own protection. Each
-health route also reuses one result for 10 seconds.
+shares one network address, such as people claiming at an event. The client is identified as
+sign-in identifies it: by `x-vercel-forwarded-for` on Vercel, or by the header
+`TRUSTED_CLIENT_IP_HEADER` names. A request without such an address is not counted, where
+sign-in refuses it, so these public routes stay available; off Vercel the limits apply only once
+`TRUSTED_CLIENT_IP_HEADER` is set. Local development is not counted. The limits stop one client
+from hammering a route; they don't stop a distributed flood, which needs the platform's own
+protection. Each health route also reuses one result for 10 seconds.
 
 ### Server-side fetches
 

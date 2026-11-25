@@ -92,10 +92,24 @@ Protection (team login), and lifting that would make every PR preview public too
 | `NEXT_PUBLIC_SITE_URL`, `APP_URL` | `https://dev.tribes.build` |
 | `STELLAR_HOME_DOMAIN`, `STELLAR_WEB_AUTH_DOMAIN` | `dev.tribes.build` |
 | `STELLAR_WEB_AUTH_SECRET` | the funded testnet key `dev-web-auth` (`GCN2L6VK…TZ2VN`), sensitive |
-| `IRON_PASSWORD` | its own 64-character secret (sensitive) |
+| `IRON_PASSWORD` | its own 64-character secret (sensitive); a JSON map of numbered secrets while rotating, see below |
+| `UPLOAD_TOKEN_SECRET` | optional: its own 64-character secret (sensitive). Unset, upload tokens use a key derived from `IRON_PASSWORD` |
 | `GOLDSKY_PIPELINE_NAME` | `builder-stellar-testnet-dev` |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
 | `PINATA_JWT`, `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`); the JWT was added by hand, since a sensitive value can't be copied |
+
+Sign-in secrets (both projects):
+
+- **Rotating `IRON_PASSWORD`.** Set it to a JSON map that keeps the old secret under `1` and adds
+  the new one under `2`, `{"2":"<new>","1":"<old>"}`, and redeploy. New cookies are sealed with `2`,
+  and a session in use is re-sealed with `2` the next time the app checks it. After 24 hours (the
+  idle limit), no live cookie uses `1`, so set the value to `{"2":"<new>"}`. Removing a number
+  early signs out every session sealed with it. To end all sessions at once, set only a new secret
+  under a new number, such as `{"3":"<newer>"}`. Without `UPLOAD_TOKEN_SECRET`, any change of the
+  current secret also ends upload tokens issued in the hour before it.
+- **Client addresses.** The sign-in rate limits read the client's address from
+  `x-vercel-forwarded-for`, which Vercel sets, so `TRUSTED_CLIENT_IP_HEADER` stays unset here.
+  The limits and challenge replay checks are per server instance; there is no shared store.
 
 `CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is report-only
 (see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). Set it to

@@ -14,8 +14,14 @@ const report = (body: string, ip = '192.0.2.10', headers: Record<string, string>
   );
 
 describe('POST /api/csp-report', () => {
-  beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => undefined));
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.stubEnv('VERCEL', '1');
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
 
   it('logs the directive, and the blocked address and page without their query strings', async () => {
     const response = await report(
