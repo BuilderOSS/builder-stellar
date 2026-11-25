@@ -286,7 +286,7 @@ fn a_failed_drive_refunds_recovers_and_frees_its_slug() {
         Err(Ok(M::UpgradeDelayNotElapsed))
     );
     e.ledger().with_mut(|l| {
-        l.sequence_number += TEST_UPGRADE_DELAY;
+        l.sequence_number += TEST_UPGRADE_DELAY.max(manager::MIN_RECOVERY_NOTICE_LEDGERS);
         l.timestamp += (TEST_UPGRADE_DELAY as u64 * manager::SECONDS_PER_LEDGER)
             .max(manager::MIN_RECOVERY_REFUND_WINDOW);
     });

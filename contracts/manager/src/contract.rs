@@ -57,6 +57,12 @@ pub const SECONDS_PER_LEDGER: u64 = 86_400 / common::ttl::DAY_IN_LEDGERS as u64;
 /// deadline members cannot act on that warning, so the refund time has its
 /// own floor.
 pub const MIN_RECOVERY_REFUND_WINDOW: u64 = 7 * 86_400;
+/// The same floor in ledgers, for the notice a recovery target waits after
+/// its approval and announcement: a lowered notice cannot let a newly
+/// announced target (for example a second recovery right after a first)
+/// apply before members can refund with the code in place.
+pub const MIN_RECOVERY_NOTICE_LEDGERS: u32 =
+    (MIN_RECOVERY_REFUND_WINDOW / SECONDS_PER_LEDGER) as u32;
 
 #[contractimpl]
 impl ManagerContract {
@@ -1058,6 +1064,8 @@ impl ManagerContract {
     ///
     /// * `DaoNotFound` / `FactoryPaused` / `LaunchAdminNotOwner`
     /// * `AssuranceExists` - one drive per DAO
+    /// * `PendingDaoUsesRevokedImplementation` - a contract runs revoked or
+    ///   unregistered code
     /// * `NoClaimMinter` - the DAO has no registered ClaimMinter
     /// * `InvalidPaymentAsset` - the recorded claims asset is not a Stellar
     ///   Asset Contract (possible only for a DAO created before the creation
@@ -1085,6 +1093,10 @@ impl ManagerContract {
         if has_persistent(&env, &assurance_key) {
             return Err(ManagerError::AssuranceExists);
         }
+        // Members' money goes into the ClaimMinter and the DAO freezes, so
+        // every contract must run registered, active code first, as at
+        // launch.
+        Self::require_dao_code(&env, &pending.addresses)?;
         let nft = NftClient::new(&env, &token_address);
         // The handoff below needs the launch admin to still hold the Token.
         if nft.admin() != pending.launch_admin {
@@ -1233,13 +1245,12 @@ impl ManagerContract {
     ///   asked), so the upgrade cannot change whether the DAO launches.
     /// - `to_hash` is approved from `from_hash` in the registry, not revoked,
     ///   and is the hash announced as latest for its name (`latest_pointer`).
-    /// - The Manager's upgrade notice (`upgrade_delay()` ledgers) has passed
-    ///   since the approval and since the announcement, and the same notice,
-    ///   in seconds (`SECONDS_PER_LEDGER` each) and never less than
-    ///   `MIN_RECOVERY_REFUND_WINDOW`, has passed since the drive's deadline.
-    ///   Members therefore have at least that long after the drive fails to
-    ///   take their refunds with the code they paid into, and the only
-    ///   possible recovery target is visible for that time.
+    /// - The Manager's upgrade notice has passed since the approval and the
+    ///   announcement (`upgrade_delay()` ledgers, at least
+    ///   `MIN_RECOVERY_NOTICE_LEDGERS`) and since the drive's deadline (in
+    ///   seconds, at least `MIN_RECOVERY_REFUND_WINDOW`). Members have at
+    ///   least seven days after the drive fails, and after each recovery
+    ///   target is announced, to refund with the code in place.
     ///
     /// # Errors
     ///
@@ -1293,7 +1304,11 @@ impl ManagerContract {
         let approved =
             Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
                 .ok_or(ManagerError::InvalidUpgradePath)?;
-        if !common::upgrade::notice_passed(&env, approved.max(latest.set_ledger)) {
+        // Floored like the refund time below, so lowering the notice cannot
+        // make a newly announced target apply at once.
+        let notice = common::upgrade::delay(&env).max(MIN_RECOVERY_NOTICE_LEDGERS);
+        let since = approved.max(latest.set_ledger);
+        if (env.ledger().sequence() as u64) < since.saturating_add(notice as u64) {
             return Err(ManagerError::UpgradeDelayNotElapsed);
         }
         // The notice also counts from the deadline, with a floor: refunds
@@ -1606,27 +1621,10 @@ impl ManagerContract {
         }
         let addresses = pending.addresses.clone();
         let treasury = addresses.treasury.clone();
-        // Every contract must currently run a registered, non-revoked hash,
-        // checked before the Manager calls into it. The CURRENT code is read
-        // (not the hash recorded at create_dao) so a pre-launch `upgrade` to
-        // an approved hash is honoured.
-        for core in [
-            &addresses.token,
-            &addresses.metadata,
-            &addresses.governor,
-            &addresses.treasury,
-        ] {
-            Self::require_active_code(&env, core)?;
-        }
+        let registry = Self::require_dao_code(&env, &addresses)?;
         // Typed clients (common::clients) rather than the module crates:
         // linking those would export their functions from the Manager WASM.
         let nft = NftClient::new(&env, &addresses.token);
-        // In Setup only the Manager registers modules, and a drive freezes
-        // the registry, so a drive's ClaimMinter is among these.
-        let registry = nft.modules();
-        for entry in registry.iter() {
-            Self::require_active_code(&env, &entry.address)?;
-        }
         match &assurance {
             Some(drive) => {
                 if Self::drive_failed(&env, &token_address, drive) {
@@ -1737,6 +1735,31 @@ impl ManagerContract {
             &registry,
         );
         Ok(())
+    }
+
+    /// Check the code of a pending DAO's core contracts and registered
+    /// modules (`require_active_code`) before the Manager calls into any of
+    /// them, and return the registry. The CURRENT code is read (not the hash
+    /// recorded at `create_dao`) so a pre-launch `upgrade` to an approved
+    /// hash is honoured. In Setup only the Manager registers modules, and a
+    /// drive freezes the registry, so a drive's ClaimMinter is among them.
+    fn require_dao_code(
+        env: &Env,
+        addresses: &DaoAddresses,
+    ) -> Result<Vec<common::modules::ModuleEntry>, ManagerError> {
+        for core in [
+            &addresses.token,
+            &addresses.metadata,
+            &addresses.governor,
+            &addresses.treasury,
+        ] {
+            Self::require_active_code(env, core)?;
+        }
+        let registry = NftClient::new(env, &addresses.token).modules();
+        for entry in registry.iter() {
+            Self::require_active_code(env, &entry.address)?;
+        }
+        Ok(registry)
     }
 
     /// `PendingDaoUsesRevokedImplementation` unless `contract` runs WASM whose

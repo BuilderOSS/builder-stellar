@@ -2328,7 +2328,7 @@ mod real_dao {
         );
         move_to(
             env,
-            TEST_UPGRADE_DELAY,
+            recovery_notice_ledgers(),
             deadline + recovery_window_seconds() + 1,
         );
         let stranger = Address::generate(env);
@@ -2366,7 +2366,7 @@ mod real_dao {
 
         // The notice since the approval and announcement passes before the
         // deadline; the drive then fails.
-        move_to(env, TEST_UPGRADE_DELAY, deadline + 1);
+        move_to(env, recovery_notice_ledgers(), deadline + 1);
         assert_eq!(
             dao.claims.assurance_state(&0),
             common::modules::AssuranceState::Failed
@@ -2391,6 +2391,33 @@ mod real_dao {
         env.as_contract(&dao.claims.address, || {
             assert_eq!(common::upgrade::current_hash(env), to);
         });
+    }
+
+    /// A drive opens only while every contract runs registered, active code:
+    /// members' money must not go into code the platform revoked.
+    #[test]
+    fn open_assurance_checks_the_code_every_contract_runs() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        dao.client.revoke_implementation(&native_hash(env));
+        let now = env.ledger().timestamp();
+        let list = crate::storage::AssuranceListParams {
+            root: BytesN::from_array(env, &[1u8; 32]),
+            tree_uri: String::from_str(env, "ipfs://bafytree"),
+            price: 10,
+            expires_at: now + 30 * DAY,
+            total: 2,
+            threshold_claimers: 2,
+            deadline: now + 10 * DAY,
+        };
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &list, &cfg(env, true, true)),
+            Err(Ok(ManagerError::PendingDaoUsesRevokedImplementation))
+        );
+        assert!(dao.client.get_assurance(token).is_none());
+        assert_eq!(dao.token.admin(), dao.launch_admin);
     }
 
     /// Lowering the upgrade notice long before the deadline does not shorten
@@ -2421,8 +2448,35 @@ mod real_dao {
             Err(Ok(ManagerError::UpgradeDelayNotElapsed))
         );
         assert_eq!(dao.claims.refund(&0, &alice), 10);
-        move_to(env, 1, deadline + crate::MIN_RECOVERY_REFUND_WINDOW + 1);
+        // The notice since the announcement has the same floor in ledgers.
+        move_to(
+            env,
+            crate::MIN_RECOVERY_NOTICE_LEDGERS - TEST_UPGRADE_DELAY - 1,
+            deadline + crate::MIN_RECOVERY_REFUND_WINDOW + 1,
+        );
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
+        move_to(env, 1, env.ledger().timestamp());
         dao.client.recover_claims(token, &from, &to);
+
+        // A second target right after the first still waits the floor, with
+        // the notice at zero and the deadline long past: members refund with
+        // the first recovery's code in that time.
+        let next = BytesN::from_array(env, &[5u8; 32]);
+        dao.client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "0.3.0"),
+            &next,
+        );
+        dao.client.approve_upgrade(&to, &next);
+        dao.client
+            .set_latest_implementation(&String::from_str(env, "Mock"), &next);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &to, &next),
+            Err(Ok(ManagerError::UpgradeDelayNotElapsed))
+        );
     }
 
     /// A target registered after the drive failed applies only once it is
@@ -2445,6 +2499,9 @@ mod real_dao {
         dao.client
             .register_implementation(&name, &String::from_str(env, "0.2.0"), &to);
         dao.client.approve_upgrade(&from, &to);
+        // The announcement comes later than the approval; the notice counts
+        // from the later of the two.
+        move_to(env, 500, env.ledger().timestamp());
         // Approved but never announced as latest.
         assert_eq!(
             dao.client.try_recover_claims(token, &from, &to),
@@ -2461,7 +2518,7 @@ mod real_dao {
             dao.client.try_recover_claims(token, &from, &to),
             Err(Ok(ManagerError::UpgradeDelayNotElapsed))
         );
-        move_to(env, TEST_UPGRADE_DELAY - 1, env.ledger().timestamp());
+        move_to(env, recovery_notice_ledgers() - 1, env.ledger().timestamp());
         assert_eq!(
             dao.client.try_recover_claims(token, &from, &to),
             Err(Ok(ManagerError::UpgradeDelayNotElapsed))
@@ -3730,7 +3787,7 @@ fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
     // The approved target applies once announced and its notice has passed.
     client.set_latest_implementation(&String::from_str(&env, "Mock"), &to);
     env.ledger().with_mut(|l| {
-        l.sequence_number += TEST_UPGRADE_DELAY;
+        l.sequence_number += recovery_notice_ledgers();
         l.timestamp = 2_000 + recovery_window_seconds() + 1;
     });
     client.recover_claims(&token, &from, &to);
@@ -3744,6 +3801,12 @@ fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
 /// seconds: the notice in seconds, never less than the floor.
 fn recovery_window_seconds() -> u64 {
     (TEST_UPGRADE_DELAY as u64 * crate::SECONDS_PER_LEDGER).max(crate::MIN_RECOVERY_REFUND_WINDOW)
+}
+
+/// The notice, in ledgers, a recovery target waits after its approval and
+/// announcement: the notice, never less than the floor.
+fn recovery_notice_ledgers() -> u32 {
+    TEST_UPGRADE_DELAY.max(crate::MIN_RECOVERY_NOTICE_LEDGERS)
 }
 
 #[test]
