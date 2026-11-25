@@ -5,7 +5,10 @@ use soroban_sdk::{contractevent, Address, BytesN, String};
 
 use crate::storage::AssuranceTerms;
 
-/// A list opened: its root, where the full tree is published, and its terms.
+/// A list opened (`open_list`): its root, where the full tree is published,
+/// and its terms. The terms never change afterwards, except that
+/// `close_list` can move `expires_at` earlier (`ListClosed`). `assurance` is
+/// set only on the assurance list.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListOpened {
@@ -20,7 +23,8 @@ pub struct ListOpened {
     pub assurance: Option<AssuranceTerms>,
 }
 
-/// A claim: `amount` tokens minted from `first_token_id` to `claimer`.
+/// A claim (`claim`): `amount` tokens minted to `claimer`, with consecutive
+/// ids from `first_token_id`, in the same transaction as the payment.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Claimed {
@@ -50,7 +54,8 @@ pub struct ListClosed {
     pub total: u32,
 }
 
-/// The assurance escrow moved to the Treasury (at launch).
+/// A list's escrow moved to the Treasury (`release`, also from `launch`).
+/// Emitted only when `amount` is above zero; the list's escrow is now zero.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EscrowReleased {
@@ -60,7 +65,8 @@ pub struct EscrowReleased {
     pub amount: i128,
 }
 
-/// A failed list's escrow returned to a claimer.
+/// A failed list's escrow returned to the claimer who paid it (`refund`).
+/// The claimer's escrow on this list is now zero.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Refunded {
@@ -71,7 +77,8 @@ pub struct Refunded {
     pub amount: i128,
 }
 
-/// `<Module>Launched`: the ClaimMinter went Live with the DAO.
+/// `<Module>Launched`: the ClaimMinter went Live with the DAO (`launch`).
+/// The Treasury is now its admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimMinterLaunched {
