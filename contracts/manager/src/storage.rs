@@ -363,18 +363,21 @@ pub enum ManagerKey {
     ApprovedVoteSource(Address),
 }
 
+/// The Manager admin, or `None` if none was recorded.
 pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage()
         .instance()
         .get(&common::ns(env, ManagerKey::ManagerAdmin))
 }
 
+/// Records the Manager admin (constructor and `accept_admin`).
 pub fn write_admin(env: &Env, admin: &Address) {
     env.storage()
         .instance()
         .set(&common::ns(env, ManagerKey::ManagerAdmin), admin);
 }
 
+/// Whether `pause_factory` is in force; false when never set.
 pub fn is_factory_paused(env: &Env) -> bool {
     env.storage()
         .instance()
@@ -382,6 +385,8 @@ pub fn is_factory_paused(env: &Env) -> bool {
         .unwrap_or(false)
 }
 
+/// Records the factory pause (constructor, `pause_factory`,
+/// `unpause_factory`).
 pub fn set_factory_paused(env: &Env, paused: bool) {
     env.storage()
         .instance()
@@ -413,6 +418,7 @@ pub fn set_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &ManagerKey, value: 
     common::ttl::extend_persistent(env, &key);
 }
 
+/// Deletes a persistent entry; nothing happens if it is absent.
 pub fn remove_persistent(env: &Env, key: &ManagerKey) {
     env.storage()
         .persistent()

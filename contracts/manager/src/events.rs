@@ -252,6 +252,8 @@ pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_le
     .publish(env);
 }
 
+/// Publishes `VoteSourceApproved` from `approve_vote_source`, when the admin
+/// approves a vote source or withdraws its approval.
 pub fn emit_vote_source_approved(env: &Env, source: &Address, approved: bool, name: &String) {
     VoteSourceApproved {
         source: source.clone(),
@@ -353,6 +355,9 @@ pub fn emit_factory_unpaused(env: &Env) {
     FactoryUnpaused {}.publish(env);
 }
 
+/// Publishes `DaoLaunched` at the end of every launch (`launch_dao`,
+/// `launch_when_ready`), with the DAO's addresses, the launch choices, and its
+/// module registry at launch.
 pub fn emit_dao_launched(
     env: &Env,
     token_address: &Address,
@@ -373,6 +378,8 @@ pub fn emit_dao_launched(
     .publish(env);
 }
 
+/// Publishes `ModuleCreated` from `create_module`, for the `n`th module of
+/// `kind` the Manager deployed for the DAO.
 pub fn emit_module_created(
     env: &Env,
     token_address: &Address,

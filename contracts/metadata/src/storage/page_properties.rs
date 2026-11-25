@@ -196,6 +196,8 @@ struct StorageHost;
 
 #[contractimpl]
 impl StorageHost {
+    /// Does nothing: the host exists only so the tests can run storage code
+    /// in a contract's context.
     pub fn noop() {}
 }
 

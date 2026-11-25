@@ -26,6 +26,8 @@ pub struct MarketplaceLaunched {
     pub opened: bool,
 }
 
+/// Publishes `MarketplaceLaunched` once, from the Manager's `launch`, with
+/// whether the marketplace opened.
 pub fn emit_launched(e: &Env, treasury: &Address, opened: bool) {
     MarketplaceLaunched {
         treasury: treasury.clone(),
@@ -187,6 +189,8 @@ pub struct MarketplaceUnpaused {
     pub changed_by: Address,
 }
 
+/// Publishes `MarketplaceInitialized` from the constructor, with the wiring
+/// and the default secondary fee.
 pub fn emit_marketplace_initialized(
     e: &Env,
     token: &Address,
@@ -205,6 +209,8 @@ pub fn emit_marketplace_initialized(
     .publish(e);
 }
 
+/// Publishes `SecondaryListingCreated` from `list`, with the terms the
+/// listing keeps: price, expiry, fee and payment asset.
 pub fn emit_secondary_created(e: &Env, token_id: u32, listing: &crate::storage::Listing) {
     SecondaryListingCreated {
         token_id,

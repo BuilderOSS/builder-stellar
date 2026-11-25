@@ -11,6 +11,7 @@ pub struct MetadataLaunched {
     pub treasury: Address,
 }
 
+/// Publishes `MetadataLaunched` once, from the Manager's `launch`.
 pub fn emit_launched(env: &Env, treasury: &Address) {
     MetadataLaunched {
         treasury: treasury.clone(),
@@ -29,6 +30,7 @@ pub struct MetadataInitialized {
     pub admin: Address,
 }
 
+/// Publishes `MetadataInitialized` from the constructor.
 pub fn emit_metadata_initialized(
     env: &Env,
     token: &Address,
@@ -55,6 +57,8 @@ pub struct ProfileUpdated {
     pub profile: String,
 }
 
+/// Publishes `ProfileUpdated` from the constructor (seq 0) and
+/// `update_profile`: the only copy of the profile text.
 pub fn emit_profile_updated(env: &Env, seq: u32, hash: &BytesN<32>, profile: &String) {
     ProfileUpdated {
         seq,
@@ -75,6 +79,8 @@ pub struct PropertyAdded {
     pub name: String,
 }
 
+/// Publishes `PropertyAdded` for each new property (constructor,
+/// `add_properties`, `delete_and_recreate_properties`).
 pub fn emit_property_added(env: &Env, property_id: u32, name: &String) {
     let event = PropertyAdded {
         property_id,
@@ -95,6 +101,8 @@ pub struct SeedGenerated {
     pub selections: Vec<u32>,
 }
 
+/// Publishes `SeedGenerated` when `on_minted` or `regenerate` writes a token's
+/// selections.
 pub fn emit_seed_generated(env: &Env, token_id: u32, num_properties: u32, selections: &Vec<u32>) {
     let event = SeedGenerated {
         token_id,
@@ -119,6 +127,8 @@ pub struct SeedsGenerated {
     pub selections: Vec<Vec<u32>>,
 }
 
+/// Publishes one `SeedsGenerated` for the whole range `on_minted_batch`
+/// seeds.
 pub fn emit_seeds_generated(
     env: &Env,
     first_token_id: u32,
@@ -143,6 +153,7 @@ pub struct RendererBaseUpdated {
     pub new_base: String,
 }
 
+/// Publishes `RendererBaseUpdated` from `update_renderer_base`.
 pub fn emit_renderer_base_updated(env: &Env, old_base: &String, new_base: &String) {
     let event = RendererBaseUpdated {
         old_base: old_base.clone(),
@@ -161,6 +172,8 @@ pub struct PropertiesReset {
     pub old_num_properties: u32,
 }
 
+/// Publishes `PropertiesReset` when `delete_and_recreate_properties` clears
+/// the properties, before their replacements' `PropertyAdded`.
 pub fn emit_properties_reset(env: &Env, old_num_properties: u32) {
     let event = PropertiesReset { old_num_properties };
     event.publish(env);

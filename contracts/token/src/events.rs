@@ -160,6 +160,8 @@ pub struct TokenLaunched {
     pub grants: Vec<MintGrant>,
 }
 
+/// Publishes `TokenInitialized` from the constructor, with the collection
+/// name, symbol and membership switches.
 pub fn emit_token_initialized(
     e: &Env,
     admin: &Address,
@@ -176,6 +178,9 @@ pub fn emit_token_initialized(
     .publish(e);
 }
 
+/// Publishes `MintAllowanceChanged` whenever a module's allowance changes:
+/// the admin's increase or decrease, a module's release, `launch` grants, and
+/// `unregister_module` zeroing it.
 pub fn emit_mint_allowance_changed(
     e: &Env,
     module: &Address,
@@ -192,6 +197,7 @@ pub fn emit_mint_allowance_changed(
     .publish(e);
 }
 
+/// Publishes `ModuleRegistered` from `register_module`.
 pub fn emit_module_registered(e: &Env, kind: &Symbol, address: &Address, non_voting: bool) {
     ModuleRegistered {
         kind: kind.clone(),
@@ -201,6 +207,7 @@ pub fn emit_module_registered(e: &Env, kind: &Symbol, address: &Address, non_vot
     .publish(e);
 }
 
+/// Publishes `ModuleUnregistered` from `unregister_module`.
 pub fn emit_module_unregistered(e: &Env, kind: &Symbol, address: &Address) {
     ModuleUnregistered {
         kind: kind.clone(),
@@ -209,6 +216,8 @@ pub fn emit_module_unregistered(e: &Env, kind: &Symbol, address: &Address) {
     .publish(e);
 }
 
+/// Publishes `MintWithMinter` from `mint`, naming who minted, beside
+/// OpenZeppelin's `Mint`.
 pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
     MintWithMinter {
         minter: minter.clone(),
@@ -218,6 +227,8 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
     .publish(e);
 }
 
+/// Publishes one `MintBatchWithMinter` for the whole range `batch_mint`
+/// mints, beside OpenZeppelin's `Mint` per token.
 pub fn emit_token_batch_mint(e: &Env, minter: &Address, first_token_id: u32, count: u32) {
     MintBatchWithMinter {
         minter: minter.clone(),
@@ -227,6 +238,8 @@ pub fn emit_token_batch_mint(e: &Env, minter: &Address, first_token_id: u32, cou
     .publish(e);
 }
 
+/// Publishes `TokenLaunched` once, from the Manager's `launch`, with the
+/// allowances it granted.
 pub fn emit_launched(e: &Env, treasury: &Address, grants: &Vec<MintGrant>) {
     TokenLaunched {
         treasury: treasury.clone(),
@@ -235,6 +248,7 @@ pub fn emit_launched(e: &Env, treasury: &Address, grants: &Vec<MintGrant>) {
     .publish(e);
 }
 
+/// Publishes `MetadataUpdated` from `set_metadata`.
 pub fn emit_metadata_updated(e: &Env, name: &String, symbol: &String) {
     MetadataUpdated {
         name: name.clone(),

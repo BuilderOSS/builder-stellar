@@ -163,6 +163,8 @@ pub struct AuctionCancelled {
 }
 
 // Event publishing helpers
+/// Publishes `AuctionInitialized` from the constructor, with the starting
+/// configuration.
 pub fn emit_auction_initialized(
     e: &Env,
     admin: &Address,
@@ -187,6 +189,8 @@ pub fn emit_auction_initialized(
     .publish(e);
 }
 
+/// Publishes `AuctionCreated` when `create_auction` mints the next token into
+/// custody and opens its auction.
 pub fn emit_auction_created(
     e: &Env,
     token_id: u128,
@@ -205,6 +209,8 @@ pub fn emit_auction_created(
     .publish(e);
 }
 
+/// Publishes `BidPlaced` when `create_bid` makes a bid the highest, with
+/// whether it extended the end time.
 pub fn emit_bid_placed(
     e: &Env,
     token_id: u128,
@@ -225,6 +231,8 @@ pub fn emit_bid_placed(
     .publish(e);
 }
 
+/// Publishes `AuctionSettled` at settlement: the winner and amount, or no
+/// winner and 0 when the token went to the Treasury.
 pub fn emit_auction_settled(e: &Env, token_id: u128, winner: &Option<Address>, amount: i128) {
     AuctionSettled {
         token_id,
@@ -234,6 +242,7 @@ pub fn emit_auction_settled(e: &Env, token_id: u128, winner: &Option<Address>, a
     .publish(e);
 }
 
+/// Publishes `DurationUpdated` from `set_duration`.
 pub fn emit_duration_updated(e: &Env, duration: u64, changed_by: &Address) {
     DurationUpdated {
         duration,
@@ -242,6 +251,7 @@ pub fn emit_duration_updated(e: &Env, duration: u64, changed_by: &Address) {
     .publish(e);
 }
 
+/// Publishes `ReservePriceUpdated` from `set_reserve_price`.
 pub fn emit_reserve_price_updated(e: &Env, reserve_price: i128, changed_by: &Address) {
     ReservePriceUpdated {
         reserve_price,
@@ -250,6 +260,7 @@ pub fn emit_reserve_price_updated(e: &Env, reserve_price: i128, changed_by: &Add
     .publish(e);
 }
 
+/// Publishes `MinBidIncrementUpdated` from `set_min_bid_increment`.
 pub fn emit_min_bid_increment_updated(
     e: &Env,
     min_bid_increment_percent: u32,
@@ -262,6 +273,7 @@ pub fn emit_min_bid_increment_updated(
     .publish(e);
 }
 
+/// Publishes `TimeBufferUpdated` from `set_time_buffer`.
 pub fn emit_time_buffer_updated(e: &Env, time_buffer: u64, changed_by: &Address) {
     TimeBufferUpdated {
         time_buffer,
@@ -270,6 +282,7 @@ pub fn emit_time_buffer_updated(e: &Env, time_buffer: u64, changed_by: &Address)
     .publish(e);
 }
 
+/// Publishes `PaymentTokenUpdated` from `set_payment_token`.
 pub fn emit_payment_token_updated(e: &Env, payment_token: &Address, changed_by: &Address) {
     PaymentTokenUpdated {
         payment_token: payment_token.clone(),
@@ -278,6 +291,8 @@ pub fn emit_payment_token_updated(e: &Env, payment_token: &Address, changed_by: 
     .publish(e);
 }
 
+/// Publishes `AuctionLaunched` once, from the Manager's `launch`, with whether
+/// the first auction started.
 pub fn emit_launched(e: &Env, treasury: &Address, started: bool) {
     AuctionLaunched {
         treasury: treasury.clone(),
@@ -286,6 +301,8 @@ pub fn emit_launched(e: &Env, treasury: &Address, started: bool) {
     .publish(e);
 }
 
+/// Publishes `BidRefunded` when an outbid or cancelled bid is pushed back to
+/// its bidder.
 pub fn emit_bid_refunded(e: &Env, token_id: u128, bidder: &Address, amount: i128) {
     BidRefunded {
         token_id,
@@ -295,6 +312,7 @@ pub fn emit_bid_refunded(e: &Env, token_id: u128, bidder: &Address, amount: i128
     .publish(e);
 }
 
+/// Publishes `AuctionCancelled` from `cancel_auction`.
 pub fn emit_auction_cancelled(e: &Env, token_id: u128, reason: u32, cancelled_by: &Address) {
     AuctionCancelled {
         token_id,
@@ -304,6 +322,8 @@ pub fn emit_auction_cancelled(e: &Env, token_id: u128, reason: u32, cancelled_by
     .publish(e);
 }
 
+/// Publishes `RefundDeferred` when a refund push fails and the amount is
+/// credited to the bidder's `PendingRefund` instead.
 pub fn emit_refund_deferred(e: &Env, token_id: u128, bidder: &Address, amount: i128) {
     RefundDeferred {
         token_id,
@@ -313,6 +333,8 @@ pub fn emit_refund_deferred(e: &Env, token_id: u128, bidder: &Address, amount: i
     .publish(e);
 }
 
+/// Publishes `RefundWithdrawn` when a bidder pulls a deferred refund with
+/// `withdraw_refund`.
 pub fn emit_refund_withdrawn(e: &Env, bidder: &Address, amount: i128) {
     RefundWithdrawn {
         bidder: bidder.clone(),
