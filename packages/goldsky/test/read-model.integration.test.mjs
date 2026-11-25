@@ -1069,3 +1069,136 @@ test('prisma schema matches the database views column for column', { skip }, () 
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Outside modules (migration 0012). Runs last: it lands more events, and the
+// tests above count the scenario's.
+// ---------------------------------------------------------------------------
+test('outside modules: malformed version and launch events leave the shared views readable', { skip }, () => {
+  assert.deepEqual(
+    one(`SELECT chain.try_int('2') AS small, chain.try_int('-7') AS negative, chain.try_int('2147483647') AS max,
+      chain.try_int('2147483648') AS over, chain.try_int('99999999999999999999') AS huge, chain.try_int('two') AS word,
+      chain.try_int('1.5') AS fraction, chain.try_int('') AS empty, chain.try_int(NULL) AS missing`),
+    { small: 2, negative: -7, max: 2147483647, over: null, huge: null, word: null, fraction: null, empty: null, missing: null }
+  );
+
+  const managerVersions = `SELECT * FROM manager.module_versions WHERE module_role <> 'module' ORDER BY dao_id, module_contract`;
+  const managerLaunches = `SELECT * FROM manager.module_launches WHERE module_role <> 'module' ORDER BY dao_id, module_contract`;
+  const otherFeeds = `SELECT activity_id, dao_id, event_name FROM app.activity_feed WHERE dao_id IS DISTINCT FROM 'CTOK4' ORDER BY activity_id`;
+  const before = { versions: rows(managerVersions), launches: rows(managerLaunches), feeds: rows(otherFeeds) };
+
+  // CEXTCLM: DAO 4 registered it by vote and the Manager never deployed it (role module, still
+  // registered). Its storage versions are out of range and text, its upgrade names a registered
+  // (and revoked) hash it does not run, and its launch flag is not a boolean.
+  const start = events.length;
+  emit('module', 'CEXTCLM', 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u64('99999999999') }, ledger: 320 });
+  emit('module', 'CEXTCLM', 'migrated', { data: { from_storage_version: u32(1), to_storage_version: str('two') }, ledger: 321 });
+  emit('module', 'CEXTCLM', 'upgraded', { topics: [bytes('x01'), bytes('bb')], data: { version: str('0.1.0') }, ledger: 322 });
+  emit('module', 'CEXTCLM', 'module_launched', { topics: [addr('CTRE4')], data: { started: str('maybe') }, ledger: 323 });
+  const raw = events.slice(start).map(rawScript);
+  const decodedRows = raw.map(decodeScript);
+  const activityRows = decodedRows.map(activityScript);
+  assert.ok([...raw, ...decodedRows, ...activityRows].every(Boolean), 'every event survives every transform');
+  for (const [schema, table, objects] of [['chain', 'raw_events', raw], ['chain', 'decoded_events', decodedRows], ['app', 'activity_feed_events', activityRows]]) {
+    const columns = tableColumns(schema, table).filter((c) => c !== 'ingested_at');
+    insertRows(`${schema}.${table}`, Object.keys(objects[0]).filter((key) => columns.includes(key)), objects);
+  }
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_events WHERE contract_id = 'CEXTCLM'`).n, 5, 'the events are in the DAO\'s window');
+  assert.throws(
+    () => psql(`SELECT (a ->> 'to_storage_version')::integer FROM manager.module_events WHERE contract_id = 'CEXTCLM' AND event_name = 'migrated'`),
+    /out of range|invalid input syntax/,
+    'the fixture really is malformed'
+  );
+
+  // Every view reads, deployment-wide, and nothing the Manager deployed changed.
+  assert.ok(rows(`SELECT * FROM manager.module_versions`).length > 0);
+  assert.ok(rows(`SELECT * FROM manager.module_launches`).length > 0);
+  assert.ok(rows(`SELECT * FROM app.activity_feed`).length > 0);
+  assert.deepEqual(rows(managerVersions), before.versions, 'every Manager-deployed module keeps its versions');
+  assert.deepEqual(rows(managerLaunches), before.launches);
+  assert.deepEqual(rows(otherFeeds), before.feeds, 'other DAOs\' feeds are unchanged');
+
+  // The outside module's own claims are ignored: no hash, version or launch from its events.
+  assert.deepEqual(
+    one(`SELECT current_hash, current_version, storage_version, upgrade_count FROM manager.module_versions WHERE module_contract = 'CEXTCLM'`),
+    { current_hash: null, current_version: null, storage_version: 1, upgrade_count: 0 }
+  );
+  assert.deepEqual(one(`SELECT is_live, started FROM manager.module_launches WHERE module_contract = 'CEXTCLM'`), { is_live: false, started: null });
+  assert.deepEqual(
+    rows(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'implementation_revoked'`).map((r) => r.dao_id),
+    ['CTOK1'],
+    'a module that only claims a revoked hash does not bring the notice to its DAO'
+  );
+  assert.deepEqual(
+    rows(`SELECT DISTINCT dao_id, visibility FROM app.activity_feed WHERE contract_id = 'CEXTCLM'`),
+    [{ dao_id: 'CTOK4', visibility: 'admin' }],
+    'its events stay in its own DAO\'s admin feed'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// u64 fields past the bigint range (migration 0013). Runs last, like the test
+// above: it lands more events.
+// ---------------------------------------------------------------------------
+test('u64 fields: a far expiry or period past the bigint range leaves the marketplace and claims views readable', { skip }, () => {
+  const MAX_U64 = '18446744073709551615';
+  const MAX_BIGINT = '9223372036854775807';
+  assert.deepEqual(
+    one(`SELECT chain.u64_bigint('5000') AS small, chain.u64_bigint('0') AS zero, chain.u64_bigint('00042') AS padded,
+      chain.u64_bigint('${MAX_BIGINT}')::text AS max, chain.u64_bigint('9223372036854775808')::text AS over,
+      chain.u64_bigint('${MAX_U64}')::text AS u64_max, chain.u64_bigint(repeat('9', 400))::text AS huge,
+      chain.u64_bigint(repeat('0', 400) || '7') AS zeros, chain.u64_bigint('-1') AS negative, chain.u64_bigint('1.5') AS fraction,
+      chain.u64_bigint('soon') AS word, chain.u64_bigint('') AS empty, chain.u64_bigint(NULL) AS missing`),
+    {
+      small: 5000, zero: 0, padded: 42, max: MAX_BIGINT, over: MAX_BIGINT, u64_max: MAX_BIGINT, huge: MAX_BIGINT,
+      zeros: 7, negative: null, fraction: null, word: null, empty: null, missing: null
+    }
+  );
+
+  const views = {
+    pools: `SELECT pool_id, expires_at::text, period_secs::text, status FROM marketplace.pools ORDER BY pool_id`,
+    listings: `SELECT token_id, expires_at::text, status FROM marketplace.secondary_listings ORDER BY token_id`,
+    lists: `SELECT dao_id, list_id, expires_at::text, deadline::text FROM claims.lists ORDER BY dao_id, list_id`
+  };
+  const before = Object.fromEntries(Object.entries(views).map(([name, sql]) => [name, rows(sql)]));
+
+  // DAO 1's own Marketplace and ClaimMinter, so the contract code is the platform's and only the
+  // values are extreme: a member lists token 23 until u64::MAX, a vote opens pool 3 with no real
+  // end or period, and a claim list (an assurance drive) is open until u64::MAX.
+  const start = events.length;
+  emit('marketplace', 'CMKT1', 'secondary_listing_created', {
+    topics: [u32(23)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(MAX_U64), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger: 330
+  });
+  emit('marketplace', 'CMKT1', 'pool_opened', {
+    topics: [u32(3)], data: { price: i128(100), asset: addr('CXLM'), expires_at: u64(MAX_U64), size: u32(1), max_per_buyer: u32(1), max_sold_per_period: u32(1), period_secs: u64(MAX_U64) }, ledger: 331
+  });
+  emit('claims', 'CCLM1', 'list_opened', {
+    topics: [u32(2)], data: { root: bytes('r3'), tree_uri: str('ipfs://tree3'), asset: addr('CXLM'), price: i128(0), expires_at: u64(MAX_U64), total: u32(1), assurance: dataMap({ threshold_claimers: u32(1), deadline: u64(MAX_U64) }) }, ledger: 332
+  });
+  const raw = events.slice(start).map(rawScript);
+  const decodedRows = raw.map(decodeScript);
+  const activityRows = decodedRows.map(activityScript);
+  assert.ok([...raw, ...decodedRows, ...activityRows].every(Boolean), 'every event survives every transform');
+  for (const [schema, table, objects] of [['chain', 'raw_events', raw], ['chain', 'decoded_events', decodedRows], ['app', 'activity_feed_events', activityRows]]) {
+    const columns = tableColumns(schema, table).filter((c) => c !== 'ingested_at');
+    insertRows(`${schema}.${table}`, Object.keys(objects[0]).filter((key) => columns.includes(key)), objects);
+  }
+  assert.throws(
+    () => psql(`SELECT (a ->> 'expires_at')::bigint FROM manager.module_events WHERE event_name = 'secondary_listing_created'`),
+    /out of range/,
+    'the fixture really is past the bigint range'
+  );
+
+  // Every view reads, the far values read as the bigint maximum, and the rows already there are unchanged.
+  const after = Object.fromEntries(Object.entries(views).map(([name, sql]) => [name, rows(sql)]));
+  assert.deepEqual(after.listings.filter((r) => r.token_id !== 23), before.listings);
+  assert.deepEqual(after.listings.find((r) => r.token_id === 23), { token_id: 23, expires_at: MAX_BIGINT, status: 'open' });
+  assert.deepEqual(after.pools.filter((r) => Number(r.pool_id) !== 3), before.pools);
+  assert.deepEqual(after.pools.find((r) => Number(r.pool_id) === 3), { pool_id: 3, expires_at: MAX_BIGINT, period_secs: MAX_BIGINT, status: 'open' });
+  assert.deepEqual(after.lists.filter((r) => !(r.dao_id === 'CTOK1' && Number(r.list_id) === 2)), before.lists);
+  assert.deepEqual(after.lists.find((r) => r.dao_id === 'CTOK1' && Number(r.list_id) === 2), { dao_id: 'CTOK1', list_id: 2, expires_at: MAX_BIGINT, deadline: MAX_BIGINT });
+  assert.ok(rows(`SELECT * FROM marketplace.pools`).length > 0);
+  assert.ok(rows(`SELECT * FROM marketplace.secondary_listings`).length > 0);
+  assert.ok(rows(`SELECT * FROM claims.lists`).length > 0);
+  assert.ok(rows(`SELECT * FROM app.activity_feed`).length > 0);
+});

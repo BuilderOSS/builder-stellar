@@ -12,6 +12,14 @@ models in `apps/web/prisma/schema.prisma` map onto the views marked **Prisma**.
    through `chain.events`, which casts the text `topics`/`args` to jsonb with
    `chain.jsonb_safe` (a `\u0000` escape, which jsonb refuses, becomes
    U+FFFD; the decoder already replaces NUL in free text before the sink).
+   A view that casts an event field reads only the roles the Manager deployed,
+   and `manager.module_versions` also casts storage versions with
+   `chain.try_int` (NULL for a value that is not a whole number in range), so
+   the views ignore malformed values from outside modules instead of failing.
+   A u64 field with no upper bound on chain (an expiry, a pool period, an
+   assurance deadline) is cast with `chain.u64_bigint`: a value past the bigint
+   range reads as 9223372036854775807, still later than any ledger time, and
+   the exact value is on chain (migration 0013).
 
 All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
 by `dao_id` (the DAO token contract address).
@@ -56,10 +64,10 @@ settings, artwork definitions, the renderer, platform registry pointers) has no 
 | `assurance_drives` **Prisma** | `assurance_opened`, `dao_launched`, `slug_released` | per drive: `claim_minter`, `list_id`, `deadline`, launch flags, `opened_*`, and `outcome` (`open`, `launched`, `released`). Whether the threshold is met is chain state (`claims.lists` has the counts) |
 | `dao_previous_slugs` **Prisma** | `slug_changed` | one row per slug a DAO moved away from, with its event position. Not reserved: the app redirects an old link only while no DAO holds it |
 | `daos` **Prisma** | registry, `dao_modules`, `dao_launches`, `assurance_drives`, `dao_created`/`pending_slug_updated` (request), `slug_claimed`/`slug_changed`/`slug_released` (claimed), `token_initialized`/`metadata_updated`, token `admin_changed`, `profile_updated`, auction `paused`/`unpaused`, `marketplace_paused`/`unpaused` | `status` pending/operational; `slug` (claimed once launched or reserved by a drive, else requested; `slug_claimed`, `requested_slug`, `claimed_slug` disambiguate; `slug_released` frees a failed drive's); `token_name`/`token_symbol`; `profile`, `profile_hash`, `profile_seq` (highest `seq` per Metadata contract, computed inline; the app shows `profile` only after hashing it and matching Metadata's on-chain `profile_hash()`); `admin_address` (launch admin, then the Treasury); `auction_contract`, `marketplace_contract`, `claims_contract` (the registered module of each kind now, NULL without one); `assurance_outcome`; `auction_enabled`, `auction_paused`, `marketplace_enabled` from the launch flags and pause events (false/NULL without the module) |
-| `module_launches` **Prisma** | each contract's `<role>_launched` | per DAO contract: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `grants` (token: `[{module, allowance}]`) |
+| `module_launches` **Prisma** | each contract's `<role>_launched` | per DAO contract: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `grants` (token: `[{module, allowance}]`). A module deployed outside the Manager has no launch event the platform knows: `is_live` false (read it on chain) |
 | `implementations` | `implementation_registered`, `implementation_revoked` | `name`, `version`, `published_ledger`, `revoked`, `revoked_ledger` |
 | `vote_sources` **Prisma** | `vote_source_approved` | vote sources new tribes may choose: the latest approval event per `source`, kept while it approves (`name`, `approved_ledger`); chain truth is `is_vote_source_approved` (migration 0011, `docs/designs/governance-adapter.md`) |
-| `module_versions` | `upgraded`, `migrated` (every DAO contract) + `dao_modules` | per DAO contract: `current_hash` (latest `to_hash`, else the creation hash), `current_version` (the registry version of `current_hash`, as the contract's `version()` reads it), `storage_version`, `upgrade_count`, `last_upgraded_*`. `scripts/renew-code-ttl.mjs` reads `current_hash` |
+| `module_versions` | `upgraded`, `migrated` (each contract the Manager deployed) + `dao_modules` | per DAO contract: `current_hash` (latest `to_hash`, else the creation hash), `current_version` (the registry version of `current_hash`, as the contract's `version()` reads it), `storage_version` (the latest `to_storage_version`, else 1), `upgrade_count`, `last_upgraded_*`. A module deployed outside the Manager (role `module`) has no `current_hash` or `current_version`: the view ignores its own `upgraded` and `migrated` events (migration 0012). `scripts/renew-code-ttl.mjs` reads `current_hash` |
 | `settings` | `manager_initialized`, `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `factory_paused`/`factory_unpaused` | one row per deployment: `admin`, `pending_admin` (NULL after an accept or a cancel), `factory_paused` (the contract has no getter; a pause blocks `create_dao`, `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready` and `change_slug`) |
 
 Not projected: `latest_implementation_set`, `current_implementations_updated`,
@@ -119,9 +127,9 @@ and for > against) until `vote_end + 14d` and expired after, or defeated.
 | `auction.bids` **Prisma** | `bid_placed` with its `comment` |
 | `metadata.token_seeds` | `seed_generated` (single mint) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); a token is seeded once |
 | `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` |
-| `marketplace.pools` **Prisma** | `pool_opened` with running totals from `pool_restocked`, `pool_purchased`, `pool_swept`, closed by `pool_closed`; keyed by `pool_id`: terms (`price`, `asset`, `expires_at`, `size`, `max_per_buyer`, `max_sold_per_period`, `period_secs`), `stocked`, `sold`, `swept`, `in_stock`, `released`, `status`. An expired pool stays `open` until someone closes it: compare `expires_at` |
+| `marketplace.pools` **Prisma** | `pool_opened` with running totals from `pool_restocked`, `pool_purchased`, `pool_swept`, closed by `pool_closed`; keyed by `pool_id`: terms (`price`, `asset`, `expires_at`, `size`, `max_per_buyer`, `max_sold_per_period`, `period_secs`; `expires_at` and `period_secs` past the bigint range read as its maximum), `stocked`, `sold`, `swept`, `in_stock`, `released`, `status`. An expired pool stays `open` until someone closes it: compare `expires_at` |
 | `marketplace.pool_stock` **Prisma** | `pool_restocked`, `transfers` | the tokens a pool has in stock: every id a restock minted into the Marketplace that hasn't moved since (a sale sends it to the buyer, a sweep to the Treasury; a resold token escrowed again is a secondary listing, not stock). Which stock page holds an id is chain state: read `pool_stock(pool_id, page)` before buying |
-| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset`, `buyer` and `closed_*` once closed |
+| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `expires_at` (past the bigint range it reads as its maximum), `fee_bps`, `payment_asset`, `buyer` and `closed_*` once closed |
 | `marketplace.sales` **Prisma** | pool sales (`pool_id` set; no seller or fee, the price goes to the Treasury) and secondary purchases (`pool_id` NULL) |
 | `marketplace.listing_comments` **Prisma** | event-only threads per token (a token's thread carries over relistings); pools carry no comments |
 
@@ -137,7 +145,7 @@ these views are history and discovery.
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline`, `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
+| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
 | `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), the claimer's running `claimed` |
 | `claims.claimers` **Prisma** | `claimed`, `refunded` | each claimer's position per list: `claimed`, `paid`, `escrowed`, `refunded` |
 
