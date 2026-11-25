@@ -17,7 +17,7 @@ export const MarketplaceError = {
    */
   7703 : { message: "InvalidExpiry" },
   /**
-   * The token is already listed
+   * The token is already listed (or, for `recover_token`, is listed)
    */
   7704 : { message: "ListingExists" },
   /**
@@ -102,7 +102,8 @@ export const MarketplaceError = {
    */
   7724 : { message: "TooManyPools" },
   /**
-   * `sweep_pool` on a pool that is still open
+   * `sweep_pool` on a pool that is still open, or `recover_token` while
+   * any pool is not yet swept empty
    */
   7725 : { message: "PoolOpen" },
   /**
@@ -112,7 +113,16 @@ export const MarketplaceError = {
   /**
    * The pool has stocked its whole size
    */
-  7727 : { message: "PoolFullyStocked" }
+  7727 : { message: "PoolFullyStocked" },
+  /**
+   * The payment asset is not a Stellar Asset Contract
+   */
+  7728 : { message: "NotStellarAsset" },
+  /**
+   * `return_listing` or `recover_token` while the marketplace is open
+   * (pause it first)
+   */
+  7729 : { message: "NotPaused" }
 }
 
 /**
@@ -183,7 +193,7 @@ export interface PoolRestockedEvent {
 }
 
 /**
- * Event: ListingExpired
+ * `expire`: an expired listing's token went back to `seller`.
  */
 export interface ListingExpiredEvent {
   name: "ListingExpired";
@@ -194,7 +204,8 @@ export interface ListingExpiredEvent {
 }
 
 /**
- * Event: ListingCancelled
+ * The listing ended and `token_id` went back to `seller`: the seller's
+ * `cancel`, or the admin's `return_listing`.
  */
 export interface ListingCancelledEvent {
   name: "ListingCancelled";
@@ -218,7 +229,8 @@ export interface ListingCommentedEvent {
 }
 
 /**
- * Event: ListingPurchased
+ * `buy`: `buyer` paid `price` (of which `fee` went to the Treasury) and
+ * received `token_id`.
  */
 export interface ListingPurchasedEvent {
   name: "ListingPurchased";
@@ -233,7 +245,7 @@ export interface ListingPurchasedEvent {
 }
 
 /**
- * Event: MarketplacePaused
+ * The marketplace paused: no new listings, purchases, or pools.
  */
 export interface MarketplacePausedEvent {
   name: "MarketplacePaused";
@@ -260,7 +272,7 @@ export interface MarketplaceLaunchedEvent {
 }
 
 /**
- * Event: MarketplaceUnpaused
+ * The marketplace reopened.
  */
 export interface MarketplaceUnpausedEvent {
   name: "MarketplaceUnpaused";
@@ -273,7 +285,7 @@ export interface MarketplaceUnpausedEvent {
 }
 
 /**
- * Event: PaymentAssetUpdated
+ * `set_payment_asset`: new listings are priced in `payment_asset`.
  */
 export interface PaymentAssetUpdatedEvent {
   name: "PaymentAssetUpdated";
@@ -284,7 +296,7 @@ export interface PaymentAssetUpdatedEvent {
 }
 
 /**
- * Event: SecondaryFeeUpdated
+ * `set_secondary_fee_bps`: the fee new listings capture.
  */
 export interface SecondaryFeeUpdatedEvent {
   name: "SecondaryFeeUpdated";
@@ -295,7 +307,7 @@ export interface SecondaryFeeUpdatedEvent {
 }
 
 /**
- * Event: MarketplaceInitialized
+ * Emitted once by the constructor, with the starting configuration.
  */
 export interface MarketplaceInitializedEvent {
   name: "MarketplaceInitialized";
@@ -309,7 +321,7 @@ export interface MarketplaceInitializedEvent {
 }
 
 /**
- * Event: SecondaryListingCreated
+ * `list`: `token_id` is escrowed here on the captured terms.
  */
 export interface SecondaryListingCreatedEvent {
   name: "SecondaryListingCreated";
@@ -329,26 +341,53 @@ export interface SecondaryListingCreatedEvent {
  * (docs/designs/membership-models.md §4).
  */
 export interface Pool {
+  /**
+   * The Stellar Asset Contract buyers pay in.
+   */
   asset: string;
+  /**
+   * Set by `close_pool`; a closed pool sells and restocks nothing.
+   */
   closed: boolean;
   /**
    * Sales and restocks stop at this ledger timestamp.
    */
   expires_at: bigint;
+  /**
+   * Most tokens one buyer may buy from this pool.
+   */
   max_per_buyer: number;
   /**
    * Most sales per `period_secs`, pool-wide.
    */
   max_sold_per_period: number;
+  /**
+   * Length of a sales period, in seconds.
+   */
   period_secs: bigint;
+  /**
+   * When the current sales period started.
+   */
   period_start: bigint;
+  /**
+   * Price of one token, in `asset`.
+   */
   price: bigint;
   /**
    * Tokens the pool may stock in all (its allowance reservation).
    */
   size: number;
+  /**
+   * Tokens sold so far.
+   */
   sold: number;
+  /**
+   * Sales in the current period.
+   */
   sold_in_period: number;
+  /**
+   * Tokens minted into the pool so far.
+   */
   stocked: number;
 }
 
@@ -356,13 +395,25 @@ export interface Pool {
  * Secondary (escrowed-token) listing, keyed by token id.
  */
 export interface Listing {
+  /**
+   * Purchases stop, and `expire` opens, at this ledger timestamp.
+   */
   expires_at: bigint;
+  /**
+   * Fee captured at list time, in basis points of the price.
+   */
   fee_bps: number;
   /**
    * Asset captured at list time; later `set_payment_asset` calls do not affect it.
    */
   payment_asset: string;
+  /**
+   * Asking price, in `payment_asset`.
+   */
   price: bigint;
+  /**
+   * Who listed the token and receives the proceeds, or the token back.
+   */
   seller: string;
 }
 
@@ -382,13 +433,28 @@ export interface PoolSlot {
 }
 
 /**
- * Struct: MarketplaceConfig
+ * The Marketplace's wiring and settings.
  */
 export interface MarketplaceConfig {
+  /**
+   * Fee new listings capture, in basis points (at most `MAX_FEE_BPS`).
+   */
   default_secondary_fee_bps: number;
+  /**
+   * The Manager that approves upgrades and performs the launch.
+   */
   manager: string;
+  /**
+   * While true, no new listings, purchases, or pools.
+   */
   paused: boolean;
+  /**
+   * Asset new listings are priced in, a Stellar Asset Contract.
+   */
   payment_asset: string;
+  /**
+   * The DAO's membership token.
+   */
   token: string;
   /**
    * Fee and primary-sale recipient. Also the admin once live (`common::admin`).

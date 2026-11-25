@@ -4,6 +4,8 @@
 // The logic is the app's (apps/web/src/lib/chain-reads/renewal.ts), run through vite-node.
 //
 // Usage: node scripts/renew-dao.mjs --token <C…> [--network testnet] [--days 90] [--source <identity>] [--dry-run]
+// --source is the payer: RENEW_IDENTITY, else `<network>-renewer`, a low-value key, not the Manager admin. The
+// stellar CLI signs each transaction (`stellar tx sign`): only the CLI reads the payer's seed, never Node.
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

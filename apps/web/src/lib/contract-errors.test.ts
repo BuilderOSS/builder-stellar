@@ -30,6 +30,16 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('token', 7205)).toContain('43');
     expect(getContractErrorMessage('minter', 7803)).toContain('43');
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
+    expect(getContractErrorMessage('governor', 7516)).toContain('CannotConsume');
+    expect(getContractErrorMessage('governor', 7517)).toContain('MintsTooLarge');
+    expect(getContractErrorMessage('treasury', 7606)).toContain('CannotConsume');
+    expect(getContractErrorMessage('governor', 7518)).toContain('StorageVersionMismatch');
+    expect(getContractErrorMessage('treasury', 7607)).toContain('StorageVersionMismatch');
+    expect(getContractErrorMessage('token', 7222)).toContain('ModuleHoldsTokens');
+    expect(getContractErrorMessage('auction', 7419)).toContain('NotStellarAsset');
+    expect(getContractErrorMessage('auction', 7420)).toContain('TokenInAuction');
+    expect(getContractErrorMessage('marketplace', 7728)).toContain('NotStellarAsset');
+    expect(getContractErrorMessage('marketplace', 7729)).toContain('NotPaused');
   });
 
   it('drops retired codes and words the governor lifecycle codes accurately', () => {
@@ -38,6 +48,7 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage(undefined, 7415)).toBeUndefined();
     expect(getContractErrorMessage('manager', 7130)).toContain('UpgradeDelayNotElapsed');
     expect(getContractErrorMessage('manager', 7143)).toContain('UnknownAgentKind');
+    expect(getContractErrorMessage('manager', 7146)).toContain('InvalidPaymentAsset');
     // Queue raises 5006 for an already-queued proposal too.
     expect(getContractErrorMessage('governor', 5006)).toContain('already queued');
     expect(getContractErrorMessage('governor', 5009)).toBe(

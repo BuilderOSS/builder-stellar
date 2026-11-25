@@ -1,5 +1,9 @@
+//! Events published by the Marketplace contract. Admin changes are
+//! `common::admin::AdminChanged`.
+
 use soroban_sdk::{contractevent, Address, Env, String};
 
+/// Emitted once by the constructor, with the starting configuration.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketplaceInitialized {
@@ -88,6 +92,7 @@ pub struct PoolSwept {
     pub pages_left: u32,
 }
 
+/// `list`: `token_id` is escrowed here on the captured terms.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SecondaryListingCreated {
@@ -100,6 +105,8 @@ pub struct SecondaryListingCreated {
     pub payment_asset: Address,
 }
 
+/// `buy`: `buyer` paid `price` (of which `fee` went to the Treasury) and
+/// received `token_id`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListingPurchased {
@@ -113,6 +120,8 @@ pub struct ListingPurchased {
     pub payment_asset: Address,
 }
 
+/// The listing ended and `token_id` went back to `seller`: the seller's
+/// `cancel`, or the admin's `return_listing`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListingCancelled {
@@ -121,6 +130,7 @@ pub struct ListingCancelled {
     pub seller: Address,
 }
 
+/// `expire`: an expired listing's token went back to `seller`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListingExpired {
@@ -141,6 +151,7 @@ pub struct ListingCommented {
     pub body: String,
 }
 
+/// `set_payment_asset`: new listings are priced in `payment_asset`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaymentAssetUpdated {
@@ -149,6 +160,7 @@ pub struct PaymentAssetUpdated {
     pub changed_by: Address,
 }
 
+/// `set_secondary_fee_bps`: the fee new listings capture.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SecondaryFeeUpdated {
@@ -157,6 +169,7 @@ pub struct SecondaryFeeUpdated {
     pub changed_by: Address,
 }
 
+/// The marketplace paused: no new listings, purchases, or pools.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketplacePaused {
@@ -165,6 +178,7 @@ pub struct MarketplacePaused {
     pub changed_by: Address,
 }
 
+/// The marketplace reopened.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketplaceUnpaused {

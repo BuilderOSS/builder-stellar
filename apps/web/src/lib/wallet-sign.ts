@@ -2,6 +2,8 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 
+import { assertSignableSep10Challenge } from '@/lib/auth/sep10-proof';
+import type { Sep10ChallengeResponse } from '@/lib/auth/types';
 import { assertFeeWithinGuard, FEE_GUARD_STROOPS } from '@/lib/fee/fee-guard';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -43,6 +45,28 @@ export async function signWithWallet(
   assertWalletNetworkReady();
   assertFeeWithinGuard(xdr, opts?.networkPassphrase, guard.maxFeeStroops ?? FEE_GUARD_STROOPS);
   return StellarWalletsKit.signTransaction(xdr, opts);
+}
+
+/**
+ * Signs a SEP-10 sign-in challenge (the fallback for wallets that can't sign messages). The server
+ * builds this transaction, so the browser checks it is a genuine sign-in challenge for `address`
+ * on this network from `serverPublicKey` (assertSignableSep10Challenge) and passes the fee guard
+ * before the wallet sees it. The caller has already checked the wallet's network.
+ */
+export async function signSep10Challenge(
+  challenge: Pick<Sep10ChallengeResponse, 'xdr' | 'homeDomain' | 'webAuthDomain'>,
+  expected: { address: string; networkPassphrase: string; serverPublicKey: string }
+): ReturnType<typeof StellarWalletsKit.signTransaction> {
+  assertSignableSep10Challenge(challenge.xdr, {
+    ...expected,
+    homeDomain: challenge.homeDomain,
+    webAuthDomain: challenge.webAuthDomain
+  });
+  assertFeeWithinGuard(challenge.xdr, expected.networkPassphrase, FEE_GUARD_STROOPS);
+  return StellarWalletsKit.signTransaction(challenge.xdr, {
+    networkPassphrase: expected.networkPassphrase,
+    address: expected.address
+  });
 }
 
 /**

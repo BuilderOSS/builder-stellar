@@ -57,7 +57,7 @@ born at 7 days, under the 60-day instance threshold. The app's fee guard is ther
 | Contract instances (module config, admin, wiring, `Live`, `CurrentHash`) | 170 days | 60 days | `common::ttl::extend_instance`, on every state-changing call |
 | Shared contract code | 4 days | 2 days | `common::ttl::extend_instance` (code bumped separately, D27); the platform prepays 170 days |
 | Persistent entries (`common::ttl::extend_persistent`) | 365 days, clamped to the network maximum | 30 days | Read or written by a contract call |
-| Governor `ProposalTime(id)`, `ProposalId(seq)` | 120 days | 30 days | Covers the longest lifecycle (3 × 30-day delays + 14 days to execute) from one touch |
+| Governor `ProposalTime(id)`, `ProposalId(seq)` | 120 days | 30 days, and always at `propose` and `queue` | The longest lifecycle is 118 days: up to 74 days from `propose` to the end of the queue window, then up to 44 days from `queue` to the end of the execution window. Each stage fits the TTL its first call sets |
 | Marketplace `Listing(id)` (resales) | 30 days | 7 days | Expired listings can be cleared by anyone |
 | OpenZeppelin owners, balances, votes, checkpoints | 30 days | 29 days | The library, when the entry is read or written |
 | Asset contract (SAC) balances | 30 days | 29 days | The host, when the balance is read or written |
@@ -126,9 +126,10 @@ until artwork exists, so the pages up to the minted count always exist and an ar
 | `Treasury`, `QueueDelay`, `Manager`, `ProposalCount` | instance | Wiring, settings, the proposal counter | | instance |
 | `ProposalTime(id)` | persistent | `(proposer, 49 packed bytes)`: snapshot, window, eta, state, seq and the quorum fixed at creation (D38) | ~270 B | Sweep while live |
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
+| `RecoveryProposal(id)` | persistent | Present for a recovery proposal made while a migration is due; read only by `cast_vote` | ~170 B | 120 days at `propose` (covers the voting delay and period) |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
 | OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
-| OZ `ProposalVote(id)` | persistent | Vote tallies; OZ renews it 30 days per vote or queue, the sweep to the full term while live | | Sweep while live, when present |
+| OZ `ProposalVote(id)` | persistent | Vote tallies; a vote renews it to the proposal's 120 days when fewer than 30 remain, so the first vote always does (it is read last at `queue`), the sweep to the full term while live | | Sweep while live, when present |
 | OZ `HasVoted(id, voter)` | persistent | One vote record, 30 days | | Holder |
 
 Each proposal stores its quorum when it is created, from the voting supply at the previous ledger (the snapshot
@@ -220,6 +221,10 @@ logic runs on the command line:
 node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <identity> [--dry-run]
 ```
 
+`--source` defaults to `RENEW_IDENTITY`, else `<network>-renewer`: a low-value payer, never the Manager admin
+([key custody](KEY_CUSTODY.md#renewal-payer)). The stellar CLI signs (`stellar tx sign`), so the payer's seed
+never enters the Node process.
+
 The e2e test `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` keeps an idle DAO alive with nothing but
 this sweep (and the platform renewal) every 150 days while archiving everything else that expires. After a year it
 settles an auction, a new member proposes and executes a Treasury spend, a year-old claim list is claimed, and an
@@ -241,7 +246,8 @@ It finds code from the Manager's `current_implementations()` and each name's lat
 running `wasm_hash()`, and what every known DAO contract runs (DAO deploy artifacts, `--token` with the modules
 its registry lists, or the indexer's `manager.module_versions` with `DATABASE_URL`), so a DAO that skipped an
 upgrade keeps its code alive. It also renews each hash's `Implementation(hash)` record, every
-`LatestImplementation(name)`, and the Manager instance.
+`LatestImplementation(name)`, and the Manager instance. It pays with `--identity`, else `RENEW_IDENTITY`, else
+`<network>-renewer`, and refuses the Manager admin unless `--allow-admin-payer` is passed.
 
 Code rent is the platform's largest cost: a dry run on 2026-10-12 quoted about 900 XLM to bring nine code hashes
 to 170 days (Auction 264 XLM, Marketplace 251 XLM, Governor ~300 XLM). Every extension is simulated first; one
@@ -267,8 +273,9 @@ Sources: [restore-required.ts](../apps/web/src/lib/restore-required.ts),
 
 ## Fee guard
 
-Every app transaction signs through `signWithWallet`, which refuses a transaction whose maximum fee exceeds
-**50 XLM** and explains that it would be paying shared code rent. The design called for 10 XLM, but creating a DAO
+Every app transaction signs through `signWithWallet` (the SEP-10 sign-in challenge through `signSep10Challenge`
+beside it), which refuses a transaction whose maximum fee exceeds **50 XLM** and explains that it would be paying
+shared code rent. It also refuses a transaction whose fee it can't read. The design called for 10 XLM, but creating a DAO
 legitimately costs about 10 XLM of instance rent on testnet. Before D27 a single code bump cost ~300 XLM, well
 above the guard. The Renewal tab passes the price the member already saw as the allowance.
 

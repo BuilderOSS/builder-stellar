@@ -1,0 +1,111 @@
+name: Contract release build
+
+# A release tag is rebuilt twice, in the pinned container and natively on the runner, and both builds
+# must match the hashes the tag publishes in releases/hashes.json. The container build's WASM gets a
+# signed build provenance attestation (docs/REPRODUCIBLE_BUILDS.md). Nothing here writes to the
+# repository or its releases. It runs only on a tag push, so every attestation records the tag
+# (`refs/tags/<tag>`) and its commit as its source.
+on:
+  push:
+    tags:
+      - 'release-*'
+      - 'contracts-*'
+      - 'audit-*'
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.ref_name }}
+
+jobs:
+  container:
+    name: Rebuild in the pinned container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # signs the attestation with the workflow's identity (Sigstore)
+      attestations: write # stores the attestation on the repository
+
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Rebuild and compare with the published hashes
+        run: node scripts/verify-wasm.mjs "$TAG" --out target/release-build
+
+      - name: Attest the WASM provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/release-build/wasm/*.wasm
+
+      - name: Upload the WASM and hashes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: contracts-${{ env.TAG }}
+          path: |
+            target/release-build/wasm/
+            target/release-build/SHA256SUMS
+            target/release-build/hashes.json
+          if-no-files-found: error
+
+      - name: Record the hashes in the run summary
+        run: |
+          {
+            echo "### Contract hashes for \`$TAG\`"
+            echo
+            echo '| Contract | sha256 | Bytes |'
+            echo '| --- | --- | ---: |'
+            node -e 'const d=require("./target/release-build/hashes.json");for(const[c,{sha256,bytes}]of Object.entries(d.contracts))console.log(`| ${c} | \`${sha256}\` | ${bytes} |`)'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  native:
+    name: Rebuild natively on the runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Setup the pinned Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --target wasm32v1-none
+          rustc -vV
+
+      # The CLI version and archive the tag's build image pins.
+      - name: Install Stellar CLI
+        run: |
+          version=$(sed -n 's#.*stellar-cli/releases/download/v\([0-9.]*\)/.*#\1#p' docker/wasm-build/Dockerfile)
+          sha=$(sed -n 's/^ADD --checksum=sha256:\([0-9a-f]*\).*/\1/p' docker/wasm-build/Dockerfile)
+          archive="stellar-cli-${version}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/stellar/stellar-cli/releases/download/v${version}/${archive}"
+          echo "${sha}  ${archive}" | sha256sum --check
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$archive" -C "$HOME/.local/bin" stellar
+          rm "$archive"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build the contracts
+        run: stellar contract build --locked
+
+      - name: Compare with the published hashes
+        run: node scripts/verify-wasm.mjs "$TAG" --wasm-dir target/wasm32v1-none/release

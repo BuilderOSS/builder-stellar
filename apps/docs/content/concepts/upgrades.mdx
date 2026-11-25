@@ -28,7 +28,9 @@ A notice also appears on the Manage overview and, for members of launched tribes
 
 The treasury's own upgrade goes in a proposal by itself. The treasury runs the proposal, so later actions in the same proposal would still use its old code. The app separates it for you.
 
-When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal.
+When a release changes how a contract stores its data, the proposal also includes a migration step straight after the upgrade, in the same proposal. The treasury is the exception: its migration is a separate step after its upgrade proposal has run, for the same reason its upgrade goes alone.
+
+The governor and the treasury don't run while their stored data is waiting for a migration. Anyone can run their migration, and it needs no proposal.
 
 ## Withdrawn versions
 
@@ -42,11 +44,13 @@ There is no downgrade button. Going back to an older release needs a new approve
 
 ## Platform contracts
 
-The Manager itself can also be upgraded. Its upgrade applies only after a notice period, so tribes can see it coming. Manage → Contract upgrades shows a "Platform contracts" card, with "Upgrade pending" and the time from which it can apply. The Manager approves the upgrades a tribe can vote on. It can't change a tribe's contracts.
+The Manager itself can also be upgraded. Its upgrade applies only after a notice period, so tribes can see it coming. Manage → Contract upgrades shows a "Platform contracts" card, with "Upgrade pending" and the time from which it can apply. The Manager approves the upgrades a tribe can vote on. It can't change a launched tribe's contracts. For a launch drive that failed, the platform can publish a fixed claims release that the tribe's launch admin may apply after a notice. See [Claim refunds](/guides/claims/refund).
 
 ## What to check before voting
 
 The chain checks that an upgrade path is approved. It doesn't check what the new code does. An upgrade action names the new code by its hash, a fingerprint of the exact code. Read the release note. If you can, compare the hash with a published build of that release before you vote.
+
+For crypto natives: each release tag publishes its contracts' hashes in `releases/hashes.json`, and anyone with git and Docker can rebuild the tag and compare with `node scripts/verify-wasm.mjs <tag>`. The [reproducible builds guide](https://github.com/BuilderOSS/builder-stellar/blob/dev/docs/REPRODUCIBLE_BUILDS.md#verify-a-release) explains the steps.
 
 ## Related
 

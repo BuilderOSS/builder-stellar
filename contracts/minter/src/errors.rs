@@ -9,50 +9,56 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum ClaimMinterError {
-    /// `total`, `leaf_amount` or `mint_now` is zero
+    /// `open_list` with a `total` of zero, or `claim` with a `leaf_amount` or
+    /// `mint_now` of zero
     InvalidAmount = 7801,
-    /// `mint_now` above `common::MAX_BATCH_MINT` (claim the rest in another call)
+    /// `claim` with `mint_now` above `common::MAX_BATCH_MINT` (claim the rest
+    /// in another call)
     BatchTooLarge = 7803,
-    /// `mint_now` is more than is left of the claimer's leaf
+    /// `claim` with `mint_now` above what is left of the claimer's leaf
     AlreadyClaimed = 7807,
-    /// Merkle proof verification failed
+    /// `claim` whose proof doesn't lead from the claimer's leaf to the list's
+    /// root, or has more than 32 siblings
     MerkleProofInvalid = 7808,
-    /// Arithmetic overflow in the price
+    /// `claim` whose cost, `price × mint_now`, overflows
     InvalidInput = 7809,
     /// `release` before the DAO is Live
     TokenNotLive = 7810,
-    /// `tree_uri` is empty, longer than `common::MAX_STRING_LENGTH`, or not
-    /// an `ipfs://` URI
+    /// `open_list` with a `tree_uri` that is empty, longer than
+    /// `common::MAX_STRING_LENGTH`, or not an `ipfs://` URI
     InvalidTreeUri = 7812,
     /// No list with this id
     ListNotFound = 7815,
-    /// The list's `expires_at` has passed
+    /// `claim` or `close_list` at or after the list's `expires_at`
     ListExpired = 7816,
-    /// The claim would mint past the list's `total`
+    /// `claim` that would mint past the list's `total`
     ListSoldOut = 7817,
-    /// The list's price is above the claimer's `max_price`
+    /// `claim` on a list whose price is above the claimer's `max_price`
     PriceAboveMax = 7818,
-    /// The assurance list failed: refunds only
+    /// `claim` on an assurance list that failed: refunds only
     AssuranceFailed = 7819,
-    /// The list has no assurance terms
+    /// `assurance_state` or `refund` on a list with no assurance terms
     NotAssurance = 7820,
-    /// Assurance terms are only allowed before launch
+    /// `open_list` with assurance terms once Live, or `close_list` on the
+    /// assurance list before launch
     AssuranceNotAllowed = 7821,
-    /// This ClaimMinter already has its assurance list
+    /// `open_list` with assurance terms when this ClaimMinter already has its
+    /// assurance list
     AssuranceExists = 7822,
     /// `refund` on a list that has not failed
     NotFailed = 7823,
     /// `refund` for a claimer with nothing in escrow
     NothingToRefund = 7824,
-    /// Threshold of zero, or a deadline not after now or after `expires_at`
+    /// `open_list` with assurance terms whose threshold is zero or above
+    /// `total`, or whose deadline is not after now or is after `expires_at`
     InvalidAssurance = 7825,
-    /// Lists opened before launch need artwork (`properties_count() > 0`)
+    /// `open_list` before launch while the artwork has no properties
     ArtworkMissing = 7826,
-    /// A list opened before launch must use the configured payment asset
+    /// `open_list` before launch in an asset other than the configured one
     PaymentAssetMismatch = 7827,
-    /// Negative price
+    /// `open_list` with a negative price
     InvalidPrice = 7828,
-    /// `expires_at` not in the future
+    /// `open_list` with an `expires_at` not in the future
     InvalidExpiry = 7829,
     /// `launch` / `handoff` treasury differs from the one wired at construction
     TreasuryMismatch = 7830,

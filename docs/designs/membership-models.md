@@ -114,10 +114,13 @@ all use the same registration, allowance and upgrade path.
   - in Setup, only for the Manager (during `create_dao` / `create_module`);
   - once Live, only for the Treasury (by proposal; custom DAO code allowed).
 - **Only contracts can be modules.** `register_module` refuses any address that isn't a deployed Wasm contract:
-  `addr.executable()` must be `Some(Executable::Wasm(_))` (soroban-sdk 27; `NotAContract`). A wallet (account)
-  or a Stellar Asset Contract can never be registered, so no proposal can strip a holder's votes by marking
-  their wallet non-voting, and no wallet can hold an allowance.
-- **Unregistering** also sets the module's allowance to 0.
+  `addr.executable()` must be `Some(Executable::Wasm(_))` (soroban-sdk 27; `NotAContract`). An account wallet
+  or a Stellar Asset Contract can never be registered, and no account wallet can hold an allowance. A
+  smart-contract wallet is a Wasm contract, though, so a proposal can register a member's contract wallet as
+  non-voting custody and strip its votes (corrected 25 November 2026; see `docs/SECURITY_MODEL.md`, "Mint
+  allowances and modules").
+- **Unregistering** also sets the module's allowance to 0. A non-voting module must hold no tokens
+  (`ModuleHoldsTokens`, added 25 November 2026), so a locked DAO never strands tokens in a former module.
 - **Every registration is an event.** The Token emits `ModuleRegistered { kind, address, non_voting }` and
   `ModuleUnregistered { address }`. These event shapes are the contract's public API for the indexer, which
   allowlists modules from them, whether the Manager built them or not (R6; the full indexer design
@@ -132,18 +135,19 @@ all use the same registration, allowance and upgrade path.
   `non_voting = true` as holding no votes.
 - **Registration moves the votes of what the module already holds, so there's nothing to grief.**
   - Registering a non-voting module that already holds k tokens runs `transfer_voting_units(Some(addr), None, k)`.
-  - Unregistering it first calls `ensure_self_delegate(addr)`, then runs `transfer_voting_units(None, Some(addr),
-    k)`, the same order `mint` and `transfer` use today. Without the self-delegation, OZ would add
-    `k` to `TotalSupply` and credit nobody's checkpoint, because a module that only ever held tokens while
-    non-voting has no delegate. Quorum would then be harder to reach by `k` for no reason.
+  - Unregistering a non-voting module is refused while it holds any token (`ModuleHoldsTokens`; changed
+    25 November 2026). Once unregistered it would no longer be custody, so in a locked DAO the tokens it held
+    for others (escrowed listings, the auctioned token, pool stock) could never move out. As a result there
+    are no votes to move back when it leaves.
   - These are the same moves a transfer into or out of the Treasury makes today. So voting units always equal
     balances (zero for non-voting holders), and the account checkpoints always add up to `TotalSupply`.
-  - **Empty a module before unregistering it.** Tokens left in an unregistered module become that contract's
-    own votes, which nobody casts unless its code votes, and they still count toward quorum. The normal path is
-    to sweep them back to the Treasury first (for example `sweep_pool`). The web warns when an unregister
-    proposal targets a module that still holds tokens. Unregistering is not blocked, because anyone could send
-    the module an NFT to block it.
-  - Sending an NFT to a predicted or registered module address can't block anything.
+  - **Empty a module before unregistering it.** The DAO can always empty the Auction and Marketplace by
+    proposal: `cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token` for a token
+    someone sent the module directly. This replaces the earlier choice not to block removal because anyone
+    could send the module an NFT. One risk remains in a DAO whose transfers are not locked: a token sent to the
+    module after the removal proposal was drafted makes that proposal fail, so the DAO recovers it in the next
+    proposal. See `docs/SECURITY_MODEL.md`, "Known limitations".
+  - Sending an NFT to a predicted module address can't block anything.
   - A wallet can't be registered at all (see "Only contracts can be modules"), so registration can't be used to
     strip a holder's votes.
 - **One-click renewal covers every module (R3).** Every registered module implements
@@ -319,7 +323,11 @@ all use the same registration, allowance and upgrade path.
     code. It calls ClaimMinter's Manager-only `recovery_upgrade(from, to)`, which checks only the
     Manager's authorization and that it is still in Setup (it must never run on a Live module); it doesn't consult
     its own state machine. The window opens only once nothing can be launched any more, so the upgrade can't
-    change the drive's outcome; it can only unblock refunds.
+    change the drive's outcome. It can change who receives the escrow, since the new code holds it, so the
+    target must also be the hash announced as latest for `ClaimMinter`, and the Manager's upgrade notice must
+    have passed since the approval, the announcement and the deadline (never less than seven days after the
+    deadline): members have that time to take their refunds with the code they paid into (SECURITY_MODEL,
+    Assurance launch).
   - `refund` and `release` never need an allowance, so cutting a buggy module's allowance to zero never strands
     escrow.
 - **Same indexer route as every module.** ClaimMinter events route through the Token's `ModuleRegistered` and
@@ -381,8 +389,8 @@ all use the same registration, allowance and upgrade path.
 
 | Actor | Before launch | After launch |
 |---|---|---|
-| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
-| Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
+| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. With the launch admin of a failed drive, it can replace that drive's ClaimMinter code (`recover_claims`), which then holds the escrow; only to the announced latest, after the notice and at least seven days after the deadline. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
+| Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash announced as latest, after the upgrade notice. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
 | Treasury | Can't act | Mints without a limit; manages allowances and registrations |
 
 Modules can also be **delegates**. `non_voting` zeroes what a module *holds*, but `Votes::delegate` is public
@@ -567,7 +575,7 @@ Choices made while building. Each refines the design without changing what it gu
 - **ClaimMinter releases its own escrow in `launch` (R4).** The Manager launches the Token first and then every module, so the ClaimMinter's `launch` sees a Live Token and moves the assurance escrow to the Treasury in the same transaction. `release` stays public.
 - **No `ManagerRequired` error.** Soroban can't tell a contract who invoked it, so a launch admin's direct `open_list` with a price or assurance terms fails the Manager's `require_auth` (an authorization error) instead of a named code.
 - **Claim records are holder class.** `Claim(list, claimer)` belongs to the claimer; their next claim or refund restores it (automatic since protocol 23). `renewal_keys` lists the DAO-owned `List(id)` entries and the escrow balance. Read the renewal Success Criterion as "lists and escrow balances".
-- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash.
+- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash (and, on the Manager's side, the latest-only rule and the notice).
 - **Storage shapes.** A `#[contracttype]` field can't hold `Option<struct>`, so a `ClaimList` stores its assurance terms flattened (a threshold of 0 means none). The Manager keeps a drive under its own `Assurance(token)` key rather than inside `PendingDao`, and drops it at launch.
 - **`open_assurance` takes `AssuranceListParams`** without an asset: the list is priced in the `claims_payment_asset` recorded at creation.
 - **`DaoLaunched.registry`** is the launch-time module list (`Vec<ModuleEntry>`). `modules` keeps the `DaoAddresses`, whose module fields are now optional, so optional modules changed no shape.
@@ -580,7 +588,7 @@ Unit tests live in each crate's `src/test.rs`; end-to-end tests run on the built
 | Success Criterion | Tests |
 |---|---|
 | No platform minting; allowance holders are modules | token `launch_refuses_a_grant…`, `increase_mint_allowance_requires_admin_auth`, `only_deployed_wasm_contracts_can_be_modules`, `the_treasury_is_never_a_module_even_with_an_empty_registry`; manager `launch_grants_exactly_the_canonical_mint_set` |
-| Vote counts stay exact (3 clauses; register/unregister of a holding module; module as delegate) | e2e `voting_units_match_balances_and_checkpoints_add_up` (each op, including registering and unregistering while holding, runs at least 20 times over 4 seeds); token `registry::*` (D2, A1) |
+| Vote counts stay exact (3 clauses; register/unregister of a holding module; module as delegate) | e2e `voting_units_match_balances_and_checkpoints_add_up` (each op, including registering while holding and refusing to unregister while holding, runs at least 20 times over 8 seeds); token `registry::*` (D2, A1) |
 | Allowances hold (cap, increases add, unregister zeroes, release lowers only one's own, only claims mints pre-launch) | token `allowances_add_subtract_and_release`, `module_mints_within_its_allowance…`, `before_launch_only_the_claims_module_mints`, `an_unlimited_allowance_is_never_spent`, `releasing_from_an_unlimited_allowance_keeps_it_unlimited`, `registry_and_allowance_changes_are_events`; e2e `a_claim_minter_stops_at_its_allowance` |
 | Assurance launch end to end (1,000 leaves, partial claims, anyone launches, both paths refused until Met and after failure, refund refused on Live, frozen setters and mints, DeadlineTooFar, recovery) | e2e `an_assurance_drive_of_a_thousand_leaves_meets_and_anyone_launches`, `a_failed_drive_refunds_recovers_and_frees_its_slug`, `a_pending_drive_is_covered_by_the_renewal_inventory`; manager `real_dao::a_met_drive_…`, `launch_dao_during_a_drive_uses_the_stored_config`, `a_failed_drive_refuses_every_launch_…` (paused factory, R1), `open_assurance_bounds_the_deadline_and_runs_once`, `recover_claims_waits_for_a_failed_drive_…` (Open and Met refused); minter `a_met_drive_…`, `a_missed_deadline_…`, `a_met_drive_that_misses_its_deadline_also_fails` |
 | Quick-buy (100-token pool, restocks, picks, caps, rate, close, sweep, allowance released) | e2e `a_hundred_token_pool_restocks_sells_closes_and_sweeps` (16-trait artwork, event budget); marketplace `pools::*` |

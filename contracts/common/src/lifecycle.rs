@@ -8,12 +8,15 @@ use soroban_sdk::{contracttype, panic_with_error, Env};
 
 use crate::error::CommonError;
 
+/// Instance key of the lifecycle flag (wrapped with [`crate::ns`]).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LifecycleKey {
+    /// `true` once the module has launched; absent during setup.
     Live,
 }
 
+/// Whether the module has launched (Live). False during setup.
 pub fn is_live(e: &Env) -> bool {
     e.storage()
         .instance()

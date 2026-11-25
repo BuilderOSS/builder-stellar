@@ -25,9 +25,14 @@
 // Usage: node scripts/renew-code-ttl.mjs <deploys/<label>-<network>-manager.json>
 //          [--days 170] [--identity <name>] [--hash <hex>]... [--token <C...>]... [--vote-source <C...>]... [--dry-run]
 // --days defaults to 170 and must be above the 4 days contracts bump code to themselves.
+// --identity is the `stellar keys` identity that pays: RENEW_IDENTITY, else `<network>-renewer`. Extending
+// a TTL needs no admin rights, so the payer is a separate low-value key, not the Manager admin
+// (docs/KEY_CUSTODY.md); the admin is refused unless --allow-admin-payer is passed. The stellar CLI signs; no secret is read here. DATABASE_URL reaches psql through
+// a service file and password file (pg-env.mjs), not on its command line.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { withPgEnv } from './pg-env.mjs';
 import {
   collectLatest,
   DEFAULT_CODE_TTL_DAYS,
@@ -43,7 +48,7 @@ import {
 const MODULE_NAMES = ['Manager', 'Token', 'Metadata', 'Auction', 'Governor', 'Treasury', 'Marketplace', 'ClaimMinter'];
 
 const args = process.argv.slice(2);
-const artifactPath = positionalArg(args, ['--dry-run']);
+const artifactPath = positionalArg(args, ['--dry-run', '--allow-admin-payer']);
 const flag = (name, fallback) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : fallback;
@@ -67,8 +72,25 @@ const dryRun = args.includes('--dry-run');
 
 const artifact = JSON.parse(readFileSync(artifactPath, 'utf8'));
 const network = artifact.network;
-const source = flag('--identity', process.env.DEPLOY_IDENTITY?.trim() || `${network}-admin`);
+const source = flag('--identity', process.env.RENEW_IDENTITY?.trim() || `${network}-renewer`);
 const manager = artifact.manager;
+const payer = runQuiet('stellar', ['keys', 'address', source]);
+if (!payer.ok) {
+  console.error(
+    `No stellar key named ${source}. Renewal is paid by a separate low-value key: create one ` +
+      `(stellar keys generate ${source}${network === 'mainnet' ? '' : ' --fund'}), fund it, and run again, or pass --identity.`
+  );
+  process.exit(1);
+}
+// The admin key signs nothing it doesn't need to: renewal is permissionless.
+if (payer.stdout.trim() === artifact.config?.adminAddress && !args.includes('--allow-admin-payer')) {
+  console.error(
+    `The payer ${source} is the Manager admin. Renewal needs no admin rights: pay with a separate low-value key ` +
+      '(docs/KEY_CUSTODY.md), or pass --allow-admin-payer.'
+  );
+  process.exit(1);
+}
+const indexer = (sql) => withPgEnv(process.env.DATABASE_URL, (env) => runQuiet('psql', ['-At', '-c', sql], { env }));
 const view = (id, method, callArgs = []) => invokeView(id, method, callArgs, { network, source });
 const tryView = (id, method, callArgs = []) => {
   try {
@@ -120,12 +142,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 if (process.env.DATABASE_URL) {
-  const r = runQuiet('psql', [
-    process.env.DATABASE_URL,
-    '-At',
-    '-c',
-    `SELECT DISTINCT current_hash FROM manager.module_versions WHERE deployment_id = 'manager:${manager}'`
-  ]);
+  const r = indexer(`SELECT DISTINCT current_hash FROM manager.module_versions WHERE deployment_id = 'manager:${manager}'`);
   if (r.ok) {
     for (const hash of r.stdout.split('\n')) add(hash.trim(), 'in use (indexer)');
   } else {
@@ -154,12 +171,7 @@ for (const token of tokens) {
 // Approved vote sources: --vote-source and the indexer. The chain can't list them.
 const voteSources = new Set(flags('--vote-source'));
 if (process.env.DATABASE_URL) {
-  const r = runQuiet('psql', [
-    process.env.DATABASE_URL,
-    '-At',
-    '-c',
-    `SELECT source FROM manager.vote_sources WHERE deployment_id = 'manager:${manager}'`
-  ]);
+  const r = indexer(`SELECT source FROM manager.vote_sources WHERE deployment_id = 'manager:${manager}'`);
   if (r.ok) {
     for (const source of r.stdout.split('\n')) if (source.trim().startsWith('C')) voteSources.add(source.trim());
   } else {

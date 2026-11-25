@@ -1,4 +1,5 @@
 import { getFetchableUrls } from '@/lib/ipfs-gateway';
+import { fetchPublicUrl, readCapped } from '@/lib/safe-remote-fetch';
 import { cached } from '@/lib/server-cache';
 
 import { type ClaimTreeFile, verifyClaimTree } from './tree';
@@ -14,14 +15,16 @@ const TOO_LARGE = 'The claim list is too large.';
 /** The whole fetch, across every gateway: a member waits at most this long for a list's state. */
 const FETCH_BUDGET_MS = 15_000;
 
+/**
+ * One gateway's copy of the list. The tree URI is chosen by whoever opens a list, so the server
+ * never follows a gateway's redirect blindly: each hop must be public HTTPS (fetchPublicUrl).
+ */
 async function fetchFrom(url: string, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(CLAIM_LIST_UNREACHABLE);
-  const length = Number(response.headers.get('content-length') ?? '0');
-  if (length > MAX_LIST_BYTES) throw new Error(TOO_LARGE);
-  const text = await response.text();
-  if (text.length > MAX_LIST_BYTES) throw new Error(TOO_LARGE);
-  return JSON.parse(text);
+  return fetchPublicUrl(url, signal, async (response) => {
+    if (!response.ok) throw new Error(CLAIM_LIST_UNREACHABLE);
+    const body = await readCapped(response, MAX_LIST_BYTES, TOO_LARGE);
+    return JSON.parse(body.toString('utf8'));
+  });
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   parseCodeTtlDays,
   runQuiet
 } from './lib.mjs';
+import { assertUploadProvenance } from './wasm-build.mjs';
 
 /**
  * Upgrade tooling for the hardened contracts.
@@ -35,9 +36,16 @@ import {
  * un-revoked). Use get_implementation(hash) and the Manager's Current* hashes for security decisions,
  * never get_latest_implementation(name): it returns None once the latest hash is revoked.
  *
+ * Before anything is sent, the script refuses a checkout that is not a pushed release tag, uncommitted
+ * build inputs, contract changes made after releases/hashes.json was written, and a WASM whose sha256
+ * is not the one that file publishes (docs/REPRODUCIBLE_BUILDS.md): the hash the Manager approves,
+ * and members vote on, must be one anyone can rebuild from a public tag.
+ *
  * Env: DEPLOY_IDENTITY (Manager admin / launch admin key), LEGACY_MANAGER_VERSION (manager only),
  *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text),
- *      MODULE_ADDRESS (DAO module address when the DAO artifact has none).
+ *      MODULE_ADDRESS (DAO module address when the DAO artifact has none), WASM_DIR (directory with
+ *      <crate>.wasm, for example the wasm/ folder scripts/build-wasm.mjs writes; default
+ *      target/wasm32v1-none/release).
  */
 
 const MASK = (1n << 64n) - 1n;
@@ -139,13 +147,18 @@ const managerArtifactPath = `deploys/${networkConfig.label}-${networkConfig.netw
 if (!existsSync(managerArtifactPath)) throw new Error(`Manager artifact not found: ${managerArtifactPath}`);
 const managerArtifact = JSON.parse(readFileSync(managerArtifactPath, 'utf8'));
 const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkConfig.network}-admin`;
-const wasmPath = `target/wasm32v1-none/release/${crateName}.wasm`;
+const wasmDir = process.env.WASM_DIR?.trim() || 'target/wasm32v1-none/release';
+const wasmPath = `${wasmDir}/${crateName}.wasm`;
 
 if (!existsSync(wasmPath)) {
-  throw new Error(`Missing ${wasmPath}. Run: pnpm contracts:build`);
+  throw new Error(`Missing ${wasmPath}. Build the release with node scripts/build-wasm.mjs and set WASM_DIR to its wasm/ folder.`);
 }
 const releaseVersion = releaseManifest[crateName];
 if (!releaseVersion) throw new Error(`Missing ${crateName} release version`);
+// Provenance before any network call: a pushed release tag, committed inputs, and exactly the
+// published hash.
+const provenance = assertUploadProvenance({ crate: crateName, wasmPath });
+const sourceCommit = provenance.commit;
 
 if (moduleName !== 'manager') {
   const managerVersionProbe = runQuiet('stellar', [
@@ -218,6 +231,10 @@ function invoke(contractId, method, params) {
 }
 
 const targetHash = createHash('sha256').update(readFileSync(wasmPath)).digest('hex');
+// The file is read again for the upload: refuse if it changed since the provenance check.
+if (targetHash !== provenance.sha256) {
+  throw new Error(`${wasmPath} changed after its provenance check (${provenance.sha256} -> ${targetHash}); rerun.`);
+}
 const installResult = runQuiet('stellar', [
   'contract',
   'upload',
@@ -377,6 +394,8 @@ const plan = {
   manager: managerArtifact.manager,
   module: moduleName,
   target,
+  sourceCommit,
+  releaseTag: provenance.tag,
   fromHash,
   toHash: targetHash,
   version: releaseVersion,

@@ -70,12 +70,19 @@ function patchGeneratedBindings(packageName, outputDir) {
   // The SDK generator emits error enums as value-only objects, while clients
   // use them as the error type in Result return values.
   if (packageName === 'manager') {
-    let typesContent = readFileSync(typesPath, 'utf8');
-    typesContent = typesContent.replace(
-      '/**\n * Event: DaoCreated',
-      'export type ManagerError = typeof ManagerError[keyof typeof ManagerError];\n\n/**\n * Event: DaoCreated'
+    const typesContent = readFileSync(typesPath, 'utf8');
+    // Insert the type right after the `ManagerError` object. Anchoring on the
+    // next declaration broke whenever that declaration's doc comment changed.
+    const start = typesContent.indexOf('export const ManagerError = {');
+    const end = start === -1 ? -1 : typesContent.indexOf('\n}\n', start);
+    if (end === -1) {
+      throw new Error(`${typesPath}: ManagerError object not found; the type patch needs updating`);
+    }
+    const at = end + '\n}\n'.length;
+    writeFileSync(
+      typesPath,
+      `${typesContent.slice(0, at)}\nexport type ManagerError = typeof ManagerError[keyof typeof ManagerError];\n${typesContent.slice(at)}`
     );
-    writeFileSync(typesPath, typesContent);
   }
 }
 
@@ -85,7 +92,7 @@ function patchGeneratedBindings(packageName, outputDir) {
 // unused library type (e.g. OpenZeppelin RWA/Governor enums) in the spec, which
 // makes the generator emit duplicate/colliding types and bindings that do not
 // match the deployed contract spec.
-run('stellar', ['contract', 'build']);
+run('stellar', ['contract', 'build', '--locked']);
 
 for (const contract of contracts) {
   mkdirSync(contract.outputDir, { recursive: true });

@@ -2,8 +2,9 @@ use common::clients::NftClient;
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    panic_with_error, Address, Env, IntoVal, String, Symbol,
+    panic_with_error, Address, Env, Executable, IntoVal, String, Symbol,
 };
+use stellar_contract_utils::pausable;
 
 use crate::{
     error::AuctionError,
@@ -17,7 +18,40 @@ use crate::{
     },
 };
 
-// Internal implementation helpers
+/// Refuse a payment token that is not a Stellar Asset Contract
+/// (`NotStellarAsset`).
+///
+/// Bids, refunds, and proceeds all go through the asset's `transfer`. A
+/// custom contract could fake a payment, refuse chosen refunds, or use up
+/// the whole budget inside the refund's `try_transfer` (an exhausted budget
+/// cannot be caught), so that no one could outbid its holder.
+pub(crate) fn require_stellar_asset(e: &Env, asset: &Address) {
+    if !matches!(asset.executable(), Some(Executable::StellarAsset)) {
+        panic_with_error!(e, AuctionError::NotStellarAsset);
+    }
+}
+
+/// After a settlement: start the next auction, or pause when the Token will
+/// not let this contract mint (its allowance is 0, because a proposal lowered
+/// it or the last mint of a finite allowance spent it).
+///
+/// Without the check the next auction's mint would fail and revert the
+/// settlement with it, leaving the winner's token and bid held here until a
+/// second proposal paused the Auction. The admin's `unpause` starts the next
+/// auction once an allowance is granted again.
+pub(crate) fn start_next_or_pause(e: &Env) {
+    let config = get_config(e);
+    let allowance =
+        NftClient::new(e, &config.token_contract).mint_allowance(&e.current_contract_address());
+    if allowance == 0 {
+        pausable::pause(e);
+    } else {
+        create_auction(e);
+    }
+}
+
+/// Mint the next token to this contract and open an auction for it, ending
+/// `duration` seconds from now. Emits `AuctionCreated`.
 pub(crate) fn create_auction(e: &Env) {
     let config = get_config(e);
 
@@ -163,6 +197,10 @@ pub(crate) fn process_bid(
     );
 }
 
+/// Settle the ended auction: the token to the highest bidder and the bid to
+/// the Treasury, or the token to the Treasury when nobody bid. Refuses a
+/// settled (`AuctionSettled`), unstarted (`AuctionNotStarted`) or running
+/// (`AuctionActive`) auction. Emits `AuctionSettled`.
 pub(crate) fn settle_auction_internal(e: &Env) {
     let mut auction = get_auction(e);
 
@@ -286,6 +324,8 @@ pub(crate) fn settle_auction_internal(e: &Env) {
     }
 }
 
+/// Return `amount` to `bidder`: pushed at once, or credited to
+/// `PendingRefund` when the push fails (`BidRefunded` or `RefundDeferred`).
 pub(crate) fn refund_bid(
     e: &Env,
     token_id: u128,

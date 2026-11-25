@@ -11,6 +11,10 @@ Start with the message the app shows. Most messages say whether anything was sig
 | "The wallet signed with a different address." | The wallet has more than one account, and it signed with another one. Select the same account in the wallet, then connect again. |
 | "Too many sign-in requests. Try again in a few minutes." | The app accepts a limited number of sign-in requests in a short time. Wait a few minutes. |
 | "Authentication challenge has expired." | The sign-in request is valid for 5 minutes. Connect again and approve it sooner. |
+| "This account's own key doesn't have enough signing weight on the account, so it can't sign in." | The account's signer settings changed: its own key was disabled, or other signers now hold the weight. Sign in with an account whose own key can still sign for it. |
+| "Current Stellar account signers could not be read. Try again." | The app checks your account's signers on the network when you sign in, and that check didn't answer. Nothing was signed in. Wait a moment, then connect again. |
+| "The sign-in request from the server is not a valid sign-in challenge, so nothing was signed." | Your browser checks a sign-in transaction before your wallet sees it, and this one didn't pass. Reload the page and connect again. If it happens again, report it. |
+| You're asked to connect again after a while | A sign-in ends after 24 hours without use, and always 3 days after you signed in. Connect again to sign in. |
 | The top bar stays on "Check wallet" | Close the wallet window, reload the page, and connect again. If it happens again, report it. |
 | Your wallet isn't in the list | Make sure the wallet's browser extension is installed and unlocked, then reload the page. See [Wallets and Stellar basics](/concepts/wallets-and-stellar). |
 
@@ -41,6 +45,8 @@ Every transaction is checked against the network before your wallet asks you to 
 | "The tribe index is unavailable right now" or "Index unavailable" | The index can't be reached. Try again in a moment. If you have a tribe's link, open it directly. |
 | You can't find a tribe | Search Discover by the tribe's name or any of its contract addresses. A tribe made on dev.tribes.build doesn't appear on tribes.build, and the other way round. See [Contract addresses](/reference/contract-addresses). |
 | "This tribe is still in setup. Bidding opens once it launches." | The tribe hasn't launched. Auctions and most actions open at launch. See [Setup versus launched](/concepts/setup-and-launch). |
+| "Too many requests. Wait a minute, then try again." | Claims and transaction checks accept a limited number of requests from one internet connection each minute, and so does artwork, which may not load until then. Wait a minute, then reload. |
+| An image in a proposal or comment shows as a link | Images show only when they are stored on IPFS. Open the link to see the image at its own address. |
 | A tribe says its contracts were archived | Its storage ran out. Anyone can restore and renew it from Manage → Storage renewal. The wallet that signs pays the fee. Until then, the parts that use that storage don't work. See [Storage and renewal](/concepts/storage-and-renewal). |
 
 ## Proposals
@@ -52,6 +58,7 @@ Every transaction is checked against the network before your wallet asks you to 
 | A passed proposal hasn't run | Someone has to queue it, then execute it after the safety delay. Any wallet can. See [Queue and execute](/guides/proposals/queue-and-execute). |
 | Execute fails | One of its actions can't run, so nothing changed. The message names the failing action's code. The proposal stays queued until it expires, so the tribe can fix the cause, for example by funding the Treasury, and anyone can try again. |
 | The composer warns about the order of actions | Some actions need another action earlier in the same proposal, such as "Pause auctions" before an auction setting change. Follow the warning. See [Choose actions](/guides/proposals/actions). |
+| "Links must start with https://, http://, or ipfs://." | The discussion link uses another kind of address. Use a web or IPFS link, or remove it. |
 | A draft is missing | Drafts are saved in the browser where you made them. Open the same browser on the same device. |
 
 ## Auctions, market and claims

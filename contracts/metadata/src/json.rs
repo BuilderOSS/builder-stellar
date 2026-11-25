@@ -24,6 +24,7 @@ pub struct Writer<const N: usize> {
 }
 
 impl<const N: usize> Writer<N> {
+    /// An empty writer.
     pub fn new() -> Self {
         Self {
             buf: [0u8; N],
@@ -32,6 +33,7 @@ impl<const N: usize> Writer<N> {
         }
     }
 
+    /// Append `bytes`, or mark the writer overflowed if they do not fit.
     pub fn push(&mut self, bytes: &[u8]) {
         if self.overflow || self.len + bytes.len() > N {
             self.overflow = true;
@@ -41,6 +43,8 @@ impl<const N: usize> Writer<N> {
         self.len += bytes.len();
     }
 
+    /// Append `value` verbatim, with no escaping: callers pass only strings
+    /// checked free of `"`, `\` and control characters.
     pub fn push_string(&mut self, value: &String) {
         let n = value.len() as usize;
         if self.overflow || self.len + n > N {
@@ -51,6 +55,7 @@ impl<const N: usize> Writer<N> {
         self.len += n;
     }
 
+    /// Append `value` in decimal.
     pub fn push_u32(&mut self, mut value: u32) {
         let mut digits = [0u8; 10];
         let mut i = digits.len();
@@ -65,6 +70,8 @@ impl<const N: usize> Writer<N> {
         self.push(&digits[i..]);
     }
 
+    /// The bytes written, or `None` if any write overflowed (so a truncated
+    /// document is never returned).
     pub fn bytes(&self) -> Option<&[u8]> {
         if self.overflow {
             None

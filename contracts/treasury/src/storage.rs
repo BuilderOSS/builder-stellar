@@ -13,6 +13,7 @@ pub const MAX_AUTH_DEPTH: u32 = 4;
 /// Most `AuthNode`s (all levels together) one `authorize` action may carry.
 pub const MAX_AUTH_NODES: u32 = 16;
 
+/// Instance keys of the Treasury's own wiring (wrapped with `common::ns`).
 #[contracttype]
 pub enum TreasuryKey {
     /// Governor whose queued proposals `execute` consumes. Immutable.
@@ -34,9 +35,13 @@ pub enum TreasuryKey {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthNode {
+    /// The contract the authorized call is made to.
     pub contract: Address,
+    /// The function called; it may not be the Governor's `consume`.
     pub fn_name: Symbol,
+    /// The exact arguments of the call; any other arguments are not authorized.
     pub args: Vec<Val>,
+    /// Calls made below this one that also need the Treasury's authorization.
     pub sub: Vec<AuthNode>,
 }
 

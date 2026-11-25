@@ -25,6 +25,7 @@ import { useWalletBalance } from '@/lib/wallet-balance';
 import { openConnectModal } from '@/lib/wallet-connect-modal';
 import { hasSeenWalletIntro, markWalletIntroSeen } from '@/lib/wallet-intro';
 import { initializeWalletKit, isWalletConnectSelected, walletConnectEnabled } from '@/lib/wallet-kit';
+import { signSep10Challenge } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { WalletIntro } from './wallet-intro';
@@ -267,9 +268,10 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
         setAuthStatus('requesting-challenge');
         const sep10Challenge = await requestSep10Challenge(result.address);
         setAuthStatus('awaiting-signature');
-        const { signedTxXdr, signerAddress } = await StellarWalletsKit.signTransaction(sep10Challenge.xdr, {
+        const { signedTxXdr, signerAddress } = await signSep10Challenge(sep10Challenge, {
+          address: result.address,
           networkPassphrase: network.passphrase,
-          address: result.address
+          serverPublicKey: challenge.serverPublicKey
         });
         if (signerAddress && signerAddress !== result.address) {
           throw new Error('The wallet signed with a different address.');

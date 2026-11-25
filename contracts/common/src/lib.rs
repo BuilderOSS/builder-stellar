@@ -134,6 +134,60 @@ pub fn batch_mint_fits(tokens: u32, recipients: u32) -> bool {
     cost <= BATCH_MINT_EVENT_BUDGET as u64
 }
 
+/// Contract-event budget for one `treasury.execute`, in estimated bytes.
+///
+/// `batch_mint_fits` bounds one mint call, but a proposal can hold several,
+/// and `treasury.execute` runs them all in one transaction under the same
+/// 16 KiB event limit, beside its own `ProposalExecuted` and one `Execute`
+/// per action. The Governor's `propose` estimates the whole execution with
+/// [`execution_event_bytes`] and refuses a proposal above this budget, so a
+/// proposal that could never execute is refused before anyone votes on it.
+///
+/// About 95% of the limit; every per-unit estimate rounds a measured size
+/// up. Actions other than mints get a fixed allowance
+/// ([`OTHER_ACTION_EVENT_BYTES`]) for their own events, which the Governor
+/// cannot know, so an action with larger events can still fail at
+/// execution. The budget accepts one `MAX_BATCH_MINT` batch with up to two
+/// other actions, two batches of 21 tokens, ten single mints, or five mints
+/// among 20 actions; the e2e suite executes each against 16-trait artwork
+/// (`contracts/e2e/src/governance.rs`).
+pub const EXECUTION_EVENT_BUDGET: u32 = 15_500;
+/// Estimated event bytes `treasury.execute` publishes once per proposal
+/// (the Governor's `ProposalExecuted`; measured ~132, rounded up).
+pub const PROPOSAL_EXECUTED_EVENT_BYTES: u32 = 150;
+/// Estimated event bytes `treasury.execute` publishes per action (its
+/// `Execute` event: measured ~260 with a 9-character function name; a
+/// 32-character name, the longest, adds ~24).
+pub const EXECUTE_EVENT_BYTES: u32 = 300;
+/// Event bytes allowed for the own events of each action that is not a
+/// counted mint (a Governor setter emits ~170, a renderer change ~194).
+pub const OTHER_ACTION_EVENT_BYTES: u32 = 200;
+/// Estimated event bytes of one mint call beside its tokens and recipient
+/// entries (`MintWithMinter` or `MintBatchWithMinter` and the metadata
+/// `SeedsGenerated` envelope; measured ~376, rounded up).
+pub const MINT_CALL_EVENT_BYTES: u32 = 400;
+
+/// Estimated event bytes of one Token `mint` or `batch_mint` call of
+/// `tokens` tokens over `recipients` recipient entries, counted as in
+/// [`batch_mint_fits`] plus [`MINT_CALL_EVENT_BYTES`].
+pub fn mint_event_bytes(tokens: u32, recipients: u32) -> u64 {
+    MINT_CALL_EVENT_BYTES as u64
+        + (tokens as u64) * (BATCH_MINT_BYTES_PER_TOKEN as u64)
+        + (recipients as u64) * (BATCH_MINT_BYTES_PER_RECIPIENT as u64)
+}
+
+/// Estimated event bytes `treasury.execute` publishes for a proposal of
+/// `actions` actions, of which `mint_actions` are mint calls adding
+/// `mint_bytes` (the sum of [`mint_event_bytes`] over them) and the rest get
+/// [`OTHER_ACTION_EVENT_BYTES`] each. Compare with [`EXECUTION_EVENT_BUDGET`].
+pub fn execution_event_bytes(actions: u32, mint_actions: u32, mint_bytes: u64) -> u64 {
+    let other_actions = actions.saturating_sub(mint_actions) as u64;
+    (PROPOSAL_EXECUTED_EVENT_BYTES as u64)
+        .saturating_add((actions as u64) * (EXECUTE_EVENT_BYTES as u64))
+        .saturating_add(other_actions * (OTHER_ACTION_EVENT_BYTES as u64))
+        .saturating_add(mint_bytes)
+}
+
 /// WARNING: exports `MockManager` as a `#[contract]`. Enable the `testutils`
 /// feature only through `[dev-dependencies]`. See README.md.
 #[cfg(any(test, feature = "testutils"))]

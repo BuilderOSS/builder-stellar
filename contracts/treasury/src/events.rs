@@ -3,6 +3,8 @@
 
 use soroban_sdk::{contractevent, Address, BytesN, Env, Symbol};
 
+/// Emitted once, by the constructor: the setup-phase admin and the Governor
+/// whose proposals this Treasury executes (fixed).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TreasuryInitialized {
@@ -19,8 +21,10 @@ pub struct TreasuryLaunched {
     pub treasury: Address,
 }
 
-/// Emitted for every executed proposal action, including self calls and
-/// `authorize` actions.
+/// Emitted by `execute` after each proposal action runs, including self
+/// calls and `authorize` actions, in order. All of a proposal's `Execute`
+/// events share one transaction with the Governor's `ProposalExecuted`; if
+/// any action fails, none of them is published.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Execute {

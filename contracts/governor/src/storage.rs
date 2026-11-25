@@ -10,16 +10,41 @@ use stellar_governance::governor::ProposalState;
 /// Storage-layout version of this code (see `common::upgrade`).
 pub const STORAGE_VERSION: u32 = 1;
 
-/// Proposal TTL requested on every read/write (~120 days).
+/// Proposal TTL (~120 days at 5-second ledgers), set by `propose` and again
+/// by `queue`, and renewed by any other touch when fewer than
+/// `PROPOSAL_TTL_THRESHOLD` ledgers remain.
 ///
-/// The longest lifecycle is voting delay + voting period + queue delay (30
-/// days each at most) plus the 14 day execution window: 104 days. One touch
-/// therefore keeps a proposal alive to its end; any later touch renews it.
+/// The longest lifecycle is [`MAX_PROPOSAL_LIFETIME`], 118 days: up to 74
+/// days from `propose` to the end of the window for `queue`
+/// ([`MAX_UNQUEUED_LIFETIME`]), then up to 44 days from `queue` to the end of
+/// the execution window ([`MAX_QUEUED_LIFETIME`]). Neither stage needs any
+/// touch but the call that starts it, so each is covered by this TTL alone,
+/// with room for ledgers that close faster than 5 seconds (checked below). A
+/// single TTL from `propose` would leave a margin of only about 2 days.
 pub const PROPOSAL_TTL_EXTEND_TO: u32 = 120 * common::ttl::DAY_IN_LEDGERS;
 
 /// Re-extend a proposal only when fewer than ~30 days remain, so reads do not
 /// re-pay rent on every touch.
 pub const PROPOSAL_TTL_THRESHOLD: u32 = 30 * common::ttl::DAY_IN_LEDGERS;
+
+/// Longest time, in seconds, from `propose` to the last moment `queue` can
+/// run: the longest voting delay and voting period, then the 14-day window in
+/// which a Succeeded proposal can still be queued (74 days).
+pub const MAX_UNQUEUED_LIFETIME: u64 =
+    MAX_VOTING_DELAY as u64 + MAX_VOTING_PERIOD as u64 + PROPOSAL_EXPIRATION_PERIOD;
+
+/// Longest time, in seconds, from `queue` to the end of the execution window:
+/// the longest queue delay, then the 14 days `treasury.execute` has (44 days).
+pub const MAX_QUEUED_LIFETIME: u64 = MAX_QUEUE_DELAY as u64 + PROPOSAL_EXPIRATION_PERIOD;
+
+/// Longest a proposal stays live, in seconds (118 days).
+pub const MAX_PROPOSAL_LIFETIME: u64 = MAX_UNQUEUED_LIFETIME + MAX_QUEUED_LIFETIME;
+
+// Each stage fits the TTL even if ledgers close every 4 seconds rather than
+// the 5 seconds `DAY_IN_LEDGERS` assumes: stage seconds ≤ TTL ledgers × 4.
+const _: () = assert!(MAX_UNQUEUED_LIFETIME <= PROPOSAL_TTL_EXTEND_TO as u64 * 4);
+const _: () = assert!(MAX_QUEUED_LIFETIME <= PROPOSAL_TTL_EXTEND_TO as u64 * 4);
+const _: () = assert!(MAX_PROPOSAL_LIFETIME == 118 * 86_400);
 
 // Basis points constants for quorum calculation
 // BPS = basis points (1 BPS = 0.01%)
@@ -113,6 +138,7 @@ pub enum GovernorKey {
     /// Not `Proposal(id)`: that encodes like OpenZeppelin's
     /// `GovernorStorageKey::Proposal(id)`, which holds a different type.
     ProposalTime(BytesN<32>),
+    /// Instance: the Manager (launch, handoff and upgrade approvals).
     Manager,
     /// Instance: number of proposals ever created (the next sequence number).
     ProposalCount,
@@ -120,6 +146,11 @@ pub enum GovernorKey {
     /// (proposer-paid, ~60 bytes) and renewed with the proposal core, so a
     /// client can list proposals from chain state alone (D10).
     ProposalId(u32),
+    /// Persistent: present for a recovery proposal made while a migration
+    /// was due (only `upgrade` and `migrate` calls on this Governor or its
+    /// Treasury). `cast_vote` accepts votes on these alone until the layout
+    /// is current again.
+    RecoveryProposal(BytesN<32>),
 }
 
 /// Most ids `proposal_ids` returns per call (each is one persistent read).
@@ -129,13 +160,21 @@ pub const MAX_PROPOSAL_IDS_PAGE: u32 = 50;
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalInfo {
+    /// The proposal id: the hash of its actions and description.
     pub id: BytesN<32>,
+    /// Creation order (`proposal_ids` lists by it).
     pub seq: u32,
+    /// The account that made the proposal.
     pub proposer: Address,
+    /// The ledger votes and the quorum supply are read at (before `propose`).
     pub vote_snapshot: u32,
+    /// Unix seconds when voting opens.
     pub vote_start: u64,
+    /// Unix seconds when voting closes.
     pub vote_end: u64,
+    /// Unix seconds from which `treasury.execute` can run it; 0 until queued.
     pub eta: u64,
+    /// The state now, computed from the stored state and the clock.
     pub state: ProposalState,
     /// For + Abstain votes the proposal needs (fixed at creation).
     pub quorum: u128,
@@ -194,7 +233,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 6;
+    pub const VARIANTS: usize = 7;
 
     pub fn index(key: &GovernorKey) -> usize {
         match key {
@@ -204,6 +243,7 @@ pub(crate) mod key_samples {
             GovernorKey::Manager => 3,
             GovernorKey::ProposalCount => 4,
             GovernorKey::ProposalId(_) => 5,
+            GovernorKey::RecoveryProposal(_) => 6,
         }
     }
 
@@ -219,6 +259,7 @@ pub(crate) mod key_samples {
             GovernorKey::Manager,
             GovernorKey::ProposalCount,
             GovernorKey::ProposalId(0),
+            GovernorKey::RecoveryProposal(id.clone()),
         ];
         common::testutils::assert_every_variant_sampled(
             "GovernorKey",
@@ -239,6 +280,7 @@ pub(crate) mod key_samples {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredProposal(pub Address, pub Bytes);
 
+/// Bytes of the packed numeric fields of a [`StoredProposal`].
 pub const PACKED_PROPOSAL_LEN: usize = 4 + 8 + 8 + 8 + 1 + 4 + 16;
 
 fn state_code(state: ProposalState) -> u8 {
@@ -263,6 +305,8 @@ fn state_from(e: &Env, code: u8) -> ProposalState {
 }
 
 impl ProposalCoreTime {
+    /// The stored form: the proposer and the numeric fields packed
+    /// big-endian (see [`StoredProposal`]).
     pub fn pack(&self, e: &Env) -> StoredProposal {
         let mut buf = [0u8; PACKED_PROPOSAL_LEN];
         buf[0..4].copy_from_slice(&self.vote_snapshot.to_be_bytes());
@@ -275,6 +319,8 @@ impl ProposalCoreTime {
         StoredProposal(self.proposer.clone(), Bytes::from_slice(e, &buf))
     }
 
+    /// Reads a [`StoredProposal`] back. Panics on a packed length other than
+    /// [`PACKED_PROPOSAL_LEN`] or an unknown state code.
     pub fn unpack(e: &Env, stored: &StoredProposal) -> Self {
         let StoredProposal(proposer, bytes) = stored;
         assert!(

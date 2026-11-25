@@ -5,13 +5,19 @@
  *   node scripts/renew-dao.mjs --token C… [--network testnet] [--days 180] [--source <identity>] [--dao <dao artifact>] [--asset C…]... [--dry-run]
  *
  * --network reads deploys/builder-<network>-manager.json for the Manager, RPC and passphrase
- * (--artifact overrides the path). --source is a `stellar keys` identity; it signs and pays.
+ * (--artifact overrides the path). --source is a `stellar keys` identity that pays: RENEW_IDENTITY, else
+ * `<network>-renewer`. Renewal needs no admin rights, so the payer is a separate low-value key; the Manager
+ * admin is refused unless --allow-admin-payer is passed (docs/KEY_CUSTODY.md).
+ *
+ * The payer's secret stays in the stellar CLI's key store (its config, the OS secure store or a Ledger).
+ * This process builds and prepares each transaction and `stellar tx sign` signs it, so no seed is ever
+ * loaded here, where the web app's whole dependency tree runs.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { Account, Keypair, type Transaction } from '@stellar/stellar-sdk';
+import { Account, type Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 import { Api, Server } from '@stellar/stellar-sdk/rpc';
 
 import {
@@ -34,6 +40,18 @@ import {
 
 const xlm = (stroops: bigint) => `${Number(stroops) / 1e7} XLM`;
 
+/** Signs with a `stellar keys` identity through the CLI; the secret never enters this process. */
+function cliSigner(identity: string, rpcUrl: string, passphrase: string) {
+  return (tx: Transaction): Transaction => {
+    const signed = execFileSync(
+      'stellar',
+      ['tx', 'sign', '--quiet', '--sign-with-key', identity, '--rpc-url', rpcUrl, '--network-passphrase', passphrase],
+      { input: tx.toXDR(), encoding: 'utf8' }
+    ).trim();
+    return TransactionBuilder.fromXDR(signed, passphrase) as Transaction;
+  };
+}
+
 function flag(name: string, fallback?: string) {
   const args = process.argv.slice(2);
   const i = args.indexOf(`--${name}`);
@@ -46,7 +64,7 @@ async function main() {
   const artifactPath = flag('artifact', resolve(root, `deploys/builder-${network}-manager.json`))!;
   const artifact = JSON.parse(readFileSync(artifactPath, 'utf8')) as {
     manager: string;
-    config: { rpcUrl: string; networkPassphrase: string };
+    config: { rpcUrl: string; networkPassphrase: string; adminAddress?: string };
   };
   const token = flag('token');
   if (!token) throw new Error('Pass --token <DAO token contract>.');
@@ -88,12 +106,19 @@ async function main() {
     );
   }
 
-  const source = flag('source', process.env.DEPLOY_IDENTITY || `${network}-admin`)!;
-  const secret = execFileSync('stellar', ['keys', 'show', source], { encoding: 'utf8' }).trim();
-  const keypair = Keypair.fromSecret(secret);
-  const loaded = await server.getAccount(keypair.publicKey());
-  const account = new Account(keypair.publicKey(), loaded.sequenceNumber());
+  const source = flag('source', process.env.RENEW_IDENTITY || `${network}-renewer`)!;
+  // Only the public address is read here; `stellar tx sign` signs below.
+  const payer = execFileSync('stellar', ['keys', 'address', source], { encoding: 'utf8' }).trim();
+  // This process loads the web dependency tree and asks the CLI to sign what it builds, so it never
+  // asks with the admin key unless told to: renewal is permissionless.
+  if (payer === artifact.config.adminAddress && !process.argv.includes('--allow-admin-payer'))
+    throw new Error(
+      `The payer ${source} is the Manager admin. Renewal needs no admin rights: pay with a separate low-value key (docs/KEY_CUSTODY.md), or pass --allow-admin-payer.`
+    );
   const passphrase = artifact.config.networkPassphrase;
+  const sign = cliSigner(source, artifact.config.rpcUrl, passphrase);
+  const loaded = await server.getAccount(payer);
+  const account = new Account(payer, loaded.sequenceNumber());
   const { maxEntryTtl, minPersistentTtl } = await readArchivalSettings(server);
   const extendTo = extendToLedgers(days, maxEntryTtl);
   const missing = inventory.missing.map((k) => k.key);
@@ -134,14 +159,13 @@ async function main() {
       `  Extend restored items: ${missing.length} keys, about ${xlm(restoredEstimate)} (estimated; prepared after the restore, stops above ${xlm(restoredExtendLimit(restoredEstimate))})`
     );
   console.info(
-    `Renew ${inventory.present.length + missing.length} keys for ${days} days: about ${xlm(fee)}, paid by ${keypair.publicKey()}`
+    `Renew ${inventory.present.length + missing.length} keys for ${days} days: about ${xlm(fee)}, paid by ${payer}`
   );
   if (dryRun) return;
 
   let sent = 0;
   const submit = async (tx: Transaction) => {
-    tx.sign(keypair);
-    const result = await server.sendTransaction(tx);
+    const result = await server.sendTransaction(sign(tx));
     if (result.status === 'ERROR' || result.status === 'TRY_AGAIN_LATER')
       throw new Error(`Transaction ${sent + 1} was not accepted (${result.status}).`);
     for (;;) {
@@ -158,7 +182,7 @@ async function main() {
   if (restoredEstimate > 0n) {
     const restored = await prepareRestoredExtend({
       rpc: server,
-      source: keypair.publicKey(),
+      source: payer,
       restored: missing,
       extendTo,
       days,

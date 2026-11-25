@@ -65,11 +65,30 @@ export const CustomGovernorError = {
   /**
    * Comment body or vote reason exceeds `MAX_PROPOSAL_COMMENT_LENGTH`
    */
-  7515 : { message: "CommentTooLong" }
+  7515 : { message: "CommentTooLong" },
+  /**
+   * A proposal action calls this Governor's `consume`. Only
+   * `treasury.execute` consumes a proposal, and only the one it runs
+   */
+  7516 : { message: "CannotConsume" },
+  /**
+   * The proposal's `mint` and `batch_mint` actions, with its other
+   * actions, would publish more contract events than one
+   * `treasury.execute` allows (`common::EXECUTION_EVENT_BUDGET`); split
+   * them over several proposals
+   */
+  7517 : { message: "MintsTooLarge" },
+  /**
+   * The stored data layout differs from the one this code expects: a
+   * migration is due (anyone may call `migrate`), or the code is older
+   * than the data
+   */
+  7518 : { message: "StorageVersionMismatch" }
 }
 
 /**
- * Event: ProposalQueued
+ * Emitted by `queue`. `eta` is the unix time (seconds) from which
+ * `treasury.execute` can run the proposal, until 14 days after it.
  */
 export interface ProposalQueuedEvent {
   name: "ProposalQueued";
@@ -90,7 +109,7 @@ export interface GovernorLaunchedEvent {
 }
 
 /**
- * Event: QuorumBpsChanged
+ * Emitted by `set_quorum_bps` (basis points). `changed_by` is the admin.
  */
 export interface QuorumBpsChangedEvent {
   name: "QuorumBpsChanged";
@@ -102,7 +121,8 @@ export interface QuorumBpsChangedEvent {
 }
 
 /**
- * A comment on a proposal. Event-only: the body is never stored on-chain.
+ * Emitted by `comment`: a comment on a proposal, by an author who
+ * authorized it. Event-only: the body is never stored on-chain.
  */
 export interface ProposalCommentedEvent {
   name: "ProposalCommented";
@@ -133,7 +153,7 @@ export interface ProposalScheduledEvent {
 }
 
 /**
- * Event: QueueDelayChanged
+ * Emitted by `set_queue_delay` (seconds). `changed_by` is the admin.
  */
 export interface QueueDelayChangedEvent {
   name: "QueueDelayChanged";
@@ -145,7 +165,7 @@ export interface QueueDelayChangedEvent {
 }
 
 /**
- * Event: VotingDelayChanged
+ * Emitted by `set_voting_delay` (seconds). `changed_by` is the admin.
  */
 export interface VotingDelayChangedEvent {
   name: "VotingDelayChanged";
@@ -157,7 +177,8 @@ export interface VotingDelayChangedEvent {
 }
 
 /**
- * Event: GovernorInitialized
+ * Emitted once, by the constructor, with every setting the Governor starts
+ * with. `token_contract` is the vote source (the Token or an adapter).
  */
 export interface GovernorInitializedEvent {
   name: "GovernorInitialized";
@@ -174,7 +195,7 @@ export interface GovernorInitializedEvent {
 }
 
 /**
- * Event: VotingPeriodChanged
+ * Emitted by `set_voting_period` (seconds). `changed_by` is the admin.
  */
 export interface VotingPeriodChangedEvent {
   name: "VotingPeriodChanged";
@@ -186,7 +207,7 @@ export interface VotingPeriodChangedEvent {
 }
 
 /**
- * Event: ProposalThresholdChanged
+ * Emitted by `set_proposal_threshold` (votes). `changed_by` is the admin.
  */
 export interface ProposalThresholdChangedEvent {
   name: "ProposalThresholdChanged";
@@ -201,17 +222,41 @@ export interface ProposalThresholdChangedEvent {
  * `proposal(id)`: the stored core plus the state computed now.
  */
 export interface ProposalInfo {
+  /**
+   * Unix seconds from which `treasury.execute` can run it; 0 until queued.
+   */
   eta: bigint;
+  /**
+   * The proposal id: the hash of its actions and description.
+   */
   id: Uint8Array;
+  /**
+   * The account that made the proposal.
+   */
   proposer: string;
   /**
    * For + Abstain votes the proposal needs (fixed at creation).
    */
   quorum: bigint;
+  /**
+   * Creation order (`proposal_ids` lists by it).
+   */
   seq: number;
+  /**
+   * The state now, computed from the stored state and the clock.
+   */
   state: ProposalState;
+  /**
+   * Unix seconds when voting closes.
+   */
   vote_end: bigint;
+  /**
+   * The ledger votes and the quorum supply are read at (before `propose`).
+   */
   vote_snapshot: number;
+  /**
+   * Unix seconds when voting opens.
+   */
   vote_start: bigint;
 }
 
@@ -224,7 +269,13 @@ export interface ProposalInfo {
 export interface AdminChangedEvent {
   name: "AdminChanged";
   data: {
+    /**
+     * The admin before the handoff (the launch admin).
+     */
     old_admin: string;
+    /**
+     * The admin after it (the Treasury).
+     */
     new_admin: string;
   };
 }
@@ -288,12 +339,19 @@ export const CommonError = {
 }
 
 /**
- * Emitted by `migrate`.
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
  */
 export interface MigratedEvent {
   name: "Migrated";
   data: {
+    /**
+     * The layout version before the migration.
+     */
     from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
     to_storage_version?: number;
   };
 }
@@ -304,8 +362,17 @@ export interface MigratedEvent {
 export interface UpgradedEvent {
   name: "Upgraded";
   data: {
+    /**
+     * The code hash before the upgrade.
+     */
     from_hash: Uint8Array;
+    /**
+     * The code hash after it.
+     */
     to_hash: Uint8Array;
+    /**
+     * The registry's release version for `to_hash`.
+     */
     version?: string;
   };
 }

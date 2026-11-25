@@ -56,6 +56,9 @@ impl Harness {
     pub fn need_setup(e: Env) {
         lifecycle::require_setup(&e);
     }
+    pub fn layout_is_current(e: Env, code_storage_version: u32) -> bool {
+        upgrade::is_current_layout(&e, code_storage_version)
+    }
 }
 
 fn h(e: &Env, b: u8) -> BytesN<32> {
@@ -197,6 +200,58 @@ fn migrate_advances_storage_version_once() {
         c.try_migrate(&2).err().unwrap().unwrap(),
         CommonError::NothingToMigrate.into()
     );
+}
+
+/// The layout check is true only when the stored version equals the code's:
+/// behind (a migration is due) and ahead (older code) are both false, and a
+/// migration brings the two back in step.
+#[test]
+fn the_layout_is_current_only_when_the_stored_version_equals_the_code_version() {
+    let (_e, c, _) = setup();
+    assert!(c.layout_is_current(&1));
+    for code in [0, 2, u32::MAX] {
+        assert!(!c.layout_is_current(&code));
+    }
+    c.migrate(&2);
+    assert!(c.layout_is_current(&2));
+    assert!(!c.layout_is_current(&1));
+}
+
+/// The execution estimate: one mint call adds its per-call bytes to the
+/// per-token and per-recipient bytes `batch_mint_fits` counts, every other
+/// action gets the fixed allowance, and the budget accepts the shapes its
+/// documentation names, and no more.
+#[test]
+fn execution_event_estimate_matches_its_documented_shapes() {
+    use crate::{
+        execution_event_bytes as total, mint_event_bytes as mint, EXECUTION_EVENT_BUDGET,
+        MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS,
+    };
+    let fits = |actions: u32, mint_actions: u32, mints: u64| {
+        total(actions, mint_actions, mints) <= EXECUTION_EVENT_BUDGET as u64
+    };
+    assert_eq!(mint(1, 1), 400 + 300 + 450);
+    assert_eq!(total(1, 0, 0), 150 + 300 + 200);
+    assert_eq!(total(1, 1, mint(1, 1)), 150 + 300 + 1_150);
+    // Twenty actions without mints always fit.
+    assert!(fits(20, 0, 0));
+    // One maximum batch with up to two other actions.
+    assert!(fits(3, 1, mint(MAX_BATCH_MINT, 1)));
+    assert!(!fits(4, 1, mint(MAX_BATCH_MINT, 1)));
+    // Two batches of 21, not 22.
+    assert!(fits(2, 2, 2 * mint(21, 1)));
+    assert!(!fits(2, 2, 2 * mint(22, 1)));
+    // Ten single mints, not eleven.
+    assert!(fits(10, 10, 10 * mint(1, 1)));
+    assert!(!fits(11, 11, 11 * mint(1, 1)));
+    // Five mints among 20 actions, not six.
+    assert!(fits(20, 5, 5 * mint(1, 1)));
+    assert!(!fits(20, 6, 6 * mint(1, 1)));
+    // One batch to the most recipients.
+    assert!(fits(1, 1, mint(MAX_BATCH_RECIPIENTS, MAX_BATCH_RECIPIENTS)));
+    // No overflow at the extremes.
+    assert!(!fits(u32::MAX, 0, mint(u32::MAX, u32::MAX)));
+    assert!(!fits(u32::MAX, u32::MAX, u64::MAX));
 }
 
 #[test]

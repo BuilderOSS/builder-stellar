@@ -72,11 +72,21 @@ export const AuctionError = {
   /**
    * Bid comment exceeds `MAX_COMMENT_LENGTH`
    */
-  7418 : { message: "CommentTooLong" }
+  7418 : { message: "CommentTooLong" },
+  /**
+   * The payment token is not a Stellar Asset Contract
+   */
+  7419 : { message: "NotStellarAsset" },
+  /**
+   * `recover_token` for the token of the auction in progress (settle or
+   * cancel it first)
+   */
+  7420 : { message: "TokenInAuction" }
 }
 
 /**
- * Event: BidPlaced
+ * A bid became the highest. `extended` is true when it moved the end time
+ * to `new_end_time`.
  */
 export interface BidPlacedEvent {
   name: "BidPlaced";
@@ -94,7 +104,7 @@ export interface BidPlacedEvent {
 }
 
 /**
- * Event: BidRefunded
+ * An outbid or cancelled bid was pushed back to `bidder`.
  */
 export interface BidRefundedEvent {
   name: "BidRefunded";
@@ -106,7 +116,7 @@ export interface BidRefundedEvent {
 }
 
 /**
- * Event: AuctionCreated
+ * A new auction opened for `token_id`, minted into the Auction's custody.
  */
 export interface AuctionCreatedEvent {
   name: "AuctionCreated";
@@ -120,7 +130,8 @@ export interface AuctionCreatedEvent {
 }
 
 /**
- * Event: AuctionSettled
+ * An auction settled: the token went to `winner` and `amount` to the
+ * Treasury, or the token went to the Treasury when `winner` is `None`.
  */
 export interface AuctionSettledEvent {
   name: "AuctionSettled";
@@ -159,7 +170,7 @@ export interface AuctionLaunchedEvent {
 }
 
 /**
- * Event: DurationUpdated
+ * `set_duration`: later auctions last `duration` seconds.
  */
 export interface DurationUpdatedEvent {
   name: "DurationUpdated";
@@ -181,7 +192,8 @@ export interface RefundWithdrawnEvent {
 }
 
 /**
- * Event: AuctionCancelled
+ * `cancel_auction`: the admin ended a running auction. The token went to
+ * the Treasury. `reason` is 0 (cancelled by the admin).
  */
 export interface AuctionCancelledEvent {
   name: "AuctionCancelled";
@@ -193,7 +205,7 @@ export interface AuctionCancelledEvent {
 }
 
 /**
- * Event: TimeBufferUpdated
+ * `set_time_buffer`: the window in which a bid extends the end time.
  */
 export interface TimeBufferUpdatedEvent {
   name: "TimeBufferUpdated";
@@ -204,7 +216,7 @@ export interface TimeBufferUpdatedEvent {
 }
 
 /**
- * Event: AuctionInitialized
+ * Emitted once by the constructor, with the starting configuration.
  */
 export interface AuctionInitializedEvent {
   name: "AuctionInitialized";
@@ -221,7 +233,8 @@ export interface AuctionInitializedEvent {
 }
 
 /**
- * Event: PaymentTokenUpdated
+ * `set_payment_token`: bids are now paid in `payment_token`, a Stellar
+ * Asset Contract.
  */
 export interface PaymentTokenUpdatedEvent {
   name: "PaymentTokenUpdated";
@@ -232,7 +245,7 @@ export interface PaymentTokenUpdatedEvent {
 }
 
 /**
- * Event: ReservePriceUpdated
+ * `set_reserve_price`: the smallest first bid of later auctions.
  */
 export interface ReservePriceUpdatedEvent {
   name: "ReservePriceUpdated";
@@ -243,7 +256,7 @@ export interface ReservePriceUpdatedEvent {
 }
 
 /**
- * Event: MinBidIncrementUpdated
+ * `set_min_bid_increment`: the percentage a new bid must add.
  */
 export interface MinBidIncrementUpdatedEvent {
   name: "MinBidIncrementUpdated";
@@ -331,10 +344,8 @@ export interface AuctionConfig {
    */
   min_bid_increment_percent: number;
   /**
-   * SAC token address for payments.
-   *
-   * All auctions use this SAC token for bids and payments.
-   * Native XLM payments are not supported.
+   * The Stellar Asset Contract bids are paid in (for XLM, its native
+   * asset contract). Any other contract is refused (`NotStellarAsset`).
    */
   payment_token: string;
   /**

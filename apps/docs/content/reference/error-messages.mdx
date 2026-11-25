@@ -57,6 +57,9 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7513 | The proposal is queued, but its safety delay hasn't ended. | Wait until the time shown on the proposal, then execute. |
 | 7514 | A comment or vote reason is empty. | Write a comment, or vote without one. |
 | 7515 | A comment or vote reason is longer than 8,192 bytes. | Shorten it. |
+| 7516 | An action in the proposal calls the Governor's `consume`, which would mark another proposal as run without running it. | Remove that action. |
+| 7517 | The proposal mints more tokens than one transaction can record, together with its other actions. | Split the mints over several proposals. See [Limits and timings](/reference/limits-and-timings). |
+| 7518 | The Governor's code and its stored data are from different releases: a migration is due after an upgrade. | Run the Governor's migration once. Anyone can run it, and it needs no proposal. See [Upgrades](/concepts/upgrades). |
 
 ## Auctions
 
@@ -77,6 +80,8 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7416 | You have no refund waiting. | Nothing to do. Refunds usually return to your wallet as soon as you're outbid. See [Auction refunds](/guides/auctions/refunds). |
 | 7417 | The extra time a late bid adds is outside 1 second to 1 day. | Choose a value in that range. |
 | 7418 | A bid comment is longer than 1,024 bytes. | Shorten it. |
+| 7419 | The payment asset is not a Stellar asset contract. | Choose a Stellar asset, such as XLM or USDC. |
+| 7420 | That token is in the auction that is running, so it can't be sent to the treasury. | Settle or cancel the auction first. |
 
 ## Market
 
@@ -84,7 +89,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 |---|---|---|
 | 7702 | The price is not valid. | Enter a price above zero. |
 | 7703 | The listing or pool end time is not valid. | Choose a time in the future. |
-| 7704 | This token is already listed. | Cancel the existing listing first. See [Cancel a listing](/guides/marketplace/cancel). |
+| 7704 | This token is already listed. | Cancel the existing listing first. See [Cancel a listing](/guides/marketplace/cancel). A listed token goes back to its seller, not to the treasury. |
 | 7705 | The listing can't be found. It may have sold or been cancelled. | Refresh the market. |
 | 7706 | The listing has expired. | Choose another listing. The seller can list it again. |
 | 7707 | The listing is still active, so it can't be cleared. | Wait until it expires. |
@@ -103,9 +108,11 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7722 | The pool has sold its limit for this period. | Try again when the period resets. |
 | 7723 | That token is no longer in the pool. | Pick another token. |
 | 7724 | Too many pools are open (the limit is 8). | Close and sweep a pool first. |
-| 7725 | The pool is still open, so it can't be swept. | Close it first, in an earlier action. |
+| 7725 | A pool is still open, so it can't be swept, or a token can't be sent to the treasury yet. | Close the pool first, in an earlier action, and sweep every pool before sending tokens to the treasury. |
 | 7726 | A pool setting is zero. | Pool size, the limit per wallet, the sales rate and the period must all be above zero. |
 | 7727 | The pool is already fully stocked. | Nothing to do. |
+| 7728 | The payment asset is not a Stellar asset contract. | Choose a Stellar asset, such as XLM or USDC. |
+| 7729 | The market must be paused for this. | Add "Pause the market" before it in the same proposal. |
 
 ## Claims
 
@@ -128,7 +135,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7822 | The tribe already has its assurance drive. | A tribe can run one drive. |
 | 7823 | Refunds open only once the assurance drive has failed. | Wait for the drive's deadline. |
 | 7824 | You have nothing in escrow on this list. | Nothing to do. |
-| 7825 | The assurance settings are not valid. | The number of members must be at least 1. The deadline must be after now and before the list expires. |
+| 7825 | The assurance settings are not valid. | The number of members must be at least 1 and no more than the list's total tokens. The deadline must be after now and before the list expires. |
 | 7826 | A claim list opened before launch needs the artwork first. | Add the artwork. See [Set up: artwork](/guides/setup/artwork). |
 | 7827 | A list opened before launch must use the claims payment asset chosen at creation. | Choose that asset. |
 | 7828 | The price is negative. | Enter zero or more. |
@@ -155,6 +162,7 @@ These come from the shared governor library and from Tribe Builder's Governor.
 | 7219 | This module is not a transfer agent. | Make it one by proposal first. |
 | 7220 | A recovery can't move a token that a module holds, for example a token in an auction or a pool. | Choose a token held by a member. |
 | 7221 | Votes can only be delegated to members of this tribe. | Choose a delegate who holds a membership. |
+| 7222 | The module still holds memberships, so it can't be removed. | Empty it first. In the same proposal, cancel the running auction, or close and sweep the pools. Before the proposal runs, open listings must be cancelled, or must end and be cleared. See [Modules](/concepts/modules#removing-a-module). |
 
 ## Artwork and profile
 
@@ -216,6 +224,7 @@ These come from the Manager.
 | 7143 | A transfer agent must be a module the tribe is created with. | Choose one of the tribe's modules. |
 | 7144 | That vote source is not approved by the platform, or its approval was withdrawn. | Choose an approved vote source. See [Vote sources](/concepts/vote-sources). |
 | 7145 | That contract doesn't answer as a vote source. | Check the address. |
+| 7146 | A payment asset is not a Stellar asset contract. | Choose one of the assets the app offers, such as XLM or USDC. |
 
 ## Upgrades and storage
 
@@ -228,12 +237,14 @@ These come from the Manager.
 | 7012 | The contract's storage is already up to date. | Nothing to do. |
 | 7103 | The version can't be found, or it was withdrawn. | Choose another release. |
 | 7105 | This upgrade path is not allowed. | Upgrade to a release the platform lists for your current version. |
-| 7130 | The Manager's own upgrade was approved too recently. Its upgrade notice hasn't passed. | Wait for the notice to pass. See [Upgrades](/concepts/upgrades). |
-| 7131 | The Manager can only upgrade to its announced latest release. | Use the latest release. |
+| 7130 | An upgrade's notice hasn't passed. This is the Manager's own upgrade, or the recovery of a failed assurance drive's claims module, which waits at least seven days after the fix is published and after the drive's deadline. | Wait for the notice to pass. See [Upgrades](/concepts/upgrades). |
+| 7131 | The upgrade isn't to the announced latest release. This applies to the Manager's own upgrade and to the recovery of a failed assurance drive's claims module. | Use the latest release. |
 | 7602 | A proposal may only call upgrade or migrate on the Treasury itself. | Remove the other Treasury action. |
 | 7603 | A Treasury upgrade or migration action has invalid arguments. | Prepare it again from Manage → Contract upgrades. |
 | 7604 | The proposal's targets, functions and arguments don't line up. | Prepare the proposal again in the app. |
 | 7605 | An authorise action is malformed or too large, or it isn't directly followed by the action it approves. | Prepare treasury purchases from the market page, not by hand. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
+| 7606 | An action, or an authorise action, calls the Governor's `consume`. | Remove that action. |
+| 7607 | The Treasury's code and its stored data are from different releases: a migration is due after an upgrade. | Run the Treasury's migration once. Anyone can run it, and it needs no proposal. See [Upgrades](/concepts/upgrades). |
 
 ## Codes you should not normally see
 

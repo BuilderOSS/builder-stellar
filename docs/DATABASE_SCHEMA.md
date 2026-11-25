@@ -56,8 +56,9 @@ settings, artwork definitions, the renderer, platform registry pointers) has no 
 | View | Reads | Notes |
 | --- | --- | --- |
 | `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, the core four contracts and what `create_dao` deployed for `auction`, `marketplace`, `claims` (NULL for a kind it didn't), each `<kind>_wasm_hash`, `created_slug` (the slug requested at creation, not unique). `manager.module_role()` maps a registry kind to its role |
-| `manager_modules` | registry, `module_created`, `current_implementations_updated` | every module this deployment's Manager deployed: `kind`, `contract_id`, `wasm_hash` (from `dao_created`, else the current implementation when `create_module` ran) |
-| `module_registrations` | `module_registered`, `module_unregistered`, `manager_modules` | one row per registration window of a module on a DAO's Token: `kind` (as registered), `module_role` (the kind the Manager deployed it as, else `module`, matching the pipeline's allowlists), `module_contract`, `non_voting`, the window (`from_pos`, `until_pos`, `registered_*`, `unregistered_*`), `created_wasm_hash` (NULL: deployed outside the Manager) |
+| `created_modules` | registry, `module_created`, `current_implementations_updated` | every module this deployment's Manager deployed, with the DAO it deployed it for: `dao_id` (`dao_created`'s token, or `module_created`'s `token_address`), `kind`, `contract_id`, `wasm_hash` (from `dao_created`, else the current implementation when `create_module` ran) (migration 0015) |
+| `manager_modules` | `created_modules` | the same rows without `dao_id` |
+| `module_registrations` | `module_registered`, `module_unregistered`, `created_modules` | one row per registration window of a module on a DAO's Token: `kind` (as registered), `module_role` (the kind the Manager deployed it as when it deployed it for this DAO, else `module`; another DAO's Manager-built module is `module`, migration 0015), `module_contract`, `non_voting`, the window (`from_pos`, `until_pos`, `registered_*`, `unregistered_*`), `created_wasm_hash` (the Manager's creation hash, whichever DAO registers it; NULL: deployed outside the Manager) |
 | `dao_modules` **Prisma** | registry, `module_registrations` | one row per DAO contract: the core four (live for good) and every module ever registered, at its latest registration (`registered` false once unregistered) |
 | `event_identity`, `module_events` | registry, `module_registrations` | contract → DAO with the window its events belong to (a module registered by two DAOs belongs to both); every DAO contract event inside its window, with its DAO: the base of every domain view, and where an unregistered module's later events are dropped |
 | `dao_launches` | `dao_launched` | per launched DAO: `launch_auction`, `launch_marketplace`, `registry` (the module entries at launch), `launched_*` |
@@ -139,13 +140,14 @@ auction/marketplace configuration setters are feed rows only; the app reads
 
 ### claims
 
-The ClaimMinter's views (role `claims`, migration `0010_claims_views`). The claims
-page reads list terms, the claimer's progress and the assurance state from chain;
-these views are history and discovery.
+The ClaimMinter's views (role `claims`, migration `0010_claims_views`; `0014_claim_list_closed`
+adds the closed state and the Setup flag to `claims.lists`). The claims page reads list terms,
+the claimer's progress and the assurance state from chain; these views are history, discovery
+and the founder supply that Setup lists can still mint.
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded` |
+| `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded`, and the close from `list_closed` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at` (as opened), `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded`, `opened_*`, then `closed` (closed early by `close_list`), `closed_ledger`, `closed_at`, `effective_expires_at` (unix seconds when claims stop: the close time for a closed list, otherwise `expires_at`), and `opened_in_setup` (opened before the ClaimMinter's `claim_minter_launched`) |
 | `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), the claimer's running `claimed` |
 | `claims.claimers` **Prisma** | `claimed`, `refunded` | each claimer's position per list: `claimed`, `paid`, `escrowed`, `refunded` |
 

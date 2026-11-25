@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { currentSessionPassword, MIN_SECRET_LENGTH } from './auth/secrets';
 import { isValidUploadType, type UploadAuthorization } from './pinata-upload';
 
 /**
@@ -14,14 +15,22 @@ const authorizationStore = new Map<
 /** How long a pin token from `generate-jwt` lets its holder pin the directory it uploaded. */
 export const PIN_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+const UPLOAD_TOKEN_KEY_LABEL = 'tribes-upload-token-v1';
+
 /**
- * The key upload tokens are signed with: derived from IRON_PASSWORD under its own label, so an
- * upload token and a session cookie never share a key and no extra variable is needed.
+ * The key upload and pin tokens are signed with. UPLOAD_TOKEN_SECRET, when set, keeps upload tokens
+ * apart from sessions: rotating one secret doesn't touch the other. When it is unset, the key is
+ * derived from the current session secret (the highest-numbered IRON_PASSWORD) under its own label,
+ * so a token and a session cookie still never share a key. Changing either secret ends the tokens
+ * already issued; they last an hour at most.
  */
 function getSigningKey(): Buffer {
-  const secret = process.env.IRON_PASSWORD;
-  if (!secret) throw new Error('IRON_PASSWORD is required for upload authorization signing');
-  return createHmac('sha256', secret).update('tribes-upload-token-v1').digest();
+  const dedicated = process.env.UPLOAD_TOKEN_SECRET?.trim();
+  if (dedicated && dedicated.length < MIN_SECRET_LENGTH) {
+    throw new Error(`UPLOAD_TOKEN_SECRET must be at least ${MIN_SECRET_LENGTH} characters.`);
+  }
+  const secret = dedicated || currentSessionPassword();
+  return createHmac('sha256', secret).update(UPLOAD_TOKEN_KEY_LABEL).digest();
 }
 
 function sign(payload: string): string {

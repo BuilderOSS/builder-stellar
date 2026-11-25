@@ -1513,7 +1513,9 @@ fn test_auction_payment_token_setter() {
     assert_eq!(config.payment_token, payment_token_addr.clone());
 
     // Can change to a different SAC token
-    let new_payment_token = Address::generate(&e);
+    let new_payment_token = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
     auction.set_payment_token(&new_payment_token);
 
     let config = auction.get_config();
@@ -1614,8 +1616,17 @@ fn test_auction_payment_token_cannot_change_after_first_bid() {
     auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     auction.pause(&owner);
-    let new_payment_token = Address::generate(&e);
-    assert!(auction.try_set_payment_token(&new_payment_token).is_err());
+    let new_payment_token = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    assert_eq!(
+        auction
+            .try_set_payment_token(&new_payment_token)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(auction::AuctionError::InvalidConfig)
+    );
 }
 
 #[test]
@@ -4159,7 +4170,7 @@ fn a_module_created_after_launch_works_in_the_next_call() {
 /// docs/designs/membership-models.md §2 (optional modules): a DAO created
 /// with no Auction or Marketplace launches with the four core contracts, and
 /// the Treasury registers outside code that holds NFTs by vote (R6): tokens it
-/// holds stop voting, and unregistering brings them back (review 2 A1).
+/// holds stop voting, and it can be unregistered only once it holds none.
 #[test]
 fn a_dao_without_optional_modules_launches_and_registers_external_code() {
     let e = Env::default();
@@ -4215,10 +4226,17 @@ fn a_dao_without_optional_modules_launches_and_registers_external_code() {
     assert_eq!(token.get_votes(&founder), 1);
     token.mint(&vault, &founder);
     assert_eq!(token.mint_allowance(&vault), 0);
-    // Unregistering brings the held token back into the voting supply.
+    // Holding a token, the vault cannot be unregistered.
+    assert_eq!(
+        token.try_unregister_module(&vault).err().unwrap().unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleHoldsTokens)
+    );
+    // Emptied, it can; the token is back in the voting supply.
+    token.transfer(&vault, &founder, &first);
     token.unregister_module(&vault);
     assert_eq!(token.total_supply(), 3);
-    assert_eq!(token.get_votes(&vault), 1);
+    assert_eq!(token.get_votes(&founder), 3);
+    assert_eq!(token.get_votes(&vault), 0);
 }
 
 // ============================================================================
@@ -5821,8 +5839,20 @@ fn dao_module_chains_two_upgrades_in_one_proposal() {
 #[path = "membership.rs"]
 mod membership;
 
+#[path = "membership_hardening.rs"]
+mod membership_hardening;
+
 #[path = "locked.rs"]
 mod locked;
 
 #[path = "vote_adapter.rs"]
 mod vote_adapter;
+
+#[path = "governance.rs"]
+mod governance;
+
+#[path = "manager_hardening.rs"]
+mod manager_hardening;
+
+#[path = "claims.rs"]
+mod claims;

@@ -9,7 +9,7 @@ import { Sheet } from '@/components/ui/sheet';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { MODULE_COPY, type ModuleKind } from '@/lib/modules/kinds';
 import { actionCount, buildDetachPlan, type PlanStep } from '@/lib/modules/plans';
-import { moduleReadiness, type ReadinessRow } from '@/lib/modules/readiness';
+import { moduleReadiness, planEmptiesModule, type ReadinessRow } from '@/lib/modules/readiness';
 import { planActions } from '@/lib/modules/requests';
 import { checkDetach, useModuleFacts } from '@/lib/modules/use-module-reads';
 import type { ActionRequest } from '@/lib/proposal-actions/action-request';
@@ -102,12 +102,17 @@ export function RemoveModuleSheet({
   }, [module, read.facts, hasPools, sweep, hasAuction, cancel]);
 
   const moduleAddress = module?.address ?? '';
-  const checkKey = open && moduleAddress ? `${moduleAddress}:${address ?? ''}` : '';
+  // The Token removes a module without votes only once it is empty, so the check depends on whether
+  // the chosen clean-up empties it.
+  const emptiedByPlan = read.facts
+    ? planEmptiesModule(read.facts, { sweep: hasPools ? sweep : true, cancel: hasAuction ? cancel : true })
+    : false;
+  const checkKey = open && moduleAddress && read.facts ? `${moduleAddress}:${address ?? ''}:${emptiedByPlan}` : '';
   useEffect(() => {
     if (!checkKey) return;
     let stale = false;
     const key = checkKey;
-    void checkDetach({ config, address, module: moduleAddress }).then((outcome) => {
+    void checkDetach({ config, address, module: moduleAddress, emptiedByPlan }).then((outcome) => {
       if (stale) return;
       setResult({
         key,
@@ -117,6 +122,7 @@ export function RemoveModuleSheet({
                 state: 'ok',
                 message: 'Checked just now. This should run as planned.',
                 detail:
+                  outcome.detail ??
                   'The removal was simulated on the chain. The clean-up steps depend on each other, so they run in order when it passes.'
               }
             : { state: 'fail', message: 'This would not run', detail: outcome.message }
@@ -216,7 +222,7 @@ export function RemoveModuleSheet({
             <ModuleCheck value={check} />
             {checklist.some((row) => row.tone === 'warn') ? (
               <FieldHelperText>
-                Warnings do not block a removal. The proposal that members vote on lists them again.
+                Warnings don’t stop you adding the removal. The proposal that members vote on lists them again.
               </FieldHelperText>
             ) : null}
           </>

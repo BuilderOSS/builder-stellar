@@ -19,7 +19,9 @@ Configure the copied file before starting:
 - `APP_DATABASE_URL`: read-only `app_server` connection to the migrated/indexed database.
 - `APP_URL`: authentication origin; required in production.
 - `NEXT_PUBLIC_SITE_URL`: the public origin. It sets `metadataBase` for share images and the default profile image and `rendererBase` of new drafts. Defaults to `https://tribes.build`; set it to a preview's own origin if that preview creates test tribes. The old host `builder-stellar-web.vercel.app` keeps serving `/api` and `/images` for tribes created before the rename, and its pages redirect to tribes.build (`next.config.mjs`).
-- `IRON_PASSWORD`: private session secret, at least 32 characters.
+- `IRON_PASSWORD`: private session secret, at least 32 characters, or a JSON map of numbered secrets while rotating it (`{"2":"<new>","1":"<old>"}`; see [dev deployment](../../docs/DEV_DEPLOYMENT.md)).
+- `UPLOAD_TOKEN_SECRET` (optional): signs upload and pin tokens, at least 32 characters. Unset, they use a key derived from `IRON_PASSWORD`.
+- `TRUSTED_CLIENT_IP_HEADER` (off Vercel only): the header your proxy sets or overwrites with the client's address, used by the sign-in rate limits; the app reads its last address. Set it only behind a proxy. Vercel's own header is used on Vercel; client-supplied headers are otherwise ignored.
 - `STELLAR_WEB_AUTH_SECRET`, `STELLAR_HOME_DOMAIN`, `STELLAR_WEB_AUTH_DOMAIN`: SEP-10 server/domain configuration. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` enables WalletConnect wallets.
 - Optional Pinata upload flag/credentials: see [.env.example](.env.example). Server credentials must not have a `NEXT_PUBLIC_` prefix. AI image generation and `/api/artwork/generate` have been removed; images use saved URLs or upload.
 
@@ -157,8 +159,9 @@ Some reads come from chain on purpose ([`lib/chain-reads`](src/lib/chain-reads))
   the sweep by simulation and renews it in one transaction
   ([TTL_ECONOMICS](../../docs/TTL_ECONOMICS.md)).
 
-Every signature goes through `signWithWallet`, which refuses a transaction able to
-charge more than 50 XLM ([fee guard](src/lib/fee/fee-guard.ts)). The stellar-sdk
+Every transaction signature goes through `src/lib/wallet-sign.ts` (`signWithWallet`, or
+`signSep10Challenge` for the sign-in fallback), which refuses a transaction able to
+charge more than 50 XLM, or whose fee it can't read ([fee guard](src/lib/fee/fee-guard.ts)). The stellar-sdk
 is patched (`patches/`) so `AssembledTransaction.sign` no longer counts the
 resource fee twice.
 
@@ -185,12 +188,15 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 | Marketplace `GET listing` | `kind`, `id`, `eventId` identify a specific scoped listing |
 | Marketplace `GET inventory`, `GET readiness` | Session-derived inventory and asset readiness |
 | Marketplace `POST prepare` | Strict action request: buy/cancel/expire, approve/list/revoke, or trustline; returns unsigned transaction |
-| `POST /api/auth/challenge`, `/verify`; `GET /api/auth/session`; `POST /api/auth/logout` | SEP-53 message proof and encrypted cookie session |
-| `GET /api/auth/sep10/challenge`, `POST /api/auth/sep10/verify` | Transaction-proof fallback; unsupported-message signing differs from wallet rejection |
+| `POST /api/auth/challenge`, `/verify`; `GET /api/auth/session`; `POST /api/auth/logout` | SEP-53 message proof, then a signer-weight check on Horizon; encrypted cookie session (24-hour idle limit, 3-day absolute limit) |
+| `POST /api/auth/sep10/challenge`, `POST /api/auth/sep10/verify` | Transaction-proof fallback; unsupported-message signing differs from wallet rejection. The challenge takes `{ address }` and is POST only |
 | `GET /api/health`, `/api/goldsky/health` | Different health semantics; see [monitoring](../../docs/MONITORING.md) |
 | `/api/uploads/*`, `/api/pinata/*` | Upload services; feature flags and server credentials apply; no AI generation endpoint |
 | `GET /api/render/[daoId]/[tokenId]`, `GET /api/render?contract=&token=` | Token artwork renderer; the query form is the `renderer_base` on-chain `token_uri` points at |
+| `POST /api/csp-report` | Content-Security-Policy violation reports from browsers; logged as `[csp-report]`, never stored |
 | `GET /api/dao/[daoId]/token/[tokenId]` | The decoded on-chain `token_uri` JSON |
+
+Rendering, transaction preparation, claims, health, and CSP reports are rate limited per client (429 with `Retry-After`), and unexpected failures answer with a short message while the detail goes to the server log; see "API errors and rate limits" in [SECURITY_MODEL.md](../../docs/SECURITY_MODEL.md#api-errors-and-rate-limits). Response headers and the page Content-Security-Policy are described under "Response headers" there.
 
 The member directory accepts `order=asc|desc` (descending votes by default); ordering is applied before pagination and includes an address tie-breaker. `GET /api/dao/[daoId]/initial-allocations` returns paginated original mint recipients before launch from `token.transfers` and `manager.dao_launches`, scoped to the deployment and Token contract. These records include any launch-drive claims and are not a list of current holders.
 

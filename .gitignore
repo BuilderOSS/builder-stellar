@@ -25,7 +25,16 @@ packages/contracts/counter/src/generated/dist
 .stellar
 opencode.json
 .vercel
-.env*.local
+
+# Environment files hold secrets (database URLs, signing keys, API tokens): never commit them.
+# Only the documented templates are tracked. packages/goldsky/{dev,prod}.env are tracked pipeline
+# settings without secrets; .gitleaks.toml and CI scan every commit for anything that slips through.
+.env
+.env.*
+!.env.example
+
+# Coverage reports (scripts/coverage.sh)
+coverage/
 .agents/
 .claude/
 .opencode/

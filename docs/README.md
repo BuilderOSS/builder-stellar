@@ -21,10 +21,15 @@ Tribe Builder ([tribes.build](https://tribes.build)): DAOs on Stellar, called tr
 - [dev.tribes.build: the `dev` deployment](DEV_DEPLOYMENT.md) (its own Manager, database, pipeline and hostname)
 - [Create, configure, and launch a DAO](DAO_DEPLOYMENT.md)
 - [Upgrade DAO contracts (step-by-step runbook)](CONTRACT_UPGRADES.md)
+- [Reproducible contract builds](REPRODUCIBLE_BUILDS.md): the pinned toolchain, release hashes, and how to verify a tag
+- [Dependencies and advisories](DEPENDENCIES.md) and the [OpenZeppelin pin](OPENZEPPELIN_PIN.md)
+- [Contract test coverage](COVERAGE.md)
 - [Set up Goldsky](GOLDSKY_SETUP.md) and [package reference](../packages/goldsky/README.md)
 - [Database migrations, roles, and reset](../db/README.md)
 - [Bindings generation](BINDINGS_GENERATION.md)
-- [Monitor the application](MONITORING.md)
+- [Monitor the application](MONITORING.md), with the alerting plan
+- [Key custody and rotation](KEY_CUSTODY.md): every secret, where it is stored and how to replace it
+- [Incident runbook](INCIDENT_RUNBOOK.md): a leaked key or secret, a hostile module, a malformed event, pausing the factory
 - [Who pays for storage, role by role](STORAGE_COSTS.md)
 - [Storage, TTL and rent reference](TTL_ECONOMICS.md)
 - [Revenue: paying for the platform (proposed)](REVENUE.md)

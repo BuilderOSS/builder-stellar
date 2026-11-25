@@ -462,6 +462,13 @@ const FIXTURES: Fixture[] = [
       assurance: null
     }
   },
+  {
+    type: 'close-claim-list',
+    draft: { listId: '2', claimsContractId: config.claimsContractId },
+    target: 'claims',
+    fn: 'close_list',
+    expected: { list_id: 2 }
+  },
   // Modules
   {
     type: 'create-module',
@@ -797,6 +804,10 @@ describe('validators refuse what each contract rejects', () => {
     ['open-claim-list', { ...claimList, treeUri: 'https://bafyclaims' }, 'a tree that is not on IPFS'],
     ['open-claim-list', { ...claimList, expiresAt: 1 }, 'a list that already closed'],
     ['open-claim-list', { ...claimList, total: 0 }, 'an empty list'],
+    // ClaimMinter close_list: a list id in u32, on the tribe's own ClaimMinter.
+    ['close-claim-list', { listId: '' }, 'no list chosen'],
+    ['close-claim-list', { listId: U32_OVER }, 'a list id over u32'],
+    ['close-claim-list', { listId: '1', claimsContractId: contract(31) }, 'a list of another claims module'],
     // Manager: slugs of 4..=63 lowercase letters, numbers and single hyphens; one module per kind.
     ['change-dao-slug', { slug: 'owl' }, 'too short'],
     ['change-dao-slug', { slug: 'night-owls' }, 'the current link'],

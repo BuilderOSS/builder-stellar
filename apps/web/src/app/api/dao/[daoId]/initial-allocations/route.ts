@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { initialAllocations } from '@/lib/member-directory/initial-allocations';
 import { memberPagination } from '@/lib/member-directory/validation';
 
@@ -15,7 +16,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   }
   try {
     return NextResponse.json(await initialAllocations((await params).daoId, page), { headers });
-  } catch {
-    return NextResponse.json({ message: 'Initial allocations could not be read.' }, { status: 503, headers });
+  } catch (error) {
+    return internalErrorResponse(
+      'initial-allocations',
+      error,
+      { message: 'Initial allocations could not be read.' },
+      { headers }
+    );
   }
 }

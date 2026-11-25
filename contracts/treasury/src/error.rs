@@ -16,4 +16,11 @@ pub enum TreasuryError {
     /// An `authorize` action is malformed, too large, or not followed by an
     /// external call it can apply to
     InvalidAuthorization = 7605,
+    /// A proposal action, or an authorization tree, calls the Governor's
+    /// `consume`. Only `execute` consumes a proposal, and only the one it runs
+    CannotConsume = 7606,
+    /// The stored data layout differs from the one this code expects: a
+    /// migration is due (anyone may call `migrate`), or the code is older
+    /// than the data
+    StorageVersionMismatch = 7607,
 }

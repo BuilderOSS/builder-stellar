@@ -15,8 +15,11 @@ A module swaps its code with `upgrade(from_hash, to_hash)`, called by its **admi
 setup, the **Treasury** after launch (so, by proposal). The module checks `from_hash` is the code it runs
 (`HashMismatch`, 7005), asks the Manager `is_upgrade_approved(from, to)` (`UpgradeNotApproved`, 7006, also false
 when `to` is revoked), takes the version from the registry, emits `Upgraded`, and swaps the WASM. Storage is
-kept. If the release changes a storage layout, `migrate()` runs next, in the same proposal. The Manager can
-approve a path but can never force a DAO to take it.
+kept. If the release changes a storage layout, `migrate()` runs next, in the same proposal, except for the
+Treasury, which migrates in a second step (§1). The Governor and the Treasury refuse to run while their stored
+layout differs from their code's (`StorageVersionMismatch`: Governor 7518, Treasury 7607), and anyone can call
+their `migrate()`. The
+Manager can approve a path but can never force a DAO to take it.
 
 ## 0. Decide: upgrade or redeploy
 
@@ -30,12 +33,37 @@ DAOs keep their addresses and history only through upgrades.
    - No (e.g. a new event, new logic over existing keys): no `migrate` step.
    - Yes: bump that module's `STORAGE_VERSION` and do the data rewrite in its `migrate()` after
      `common::upgrade::migrate`. Every proposal for this release then runs `upgrade` **then** `migrate`.
+   - Yes, for the **Treasury**: the proposal runs `upgrade` alone. The Treasury runs a proposal on the code it
+     started with, so a `migrate` action in the same proposal still runs the old code, fails `NothingToMigrate`
+     (7012) and reverts the upgrade with it. After the upgrade proposal executes, anyone calls
+     `treasury.migrate()` (no authorization needed); until then `treasury.execute` runs only recovery
+     proposals (`StorageVersionMismatch`, 7607, for any other). See e2e
+     `the_treasury_upgrades_then_migrates_in_two_steps`.
+   - Rehearse every Governor or Treasury migration on a copy of production (§2) before proposing the upgrade,
+     and keep the Governor's `upgrade` and `migrate` in one proposal, so a failing `migrate` reverts the upgrade.
+   - If a migration fails anyway, the module stays on that release with its migration due, and accepts only a
+     **recovery proposal**: every action `upgrade` or `migrate` on the DAO's own Governor or Treasury. Build a
+     fixed release, register it and approve `broken -> fixed`, then propose `upgrade(broken, fixed)` and
+     `migrate()` for the Governor, or `upgrade(broken, fixed)` for the Treasury followed by a direct
+     `treasury.migrate()`. A release must keep the storage the recovery path reads unchanged
+     ([SECURITY_MODEL.md § Upgrade path and migrations](SECURITY_MODEL.md#upgrade-path-and-migrations)). See e2e
+     `a_governor_whose_migration_fails_recovers_by_proposal` and `a_treasury_whose_migration_fails_recovers_by_proposal`.
 2. Bump the module in [`releases/contracts.json`](../releases/contracts.json) (e.g. `"token": "0.2.0"`). This is the
    version registered for the new hash. **Registry records are write-once**: a wrong version can never be fixed.
    The version is only a registry label: `version()` reads it from the Manager, so bumping it doesn't change the
    build or the hash. Each Manager keeps its own records, so the same hash can carry different labels on two
    Managers (release 0.5.0 registers on tribes.build the hashes dev.tribes.build records as 0.4.0).
-3. Build: `pnpm contracts:build`. Note the new hash: `shasum -a 256 target/wasm32v1-none/release/<module>.wasm`.
+3. Commit the change and the version bump, then build the release in the pinned container and publish its
+   hashes ([reproducible builds](REPRODUCIBLE_BUILDS.md)):
+   ```sh
+   node scripts/build-wasm.mjs --write-hashes   # prints each module's new hash
+   git add releases/hashes.json && git commit -m "release: contract hashes" && git tag release-<n>
+   ```
+   The WASM files are in `target/wasm-build/<built-commit>/wasm/`. Upload those, not a `pnpm contracts:build`
+   output: the bytes depend on the build platform, and the published hashes are the container's `linux/amd64`
+   build.
+   Pushing the tag (with sign-off) runs the Contract release build workflow, which rebuilds the tag twice and
+   fails unless both builds match `releases/hashes.json`.
 4. Know exactly what ships: the new code is everything since the deployed build, not just your change.
    ```sh
    C=$(jq -r .sourceCommit deploys/<label>-<network>-manager.json)
@@ -66,7 +94,8 @@ DAOs keep their addresses and history only through upgrades.
    - live upgrade by proposal through `treasury.execute` with `e.set_auths(&[])` (Treasury's own auth only),
      including a call that needs the new code **in the same proposal** if the UI will offer that;
    - rejections: unapproved target, stale `from`, revoked target;
-   - with a storage change: `migrate()` in the same proposal and `storage_version()` after.
+   - with a storage change: `migrate()` in the same proposal (for the Treasury, a separate `migrate()` call after
+     the proposal) and `storage_version()` after.
 4. `cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets`.
 
 ## 3. Bindings and app
@@ -104,6 +133,8 @@ DAOs keep their addresses and history only through upgrades.
    TEST_DATABASE_URL="postgres://$(whoami)@localhost:5432/builder_migration_test" ./db/test-migrations.sh
    dropdb -h localhost builder_migration_test
    ```
+   The role in the URL must be a superuser: the run creates roles and the writer's event trigger
+   ([db operations](../db/README.md#verifying-changes)).
 
 Commit all of the above before touching the network.
 
@@ -114,8 +145,8 @@ then each DAO.
 
 1. **Database**: apply the migration and refresh grants.
    ```sh
-   ./db/migrate.sh "$ADMIN_DATABASE_URL"
-   ./db/grant-permissions.sh "$ADMIN_DATABASE_URL"
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/migrate.sh
+   DATABASE_URL="$ADMIN_DATABASE_URL" ./db/grant-permissions.sh
    ```
 2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`, the name `pnpm generate`
    writes into `packages/goldsky/pipelines/builder-stellar-events.yaml`): apply it **in place**
@@ -126,6 +157,12 @@ then each DAO.
       ```sh
       node scripts/upgrade-contract.mjs <module> configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
       ```
+      Run it from the pushed release tag with `WASM_DIR=target/wasm-build/<built-commit>/wasm` (default
+      `target/wasm32v1-none/release`). Before it sends anything, it refuses a checkout without a release tag
+      that `origin` has, uncommitted changes to the build inputs (`contracts/`, `Cargo.*`,
+      `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/`, and `releases/`), contract changes made after
+      `releases/hashes.json` was written, and a WASM whose sha256 is not the one that file publishes for the
+      module ([reproducible builds](REPRODUCIBLE_BUILDS.md#what-the-upload-script-checks)).
       Argument order for DAO modules is **DAO config, then network config**. The DAO config's `nonce` must
       have an artifact (`deploys/<label>-<network>-dao-<nonce>.json`; each artifact's `.config` is the config
       it was deployed with). For a platform release, pass a **launched** DAO: a DAO still in setup is
@@ -156,8 +193,8 @@ then each DAO.
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
-   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`).
-     Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
+   - The Treasury upgrades itself through its self-call allowlist (`upgrade`, `migrate`); the Governor through an
+     ordinary action that calls `governor.upgrade`. Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
      registry on each read.
    - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
      runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
@@ -171,6 +208,8 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 stellar contract invoke --id <module-address> --network <network> --source-account <any> --send no -- wasm_hash  # <to-hash>
 ```
 
+- Anyone can rebuild the release and compare it with the hash the proposal names:
+  `node scripts/verify-wasm.mjs <tag>` ([reproducible builds](REPRODUCIBLE_BUILDS.md#verify-a-release)).
 - Read model: `manager.module_versions` shows the new hash/version and `upgrade_count`; the activity feed shows
   "Contract upgraded to version …".
 - Exercise the new behaviour once on the upgraded DAO (e.g. rename) and confirm it reaches the app after indexing.
@@ -183,9 +222,12 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - **Code**: there is no downgrade button. To go back, the Manager admin approves the reverse path
   (`approve_upgrade(<new>, <old>)`; the old hash must not be revoked) and each DAO upgrades again (by proposal
   when live). If storage was migrated, the old code must still read the new layout; otherwise don't roll back.
+  Never roll the **Governor** or the **Treasury** back across a layout change. Code with a lower
+  `STORAGE_VERSION` than the stored one accepts only recovery proposals, if it has the recovery path; releases
+  before it (all on `STORAGE_VERSION` 1) have none, and the module could no longer run proposals.
 - **Stop further adoption** of a bad release: `revoke_implementation(<to-hash>)`. Revocation blocks new upgrades
   and launches of pending DAOs on that hash; it does not change DAOs already on it.
-- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file.
+- **Database**: `./db/rollback.sh --steps 1` runs the matching rollback file, after you type the database name.
 - Registry records cannot be edited or deleted; a mistaken version string needs a new build (new hash).
 
 ## Manager upgrades
@@ -221,7 +263,13 @@ registry only vouches for Manager-approved hashes.
 **Failed assurance drives.** An open drive freezes its DAO's upgrades (every admin is the Treasury, which can't
 act before launch). If a drive fails and the ClaimMinter's refund code is broken, the launch admin recorded in
 `PendingDao` runs `manager.recover_claims(token, from_hash, to_hash)` to move that DAO's ClaimMinter to a
-Manager-approved `claims` hash; it works only once the drive has failed and never on a live module
+`ClaimMinter` hash. It works only once the drive has failed and never on a live module. The Manager admin
+registers the fix, approves the path from the running hash and announces the fix as latest for `ClaimMinter`
+(`set_latest_implementation`; otherwise `UpgradeNotLatest`, 7131). The upgrade then waits out the Manager's notice
+after the later of the approval and the announcement (`upgrade_delay()` ledgers, never less than seven days of
+ledgers), and the same notice in seconds (five per ledger, never less than seven days) after the drive's deadline
+(`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
+latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
 (SECURITY_MODEL, Assurance launch).
 
 ## Approving upgrade paths for DAO modules
@@ -231,6 +279,8 @@ own proposal is its notice and a migration may have to pass through intermediate
 Manager admin: **approve only the paths the `migrate` code supports.** Approve v1 → v2 and v2 → v3 when v3's
 `migrate` assumes the v2 layout; approve v1 → v3 directly only when v3's `migrate` handles the v1 layout. A DAO
 two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
-`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone (e2e
-`dao_module_chains_two_upgrades_in_one_proposal`). `migrate()` refuses a no-op (`NothingToMigrate`), so include
+`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone, one step per
+proposal, each followed by a separate `treasury.migrate()` call (e2e
+`dao_module_chains_two_upgrades_in_one_proposal`). Never approve a Governor or Treasury path to a lower
+`STORAGE_VERSION` (see Rolling back). `migrate()` refuses a no-op (`NothingToMigrate`), so include
 it only for steps that change the storage version.

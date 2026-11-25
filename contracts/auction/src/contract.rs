@@ -19,7 +19,8 @@ use crate::{
         emit_reserve_price_updated, emit_time_buffer_updated,
     },
     helpers::{
-        create_auction, process_bid, refund_bid, settle_auction_internal, validate_bid_amount,
+        create_auction, process_bid, refund_bid, require_stellar_asset, settle_auction_internal,
+        start_next_or_pause, validate_bid_amount,
     },
     storage::{
         clear_pending_refund, get_auction, get_config, get_pending_refund, has_auction,
@@ -29,12 +30,17 @@ use crate::{
     },
 };
 
+/// A DAO's continuous auction: one membership token at a time, minted into
+/// this contract's custody and sold for the payment token, with the proceeds
+/// going to the Treasury. See the crate documentation for the lifecycle.
 #[contract]
 pub struct DaoAuctionContract;
 
+/// The Auction's public interface. Each function is documented where it is
+/// implemented, which is also the text the generated bindings carry.
 #[contracttrait]
 pub trait DaoAuctionContractTrait {
-    /// Initialize the auction contract
+    /// Deploy-time setup (the Manager, at `create_dao` or `create_module`).
     fn __constructor(
         e: &Env,
         admin: Address,
@@ -49,49 +55,62 @@ pub trait DaoAuctionContractTrait {
         current_hash: BytesN<32>,
     );
 
-    /// Create a bid with SAC token. `comment` is optional (empty for none),
-    /// at most `MAX_COMMENT_LENGTH` bytes, and only emitted in `BidPlaced`.
+    /// Bid on the current auction (the bidder signs).
     fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128, comment: String);
 
-    /// Settle current auction and create new one
+    /// Settle the ended auction and start the next one, or pause when the
+    /// Auction may no longer mint (anyone, while unpaused).
     fn settle_and_create_new(e: &Env);
 
-    /// Settle an ended auction while paused (no new auction is created)
+    /// Settle the ended auction without starting another (anyone, while
+    /// paused).
     fn settle_auction(e: &Env);
 
-    /// Get current auction state
+    /// The current auction (read-only).
     fn get_auction(e: &Env) -> AuctionState;
 
-    /// Get auction configuration
+    /// The auction configuration (read-only).
     fn get_config(e: &Env) -> AuctionConfig;
 
-    /// Cancel the current auction (admin only, when paused)
+    /// Cancel the current auction and refund its leader (the admin, while
+    /// paused).
     fn cancel_auction(e: &Env);
 
-    /// Pull a refund whose push failed (bidder auth required). Panics
-    /// `NoPendingRefund` if the balance is zero.
+    /// Send a token this contract holds but is not auctioning to the
+    /// Treasury (the admin, while paused).
+    fn recover_token(e: &Env, token_id: u32);
+
+    /// Pull a refund whose push failed (the bidder signs).
     fn withdraw_refund(e: &Env, bidder: Address);
 
-    /// Refund credited to `bidder` and not yet withdrawn.
+    /// Refund credited to `bidder` and not yet withdrawn (read-only).
     fn pending_refund(e: &Env, bidder: Address) -> i128;
 
-    // Configuration setters (admin only, when paused)
+    /// Set the duration of later auctions (the admin, while paused).
     fn set_duration(e: &Env, duration: u64);
+    /// Set the reserve price of later auctions (the admin, while paused).
     fn set_reserve_price(e: &Env, reserve_price: i128);
+    /// Set the minimum bid increment (the admin, while paused).
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
+    /// Set the anti-sniping time buffer (the admin, while paused).
     fn set_time_buffer(e: &Env, time_buffer: u64);
+    /// Set the payment token before the first bid (the admin, while paused).
     fn set_payment_token(e: &Env, payment_token: Address);
+    /// One-shot launch, Setup to Live (the Manager).
     fn launch(e: &Env, treasury: Address, start: bool);
-    /// Manager-only: hand the admin to the Treasury early and stay in Setup.
+    /// Hand the admin to the Treasury early and stay in Setup (the Manager).
     fn handoff(e: &Env, treasury: Address);
     /// The configured payment token (`DaoModule::payment_asset`).
     fn payment_asset(e: &Env) -> Address;
     /// DAO-owned keys for the renewal sweep (`DaoModule::renewal_keys`).
     fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> RenewalPage;
+    /// Replace this contract's code with a Manager-approved hash (the admin).
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
-    /// Advance the storage layout after an upgrade (admin only).
+    /// Advance the storage layout after an upgrade (the admin).
     fn migrate(e: &Env);
+    /// The release version of the running code (read-only).
     fn version(e: &Env) -> String;
+    /// The running WASM hash (read-only).
     fn wasm_hash(e: &Env) -> BytesN<32>;
     /// Storage-layout version of the data held by this contract.
     fn storage_version(e: &Env) -> u32;
@@ -99,14 +118,23 @@ pub trait DaoAuctionContractTrait {
     fn admin(e: &Env) -> Address;
 }
 
+/// OpenZeppelin `Pausable`: `paused`, `pause`, and `unpause`. While paused,
+/// bids and `settle_and_create_new` are refused; the setters,
+/// `settle_auction`, `cancel_auction`, and `recover_token` need the pause.
 #[contractimpl(contracttrait)]
 impl Pausable for DaoAuctionContract {
+    /// Pause bidding (`caller` must be the admin and sign; `Unauthorized`).
+    /// A running auction keeps its leader and end time: it settles with
+    /// `settle_auction` once it ends, or the admin cancels it.
     fn pause(e: &Env, caller: Address) {
         Self::require_caller_is_admin(e, &caller);
         common::ttl::extend_instance(e);
         pausable::pause(e);
     }
 
+    /// Resume bidding (`caller` must be the admin and sign; Live only). If no
+    /// auction is running, starts one, which needs the Auction's mint
+    /// allowance: with none left the call fails at the mint and stays paused.
     fn unpause(e: &Env, caller: Address) {
         // Nothing holds mint authority before launch, so unpausing would fail at mint.
         common::lifecycle::require_live(e);
@@ -179,6 +207,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         common::ttl::extend_instance(e);
     }
 
+    /// The configured payment token (`DaoModule::payment_asset`; read-only).
+    /// The Manager compares it with the asset recorded at `create_dao`
+    /// before launch.
     fn payment_asset(e: &Env) -> Address {
         get_config(e).payment_token
     }
@@ -195,6 +226,21 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         }
     }
 
+    /// Deploy-time setup, run once by the Manager at `create_dao` or
+    /// `create_module`. Starts paused and in Setup.
+    ///
+    /// * `admin` - the launch admin; becomes the Treasury at launch
+    /// * `token_contract` - the DAO's membership token, which mints each
+    ///   auctioned token against this contract's allowance
+    /// * `treasury` - receives the proceeds and unsold tokens
+    /// * `duration` - seconds per auction, 5 minutes to 30 days (`InvalidConfig`)
+    /// * `reserve_price` - smallest first bid, at least `MIN_RESERVE_PRICE` (`InvalidBid`)
+    /// * `min_bid_increment_percent` - 1 to 100 (`InvalidConfig`)
+    /// * `time_buffer` - 1 second to 1 day (`InvalidTimeBuffer`)
+    /// * `payment_token` - a Stellar Asset Contract (`NotStellarAsset`)
+    /// * `manager`, `current_hash` - upgrade approvals and the running hash
+    ///
+    /// Emits `AuctionInitialized`.
     fn __constructor(
         e: &Env,
         admin: Address,
@@ -228,6 +274,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if time_buffer == 0 || time_buffer > MAX_TIME_BUFFER {
             panic_with_error!(e, AuctionError::InvalidTimeBuffer);
         }
+        require_stellar_asset(e, &payment_token);
 
         common::admin::init(e, &admin);
 
@@ -263,32 +310,54 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         );
     }
 
+    /// Replaces this contract's WASM with `to_hash` (admin only: the launch
+    /// admin in Setup, the Treasury by proposal once live). `from_hash` must
+    /// be the running hash, and the Manager must have approved the
+    /// `from_hash` to `to_hash` step (`common::upgrade::apply`).
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         common::admin::require_admin(e);
         common::upgrade::apply(e, &Self::manager(e), &from_hash, &to_hash);
     }
 
+    /// Advances the storage layout to this code's `STORAGE_VERSION` after an
+    /// upgrade (admin only; `NothingToMigrate` when already current).
     fn migrate(e: &Env) {
         common::admin::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
+    /// Storage-layout version of the data held by this contract (read-only).
     fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
 
+    /// The module admin: the launch admin in Setup, the Treasury once live
+    /// (read-only).
     fn admin(e: &Env) -> Address {
         common::admin::admin(e)
     }
 
+    /// The release version registered in the Manager for the running WASM
+    /// (read-only; `ImplementationNotFound` if the registry has none).
     fn version(e: &Env) -> String {
         common::upgrade::version(e, &Self::manager(e))
     }
 
+    /// The running WASM hash (read-only).
     fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
     }
 
+    /// Bid `amount` of the payment token on `token_id`, the token being
+    /// auctioned (`bidder` signs; refused while paused). The bid must meet
+    /// the reserve price (first bid) or the last bid plus the minimum
+    /// increment, and arrive before the end time (`AuctionOver`). The amount
+    /// moves into this contract, the previous leader is refunded (pushed, or
+    /// credited to `PendingRefund` if the push fails), and a bid inside the
+    /// time buffer extends the end time, at most `MAX_AUCTION_EXTENSIONS`
+    /// times. `comment` is optional (empty for none), at most
+    /// `MAX_COMMENT_LENGTH` bytes, and only emitted in `BidPlaced`. The first
+    /// bid locks the payment token.
     #[when_not_paused]
     fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128, comment: String) {
         bidder.require_auth();
@@ -324,35 +393,48 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         process_bid(e, &mut auction, &config, &bidder, amount, &comment);
     }
 
-    /// DESIGN NOTE: settle_and_create_new is intentionally permissionless.
-    /// Anyone can call this after an auction ends to settle it and create the next one.
-    /// This is a deliberate design choice to ensure auctions continue automatically.
-    /// The only griefing vector is settling at exact end time, which is minimal impact.
+    /// Settle the ended auction and start the next one (anyone may call;
+    /// refused while paused). Never before the end time (`AuctionActive`).
+    /// The token goes to the winner and the bid to the Treasury, or the
+    /// token to the Treasury when nobody bid.
+    ///
+    /// If the Token will not let the Auction mint the next token (its
+    /// allowance is 0, because a proposal lowered it or the last mint of a
+    /// finite allowance spent it), the settlement still completes and the
+    /// Auction pauses itself instead of starting another auction (OpenZeppelin
+    /// `Paused`). The admin's `unpause` resumes once an allowance is granted.
     #[when_not_paused]
     fn settle_and_create_new(e: &Env) {
         common::ttl::extend_instance(e);
         settle_auction_internal(e);
-        create_auction(e);
+        start_next_or_pause(e);
     }
 
-    /// Permissionless like `settle_and_create_new`, and likewise only after
-    /// the auction has ended (`AuctionActive` otherwise).
+    /// Settle the ended auction without starting another (anyone may call;
+    /// only while paused). Like `settle_and_create_new`, never before the
+    /// end time (`AuctionActive`).
     #[when_paused]
     fn settle_auction(e: &Env) {
         common::ttl::extend_instance(e);
         settle_auction_internal(e);
     }
 
+    /// The current or last auction (read-only; `NotLaunched` before the
+    /// first one).
     fn get_auction(e: &Env) -> AuctionState {
         get_auction(e)
     }
 
+    /// The auction configuration (read-only).
     fn get_config(e: &Env) -> AuctionConfig {
         get_config(e)
     }
 
-    /// Cancel the current auction and refund the highest bidder (admin only,
-    /// when paused). The emergency exit for a running auction.
+    /// Cancel the current auction (the admin, while paused;
+    /// `AuctionSettled` if it already ended that way). The emergency exit
+    /// for a running auction: the leader's bid is refunded (pushed, or
+    /// credited to `PendingRefund`), the token goes to the Treasury, and no
+    /// new auction starts until `unpause`. Emits `AuctionCancelled`.
     #[when_paused]
     fn cancel_auction(e: &Env) {
         let admin = common::admin::require_admin(e);
@@ -411,6 +493,53 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_auction_cancelled(e, auction.token_id, 0, &admin); // reason: 0 = admin cancelled
     }
 
+    /// Send `token_id`, a membership token this contract holds but is not
+    /// auctioning, to the Treasury (the admin, while paused). For a token
+    /// someone transferred here directly, which no auction records. The
+    /// token of an auction that has not settled is refused
+    /// (`TokenInAuction`): it belongs to the winner or, after
+    /// `cancel_auction`, to the Treasury. The Token's `Transfer` records the
+    /// move; no auction event is emitted.
+    ///
+    /// The Token refuses to unregister the Auction while it holds tokens,
+    /// so without this anyone could keep it registered by sending it one.
+    #[when_paused]
+    fn recover_token(e: &Env, token_id: u32) {
+        common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        // The running auction's token is owed to its winner or, when
+        // cancelled, to the Treasury through `cancel_auction`.
+        if has_auction(e) {
+            let auction = get_auction(e);
+            if !auction.settled && auction.token_id == u128::from(token_id) {
+                panic_with_error!(e, AuctionError::TokenInAuction);
+            }
+        }
+        let config = get_config(e);
+        let this = e.current_contract_address();
+        e.authorize_as_current_contract(soroban_sdk::vec![
+            e,
+            InvokerContractAuthEntry::Contract(SubContractInvocation {
+                context: ContractContext {
+                    contract: config.token_contract.clone(),
+                    fn_name: Symbol::new(e, "transfer"),
+                    args: soroban_sdk::vec![
+                        e,
+                        this.to_val(),
+                        config.treasury.to_val(),
+                        token_id.into_val(e)
+                    ],
+                },
+                sub_invocations: soroban_sdk::vec![e],
+            }),
+        ]);
+        NftClient::new(e, &config.token_contract).transfer(&this, &config.treasury, &token_id);
+    }
+
+    /// Pull the refund credited to `bidder` when a push refund failed
+    /// (`bidder` signs; `NoPendingRefund` when there is none). The balance is
+    /// cleared before the transfer, and a failing transfer reverts both.
+    /// Emits `RefundWithdrawn`.
     fn withdraw_refund(e: &Env, bidder: Address) {
         bidder.require_auth();
         common::ttl::extend_instance(e);
@@ -451,10 +580,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_refund_withdrawn(e, &bidder, amount);
     }
 
+    /// Refund credited to `bidder` and not yet withdrawn (read-only).
     fn pending_refund(e: &Env, bidder: Address) -> i128 {
         get_pending_refund(e, &bidder)
     }
 
+    /// Set the duration of later auctions, 5 minutes to 30 days (the admin,
+    /// while paused; `InvalidConfig`). Emits `DurationUpdated`.
     #[when_paused]
     fn set_duration(e: &Env, duration: u64) {
         let admin = common::admin::require_admin(e);
@@ -470,6 +602,8 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_duration_updated(e, duration, &admin);
     }
 
+    /// Set the reserve price of later auctions, at least `MIN_RESERVE_PRICE`
+    /// (the admin, while paused; `InvalidBid`). Emits `ReservePriceUpdated`.
     #[when_paused]
     fn set_reserve_price(e: &Env, reserve_price: i128) {
         let admin = common::admin::require_admin(e);
@@ -486,6 +620,8 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_reserve_price_updated(e, reserve_price, &admin);
     }
 
+    /// Set the minimum bid increment, 1 to 100 percent (the admin, while
+    /// paused; `InvalidConfig`). Emits `MinBidIncrementUpdated`.
     #[when_paused]
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32) {
         let admin = common::admin::require_admin(e);
@@ -501,6 +637,8 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_min_bid_increment_updated(e, min_bid_increment_percent, &admin);
     }
 
+    /// Set the anti-sniping time buffer, 1 second to 1 day (the admin, while
+    /// paused; `InvalidTimeBuffer`). Emits `TimeBufferUpdated`.
     #[when_paused]
     fn set_time_buffer(e: &Env, time_buffer: u64) {
         let admin = common::admin::require_admin(e);
@@ -516,6 +654,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         emit_time_buffer_updated(e, time_buffer, &admin);
     }
 
+    /// Set the payment token (the admin, while paused). It must be a
+    /// Stellar Asset Contract (`NotStellarAsset`), and it can no longer
+    /// change once anyone has bid (`InvalidConfig`), so bids and refunds
+    /// always use one asset. Emits `PaymentTokenUpdated`.
     #[when_paused]
     fn set_payment_token(e: &Env, payment_token: Address) {
         let admin = common::admin::require_admin(e);
@@ -523,6 +665,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if is_payment_token_locked(e) {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
+        require_stellar_asset(e, &payment_token);
 
         let mut config = get_config(e);
         config.payment_token = payment_token.clone();

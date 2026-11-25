@@ -1,15 +1,18 @@
 import {Address} from '@stellar/stellar-sdk';
 
     /**
- * Metadata errors (block `common::error::codes::METADATA`).
+ * Metadata errors (block `common::error::codes::METADATA`). Entry points
+ * return them as `Result` errors, or panic with them where they cannot
+ * return one (the constructor, `launch`, `handoff`).
  */
 export const Error = {
   /**
-   * Settings missing (contract not initialized)
+   * Settings or profile state missing (contract not initialised)
    */
   7301 : { message: "NotInitialized" },
   /**
-   * `launch` treasury differs from the treasury wired at construction
+   * `launch` or `handoff` was given a Treasury other than the one wired at
+   * construction
    */
   7302 : { message: "TreasuryMismatch" },
   /**
@@ -21,7 +24,7 @@ export const Error = {
    */
   7304 : { message: "PropertyHasNoItems" },
   /**
-   * More than 16 properties
+   * More than `MAX_PROPERTIES` (16) properties
    */
   7305 : { message: "TooManyProperties" },
   /**
@@ -37,11 +40,12 @@ export const Error = {
    */
   7308 : { message: "TooManyItems" },
   /**
-   * A paginated/bump `limit` above `MAX_PAGE`
+   * `get_items` was given a `limit` above `MAX_PAGE`
    */
   7309 : { message: "LimitTooHigh" },
   /**
-   * The token does not exist (or has no attributes yet)
+   * `regenerate`: the token does not exist. `get_attributes`: the token
+   * has no selections (it does not exist, or was minted before artwork)
    */
   7310 : { message: "TokenNotMinted" },
   /**
@@ -49,11 +53,13 @@ export const Error = {
    */
   7311 : { message: "AlreadySeeded" },
   /**
-   * A settings or artwork string is longer than its cap
+   * A settings or artwork string, or the `token_uri` name, is longer than
+   * its cap
    */
   7312 : { message: "StringTooLong" },
   /**
-   * An artwork name contains `"`, `\` or a control character
+   * A string copied into the token JSON (an artwork name, the renderer
+   * base or the `token_uri` name) contains `"`, `\` or a control character
    */
   7313 : { message: "InvalidName" },
   /**
@@ -77,13 +83,17 @@ export const Error = {
    */
   7318 : { message: "TokenUriTooLong" },
   /**
-   * The token exists but was minted before any artwork; `regenerate` seeds it.
+   * `token_uri`: the token has no selections, because it was minted before
+   * any artwork (`regenerate` seeds it) or was never minted (`token_uri`
+   * does not check existence)
    */
   7319 : { message: "NotSeeded" }
 }
 
 /**
- * Event: PropertyAdded
+ * A new property, from `add_properties`, `delete_and_recreate_properties`
+ * or the constructor. `property_id` is its index (ids restart at 0 after a
+ * reset). Items are not emitted; read them with `get_items`.
  */
 export interface PropertyAddedEvent {
   name: "PropertyAdded";
@@ -94,7 +104,9 @@ export interface PropertyAddedEvent {
 }
 
 /**
- * Event: SeedGenerated
+ * A token's trait selections, from `on_minted` or `regenerate`.
+ * `selections` is `[num_properties, item_index..]`, as `get_attributes`
+ * returns it. Not emitted for a token minted before any artwork.
  */
 export interface SeedGeneratedEvent {
   name: "SeedGenerated";
@@ -137,7 +149,9 @@ export interface SeedsGeneratedEvent {
 }
 
 /**
- * Event: PropertiesReset
+ * The admin cleared every property (`delete_and_recreate_properties`); the
+ * new properties follow as `PropertyAdded` from id 0. Tokens keep their
+ * stored selections.
  */
 export interface PropertiesResetEvent {
   name: "PropertiesReset";
@@ -151,6 +165,7 @@ export interface PropertiesResetEvent {
 
 /**
  * Emitted once when the Manager launches the metadata module (Setup -> Live).
+ * `treasury` is the admin from then on.
  */
 export interface MetadataLaunchedEvent {
   name: "MetadataLaunched";
@@ -160,7 +175,8 @@ export interface MetadataLaunchedEvent {
 }
 
 /**
- * Event: MetadataInitialized
+ * Emitted once by the constructor, when the Manager deploys the contract
+ * in `create_dao`. `admin` is the launch admin.
  */
 export interface MetadataInitializedEvent {
   name: "MetadataInitialized";
@@ -172,7 +188,7 @@ export interface MetadataInitializedEvent {
 }
 
 /**
- * Event: RendererBaseUpdated
+ * The admin changed the image compositor URL (`update_renderer_base`).
  */
 export interface RendererBaseUpdatedEvent {
   name: "RendererBaseUpdated";
@@ -183,15 +199,23 @@ export interface RendererBaseUpdatedEvent {
 }
 
 /**
- * Struct: Item
+ * One value of a property (a trait), as `get_items` returns it.
  */
 export interface Item {
+  /**
+   * At most `common::MAX_ARTWORK_NAME_LENGTH` bytes, without `"`, `\` or
+   * control characters (it is copied into the token JSON).
+   */
   name: string;
+  /**
+   * Index of the item's [`IpfsGroup`] (`get_ipfs_group`), below
+   * `MAX_IPFS_GROUPS`.
+   */
   reference_slot: number;
 }
 
 /**
- * Struct: Property
+ * A property (trait type) with all of its items, in item order.
  */
 export interface Property {
   items: Array<Item>;
@@ -199,30 +223,48 @@ export interface Property {
 }
 
 /**
- * Struct: Settings
+ * The Token this contract serves and where token images are rendered.
  */
 export interface Settings {
   /**
    * Base URL of the image compositor; `token_uri` points `image` here.
    */
   renderer_base: string;
+  /**
+   * The Token: the only caller of the mint hooks.
+   */
   token: string;
 }
 
 /**
- * Struct: IpfsGroup
+ * The IPFS folder (`base_uri`) and file extension a batch of item images
+ * was uploaded with. Items point at their group by `reference_slot`; the
+ * off-chain compositor builds each image URL from it.
  */
 export interface IpfsGroup {
+  /**
+   * At most `common::MAX_STRING_LENGTH` bytes.
+   */
   base_uri: string;
+  /**
+   * At most `common::MAX_EXTENSION_LENGTH` bytes.
+   */
   extension: string;
 }
 
 /**
- * Struct: ItemParam
+ * An item to add with `add_properties`.
  */
 export interface ItemParam {
+  /**
+   * Whether `property_id` counts from the first property this call adds.
+   */
   is_new_property: boolean;
   name: string;
+  /**
+   * The property's index: among the existing properties, or, with
+   * `is_new_property`, among the `names` of the same call.
+   */
   property_id: number;
 }
 
