@@ -302,6 +302,10 @@ all use the same registration, allowance and upgrade path.
 
   The unit is distinct claimers, because the goal is "people who show up". The tree fixes the addresses, so
   nobody can add sybil leaves, and partial claims count once per address.
+- **`close_list(list_id)`** (the admin: the launch admin in Setup, the Treasury by proposal once Live) ends a list
+  early by setting its `expires_at` to now, and emits `ListClosed { list_id, minted, total }`. A free Setup list stays
+  claimable after launch, so its unclaimed allocations are founder supply the DAO may want to stop; this is how. The
+  assurance list can't be closed before launch (`AssuranceNotAllowed`), and an expired list fails with `ListExpired`.
 - **`release(list_id)`** moves the list's escrow to the Treasury wired at construction, so nobody can redirect it.
   `launch_dao` and `launch_when_ready` call it in the same transaction, right after every module goes Live, so
   the fees arrive with the launch (R4). It stays public, and refuses unless the Token is Live.
