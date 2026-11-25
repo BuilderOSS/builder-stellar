@@ -32,7 +32,7 @@ You receive one token for each purchase. To buy another, repeat the purchase, up
 
 ### Open a pool by proposal
 
-5. **Open Manage → Market.** Choose **Manage** in the tribe's navigation, then **Market**. Or choose **Market settings** on the Market page. The page is headed **Manage the marketplace**.
+5. **Open Manage → Market.** Choose **Manage** in the tribe's navigation, then **Market**. Or choose **Market settings** on the Market page. Both open the page headed **Market settings**.
 
    <Shot id="marketplace/pools/05" alt="The Manage the marketplace page with the market status notice and the Propose a quick-buy pool section" />
 
@@ -62,7 +62,7 @@ To sell more tokens after a pool sells out or closes, members open a new pool by
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  **Opening** runs two calls when the proposal is executed: `increase_mint_allowance` on the tribe's Token contract, then `open_pool` on the Marketplace contract. Each pool reserves part of the market's mint allowance for itself, so one pool can't use up another's. Opening fails if the market is paused, the closing time has passed, any limit is zero, the allowance isn't enough, or 8 pools are already open.
+  **Opening** runs two calls when the proposal is executed: `increase_mint_allowance` on the tribe's Token contract, then `open_pool` on the Marketplace contract. Each pool reserves part of the market's mint allowance for itself, so one pool can't use up another's. Opening fails if the market is paused, the closing time has passed, any limit is zero, or the allowance isn't enough. It also fails if the market already has 8 pools that are open, or closed but not yet swept empty.
 
   **Stocking** calls `restock`, which anyone can call until the pool closes. It mints the pool's next batch, at most 42 tokens, into the Marketplace contract. Tokens held by the market carry no votes.
 
@@ -79,10 +79,10 @@ To sell more tokens after a pool sells out or closes, members open a new pool by
 
 - **"Nothing is stocked in this pool right now. Restock it first."** Choose **Stock this pool**, then buy.
 - **"You already bought the most this pool allows per wallet."** The pool's per-wallet limit is reached for this wallet.
-- **The purchase can't be prepared, and the pool still has tokens.** The pool may have reached its sales limit for the current period (error 7722). Try again when the next period starts. The **Sales limit** in the pool's details shows the period.
+- **"This pool has sold as many tokens as it can for now. Try again when its next sales period starts."** The pool reached its sales limit for the current period (error 7722). The **Sales limit** in the pool's details shows the period.
 - **"This pool changed or closed. Refresh before signing."** or **"This pool has closed."** The pool sold out, closed, or passed its closing time. Reload the page.
 - **"Pools sell only from a launched, unpaused marketplace."** The market is paused. Purchases resume when a vote reopens it.
-- **"The marketplace is paused."** on Manage → Market. A pool can't open while the market is paused. Add **Reopen the market** before the pool in the same proposal, or wait until a reopening is executed.
+- **"The market is paused."** on Manage → Market. A pool can't open while the market is paused. Add **Reopen the market** before the pool in the same proposal, or wait until a reopening is executed.
 - **"Choose a closing time in the future, allowing time for the vote and execution."** Pick a later closing time. If the time passes before the proposal is executed, opening the pool fails.
 - **"Pool #3 is still open: close it first, then sweep it."** Close the pool in one proposal, then sweep it once it is closed.
 

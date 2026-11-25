@@ -42,7 +42,7 @@ The **Link** field sets the tribe's address, /dao/ followed by the link. During 
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  The name and symbol are stored on the tribe's Token contract (`set_metadata`). The description, links and image are stored together as one profile on the tribe's Metadata contract (`update_profile`). The image itself is uploaded first, and the profile stores its address. The link is stored by the platform's Manager contract (`change_slug`).
+  The name and symbol are stored on the tribe's Token contract (`set_metadata`). The description, links and image are saved together as one profile by the tribe's Metadata contract (`update_profile`), which publishes the profile in an event and stores its hash. The image itself is uploaded first, and the profile holds its address. The link is stored by the platform's Manager contract: `update_pending_slug` during setup, and `change_slug` after launch.
 
   The profile update names the revision it replaces. If someone else changes the profile first, the update fails, so one change can't overwrite another by accident.
 

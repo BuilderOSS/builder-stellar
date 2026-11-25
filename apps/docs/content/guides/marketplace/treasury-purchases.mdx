@@ -19,7 +19,7 @@ Members can decide by vote that the tribe's [Treasury](/reference/glossary#treas
 
    <Shot id="marketplace/treasury-purchases/02" alt="The Listed token ID field with a token number entered" />
 
-3. **Add the purchase to your proposal.** Choose **Add the purchase to proposal**. The app reads the live listing and checks that it is open and hasn't ended. It then prepares the Treasury's permission for exactly the listing's payments, and asks the Treasury contract to check it. The purchase joins your draft as one item, "Treasury buys listed token #12", with two steps: the authorization, then the purchase at no more than the current price.
+3. **Add the purchase to your proposal.** Choose **Add the purchase to proposal**. The app reads the live listing and checks that it is open and hasn't ended. It then prepares the Treasury's permission for exactly the listing's payments, and asks the Treasury contract to check it. The purchase joins your draft as one item, "Treasury buys listed token #12", with two steps: the authorisation, then the purchase at no more than the current price.
 
    <Shot id="marketplace/treasury-purchases/03" alt="The proposal draft with the Treasury buys listed token item and its two steps" />
 
@@ -56,7 +56,7 @@ After execution, the token is held by the Treasury. Tokens the Treasury holds ca
 - **"Token #12 has no open secondary listing."** The token isn't listed now. Check the number on the Market page.
 - **"This listing has expired and cannot be bought."** The listing has ended. The seller can list the token again.
 - **"The Treasury cannot buy its own listing."** The Treasury is the seller of this listing.
-- **"The Treasury rejected this authorization tree."** The Treasury's check of the payments failed. Nothing was added. Reload the page and try again.
+- **"The Treasury rejected this authorisation tree."** The Treasury's check of the payments failed. Nothing was added. Reload the page and try again.
 - **The executed proposal failed.** Check that the listing is still open at the same price, and that the Treasury holds enough of the payment asset. The proposal stays queued until it expires, so it can be executed again once the problem is fixed. If the listing changed, propose a new purchase.
 
 For an error code, see [Error messages](/reference/error-messages/).
