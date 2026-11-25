@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   createEmptyDraft,
@@ -8,6 +8,10 @@ import {
   selectHasDraft,
   useProposalComposerStore
 } from './proposal-composer-store';
+
+// Rehydrating the store imports the action registry without waiting for it. Load it here first,
+// so that import finishes before this file ends (Vitest 4 reports a module loaded after teardown).
+beforeAll(() => import('@/lib/proposal-actions/registry'));
 
 const daoId = 'dao-wallet-scope-test';
 
