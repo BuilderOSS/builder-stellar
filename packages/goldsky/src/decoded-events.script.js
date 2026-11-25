@@ -171,7 +171,7 @@ function invoke(data) {
     // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
     ProfileUpdated: ['seq'], RendererBaseUpdated: [],
     // ClaimMinter (role claims): merkle claim lists, paid or free, with an optional assurance escrow.
-    ListOpened: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
+    ListOpened: ['list_id'], ListClosed: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
     // Marketplace
     MarketplaceInitialized: ['token', 'admin'], SecondaryListingCreated: ['token_id'],
     ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
@@ -256,7 +256,7 @@ function invoke(data) {
       var canonical = toCanonical(name);
       if (/^(MintBatchWithMinter|MetadataUpdated|DaoRecoveryChanged|DaoTransfer|TransfersLockChanged|MembersOnlyDelegationChanged|TransferAgentChanged|AgentTransfer)$/.test(canonical)) return 'token';
       if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PendingSlug|Slug|ModuleCreated|AssuranceOpened)/.test(canonical)) return 'manager';
-      if (/^(ListOpened|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
+      if (/^(ListOpened|ListClosed|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
       if (/^(Marketplace|Listing|Secondary|PaymentAsset|Pool)/.test(canonical)) return 'marketplace';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
