@@ -29,7 +29,7 @@ The person who made a proposal can withdraw it before voting closes. A cancelled
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Cancelling calls `cancel` on the tribe's Governor contract. The Governor accepts it only from the proposer's wallet, and only while the proposal is pending or active. It then marks the proposal as cancelled, which can't be undone. Votes already cast stay on record, but the proposal can't pass, be queued, or run.
 
   You pay the Stellar network fee in XLM. Tribe Builder takes no fee. The cancellation is public on chain once confirmed.

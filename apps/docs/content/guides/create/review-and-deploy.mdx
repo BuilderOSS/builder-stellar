@@ -37,7 +37,7 @@ Your tribe is now in Setup. On its page you see "You are the launch admin" and a
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Create tribe** sends one transaction to the Tribe Builder factory contract (the Manager). In that transaction the Manager deploys the four core contracts: the membership token, the artwork and profile contract (Metadata), the Governor (proposals and votes), and the [Treasury](/reference/glossary#treasury). It also deploys each module your membership choice needs: an auction, a market, a claims contract, or a combination. It registers each module on the token and applies your membership rules and voting rules.
 
   The addresses are worked out in advance from your wallet and a random number saved with the draft (a nonce). If you have to try again, the app reuses the same settings and addresses, so the tribe is not created twice. You can see the transaction, your wallet, the nonce, and each contract address under **Technical details**.

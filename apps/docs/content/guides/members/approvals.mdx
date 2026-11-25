@@ -39,7 +39,7 @@ Choose **Cancel token approval** ("Remove permission to transfer this token"). T
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Approve** calls `approve` on the tribe's Token contract, with you as owner, the spender, the token, and the expiration ledger. Each token has one single-token approval at a time, so a new approval replaces the old one. It is cleared when the token moves, and it ends at the expiration ledger.
 
   **Cancel token approval** calls `approve` again with an expiration of 0, which removes the single-token approval. It doesn't change collection-wide operator approvals (`approve_for_all`), which this page doesn't create.

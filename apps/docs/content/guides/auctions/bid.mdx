@@ -39,7 +39,7 @@ A bid placed close to the end extends the auction, so other bidders have time to
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Placing a bid calls `create_bid` on the tribe's Auction contract. The call checks the amount before any payment moves: the first bid must meet the starting price (the reserve price), and each later bid must be at least the top bid plus the minimum increase. Your bid then moves from your wallet to the Auction contract, which holds it while you lead.
 
   In the same transaction, the Auction contract sends the previous top bid back to that bidder. If that transfer fails, the amount is recorded as a pending refund for them instead, so one bidder can never block the auction.

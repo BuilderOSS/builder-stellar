@@ -32,7 +32,7 @@ A tribe's membership token is an NFT on Stellar: each token is one membership wi
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Minting calls `batch_mint` on the tribe's Token contract. Only the token's admin can mint this way: the launch admin during setup, and the tribe's Treasury after launch. After launch the mint runs when the proposal is executed, with the Treasury as the minter.
 
   Each new token held by a member adds one vote to the voting supply. Tokens held by the tribe's Treasury, Auction, and Marketplace don't count. Quorum is a share of that supply, so minting raises the votes needed for proposals made afterwards. Proposals already made keep the quorum they were created with.

@@ -61,7 +61,7 @@ To sell more tokens after a pool sells out or closes, members open a new pool by
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Opening** runs two calls when the proposal is executed: `increase_mint_allowance` on the tribe's Token contract, then `open_pool` on the Marketplace contract. Each pool reserves part of the market's mint allowance for itself, so one pool can't use up another's. Opening fails if the market is paused, the closing time has passed, any limit is zero, or the allowance isn't enough. It also fails if the market already has 8 pools that are open, or closed but not yet swept empty.
 
   **Stocking** calls `restock`, which anyone can call until the pool closes. It mints the pool's next batch, at most 42 tokens, into the Marketplace contract. Tokens held by the market carry no votes.

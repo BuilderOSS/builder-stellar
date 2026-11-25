@@ -63,7 +63,7 @@ If you allowed the market and then decide not to list, choose **Remove the marke
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Allow** calls `approve` on the tribe's Token contract. It names the Marketplace contract as the spender for this one token, with an expiry about 720 ledgers ahead (about 1 hour, at one ledger every 5 seconds). Before each step, the app reads `get_approved` and `is_approved_for_all` to see whether a permission is still live, and skips Allow when it is.
 
   **List** calls `list` on the tribe's Marketplace contract with the token, the price, the end time, and the resale fee and payment asset you reviewed. The contract refuses the listing if the market hasn't launched or is paused, the price isn't above zero, the end time has passed, the token already has a listing, or you no longer hold the token. It also refuses it if the tribe raised the fee or changed the asset after you reviewed them, so a change can't apply to you without your consent. The contract then moves the token into its own care with `transfer_from`.

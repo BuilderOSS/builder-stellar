@@ -56,7 +56,7 @@ Under **Discussion**, any connected wallet can post a comment on the proposal. E
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Voting calls `cast_vote` on the tribe's Governor contract with your choice and your reason. The Governor counts your voting power at the proposal's snapshot ledger, which is the ledger before the proposal was made. A wallet with no votes at the snapshot can't vote. Each wallet can vote once on each proposal.
 
   The quorum is stored with each proposal when it is made. It is a share of the voting supply at that moment. Tokens held by the tribe's Treasury, Auction, and Marketplace don't count toward that supply.

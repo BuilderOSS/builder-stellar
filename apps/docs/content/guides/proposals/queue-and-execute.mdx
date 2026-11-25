@@ -33,7 +33,7 @@ A proposal that passes doesn't run by itself. Someone queues it, which starts th
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Queueing calls `queue` on the tribe's Governor contract. The Governor checks that the proposal passed, then sets its execution time to now plus the tribe's safety delay (the queue delay, a timelock). The safety delay is set in **Manage → Voting rules**, and the value at the moment of queueing is the one used.
 
   Executing calls `execute` on the tribe's Treasury contract, not the Governor. The Treasury asks the Governor to confirm that the proposal is queued and ready, then makes each call in order, as itself. If any call fails, the whole transaction is reverted. Nothing runs, and the proposal stays queued, so it can be executed again until it expires.

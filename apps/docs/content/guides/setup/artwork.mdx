@@ -37,7 +37,7 @@ The limits for an uploaded folder are: up to 16 layers and 1,000 images in total
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Uploading the folder stores the images on IPFS through Tribe Builder's upload service. That is not a blockchain transaction. The preview and the layer order stay in this browser.
 
   Each **Sign artwork batch** is one transaction to the tribe's artwork and profile contract (Metadata). The first batch creates every layer with its first image. Later batches add the remaining images, up to 30 per transaction. Each transaction has a Stellar network fee, which your wallet shows before you sign. The contract records the IPFS address of the collection and the name of each layer and image, so anyone can read them.
