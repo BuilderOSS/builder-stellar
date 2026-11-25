@@ -7,11 +7,11 @@ import { buildContentSecurityPolicy, createNonce, cspMode } from '@/lib/content-
  * Gives every page response a fresh script nonce and its Content-Security-Policy.
  *
  * Next reads the nonce from the request's `content-security-policy` header and puts it on its own
- * scripts; the root layout reads `x-nonce` for the theme boot script. With CSP_MODE=enforce the
- * policy is enforced; otherwise it is report-only, and next.config.mjs enforces the baseline (no
- * framing, no plugins). This response sets one CSP header only: Next copies a middleware's
- * response headers onto the request, so a second, nonce-free one would hide the nonce from Next.
- * API routes and static files get their headers from next.config.mjs instead.
+ * scripts; the root layout reads `x-nonce` for the theme boot script. The policy is enforced unless
+ * CSP_MODE=report-only. Pages get exactly one CSP header, this one: Next copies a middleware's
+ * response headers onto the request, so a second, nonce-free policy (here or in next.config.mjs)
+ * would hide the nonce from Next. API routes and static files get their headers from
+ * next.config.mjs instead.
  */
 export function middleware(request: NextRequest) {
   const nonce = createNonce();

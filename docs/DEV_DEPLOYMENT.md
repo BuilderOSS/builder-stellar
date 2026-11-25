@@ -121,11 +121,13 @@ Sign-in secrets (both projects):
   `x-vercel-forwarded-for`, which Vercel sets, so `TRUSTED_CLIENT_IP_HEADER` stays unset here.
   The limits and challenge replay checks are per server instance; there is no shared store.
 
-`CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is report-only
-(see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). Set it to
-`enforce` and redeploy once the `[csp-report]` lines in the function logs show no unexpected
-violations. `next.config.mjs` reads it at build time and the middleware on each request, so
-change it only with a new deployment.
+`CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is enforced
+(see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). To check a
+change without blocking anything, set it to `report-only` and redeploy: violations then appear as
+`[csp-report]` lines in the function logs and nothing is blocked. If an enforced deployment shows
+pages that load but don't respond (Next's scripts blocked), `report-only` is also the quick way
+back while the cause is found. The middleware reads it on each request; change it only with a new
+deployment.
 
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
@@ -166,9 +168,11 @@ names, so revoke those once in the Pinata dashboard (API Keys, filter by name).
 
 - `https://dev.tribes.build/api/health`: the chain head, the database, and the pipeline
   `builder-stellar-testnet-dev` near the head.
-- `curl -sI https://dev.tribes.build/` shows `content-security-policy-report-only` with a
-  `'nonce-…'` source, `content-security-policy: frame-ancestors 'none'; …`,
-  `x-frame-options: DENY`, and `x-content-type-options: nosniff`.
+- `curl -sI https://dev.tribes.build/` shows one `content-security-policy` with a `'nonce-…'`
+  source (and no `content-security-policy-report-only`), `x-frame-options: DENY`, and
+  `x-content-type-options: nosniff`.
+- Every script tag carries the nonce: `curl -s https://dev.tribes.build/ | grep -o '<script[^>]*>' | grep -vc 'nonce='`
+  prints `0`. Any other number means the browser blocks those scripts and the page won't respond.
 - Connect a wallet and sign in (SEP-53) on dev.tribes.build.
 - Create a tribe on dev: it appears in Discover within the indexer's lag, and not on tribes.build.
 - docs.tribes.build serves the home page, search and both themes.
