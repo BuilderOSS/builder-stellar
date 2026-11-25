@@ -1,6 +1,6 @@
 # Security Model
 
-Scope: the Soroban contracts under `contracts/`. The Rust sources under `contracts/*/src` are authoritative; this document describes behavior, not intent. It is not an audit.
+Scope: the Soroban contracts under `contracts/`. The Rust sources under `contracts/*/src` are authoritative; this document describes behavior, not intent. It is not an audit. The documentation package for an external audit is in [`docs/audit/`](audit/README.md).
 
 ## Roles
 
