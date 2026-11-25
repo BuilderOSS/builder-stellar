@@ -1,3 +1,5 @@
+import { safeMarkdownUrl } from '@/lib/safe-url';
+
 export type ProposalMetadata = {
   title: string;
   description: string;
@@ -26,12 +28,18 @@ function normalizeDescription(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function normalizeUrl(value: unknown) {
+/**
+ * The link as it is stored and shown: a bare address gains https://, and an address with any
+ * scheme other than https, http, ipfs or mailto becomes empty. The link comes from the proposer,
+ * and the chain accepts any text, so this runs when a proposal is read as well as when it is written.
+ */
+export function normalizeUrl(value: unknown) {
   if (typeof value !== 'string') return '';
 
   const url = value.trim();
   if (!url) return '';
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) return url;
+  // A scheme is letters then a colon not followed by a digit ("localhost:3000" is a host and port).
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d)/.test(url)) return safeMarkdownUrl(url) ?? '';
 
   return `https://${url}`;
 }
@@ -187,6 +195,9 @@ export function validateProposalMetadataDraft(metadata: ProposalMetadataDraft): 
   }
 
   const url = normalizeUrl(metadata.url);
+  if (metadata.url?.trim() && !url) {
+    return { valid: false, message: 'Links must start with https://, http://, or ipfs://.' };
+  }
   if (url) {
     try {
       const parsed = new URL(url);

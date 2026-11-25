@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { directoryMember, directoryMembers } from '@/lib/member-directory/query';
 import {
   memberAddress,
@@ -34,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
         headers
       }
     );
-  } catch {
-    return NextResponse.json({ message: 'Member data is unavailable. Try again.' }, { status: 503, headers });
+  } catch (error) {
+    return internalErrorResponse('members', error, { message: 'Member data is unavailable. Try again.' }, { headers });
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { limitApiRequest } from '@/lib/api-rate-limit';
 import { marketplaceActionSchema, prepareMarketplaceAction } from '@/lib/marketplace/actions';
 import {
   marketplaceActor,
@@ -11,6 +12,9 @@ import { MarketplaceError } from '@/lib/marketplace/query';
 import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
+  // Each preparation simulates a transaction on RPC.
+  const limited = await limitApiRequest(request, 'prepare');
+  if (limited) return limited;
   try {
     marketplaceSameOrigin(request);
     const actor = await marketplaceActor();

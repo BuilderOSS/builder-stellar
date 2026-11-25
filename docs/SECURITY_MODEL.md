@@ -305,7 +305,8 @@ single-token approval revocation is not collection-wide permission revocation.
 Claims use the ClaimMinter the Token's registry names (`token.module("claims")`),
 the list's root, price and the claimer's record read from chain, and a
 claimer-bound Merkle proof; restoration-required simulations are rejected. The
-claim list is fetched from the list's `tree_uri` and rebuilt: the app offers a
+claim list is fetched from the list's `tree_uri` through public IPFS gateways (see
+[Server-side fetches](#server-side-fetches)) and rebuilt: the app offers a
 proof only when the rebuilt root equals the chain's, and uses the rebuilt proof,
 never the file's. The claim carries `max_price`, so a price change fails the claim.
 The client rechecks the list, price and the claimer's progress before signing.
@@ -356,3 +357,86 @@ avoid mixing workspaces but do not secure data from another user of the same bro
 Clearing storage removes recovery data. Read-only SQL credentials do not imply that
 all server endpoints are side-effect free: uploads and transaction preparation have
 their own boundaries. See [web reference](../apps/web/README.md).
+
+### Response headers
+
+Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a `Permissions-Policy` that turns off
+the camera, microphone, location, payment, screen capture, and motion sensors. WebUSB and WebHID
+stay available for hardware wallets. Vercel sends `Strict-Transport-Security` on every
+deployment; a production build that runs elsewhere sends the same value itself. API responses
+add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The rules are in
+`apps/web/security-headers.mjs`.
+
+Pages get a Content-Security-Policy from `apps/web/src/middleware.ts`, with a fresh nonce for
+each response. Scripts run only with that nonce (`'strict-dynamic'` lets them load the app's
+chunks), so markup injected into a page can't run script. The policy also lists the hosts the
+app and the wallet kit use for images, connections, and frames: the IPFS gateways, the site and
+its old host, Stellar RPC and Horizon, Pinata uploads, the wallet icons, WalletConnect, the
+frames Albedo, Trezor, and HOT open, and HOT's request relay. Reading the nonce makes every page
+render per request. Since no page may be framed, the app can't run inside another site's frame,
+including a wallet that opens apps in one (HOT inside Telegram).
+
+The page policy is report-only for now, because several wallets (WalletConnect, Albedo, Trezor,
+HOT, and Ledger) can't be tried on a local server and may need hosts the list lacks. Browsers
+send violations to `POST /api/csp-report`, which logs a trimmed summary as `[csp-report]` and
+stores nothing. While the policy is report-only, pages enforce `frame-ancestors 'none';
+object-src 'none'; base-uri 'self'; form-action 'self'`. Setting `CSP_MODE=enforce` and
+redeploying enforces the whole policy; do that once the log shows no unexpected violations.
+The Vercel toolbar on preview deployments loads a script without the nonce, so an enforced
+policy blocks it there. A tribe's image, and a token image from a renderer other than this site,
+can be any `https:` address the tribe chose; the policy reports those, and enforcing it hides
+them, so decide whether to allow such hosts before enforcing.
+
+### Member-written content
+
+Markdown (proposal descriptions, comments, and tribe descriptions) shows images only from IPFS,
+through the app's gateways. An image at any other address would tell its author who read the
+text and when, so it is shown as a link the reader can choose to open, or as plain text when it
+already sits inside a link. A gateway address on
+another host is read as its IPFS path, so that host is never contacted. The app does not proxy
+remote images: a proxy would fetch any address from the server and cost the operator on every
+view, while the editor already uploads images to IPFS.
+
+Links and image addresses pass through `safeMarkdownUrl` (`apps/web/src/lib/safe-url.ts`):
+only `https:`, `http:`, `mailto:`, and `ipfs:` addresses survive. A proposal's discussion link
+goes through the same check when it is written and again when it is read, since the chain
+stores any text; a link with another scheme is dropped.
+
+### API errors and rate limits
+
+When a route fails for a reason the client can't act on (the database, the indexer, RPC, or
+IPFS), it answers with a short message and logs the detail on the server, since upstream error
+text can name hosts, queries, or configuration. Validation errors and the app's own errors keep
+their messages. `/api/health` returns how many Goldsky pipeline errors there are
+(`pipeline.error_count`), not their text. This applies to every API route except sign-in
+(`/api/auth/*`) and uploads (`/api/pinata/*`, `/api/uploads/*`).
+
+These routes are limited per client address, per server instance, with the same bookkeeping as
+sign-in (`apps/web/src/lib/api-rate-limit.ts`):
+
+| Routes | Limit |
+| --- | --- |
+| Artwork rendering (`/api/render`) | 300 a minute |
+| Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
+| Claim state and claim history | 120 a minute, shared |
+| `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
+| `POST /api/csp-report` | 30 a minute |
+
+Over the limit, a route answers 429 with `Retry-After`. The limits leave room for a group that
+shares one network address, such as people claiming at an event. The client is identified as
+sign-in identifies it: by `x-vercel-forwarded-for` on Vercel, or by the header
+`TRUSTED_CLIENT_IP_HEADER` names. A request without such an address is not counted, where
+sign-in refuses it, so these public routes stay available; off Vercel the limits apply only once
+`TRUSTED_CLIENT_IP_HEADER` is set. Local development is not counted. The limits stop one client
+from hammering a route; they don't stop a distributed flood, which needs the platform's own
+protection. Each health route also reuses one result for 10 seconds.
+
+### Server-side fetches
+
+The server fetches remote content in two places: artwork layers (`/api/render` and share
+cards) and claim lists. Both use `fetchPublicUrl` (`apps/web/src/lib/safe-remote-fetch.ts`).
+Each hop, redirects included, must use HTTPS and resolve only to public addresses, and the
+connection is pinned to the address that was checked, so a second DNS answer can't swap in an
+internal one. At most three redirects are followed, each checked before it is requested, and
+the body is capped in size.

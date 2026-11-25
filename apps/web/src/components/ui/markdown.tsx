@@ -5,11 +5,17 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { css, cx } from 'styled-system/css';
 
+import { normalizeIpfsUri } from '@/lib/ipfs-uri';
+import { safeMarkdownUrl } from '@/lib/safe-url';
+
 import { FallbackImage } from './FallbackImage';
 
 export type MarkdownVariant = 'rich' | 'comment';
 
-/** Raw HTML is never parsed (no rehype-raw); the sanitizer also allows `ipfs:` images and links. */
+/**
+ * Raw HTML is never parsed (no rehype-raw); the sanitizer also allows `ipfs:` images and links.
+ * Images other than IPFS render as links (see remoteImagesAsLinks).
+ */
 const schema = {
   ...defaultSchema,
   protocols: {
@@ -19,13 +25,7 @@ const schema = {
   }
 };
 
-const SAFE_URL = /^(https?:|mailto:|ipfs:)/i;
-
-/** Only absolute web, mail and IPFS addresses survive; anything else (javascript:, data:, relative) is dropped. */
-export function safeMarkdownUrl(url: string) {
-  const trimmed = url.trim();
-  return SAFE_URL.test(trimmed) ? trimmed : null;
-}
+export { safeMarkdownUrl };
 
 /** Comments support formatting, demoted headings, tables, images, and disabled task-list checkboxes. */
 const COMMENT_ELEMENTS = [
@@ -145,11 +145,46 @@ function Link({ href, children, node: _node, ...props }: ComponentProps<'a'> & {
   );
 }
 
+type HastNode = {
+  type: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+  value?: string;
+};
+
+/**
+ * Images load only from IPFS, through the app's gateways. Any other address would let the author
+ * see who reads the text and when (a tracking pixel), so before rendering, such an image becomes a
+ * link the reader can choose to open, or just its text when it already sits inside a link (a link
+ * can't contain another). Uploads from the editor are IPFS images, so they always show.
+ */
+function remoteImagesAsLinks() {
+  const rewrite = (node: HastNode, insideLink: boolean) => {
+    if (!node.children) return;
+    node.children = node.children.map((child) => {
+      if (child.type === 'element' && child.tagName === 'img') {
+        const src = typeof child.properties?.src === 'string' ? child.properties.src : '';
+        if (normalizeIpfsUri(src)) return child;
+        const text: HastNode = { type: 'text', value: String(child.properties?.alt ?? '').trim() || 'Image link' };
+        if (insideLink || !src) return text;
+        return { type: 'element', tagName: 'a', properties: { href: src }, children: [text] };
+      }
+      rewrite(child, insideLink || (child.type === 'element' && child.tagName === 'a'));
+      return child;
+    });
+  };
+  return (tree: HastNode) => rewrite(tree, false);
+}
+
+/** An IPFS image (remoteImagesAsLinks has turned every other image into a link). */
 function Image({ src, alt, node: _node, ...props }: ComponentProps<'img'> & { node?: unknown }) {
+  const ipfs = typeof src === 'string' ? normalizeIpfsUri(src) : undefined;
+  if (!ipfs) return null;
   return (
     <FallbackImage
       {...props}
-      src={typeof src === 'string' ? src : null}
+      src={ipfs}
       alt={alt ?? ''}
       loading="lazy"
       className={image}
@@ -194,7 +229,7 @@ export function Markdown({
     <div className={cx(root, isComment && comment, className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeSanitize, schema]]}
+        rehypePlugins={[[rehypeSanitize, schema], remoteImagesAsLinks]}
         urlTransform={(url) => safeMarkdownUrl(url)}
         components={isComment ? COMMENT_COMPONENTS : RICH_COMPONENTS}
         allowedElements={isComment ? COMMENT_ELEMENTS : undefined}

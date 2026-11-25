@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { getDashboardData } from '@/lib/goldsky';
 
@@ -31,14 +32,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return NextResponse.json(
-      {
-        myDaos: [],
-        feed: { items: [], total: 0, limit: 20, offset: 0, hasMore: false },
-        generatedAt: new Date().toISOString(),
-        message: error instanceof Error ? error.message : 'Dashboard data unavailable'
-      },
-      { status: 503, headers: { 'Cache-Control': 'no-store' } }
-    );
+    return internalErrorResponse('dashboard', error, {
+      myDaos: [],
+      feed: { items: [], total: 0, limit: 20, offset: 0, hasMore: false },
+      generatedAt: new Date().toISOString(),
+      message: 'Your tribes and activity are unavailable. Try again.'
+    });
   }
 }

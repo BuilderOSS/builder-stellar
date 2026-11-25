@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { getGoldskyProposalVotes } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
@@ -26,15 +27,12 @@ export async function GET(request: Request, context: { params: Promise<{ daoId: 
       await getGoldskyProposalVotes(daoId, { proposalId, limit: Math.min(limit, 1000), offset, support }),
       { headers: { 'Cache-Control': 'no-store' } }
     );
-  } catch {
-    return NextResponse.json(
-      {
-        items: [],
-        tally: { for: '0', against: '0', abstain: '0' },
-        generatedAt: new Date().toISOString(),
-        message: 'Proposal votes unavailable'
-      },
-      { status: 503 }
-    );
+  } catch (error) {
+    return internalErrorResponse('proposal-votes', error, {
+      items: [],
+      tally: { for: '0', against: '0', abstain: '0' },
+      generatedAt: new Date().toISOString(),
+      message: 'Proposal votes unavailable'
+    });
   }
 }

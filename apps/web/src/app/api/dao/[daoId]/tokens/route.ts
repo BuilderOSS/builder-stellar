@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { internalErrorResponse } from '@/lib/api-error';
 import { directoryTokens } from '@/lib/member-directory/query';
 import { memberAddress, memberPagination } from '@/lib/member-directory/validation';
 
@@ -19,7 +20,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   }
   try {
     return NextResponse.json(await directoryTokens(daoId, page, owner), { headers });
-  } catch {
-    return NextResponse.json({ message: 'Token inventory is unavailable. Try again.' }, { status: 503, headers });
+  } catch (error) {
+    return internalErrorResponse(
+      'tokens',
+      error,
+      { message: 'Token inventory is unavailable. Try again.' },
+      { headers }
+    );
   }
 }

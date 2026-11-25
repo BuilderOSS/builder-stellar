@@ -111,6 +111,12 @@ Sign-in secrets (both projects):
   `x-vercel-forwarded-for`, which Vercel sets, so `TRUSTED_CLIENT_IP_HEADER` stays unset here.
   The limits and challenge replay checks are per server instance; there is no shared store.
 
+`CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is report-only
+(see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). Set it to
+`enforce` and redeploy once the `[csp-report]` lines in the function logs show no unexpected
+violations. `next.config.mjs` reads it at build time and the middleware on each request, so
+change it only with a new deployment.
+
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
 Its Ignored Build Step `[ "$VERCEL_GIT_COMMIT_REF" = "dev" ] && exit 0 || exit 1` skips `dev`,
@@ -127,6 +133,9 @@ which `builder-stellar-dev` builds; `main` and PR previews still build there.
 
 - `https://dev.tribes.build/api/health`: the chain head, the database, and the pipeline
   `builder-stellar-testnet-dev` near the head.
+- `curl -sI https://dev.tribes.build/` shows `content-security-policy-report-only` with a
+  `'nonce-…'` source, `content-security-policy: frame-ancestors 'none'; …`,
+  `x-frame-options: DENY`, and `x-content-type-options: nosniff`.
 - Connect a wallet and sign in (SEP-53) on dev.tribes.build.
 - Create a tribe on dev: it appears in Discover within the indexer's lag, and not on tribes.build.
 - docs.tribes.build serves the home page, search and both themes.

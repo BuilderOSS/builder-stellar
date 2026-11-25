@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { internalErrorResponse } from '@/lib/api-error';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { isDaoNotFound } from '@/lib/dao-db';
 import { getGoldskyProposalDetail, GoldskyProposalNotFoundError } from '@/lib/goldsky';
 import { PROPOSAL_EXPIRATION_SECONDS, readProposalChainState } from '@/lib/proposal-chain-state';
 import { getIndexedExecutionReceipt } from '@/lib/proposal-execution-receipt-service';
@@ -88,12 +90,11 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : 'Proposal unavailable' },
-      {
-        status: error instanceof GoldskyProposalNotFoundError ? 404 : 503,
-        headers: { 'Cache-Control': 'no-store' }
-      }
-    );
+    if (error instanceof GoldskyProposalNotFoundError || isDaoNotFound(error))
+      return NextResponse.json(
+        { message: isDaoNotFound(error) ? 'Tribe not found.' : 'Proposal not found.' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      );
+    return internalErrorResponse('proposal', error, { message: 'The proposal is unavailable. Try again.' });
   }
 }
