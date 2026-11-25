@@ -41,8 +41,15 @@ describe('IPFS upload URLs', () => {
 
     expect(cidToUrls('bafytest')).toEqual({
       ipfsUri: 'ipfs://bafytest',
-      gatewayUrl: 'https://nouns-builder.mypinata.cloud/ipfs/bafytest'
+      gatewayUrl: 'https://gateway.pinata.cloud/ipfs/bafytest'
     });
+    expect(getPreferredGatewayHost()).toBe('gateway.pinata.cloud');
+  });
+
+  it('accepts a configured gateway with a scheme or a trailing slash', () => {
+    process.env.NEXT_PUBLIC_PINATA_GATEWAY = 'https://custom.example.com/';
+
+    expect(getPreferredGatewayHost()).toBe('custom.example.com');
   });
 });
 

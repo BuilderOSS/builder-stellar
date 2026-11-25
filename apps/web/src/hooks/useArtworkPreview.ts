@@ -71,12 +71,10 @@ export function useArtworkPreview({
 
       const cleanBase = source.baseUri.replace(/\/$/, '');
 
-      // Handle different base URI formats
+      // An ipfs:// base stays an ipfs:// path: loadImageWithFallback walks every gateway in order,
+      // so a gateway that refuses the folder doesn't decide which one is tried first.
       if (cleanBase.startsWith('ipfs://')) {
-        const cid = cleanBase.replace('ipfs://', '');
-        const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'nouns-builder.mypinata.cloud';
-        const gatewayUrl = `https://${gateway}/ipfs/${cid}`;
-        return `${gatewayUrl}/${property.name}/${itemName}${extension}`;
+        return `${cleanBase}/${property.name}/${itemName}${extension}`;
       }
 
       if (cleanBase.startsWith('https://')) {

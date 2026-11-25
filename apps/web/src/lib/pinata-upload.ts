@@ -1,20 +1,9 @@
 import { z } from 'zod';
 
-/**
- * Canonical IPFS gateway URLs - fallback order
- * The first gateway is tried first, then others in order.
- * Matches the list used in the render API.
- */
-const IPFS_GATEWAY_HOSTS = [
-  'nouns-builder.mypinata.cloud',
-  'gateway.pinata.cloud',
-  'ipfs.io',
-  'magic.decentralized-content.com',
-  'dweb.link',
-  'w3s.link',
-  'nft.storage',
-  'cf-ipfs.com'
-];
+import { DEFAULT_PINATA_GATEWAY } from './ipfs-uri';
+
+/** The gateway an upload's `gatewayUrl` uses when `NEXT_PUBLIC_PINATA_GATEWAY` is unset (see `ipfs-uri.ts`). */
+const DEFAULT_GATEWAY_HOST = DEFAULT_PINATA_GATEWAY;
 
 /**
  * Upload policy configuration for different asset types.
@@ -96,7 +85,7 @@ export function cidToUrls(cid: string, preferredGatewayHost?: string): { ipfsUri
   const ipfsUri = `ipfs://${cid}`;
 
   // Use provided gateway or first in fallback list
-  const gatewayHost = preferredGatewayHost || IPFS_GATEWAY_HOSTS[0];
+  const gatewayHost = preferredGatewayHost || DEFAULT_GATEWAY_HOST;
   const gatewayUrl = `https://${gatewayHost}/ipfs/${cid}`;
 
   return { ipfsUri, gatewayUrl };
@@ -118,22 +107,12 @@ export function normalizeIpfsCid(value: string): string | null {
 }
 
 /**
- * Gets the preferred IPFS gateway host.
- * Falls back to hardcoded list if environment variable is not set.
+ * The gateway host for the URLs an upload returns: `NEXT_PUBLIC_PINATA_GATEWAY` without a scheme or a
+ * trailing slash, or Pinata's public gateway when it is unset.
  */
 export function getPreferredGatewayHost(): string {
-  const envHost = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
-  if (envHost && IPFS_GATEWAY_HOSTS.includes(envHost)) {
-    return envHost;
-  }
-
-  // Also try the first entry even if not in the hardcoded list
-  // (in case user has a custom gateway)
-  if (envHost) {
-    return envHost;
-  }
-
-  return IPFS_GATEWAY_HOSTS[0];
+  const envHost = process.env.NEXT_PUBLIC_PINATA_GATEWAY?.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return envHost || DEFAULT_GATEWAY_HOST;
 }
 
 /**

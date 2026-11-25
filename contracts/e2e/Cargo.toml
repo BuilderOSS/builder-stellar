@@ -24,3 +24,5 @@ vote-adapter-mock = { path = "../vote-adapter-mock", features = ["testutils"] }
 stellar-governance = { workspace = true }
 stellar-tokens = { workspace = true }
 common = { path = "../common", features = ["testutils"] }
+# Property tests (src/audit_properties.rs). `std` only: no forking, timeouts, or regex strategies.
+proptest = { version = "1.6", default-features = false, features = ["std"] }

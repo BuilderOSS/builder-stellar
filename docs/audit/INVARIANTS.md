@@ -2,7 +2,7 @@
 
 These are the properties the contracts must keep, each with the tests that check it. A property is **Covered** when tests assert it directly, **Partial** when they assert only part of it (the missing part is named), and **Missing** when no test asserts it. Test names are function names in the linked file; search the file for `fn <name>`.
 
-The list was checked against `dev` at `f51d301`, which includes pull requests 118 to 130. IDs are stable: a new property takes the next number and sits in the section it belongs to. When a contract change adds a test, link it here.
+The list was checked against `dev` at `f51d301`, which includes pull requests 118 to 130. The tests in [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) and [`audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) were added afterwards. They close INV-04, INV-10, INV-12, INV-13, INV-14, INV-18, INV-22, and INV-28, now Covered, and add property tests to INV-01 and INV-05, and the authorization-scope check to INV-16; INV-07, INV-08, INV-11, INV-27, INV-32, and INV-33 remain Partial. IDs are stable: a new property takes the next number and sits in the section it belongs to. When a contract change adds a test, link it here.
 
 ## Summary
 
@@ -11,31 +11,31 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 | [INV-01](#inv-01-voting-units-equal-non-custody-balances) | Voting units equal non-custody balances | Covered |
 | [INV-02](#inv-02-system-holders-never-vote) | System holders never vote | Covered |
 | [INV-03](#inv-03-votes-and-the-quorum-are-fixed-at-the-snapshot) | Votes and the quorum are fixed at the snapshot | Covered |
-| [INV-04](#inv-04-one-vote-per-account-and-only-the-proposer-cancels) | One vote per account, and only the proposer cancels | Partial |
+| [INV-04](#inv-04-one-vote-per-account-and-only-the-proposer-cancels) | One vote per account, and only the proposer cancels | Covered |
 | [INV-05](#inv-05-mint-allowance-accounting) | Mint allowance accounting | Covered |
 | [INV-06](#inv-06-the-module-registry) | The module registry | Covered |
 | [INV-07](#inv-07-batch-mints-fit-the-event-budget) | Batch mints fit the event budget | Partial |
 | [INV-08](#inv-08-one-admin-per-contract) | One admin per contract | Partial |
 | [INV-09](#inv-09-launch-is-one-shot-and-manager-only) | Launch is one-shot and Manager-only | Covered |
-| [INV-10](#inv-10-a-failed-launch-changes-nothing) | A failed launch changes nothing | Partial |
+| [INV-10](#inv-10-a-failed-launch-changes-nothing) | A failed launch changes nothing | Covered |
 | [INV-11](#inv-11-live-only-entry-points-refuse-before-launch) | Live-only entry points refuse before launch | Partial |
-| [INV-12](#inv-12-handoff-freezes-setup) | Handoff freezes Setup | Partial |
-| [INV-13](#inv-13-launch-checks) | Launch checks | Partial |
-| [INV-14](#inv-14-the-factory-pause) | The factory pause | Partial |
+| [INV-12](#inv-12-handoff-freezes-setup) | Handoff freezes Setup | Covered |
+| [INV-13](#inv-13-launch-checks) | Launch checks | Covered |
+| [INV-14](#inv-14-the-factory-pause) | The factory pause | Covered |
 | [INV-15](#inv-15-proposals-execute-only-through-the-treasury-once) | Proposals execute only through the Treasury, once | Covered |
 | [INV-16](#inv-16-treasury-self-calls-and-authorization-trees) | Treasury self-calls and authorization trees | Covered |
 | [INV-17](#inv-17-the-proposal-threshold) | The proposal threshold | Covered |
-| [INV-18](#inv-18-governance-parameter-bounds) | Governance parameter bounds | Partial |
+| [INV-18](#inv-18-governance-parameter-bounds) | Governance parameter bounds | Covered |
 | [INV-19](#inv-19-proposal-expiry) | Proposal expiry | Covered |
 | [INV-20](#inv-20-the-upgrade-path) | The upgrade path | Covered |
 | [INV-21](#inv-21-the-managers-upgrade-notice) | The Manager's upgrade notice | Covered |
-| [INV-22](#inv-22-claimminter-escrow-is-conserved) | ClaimMinter escrow is conserved | Partial |
+| [INV-22](#inv-22-claimminter-escrow-is-conserved) | ClaimMinter escrow is conserved | Covered |
 | [INV-23](#inv-23-refund-and-release-are-mutually-exclusive) | Refund and release are mutually exclusive | Covered |
 | [INV-24](#inv-24-assurance-state) | Assurance state | Covered |
 | [INV-25](#inv-25-claims) | Claims | Covered |
 | [INV-26](#inv-26-recovery-upgrades-of-a-failed-drive) | Recovery upgrades of a failed drive | Covered |
 | [INV-27](#inv-27-auction-settlement-and-refunds) | Auction settlement and refunds | Partial |
-| [INV-28](#inv-28-listings) | Listings | Partial |
+| [INV-28](#inv-28-listings) | Listings | Covered |
 | [INV-29](#inv-29-quick-buy-pools) | Quick-buy pools | Covered |
 | [INV-30](#inv-30-membership-switches-and-transfer-agents) | Membership switches and transfer agents | Covered |
 | [INV-31](#inv-31-slugs) | Slugs | Covered |
@@ -51,6 +51,7 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 Each account's voting units equal its token balance, and are zero for the Treasury and the non-voting modules (Auction, Marketplace). The `TotalSupply` checkpoint equals the sum of all units, and the sum of `get_votes` equals `TotalSupply`.
 
 - [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomized walk (eight fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
+- [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) `voting_units_equal_non_custody_balances_over_generated_sequences`: a property test (48 generated sequences of up to 40 steps, shrunk on failure) over mints, batch mints, transfers, custody moves into and out of the Treasury, Auction, Marketplace, and a vault module, delegations, and registering a holder as a non-voting module, asserting the three equalities and that every minted token is held after every step. The Token has no burn: a voting unit is burned only when its token moves into custody or its holder becomes a non-voting module.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `system_holders_carry_no_votes_through_every_path`, `registering_a_holder_non_voting_removes_its_votes_from_its_delegate`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 
 **Covered.**
@@ -79,8 +80,9 @@ An account votes once per proposal, with a known vote type (OpenZeppelin `count_
 
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `a_second_vote_fails_already_voted`, `an_unknown_vote_type_fails_invalid_vote_type`, `only_the_proposer_can_cancel` (another account, with its own authorization, cannot cancel; the proposer then can).
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `protocol_runs_on_chain_state_only` has the proposer cancel a pending proposal.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_proposal_past_active_cannot_be_cancelled_even_by_its_proposer`: the proposer cancels a `Pending` and an `Active` proposal, and is refused (`ProposalNotCancellable`, 5009, the state unchanged) for `Succeeded`, `Defeated`, `Queued`, `Executed`, `Expired`, and `Canceled` ones.
 
-**Partial:** no test asserts that a proposal past `Active` (`Succeeded`, `Queued`, or `Defeated`) cannot be cancelled.
+**Covered.**
 
 ## Minting
 
@@ -90,6 +92,7 @@ The admin mints without an allowance. Every other minter must be a registered mo
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `module_mints_within_its_allowance_and_stops_at_zero`, `an_unlimited_allowance_is_never_spent`, `an_increase_that_reaches_the_cap_saturates_to_unlimited`, `allowances_add_subtract_and_release`, `unregistering_zeroes_the_allowance_and_emits`.
 - [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `free_lists_share_the_drives_allowance`.
+- [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) `minted_plus_remaining_equals_granted_over_generated_sequences`: a property test (64 generated sequences of up to 40 steps) over module mints and batch mints, admin mints, increases (some saturating to unlimited), decreases (some from unlimited), releases, unregistering and registering again. Each module mints only to its own recipient. After every step each module's allowance equals a model of the rules above, and while it is finite, the tokens it minted (read from its recipient's balance) plus its remaining allowance equal the net amount granted to it. Refused mints and increases change nothing.
 
 **Covered.**
 
@@ -144,7 +147,9 @@ If any launch check or call fails, the transaction reverts: every contract stays
 
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `launch_dao_rejects_payment_asset_changed_during_setup`, `launch_checks_every_registered_modules_payment_asset`, `launch_checks_the_code_the_host_runs_not_the_hash_a_contract_reports`, `launch_dao_requires_launch_admin_auth`: after a failed launch, `PendingDao` remains and the Token or ClaimMinter admin is still the launch admin. `open_assurance_checks_the_code_every_contract_runs` checks the same for a drive refused on revoked code: no drive is recorded and the launch admin keeps the Token.
 
-**Partial:** no test checks every contract's `Live` flag and admin after a failed launch.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_launch_that_fails_at_any_contract_leaves_every_contract_as_it_was`, on the built WASM: each of the six launch calls after the Token's (Governor, Treasury, Auction, Marketplace, ClaimMinter, and Metadata) is made to fail in turn, by launching that contract first, so the calls before it ran and were reverted; with the Token launched first, the launch is refused before any call (`LaunchAdminNotOwner`). Afterwards every other contract's `Live` flag is false and its admin is the launch admin, the first auction's token was not minted, the Auction has no allowance, `PendingDao` is unchanged, and the slug is free.
+
+**Covered.**
 
 ### INV-11: Live-only entry points refuse before launch
 
@@ -167,7 +172,9 @@ After `open_assurance` hands every admin to the Treasury, nothing in Setup can c
 - [`contracts/metadata/src/test.rs`](../../contracts/metadata/src/test.rs) `handoff_is_the_managers_freezes_artwork_and_stays_in_setup`.
 - [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `handoff_freezes_the_lists_until_launch`. The Token's switches and `create_module` are also checked ([`contracts/token/src/test.rs`](../../contracts/token/src/test.rs), [`contracts/e2e/src/membership.rs`](../../contracts/e2e/src/membership.rs)).
 
-**Partial:** after handoff, a launch-admin `increase_mint_allowance` and `upgrade` are not tested.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `after_handoff_the_launch_admin_cannot_change_an_allowance_or_upgrade`, on the built WASM: after `open_assurance`, the launch admin's signature no longer raises or lowers the ClaimMinter's allowance, and no longer upgrades any of the seven contracts along a path the registry approved (an authorization error, with the code unchanged). Before the handoff the same signature raised the allowance, and with the admin's authorization mocked the same upgrades apply.
+
+**Covered.**
 
 ### INV-13: Launch checks
 
@@ -176,7 +183,9 @@ After `open_assurance` hands every admin to the Treasury, nothing in Setup can c
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `launch_dao_is_blocked_while_the_factory_is_paused`, `launch_rejects_each_contract_on_revoked_or_unregistered_code`, `launch_checks_the_code_the_host_runs_not_the_hash_a_contract_reports`, `open_assurance_checks_the_code_every_contract_runs`, `launch_with_zero_supply_returns_launch_supply_zero`, `launch_dao_rejects_payment_asset_changed_during_setup`, and the slug and vote-source tests.
 - [`contracts/e2e/src/manager_hardening.rs`](../../contracts/e2e/src/manager_hardening.rs) `launch_checks_the_code_each_contract_runs`, on the built module WASM.
 
-**Partial:** `LaunchAdminNotOwner` (7126) is never triggered by a test; only its code block is checked.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_launch_that_fails_at_any_contract_leaves_every_contract_as_it_was` triggers `LaunchAdminNotOwner` (7126) by launching the Token before `launch_dao`. With the deployed code the launch admin holds the Token until a drive or a launch hands it over, and `launch_dao` during a drive does not run this check, so the test reaches it only by that earlier launch.
+
+**Covered.**
 
 ### INV-14: The factory pause
 
@@ -184,7 +193,9 @@ While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `l
 
 - [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `launch_dao_is_blocked_while_the_factory_is_paused`, `change_slug_is_blocked_while_the_factory_is_paused`, `create_module_needs_the_token_admin_and_an_unpaused_factory`, `a_failed_drive_refuses_every_launch_refunds_and_frees_its_slug`.
 
-**Partial:** `open_assurance` while paused is not tested, and the `create_dao` test does not check the error code.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_paused_factory_refuses_create_dao_and_open_assurance`, on the built WASM: both fail with `FactoryPaused` (7111) and change nothing (no DAO, list, allowance, slug, or handoff); unpaused, both go through.
+
+**Covered.**
 
 ## Governance
 
@@ -204,8 +215,11 @@ While the factory is paused, `create_dao`, `create_module`, `open_assurance`, `l
 A proposal can call the Treasury itself only for `authorize`, `upgrade`, and `migrate` (`UnknownSelfCall` 7602, `InvalidSelfCallArgs` 7603). An `authorize` tree covers only the exact call it describes, only for the next action, and is bounded to depth 4 and 16 nodes (`InvalidAuthorization`, 7605). A tree may not contain a node for the Governor's `consume`, at any depth (`CannotConsume`, 7606).
 
 - [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) `self_call_outside_allowlist_is_rejected`, `self_call_with_bad_args_is_rejected`, `authorization_is_exact_and_single_use`, `tree_size_and_depth_are_bounded`, `an_authorization_tree_for_consume_is_refused`, and the malformed-tree cases.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs), through the real Governor and Treasury with no authorization but the Treasury's own: `an_authorize_tree_does_not_outlive_the_call_it_was_attached_to`, `an_authorize_node_is_used_once_at_any_depth_below_its_call`, `a_nested_authorize_node_is_used_only_below_its_parent`, and `check_authorization_installs_no_authorization`.
 
 **Covered.**
+
+**Checked: a tree cannot be used by a later call.** The question was whether a tree an `authorize` action stores could be consumed by a `require_auth(treasury)` deeper in a later call than the one it was meant for. It cannot. `execute` hands the trees to the host (`authorize_as_current_contract`) together with the entry for the next action's own call, just before making that call, and the host drops those entries when that call returns, used or not. A later action that needs the tree, one or two levels below its own call, fails authorization and the proposal stays `Queued`. The controls show the missing tree is the cause: the unused tree and the action it was attached to execute on their own, and the later action executes with a tree of its own. Within the call it is attached to, a node is used once, by a call with exactly its contract, function, and arguments, at any depth below the call and whichever contract makes it: an action that makes the same debit twice is refused with nothing debited, while two nodes cover both. A node's sub-nodes are used only below the call that used the node: not when that call never runs, and not after it returns. `check_authorization` stores nothing: after it has checked a tree, a proposal that needs the tree but carries no `authorize` action is still refused.
 
 ### INV-17: The proposal threshold
 
@@ -223,7 +237,9 @@ The voting delay, voting period, and queue delay are each 300 seconds to 30 days
 - [`contracts/governor/src/test.rs`](../../contracts/governor/src/test.rs) `setters_accept_exact_max_and_reject_above`, `constructor_rejects_short_voting_delay`, `set_quorum_bps_zero_fails`, and the over-10,000 quorum case.
 - [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `test_governor_queue_delay_minimum_300`.
 
-**Partial:** a voting period below 300 seconds (`InvalidVotingPeriod`, 7505) is not tested.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_governor_constructed_with_a_voting_period_under_300_seconds_is_refused` (the constructor, `InvalidVotingPeriod`, 7505) and `a_voting_period_under_300_seconds_is_refused_by_the_setter_and_the_manager` (`set_voting_period` refuses 0, 1, and 299 and keeps its value, and accepts 300; the Manager's `create_dao` refuses 299 with `InvalidGovernanceTiming`, 7118).
+
+**Covered.**
 
 ### INV-19: Proposal expiry
 
@@ -269,14 +285,17 @@ While the Governor's or the Treasury's stored storage version differs from its c
 
 ### INV-22: ClaimMinter escrow is conserved
 
-For the assurance list, the list's `escrow` equals the sum of its claim records' `escrowed`, and the ClaimMinter's balance of the list's asset covers it.
+For the assurance list, until `release`, the list's `escrow` equals the sum of its claim records' `escrowed`, and the ClaimMinter's balance of the list's asset is the escrow plus whatever was sent to it directly. `release` sets the escrow to zero and leaves the records ([`ClaimList::escrow`](../../contracts/minter/src/storage.rs)); no refund can follow, because a released drive's Token is Live.
 
 Only `claim` adds to escrow, and only `release` and `refund` take from it. An asset sent to the ClaimMinter directly is in no escrow, and no function moves it.
 
 - [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `a_met_drive_launches_and_the_escrow_moves_to_the_treasury`, `a_missed_deadline_fails_the_drive_and_refunds_pay_out`, `assets_sent_directly_stay_in_the_claim_minter`.
 - [`contracts/e2e/src/membership.rs`](../../contracts/e2e/src/membership.rs) `a_failed_drive_refunds_recovers_and_frees_its_slug`.
 
-**Partial:** the tests check balances and single records at the start and end; no test asserts the three-way equality at intermediate states.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_drives_escrow_equals_its_records_and_its_balance_after_every_step`, on the built WASM through the Manager: the three-way equality after every partial claim, a payment sent directly, refused claims, refunds, and releases, then either a met drive launched (escrow released, records kept) or a failed drive refunded one claimer at a time.
+- [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) `claim_minter_escrow_equals_its_records_and_its_balance_over_generated_sequences`: a property test (64 generated drives and sequences of up to 40 steps) over claims, direct payments, the passing of time, launch, releases, and refunds, checking after every step the equality, each record against a model, the ClaimMinter's and the Treasury's balances, and that no payment is created or lost.
+
+**Covered.**
 
 ### INV-23: Refund and release are mutually exclusive
 
@@ -332,7 +351,9 @@ The fee is at most 25% and recorded in the listing; a listing fails on a worse f
 
 - [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `list_rejects_a_fee_above_the_sellers_bound`, `list_rejects_an_unexpected_payment_asset`, `buy_rejects_a_price_above_the_buyers_bound`, `secondary_buy_uses_captured_asset_and_fee_after_config_changes`, `the_admin_returns_a_listing_to_its_seller_while_paused`, `only_the_admin_returns_a_listing`, and the fee-cap, cancel, and expire cases.
 
-**Partial:** a cancel by someone other than the seller (`NotSeller`) is not tested.
+- [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_listing_is_cancelled_only_by_its_seller`, on the built WASM: another account naming itself fails `NotSeller` (7708), naming the seller without the seller's signature fails authorization, and the listing and the escrowed token stay; the seller then cancels and gets the token back.
+
+**Covered.**
 
 ### INV-29: Quick-buy pools
 
@@ -396,7 +417,7 @@ Storage keys do not collide; entry points extend their contract's instance; shar
 ## Test helpers
 
 - **Randomized walk:** [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) is a fixed-seed walk that also requires each operation, refusals included, to run a minimum number of times.
-- **Property tests:** [`contracts/metadata/src/storage/page_properties.rs`](../../contracts/metadata/src/storage/page_properties.rs) checks the attributes-page codec with fixed-seed generated input: round trips at the exact size, canonical encoding, malformed bytes refused without reading out of range, the public record form, and range writes against a map.
+- **Property tests:** [`contracts/metadata/src/storage/page_properties.rs`](../../contracts/metadata/src/storage/page_properties.rs) checks the attributes-page codec with fixed-seed generated input: round trips at the exact size, canonical encoding, malformed bytes refused without reading out of range, the public record form, and range writes against a map. [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) uses `proptest` for INV-01, INV-05, and INV-22: a fixed seed by default, so CI is repeatable; `PROPTEST_RNG_SEED` and `PROPTEST_CASES` explore other and longer runs, for example `PROPTEST_CASES=500 PROPTEST_RNG_SEED=7 cargo test -p dao-e2e audit_properties`. A failing case is shrunk to a shorter sequence. With the default seed and case count, each property also requires every kind of step that changes state or is refused to run a minimum number of times.
 - **Invariant helpers:** the Auction's `refunds` module (`assert_invariant`); the Token's `assert_voting_supply` and the registry's `assert_books`.
 - **Resource limits:** `assert_within_limits` in [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs), used by `largest_create_dao_and_propose_fit_the_live_limits`, `reference_dao_sweep_fits_one_transaction`, the 1,000-leaf drive in [`membership.rs`](../../contracts/e2e/src/membership.rs), the largest paid claim in [`claims.rs`](../../contracts/e2e/src/claims.rs), and the mint and 20-action proposals in [`governance.rs`](../../contracts/e2e/src/governance.rs); the Manager's scale tests; the Metadata worst-case tests.
 - **Storage:** [`contracts/common/src/testutils.rs`](../../contracts/common/src/testutils.rs) (`assert_keys_disjoint`, `assert_every_variant_sampled`, `assert_storage_namespaced`, a mock Manager).
