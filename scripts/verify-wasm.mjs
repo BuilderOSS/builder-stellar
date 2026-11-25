@@ -1,9 +1,11 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   HASHES_PATH,
   buildInContainer,
   compareHashes,
+  hashesDocument,
   printComparison,
   publishedHashesAt,
   resolveCommit,
@@ -11,24 +13,34 @@ import {
 } from './wasm-build.mjs';
 
 /**
- * Rebuild a tag in the pinned container and compare every contract with the hashes the tag
- * publishes in releases/hashes.json (docs/REPRODUCIBLE_BUILDS.md).
+ * Check a tag's contracts against the hashes it publishes in releases/hashes.json
+ * (docs/REPRODUCIBLE_BUILDS.md).
  *
- *   node scripts/verify-wasm.mjs <tag> [--out <dir>]
+ *   node scripts/verify-wasm.mjs <tag> [--out <dir>]     rebuild the tag in the pinned container
+ *   node scripts/verify-wasm.mjs <tag> --wasm-dir <dir>  check existing <crate>.wasm files instead,
+ *                                                        for example a native build or downloaded files
  *
- * Exits 0 only when every published contract rebuilds byte for byte with the recorded toolchain.
- * Anyone can run it from a fresh clone with Docker and git; it needs no keys and sends nothing to a
- * network beyond fetching the image, the Stellar CLI and the crates.
+ * Exits 0 only when every published contract matches byte for byte. Anyone can run it from a fresh
+ * clone with Docker and git; it needs no keys and sends nothing to a network beyond fetching the
+ * image, the Stellar CLI and the crates.
  */
 
-const USAGE = 'Usage: node scripts/verify-wasm.mjs <tag> [--out <dir>]';
+const USAGE = 'Usage: node scripts/verify-wasm.mjs <tag> [--out <dir> | --wasm-dir <dir>]';
 const args = process.argv.slice(2);
-const tag = args.find((arg, i) => !arg.startsWith('--') && args[i - 1] !== '--out');
-const outIndex = args.indexOf('--out');
-if (!tag || (outIndex >= 0 && !args[outIndex + 1])) {
+const option = (name) => {
+  const i = args.indexOf(name);
+  if (i < 0) return undefined;
+  if (!args[i + 1] || args[i + 1].startsWith('--')) usage();
+  return args[i + 1];
+};
+function usage() {
   console.error(USAGE);
   process.exit(2);
 }
+const tag = args.find((arg, i) => !arg.startsWith('--') && !['--out', '--wasm-dir'].includes(args[i - 1]));
+const outOption = option('--out');
+const wasmDir = option('--wasm-dir');
+if (!tag || (outOption && wasmDir)) usage();
 
 let commit;
 try {
@@ -42,18 +54,31 @@ if (!published) {
   console.error(`${tag} has no ${HASHES_PATH}, so it publishes no hashes to verify.`);
   process.exit(2);
 }
-// The recorded toolchain must be the one the tag's own files pin; the build below uses those files.
+// The recorded toolchain must be the one the tag's own files pin; a container build uses those files.
 const pinned = toolchainAt(commit);
 
-const outDir = outIndex >= 0 ? args[outIndex + 1] : join('target', 'verify-wasm', tag.replace(/[^\w.-]+/g, '_'));
-const { document } = buildInContainer({ ref: commit, outDir });
+let document;
+let source;
+if (wasmDir) {
+  // Only the bytes can be checked here; the files carry no record of the machine that built them.
+  const files = {};
+  for (const crate of Object.keys(published.contracts)) {
+    const path = join(wasmDir, `${crate}.wasm`);
+    if (existsSync(path)) files[crate] = readFileSync(path);
+  }
+  document = hashesDocument(published.toolchain, files);
+  source = wasmDir;
+} else {
+  source = outOption ?? join('target', 'verify-wasm', tag.replace(/[^\w.-]+/g, '_'));
+  ({ document } = buildInContainer({ ref: commit, outDir: source }));
+}
 
 console.log(`\n${tag} (${commit})`);
 console.log(`Toolchain: Rust ${pinned.rustc}, Stellar CLI ${pinned.stellarCli}, ${pinned.platform}, ${pinned.image}\n`);
 const ok = printComparison(`${tag}:${HASHES_PATH}`, compareHashes(published, document));
 console.log(
   ok
-    ? `\nEvery contract in ${tag} rebuilds byte for byte. Rebuilt files: ${outDir}`
-    : `\n${tag} does NOT rebuild to its published hashes. Rebuilt files: ${outDir}`
+    ? `\nEvery contract published by ${tag} matches byte for byte. Files: ${source}`
+    : `\nThe files in ${source} do NOT match the hashes ${tag} publishes.`
 );
 process.exit(ok ? 0 : 1);
