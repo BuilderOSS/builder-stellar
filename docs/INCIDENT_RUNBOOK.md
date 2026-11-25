@@ -160,7 +160,7 @@ for the database name, typed in full ([db operations](../db/README.md#resetting-
 - anything a launched tribe does: proposals, votes and execution through its Treasury, auctions, the market,
   claims, token transfers, registering or removing modules by vote, and upgrades its members pass;
 - Setup work on a pending tribe's own contracts by its launch admin;
-- claims into an open assurance drive, and refunds;
+- claims into an open assurance drive, refunds, and a failed drive's `release_slug` and `recover_claims`;
 - the Manager admin's own calls: registering, approving and revoking code, and upgrading the Manager;
 - renewals, the indexer and the web app.
 
