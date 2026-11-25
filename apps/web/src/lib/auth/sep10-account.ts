@@ -33,7 +33,7 @@ function byte(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255;
 }
 
-function accountNotFound(error: unknown): boolean {
+export function accountNotFound(error: unknown): boolean {
   if (!(error instanceof NotFoundError) || error.response?.status !== 404) return false;
   // A proxy/RPC-only local endpoint can return 404 too. Only Horizon's
   // account lookup problem response establishes absence, not a generic 404.
