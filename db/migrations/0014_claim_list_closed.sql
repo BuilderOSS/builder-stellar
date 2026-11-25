@@ -24,7 +24,10 @@
 --                          as founder supply that can still be minted.
 --
 -- A ClaimMinter added after launch is launched in the transaction that creates
--- it, so its lists all read opened_in_setup false.
+-- it, so its lists all read opened_in_setup false. The launch is read from
+-- chain.events, as 0012's manager.module_launches does: a module registered in
+-- a later transaction than the one that created it has its launch before its
+-- registration window, so manager.module_events does not hold it.
 -- =============================================================================
 
 CREATE OR REPLACE VIEW claims.lists AS
@@ -62,7 +65,7 @@ SELECT
     ELSE LEAST(chain.u64_bigint(o.a ->> 'expires_at'), floor(extract(epoch FROM k.closed_at))::bigint)
   END AS effective_expires_at,
   NOT EXISTS (
-    SELECT 1 FROM manager.module_events l
+    SELECT 1 FROM chain.events l
     WHERE l.deployment_id = o.deployment_id AND l.contract_id = o.contract_id
       AND l.contract_role = 'claims'
       AND l.event_name = 'claim_minter_launched'

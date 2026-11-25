@@ -375,7 +375,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         ) : null}
         {data && !data.claimsContractId ? <Callout variant="info" title="This tribe has no claims module" /> : null}
         {data?.claimsContractId ? (
-          <FounderSupply daoId={config.tokenContractId} allowance={data.allowance} live={data.live} />
+          <FounderSupply daoId={config.tokenContractId} allowance={data.allowance} live={data.live} showError={admin} />
         ) : null}
         {data && !data.authenticated && !admin ? (
           <p>Connect the wallet that is on a claim list to see your tokens, or to take back a payment.</p>

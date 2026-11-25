@@ -376,6 +376,7 @@ export function MembershipSettings() {
               allowance={data.modules.find((entry) => entry.address === config.claimsContractId)?.allowance ?? null}
               live={data.live}
               manageHref={daoRoute(routeId, 'admin/claims')}
+              showError
             />
           ) : null}
         </Stack>

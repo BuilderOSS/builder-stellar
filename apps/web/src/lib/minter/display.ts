@@ -95,13 +95,15 @@ export function founderSupplyText({
     `People on ${lists === 1 ? 'that list' : 'those lists'} can still claim them until ${lists === 1 ? 'it closes' : 'each list closes'}.`
   ];
   if (cap === 0)
-    parts.push('The claims module has no mint allowance left, so none can be minted until a proposal raises it.');
+    parts.push(
+      `The claims module has no mint allowance left, so none can be minted until ${live ? 'a proposal' : 'the launch admin'} raises it.`
+    );
   else if (cap < unclaimed)
     parts.push(`The claims module can mint ${tokens(cap)} of them, its remaining mint allowance.`);
   parts.push(
     live
       ? 'A proposal can close a list early to stop this.'
-      : 'They stay claimable after launch, until each list closes.'
+      : `They stay claimable after launch, until ${lists === 1 ? 'the list closes' : 'each list closes'}.`
   );
   return {
     title: cap === 0 ? 'Founder supply on setup lists' : `Founder supply: ${tokens(cap)} can still be minted`,

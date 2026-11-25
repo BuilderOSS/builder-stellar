@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), aggregate: vi.fn(), config: vi.fn() }));
-vi.mock('@/lib/prisma', () => ({ prisma: { claimsList: { findMany: mocks.findMany, aggregate: mocks.aggregate } } }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), config: vi.fn() }));
+vi.mock('@/lib/prisma', () => ({ prisma: { claimsList: { findMany: mocks.findMany } } }));
 vi.mock('./service', () => ({ claimScope: async () => ({ config: mocks.config() }) }));
 vi.mock('@/config/deployments.generated', () => ({ DEPLOYMENT_ID: 'deployment-a' }));
 
@@ -28,8 +28,13 @@ describe('open claim lists from the index', () => {
   });
 
   it('reads only the tribe’s current ClaimMinter, and only lists that have not closed or expired', async () => {
-    mocks.findMany.mockResolvedValue([row(0), row(3, { openedInSetup: false })]);
-    mocks.aggregate.mockResolvedValue({ _sum: { total: 10n, claimed: 4n }, _count: 1 });
+    mocks.findMany
+      .mockResolvedValueOnce([row(0), row(3, { openedInSetup: false })])
+      // Setup lists: one with 6 left, one fully claimed (it neither adds tokens nor counts).
+      .mockResolvedValueOnce([
+        { total: 10n, claimed: 4n },
+        { total: 5n, claimed: 5n }
+      ]);
     const result = await openClaimLists(TOKEN, NOW);
     const where = {
       deploymentId: 'deployment-a',
@@ -38,9 +43,10 @@ describe('open claim lists from the index', () => {
       closed: false,
       effectiveExpiresAt: { gt: BigInt(NOW) }
     };
-    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+    expect(mocks.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where }));
     // Founder supply: free Setup lists only, not the launch drive.
-    expect(mocks.aggregate).toHaveBeenCalledWith(
+    expect(mocks.findMany).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({ where: { ...where, openedInSetup: true, isAssurance: false } })
     );
     expect(result).toMatchObject({ deploymentId: 'deployment-a', daoId: TOKEN, setupUnclaimed: 6, setupLists: 1 });

@@ -39,12 +39,15 @@ describe('founder supply', () => {
     expect(text?.title).toBe('Founder supply: 2 tokens can still be minted');
     expect(text?.description).toContain('a claim list opened during setup');
     expect(text?.description).toContain('The claims module can mint 2 tokens of them, its remaining mint allowance.');
-    expect(text?.description).toContain('They stay claimable after launch, until each list closes.');
+    expect(text?.description).toContain('They stay claimable after launch, until the list closes.');
   });
 
   it('says when no allowance is left, and nothing when there is no supply', () => {
     expect(founderSupplyText({ unclaimed: 1, lists: 1, allowance: 0, live: true })?.description).toContain(
       'none can be minted until a proposal raises it'
+    );
+    expect(founderSupplyText({ unclaimed: 1, lists: 1, allowance: 0, live: false })?.description).toContain(
+      'none can be minted until the launch admin raises it'
     );
     expect(founderSupplyText({ unclaimed: 0, lists: 0, allowance: 5, live: true })).toBeNull();
   });

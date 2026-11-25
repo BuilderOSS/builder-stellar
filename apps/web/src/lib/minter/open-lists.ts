@@ -11,8 +11,10 @@ import { prisma } from '@/lib/prisma';
 
 import { claimScope } from './service';
 
-/** At most this many open lists are listed; the founder supply total counts every Setup list. */
+/** At most this many open lists are listed. */
 export const OPEN_CLAIM_LISTS_SHOWN = 50;
+/** Setup lists read for the founder supply total; the launch admin opens a handful in practice. */
+const SETUP_LISTS_READ = 1000;
 
 export type OpenClaimList = {
   listId: number;
@@ -40,7 +42,7 @@ export type OpenClaimLists = {
    * supply yet, and the ClaimMinter can mint them until each list closes, within its allowance.
    */
   setupUnclaimed: number;
-  /** How many open Setup lists hold that supply. */
+  /** How many open Setup lists still have tokens to claim. */
   setupLists: number;
   generatedAt: string;
 };
@@ -66,9 +68,16 @@ export async function openClaimLists(daoId: string, now = Math.floor(Date.now() 
   const setupWhere = { ...where, openedInSetup: true, isAssurance: false };
   const [rows, setup] = await Promise.all([
     prisma.claimsList.findMany({ where, orderBy: { listId: 'asc' }, take: OPEN_CLAIM_LISTS_SHOWN }),
-    prisma.claimsList.aggregate({ where: setupWhere, _sum: { total: true, claimed: true }, _count: true })
+    prisma.claimsList.findMany({
+      where: setupWhere,
+      select: { total: true, claimed: true },
+      orderBy: { listId: 'asc' },
+      take: SETUP_LISTS_READ
+    })
   ]);
-  const left = (setup._sum.total ?? 0n) - (setup._sum.claimed ?? 0n);
+  // A fully claimed list has nothing left to mint, so it neither adds tokens nor counts as a list.
+  const remaining = setup.map((list) => list.total - list.claimed).filter((left) => left > 0n);
+  const left = remaining.reduce((sum, value) => sum + value, 0n);
   return {
     ...base,
     lists: rows.map((row) => ({
@@ -81,7 +90,7 @@ export async function openClaimLists(daoId: string, now = Math.floor(Date.now() 
       expiresAt: Number(row.effectiveExpiresAt),
       openedInSetup: row.openedInSetup
     })),
-    setupUnclaimed: Number(left > 0n ? left : 0n),
-    setupLists: setup._count
+    setupUnclaimed: Number(left),
+    setupLists: remaining.length
   };
 }

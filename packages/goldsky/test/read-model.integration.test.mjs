@@ -1214,7 +1214,7 @@ test('claims: a closed list stops at its close, and Setup lists are marked', { s
     { topics: 1, data: ['minted', 'total'] },
     'the fixture below uses the fields ListClosed emits'
   );
-  const others = `SELECT * FROM claims.lists WHERE dao_id <> 'CTOK5' ORDER BY dao_id, list_id`;
+  const others = `SELECT * FROM claims.lists WHERE dao_id NOT IN ('CTOK4', 'CTOK5') ORDER BY dao_id, list_id`;
   const before = rows(others);
 
   // DAO 5: the launch admin opens two free lists in Setup and a claimant takes 2 tokens from the
@@ -1232,6 +1232,14 @@ test('claims: a closed list stops at its close, and Setup lists are marked', { s
   emit('claims', 'CCLM5', 'claim_minter_launched', { topics: [addr('CTRE5')], ledger: 343 });
   list(2, 344);
   emit('claims', 'CCLM5', 'list_closed', { topics: [u32(0)], data: { minted: u32(2), total: u32(10) }, ledger: 345 });
+  // DAO 4, already live, gets a ClaimMinter by proposal: create_module launches it at once, and a
+  // later proposal registers it, so its launch lands before its registration window opens.
+  emit('manager', 'CMANAGER', 'module_created', { topics: [addr('CTOK4'), sym('claims')], data: { n: u32(1), address: addr('CCLM4') }, ledger: 346 });
+  emit('claims', 'CCLM4', 'claim_minter_launched', { topics: [addr('CTRE4')], ledger: 346, evt: 1 });
+  emit('token', 'CTOK4', 'module_registered', { topics: [sym('claims')], data: { address: addr('CCLM4'), non_voting: bool(false) }, ledger: 347 });
+  emit('claims', 'CCLM4', 'list_opened', {
+    topics: [u32(0)], data: { root: bytes('r40'), tree_uri: str('ipfs://tree40'), asset: addr('CXLM'), price: i128(0), expires_at: u64(9_000_000_000), total: u32(3), assurance: VOID }, ledger: 348
+  });
   const raw = events.slice(start).map(rawScript);
   const decodedRows = raw.map(decodeScript);
   const activityRows = decodedRows.map(activityScript);
@@ -1267,7 +1275,11 @@ test('claims: a closed list stops at its close, and Setup lists are marked', { s
   assert.deepEqual(
     rows(`SELECT dao_id, list_id, closed, opened_in_setup, (effective_expires_at = expires_at) AS same FROM claims.lists WHERE dao_id <> 'CTOK5' ORDER BY dao_id, list_id`)
       .map((r) => [r.dao_id, Number(r.list_id), r.closed, r.opened_in_setup, r.same]),
-    [['CTOK1', 0, false, false, true], ['CTOK1', 1, false, false, true], ['CTOK1', 2, false, false, true], ['CTOK2', 0, false, true, true]]
+    [
+      ['CTOK1', 0, false, false, true], ['CTOK1', 1, false, false, true], ['CTOK1', 2, false, false, true], ['CTOK2', 0, false, true, true],
+      // The ClaimMinter added after launch: its list is not a Setup list.
+      ['CTOK4', 0, false, false, true]
+    ]
   );
   assert.deepEqual(
     rows(`SELECT kind, visibility FROM app.activity_feed WHERE dao_id = 'CTOK5' AND event_name = 'list_closed'`),

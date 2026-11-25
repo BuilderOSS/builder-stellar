@@ -15,7 +15,8 @@ export function FounderSupply({
   daoId,
   allowance,
   live,
-  manageHref
+  manageHref,
+  showError = false
 }: {
   daoId: string;
   /** The claims module's remaining mint allowance; null when it has none. */
@@ -23,9 +24,12 @@ export function FounderSupply({
   live: boolean;
   /** Where the lists are managed, when this is not that page. */
   manageHref?: Route;
+  /** Say when the index can't be read (manage views); elsewhere nothing shows. */
+  showError?: boolean;
 }) {
   const open = useOpenClaimLists(daoId);
-  if (open.error) return <Text size="sm">Founder supply could not be read from the index right now.</Text>;
+  if (open.error)
+    return showError ? <Text size="sm">Founder supply could not be read from the index right now.</Text> : null;
   if (!open.data) return null;
   const text = founderSupplyText({
     unclaimed: open.data.setupUnclaimed,

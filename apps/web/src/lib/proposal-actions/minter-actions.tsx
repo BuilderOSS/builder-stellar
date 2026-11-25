@@ -133,7 +133,8 @@ function CloseClaimListForm({
       <Select
         id="close-claim-list"
         value={chosen === null ? '' : String(chosen)}
-        onChange={(event) => onChange({ ...value, listId: event.target.value })}
+        // Choosing a list (again) binds the draft to the tribe's current ClaimMinter when it is queued.
+        onChange={(event) => onChange({ listId: event.target.value })}
         disabled={disabled || open.isLoading}
         aria-invalid={Boolean(error) || undefined}
         aria-describedby="close-claim-list-hint"
