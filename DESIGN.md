@@ -1,7 +1,7 @@
 ---
 # gstack: design-md-format=spec
 name: Tribe Builder
-description: A cozy, lamplit clubhouse for tribes that own things together. Warm neutrals, one confident blue, brass for what's yours.
+description: A cosy, lamplit clubhouse for tribes that own things together. Warm neutrals, one confident blue, brass for what's yours.
 colors:
   # Dark is the hero theme. Light values are in the Colors table below.
   canvas: "#141311"
@@ -125,7 +125,7 @@ Construction, on a 32-unit grid (viewBox `0 0 32 32`):
 | Glyph on the tile | #F3EDE5, seat #D9A35A | same | icon files only |
 | One colour | ink #221E19 or paper #F3EDE5 | | press kit |
 
-The mark uses `signal`, not `primary`: it says "here", it isn't a filled button. Components colour it with tokens only; raw hex lives only in icon files (`app/icon.svg`, `lib/brand-tile.tsx`) because browser chrome and image generation can't read CSS variables.
+The mark uses `signal`, not `primary`: it says "here", it isn't a filled button. Components colour it with tokens only; raw hex lives only in icon and image files (`app/icon.svg`, and `lib/brand-colors.ts` for `lib/brand-tile.tsx` and the share cards) because browser chrome and image generation can't read CSS variables.
 
 **Clear space and size:** one head's diameter on every side. The minimum size is 16px, using the 16px drawing.
 

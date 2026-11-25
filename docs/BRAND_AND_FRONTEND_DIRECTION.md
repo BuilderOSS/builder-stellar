@@ -6,16 +6,17 @@ Tribe Builder, at [tribes.build](https://tribes.build), is where people build an
 
 ## Who it's for
 
-First, people in the Stellar ecosystem and organizers new to crypto who already have people and a purpose. Second, crypto natives who know Nouns and want a fast, cheap DAO. The savings circle isn't ready, so it doesn't lead the story.
+First, people in the Stellar ecosystem and organisers new to crypto who already have people and a purpose. Second, crypto natives who know Nouns and want a fast, low-cost DAO. The savings circle isn't ready, so the product does not lead with it.
 
 ## Voice
 
-A warm host: plain, kind, specific, quietly confident.
+Clear, calm and inclusive: a professional guide for communities that decide together. The full rules are in the Voice section of [DESIGN.md](../DESIGN.md).
 
 - **Plain word first, the DAO term one line beneath.** "Members", then "Each membership is an NFT with one vote." The home hero says "Build a tribe." and then "A DAO on Stellar: shared treasury, onchain votes, NFT membership."
 - **A group is a tribe.** Your tribes, Find a tribe, Build a tribe, Switch tribe. Savings circles are circles, groups or savers, never tribes. Never call a real group of people a tribe in marketing.
+- **Literal and calm.** No idioms, metaphors, slang, jokes or hype. Never promise returns, value, safety or permanence.
 - **Say what will happen before it happens**, and name the outcome on buttons: "Place 200 XLM bid", not "Submit".
-- Sentence case, contractions, no exclamation marks, no "simply" or "just", no em dashes in UI copy.
+- **Short, global sentences.** British spelling, the Oxford comma, sentence case and contractions. Unambiguous numbers and dates (2 days, 2,400 XLM, 3 March 2026). No exclamation marks, no "simply", "just", "easy" or "magic", and no em dashes in UI copy.
 - **Help sits where the question comes up:** the "What's a tribe?" sheet (home hero and footer), the wallet intro before the first Connect (reopened from the You sheet), and glossary popovers for Treasury, Proposal, Delegate, Quorum, Launch admin and Safety delay.
 
 ## Logo
@@ -40,21 +41,21 @@ Every page shares as a 1200×630 card on the Dusk gradient, drawn with `next/og`
 
 ## Current flows
 
-`/create` is one long form with sections: identity, membership, governance, then review. Artwork and founder minting belong to Setup after creation. The local workspace supports multiple drafts, duplication, resumption and guarded deletion. Marketplace favorites are private browser preferences, not public tags.
+`/create` is one long form with sections: identity, membership, governance, then review. Artwork and founder minting belong to Setup after creation. The local workspace supports multiple drafts, duplication, resumption and guarded deletion. Marketplace favourites are private browser preferences, not public tags.
 
-Marketplace discovery, sale views, approval and escrow selling, purchase, cancellation, expiry recovery and governance preparation are implemented. Proposal detail distinguishes chain state, indexed fallback, successful execution and receipt availability. Read [web behavior](../apps/web/README.md) for boundaries.
+Marketplace discovery, sale views, approval and escrow selling, purchase, cancellation, expiry recovery and governance preparation are implemented. Proposal detail distinguishes chain state, indexed fallback, successful execution and receipt availability. Read [web behaviour](../apps/web/README.md) for boundaries.
 
 Treasury funding, holder controls, paginated members, auction history and paused settlement, and claimant signing use reviewed transaction flows. Allocation draft validation is not proposal submission. Creation uses signed-versus-accepted states and explicit identical-envelope rebroadcast; UI copy must not call signing alone a submitted transaction. Registry review does not upload or approve an upgrade.
 
 ## Authority and language
 
-Authority language is correctness, not style, and stays exact:
+Authority language is correctness, not style, and stays exact. The list is in the Voice section of [DESIGN.md](../DESIGN.md):
 
 - Before launch: **Launch admin**, **Setup**, and direct configuration transactions.
 - After launch: **Requires DAO governance**, not unilateral administrator power.
 - Queue and execute: any wallet can submit when the proposal is eligible; it pays fees.
 - Preparation: **Local draft** does not mean deployed, shared or approved.
-- Transactions: keep wallet review, submission, confirmation and indexed visibility distinct. An unknown confirmation is a recovery state, not evidence of failure.
+- Transactions: keep wallet review, submission, confirmation and indexed visibility distinct. Signing alone is not "submitted". An unknown confirmation is a recovery state, not evidence of failure.
 
 The newcomer help explains these ideas; it is not a guided tour, and there is no cross-device collaboration. Document such capabilities only when they're implemented.
 

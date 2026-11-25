@@ -34,11 +34,11 @@ Local browser storage → creation/proposal drafts and preferences (not indexed)
 | [ClaimMinter](../contracts/minter/README.md) | The DAO's claim lists: a Merkle root plus a published `tree_uri`, an optional price, partial claims, and the assurance list with escrow and refunds. Optional module (crate `minter`, registry kind `claims`) |
 | [Manager](../contracts/manager/README.md) | Deterministic factory (`create_dao`, `create_module`), implementation registration/revocation/latest selection and approvals, the assurance launch (`open_assurance`, `launch_when_ready`, `recover_claims`), slug registry (launched DAOs can move by vote) |
 
-`common` is a library; `dao-e2e` is an in-memory test crate. Neither is a DAO module. Release labels live in [the manifest](../releases/contracts.json).
+`common` is a library, `dao-e2e` is an in-memory test crate, and `vote-adapter-mock` is a Governor vote source for tests and testnet only ([governance adapter](designs/governance-adapter.md)). None of them is a DAO module. Release labels live in [the manifest](../releases/contracts.json).
 
 ## Create → Setup → Launch
 
-1. `create_dao` requires deployer and launch-admin authorization, validates configuration/current implementations, deploys the core four with constructor-only wiring, deploys each module in `modules: Vec<ModuleSpec>` and registers it on the Token, and applies `token_settings` and `transfer_agents`. `create_module` adds a module later (Setup or by proposal).
+1. `create_dao` requires deployer and launch-admin authorisation, validates configuration/current implementations, deploys the core four with constructor-only wiring, deploys each module in `modules: Vec<ModuleSpec>` and registers it on the Token, and applies `token_settings` and `transfer_agents`. `create_module` adds a module later (Setup or by proposal).
 2. The launch admin is every contract's `admin()` in Setup, and grants module allowances and opens free claim lists. Artwork must be added **before** founder mints: the Metadata hook seeds traits at mint time and seeds nothing without properties (`metadata.regenerate` seeds a token minted without traits). Founder mints and artwork/configuration changes are separate transactions; a later failed transaction does not undo earlier ones.
 3. `launch_dao(token_address, launch_config)` checks launch-admin auth, factory not paused, the requested slug still free (`SlugTaken`), the launch admin still the Token admin, registered/non-revoked current hashes for the core and every registered module, a nonzero voting supply, and each module's payment asset unchanged since creation.
 4. Launch sets every contract Live and hands its admin to the Treasury (`AdminChanged`). A started Auction gets an unlimited mint allowance; the Marketplace gets one per pool, by the proposal that opens it; the ClaimMinter keeps what the launch admin granted.
@@ -55,11 +55,11 @@ Which modules a DAO has is chosen at creation (`modules`); `launch_config` only 
 
 ## Execution and upgrades
 
-Queue and Treasury execution are permissionless at the contract boundary. The submitting wallet pays fees; neither requires token ownership. Proposing and voting have their own authorization/eligibility checks. Governor derives ETA from its queue delay, ignoring the inherited queue ETA/operator inputs.
+Queue and Treasury execution are permissionless at the contract boundary. The submitting wallet pays fees; neither requires token ownership. Proposing and voting have their own authorisation and eligibility checks. Governor derives ETA from its queue delay, ignoring the inherited queue ETA/operator inputs.
 
 Treasury execution consumes the exact action vectors and description hash on Governor, then invokes each action. Governor is off the call stack before actions run. A failing action reverts the transaction, including the Executed mark. `Governor.execute` always fails with `UseTreasuryExecute`.
 
-Treasury-targeted actions use an internal allowlist (`upgrade`, `migrate`, plus `authorize`, which attaches a nested authorization tree to the next action) rather than re-entry. Other contract upgrades require the contract's admin, matching current hash, and a Manager-approved registered/non-revoked destination; `migrate()` then advances the storage version. Manager approval cannot force an upgrade. `version()` is never stored: every contract looks its `CurrentHash` up in the Manager registry, so versions follow upgrades without a proposal. Modules are upgraded per DAO like the core contracts; there is no shared contract whose upgrade reaches every DAO. Error codes are unique per contract (7000-7899). See [security](SECURITY_MODEL.md).
+Treasury-targeted actions use an internal allowlist (`upgrade`, `migrate`, plus `authorize`, which attaches a nested authorisation tree to the next action) rather than re-entry. Other contract upgrades require the contract's admin, matching current hash, and a Manager-approved registered/non-revoked destination; `migrate()` then advances the storage version. Manager approval cannot force an upgrade. `version()` is never stored: every contract looks its `CurrentHash` up in the Manager registry, so versions follow upgrades without a proposal. Modules are upgraded per DAO like the core contracts; there is no shared contract whose upgrade reaches every DAO. Error codes are unique per contract (7000-7899). See [security](SECURITY_MODEL.md).
 
 ## Read and presentation layers
 
@@ -67,7 +67,7 @@ The database is event-derived, not a copy of contract storage. The indexer follo
 
 Execution receipts come from scoped successful Treasury events or the indexed execution-call view. Confirmation and receipt/index availability are distinct. The marketplace uses indexed discovery and live preflight checks; the server prepares unsigned transactions and the wallet signs/submits them.
 
-The web app does not write application tables. Multiple drafts and private marketplace labels/favorites live in browser storage only. See [web reference](../apps/web/README.md), [database catalog](DATABASE_SCHEMA.md), and [tenant boundaries](MULTITENANT_ARCHITECTURE.md).
+The web app does not write application tables. Multiple drafts and marketplace favourites live in browser storage only. See [web reference](../apps/web/README.md), [database catalogue](DATABASE_SCHEMA.md), and [tenant boundaries](MULTITENANT_ARCHITECTURE.md).
 
 Treasury funding and token-holder/claim APIs prepare unsigned transactions from
 session-derived identity; they are not database writes or server signing. Treasury

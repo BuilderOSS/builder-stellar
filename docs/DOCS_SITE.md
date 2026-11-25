@@ -1,13 +1,12 @@
 # The docs site (docs.tribes.build)
 
-`apps/docs` is the user docs for Tribe Builder: concepts, a guide for each flow, and
-reference pages. It is a static Next.js site with MDX, on the same Warm Ink · Dusk system
-as the app. The plan and its design decisions are in
+`apps/docs` is the user documentation for Tribe Builder: concepts, a guide for each flow,
+and reference pages. It is a static Next.js site with MDX, on the same Warm Ink · Dusk
+system as the app. The plan and its design decisions are in
 `docs/plans/walkthroughs-and-docs.md` (§5, and the decisions in §12 and §14).
 
-This is the P5 scaffold. Every page in the information architecture exists as a
-placeholder, and the real content arrives in P7. Screenshots come from the capture
-pipeline in P6 (`docs/qa/SHOWCASE_TRIBE.md`).
+Every page in the information architecture is written: no page still uses `<Placeholder>`.
+Screenshots come from the capture pipeline (`docs/qa/SHOWCASE_TRIBE.md`).
 
 ## Commands
 
@@ -42,15 +41,16 @@ apps/web/src/components/ui ──> apps/docs (package export @builder-stellar/we
   semantic tokens, the `dark` and `light` conditions, text styles, keyframes, and the
   primitive recipes), the three `next/font` faces, and the theme runtime. Both apps list
   the preset after `@pandacss/preset-panda`.
-- **The app's primitives, not copies.** The docs import Button, Dialog, Sheet,
-  Disclosure, SegmentedControl, ListRow, SearchInput and Callout from `apps/web` through
-  its `./ui/*` package export, plus `BrandMark` through `./brand-mark`. Those files import
-  `styled-system/*`, which the docs resolve to their own generated system (the webpack
-  alias in `next.config.mjs` and `paths` in `tsconfig.json`). The docs Panda config scans
-  those files, so their styles are generated here too. Only import primitives that don't
-  reach into the app (`@/lib`, contexts): today that's every file in `components/ui`
-  except `address`, `avatar`, `countdown`, `crest`, `duration-input`, `FallbackImage` and
-  `markdown-field`.
+- **The app's primitives, not copies.** The docs import Button, Callout, Dialog,
+  Disclosure, ListRow, SearchInput, Sheet and ThemeSwitch (with its SegmentedControl) from
+  `apps/web` through its `./ui/*` package export, plus `BrandMark` through `./brand-mark`.
+  Those files import `styled-system/*`, which the docs resolve to their own generated
+  system (the webpack alias in `next.config.mjs` and `paths` in `tsconfig.json`). The docs
+  Panda config scans those files, so their styles are generated here too. Only import
+  primitives that don't reach into the app (`@/lib`, contexts), directly or through another
+  primitive: today that's every file in `components/ui` except `address`, `avatar`,
+  `countdown`, `crest`, `duration-input`, `FallbackImage`, `guide-link`, `markdown`,
+  `markdown-field`, `page-header` and `short-id`.
 - **Static.** `output: 'export'` with trailing slashes: `/guides/proposals/vote/` is
   `out/guides/proposals/vote/index.html`. There is no server and no API.
 
@@ -66,8 +66,9 @@ apps/web/src/components/ui ──> apps/docs (package export @builder-stellar/we
   which writes a placeholder for every nav page that has no file (it never overwrites).
 - **MDX components** (`src/mdx-components.tsx`): headings, paragraphs, lists, links and
   code get the docs prose styles. Pages can also use `<Shot>`, `<Callout>`,
-  `<Disclosure>`, `<GlossaryList>` and `<Placeholder>`. Internal links that start with `/`
-  use Next links; others open in a new tab.
+  `<Disclosure>`, `<GlossaryList>` and `<Placeholder>` (the "not written yet" notice that
+  `scaffold-content.mjs` writes). Internal links that start with `/` use Next links, links
+  that start with `#` stay on the page, and others open in a new tab.
 - **Guides use the page template** (plan §5.3): Overview, Before you start, Steps,
   What happens on chain (in a Disclosure), If something goes wrong, Related.
 - **The table of contents** comes from the page's h2 and h3 headings, read from the MDX
@@ -101,8 +102,8 @@ apps/web/src/components/ui ──> apps/docs (package export @builder-stellar/we
 
 ## Theme
 
-Dark, Light and System, with the same SegmentedControl as the app's You sheet: in the
-header from 768px, and in the nav sheet below that. The runtime is
+Dark, Light and System, with the app's ThemeSwitch (the same SegmentedControl as the You
+sheet): in the header from 768px, and in the nav sheet below that. The runtime is
 `packages/design-tokens/src/theme.ts`, shared with the app.
 
 - **Storage.** Choosing a theme writes the app's localStorage key
@@ -138,20 +139,22 @@ pager. The 404 and the component preview are excluded.
 <Shot id="create/identity/01" alt="The identity step with the tribe name filled in" />
 ```
 
-- **Capture.** The images come from the real app on the dev deployment, following one example tribe,
-  Lamplight. `docs/qa/SHOWCASE_TRIBE.md` has the story, the commands (`pnpm --dir apps/e2e
-  build:capture`, then `capture-story.sh` beside the `90-drive` spec) and the shots that can't be
-  captured. Desktop is 1440 × 900 and mobile 375 × 812, both at 2x, saved as WebP.
+- **Capture.** The images come from the real app on the dev deployment, following one
+  example tribe, Lamplight. `docs/qa/SHOWCASE_TRIBE.md` has the story, the commands
+  (`pnpm --dir apps/e2e build:capture`, then `capture-story.sh` beside the `90-drive` spec;
+  `pnpm docs:capture` runs the story script) and the shots that can't be captured. Desktop
+  is 1440 × 900 and mobile 375 × 812, both at 2x, saved as WebP.
 - **Files.** `public/shots/<id>/{desktop,mobile}-{light,dark}.webp` and
   `public/shots/<id>/manifest.json`, written by the capture pipeline (P6, plan §5.6). The
   manifest shape is `ShotManifest` in `src/lib/shots.ts`: the app commit, ledger, capture
   time, each variant's pixel size and viewport, and the markers.
 - **Theme.** Each device renders a light and a dark image, and CSS shows the one that
-  matches `[data-theme]`. They are lazy, and browsers defer lazy images that are hidden, so a reader normally downloads only the one they see.
+  matches `[data-theme]`. The images are lazy, and browsers defer lazy images that are
+  hidden, so a reader normally downloads only the one they see.
 - **Device** (decision 7A). Under 768px readers see the mobile capture; wider screens see
-  desktop. A small muted "Show mobile" (or "Show desktop") under each figure switches every figure, for the session
-  (sessionStorage). Most readers never need it, so it is the size of a caption. A device is used only when
-  both its theme images exist.
+  desktop. A small muted "Show mobile" (or "Show desktop") under each figure switches every
+  figure for the session (sessionStorage). Most readers never need it, so it is the size of
+  a caption. A device is used only when both its theme images exist.
 - **Markers** (decision 3A). Each manifest marker has a box per device, as fractions of
   the image. `<Shot>` draws a 2px `signal` ring 4px outside the box, at the control radius
   plus 4px, and a numbered 20px disc. Screen readers get "Step 2: the New proposal button"
@@ -185,7 +188,9 @@ can't drift. `glossaryHref(key, origin)` links a term to its anchor on the docs 
 
 ## Deploy
 
-Not set up yet. The plan (§11 Q5) is Vercel under the same team as the app, at
-`docs.tribes.build`: root directory `apps/docs`, build command `pnpm docs:build` from the
-repo root, output directory `apps/docs/out`. Set `NEXT_PUBLIC_DOCS_URL` on previews so
+docs.tribes.build is the Vercel project `builder-stellar-docs`: root directory `apps/docs`,
+build `pnpm build` (codegen, `next build`, Pagefind), output `out` and production branch
+`dev`. It is one site for both the dev and the production app. Its settings are in
+[DEV_DEPLOYMENT.md](DEV_DEPLOYMENT.md), section 5. `NEXT_PUBLIC_DOCS_URL` overrides the
+canonical origin (`metadataBase` in `src/app/layout.tsx`), so set it on previews to make
 canonical and Open Graph URLs point at the preview.

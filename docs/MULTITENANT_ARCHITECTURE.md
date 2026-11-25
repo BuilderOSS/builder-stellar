@@ -9,9 +9,9 @@ dao_id        = <DAO Token contract address>
 
 ## Deployment selection
 
-[generate-web-deployment.mjs](../scripts/generate-web-deployment.mjs) selects the newest `deploys/*-manager.json` by `deployedAt`, skipping the gitignored `e2e-*` rehearsal artifacts and generates `DEPLOYMENT_ID`. This is a build/dev selection, not a user-supplied query parameter. `NEXT_PUBLIC_NETWORK` independently selects network settings; it must match the artifact. The generator does not filter artifacts by that environment variable.
+[generate-web-deployment.mjs](../scripts/generate-web-deployment.mjs) generates `DEPLOYMENT_ID` from one Manager artifact: the one `MANAGER_DEPLOYMENT_FILE` names, if set, or else the newest `deploys/*-manager.json` by `deployedAt`. The newest-artifact search skips the gitignored `e2e-*` rehearsal artifacts and any artifact marked `rehearsalOf` ([deployment-artifacts.mjs](../scripts/deployment-artifacts.mjs)). This is a build and dev selection, not a user-supplied query parameter. `NEXT_PUBLIC_NETWORK` independently selects network settings; it must match the artifact. The generator does not filter artifacts by that environment variable.
 
-The Goldsky generator instead uses its explicit `MANAGER_DEPLOYMENT_FILE`. Keep web selection, pipeline artifact, network, and database deployment rows consistent. Do not set a manual `NEXT_PUBLIC_DEPLOYMENT_ID` override.
+The Goldsky generator requires an explicit `MANAGER_DEPLOYMENT_FILE`. Keep web selection, pipeline artifact, network, and database deployment rows consistent. Do not set a manual `NEXT_PUBLIC_DEPLOYMENT_ID` override.
 
 ## Database layers
 
@@ -19,18 +19,18 @@ Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_fee
 
 `DaoCreated` supplies deployer, launch admin, the core four addresses, the modules created with the DAO (null for a kind it didn't create) and creation WASM hashes; later modules come from `ModuleCreated` and the Token's `ModuleRegistered` (`manager.module_registrations`). Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each contract's `<role>_launched` event by emitting contract. The admin is the launch admin until launch (or a launch drive opens), then the Treasury. Upgrades overlay creation hashes (`manager.module_versions`).
 
-Every DAO contract's events resolve through `manager.event_identity`: the core four from creation on, each module only inside its registration window on that DAO's Token (a module registered by two DAOs counts for each in its own window). Events outside every window are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
+Every DAO contract's events resolve through `manager.event_identity`: the core four from creation on, each module only inside its registration window on that DAO's Token (a module registered by two DAOs counts for each in its own window). Events outside every window are excluded from DAO views. Details: [database catalogue](DATABASE_SCHEMA.md).
 
 Manager also retains slug mappings. `DaoCreated.slug` is only a
 request (several pending DAOs may request the same slug); `SlugClaimed` at launch
 makes it unique, and `SlugChanged` (a vote, Manager 0.2.0) moves it and releases the
 old one. `manager.daos.slug` is the current claimed slug once launched, else the
-latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate).
-Layout resolution filters by deployment, prefers
-the current claimed slug, then the latest DAO that moved away from it
-(`manager.dao_previous_slugs`, so old links redirect while unclaimed), then an
-unambiguous request, and maps to canonical Token ID. Direct service/API validation still requires its actual documented ID
-format rather than accepting arbitrary aliases.
+latest request (`slug_claimed`, `requested_slug` and `claimed_slug` disambiguate).
+Layout resolution filters by deployment, prefers the current claimed slug, then the
+latest DAO that moved away from it (`manager.dao_previous_slugs`, so old links
+redirect while the slug is unclaimed), then an unambiguous request, and maps the
+result to the canonical Token ID. Direct service and API validation still requires
+the documented ID format rather than accepting arbitrary aliases.
 
 ## Query isolation
 
@@ -44,7 +44,7 @@ WHERE deployment_id = $1 AND dao_id = $2;
 
 Deployment-wide discovery intentionally filters only the deployment. Marketplace listing reads also bind the Marketplace contract and listing event identity. Execution receipts additionally bind Treasury, Governor, proposal ID, and ordered action identities.
 
-These are query/service isolation rules, not a claim of per-DAO PostgreSQL row-level security. The `app_server` role can read view schemas; keys alone do not prevent an incorrectly scoped query. `goldsky_writer` owns ingestion privileges, not application query authorization. See [grants](../db/README.md).
+These are query/service isolation rules, not a claim of per-DAO PostgreSQL row-level security. The `app_server` role can read view schemas; keys alone do not prevent an incorrectly scoped query. `goldsky_writer` owns ingestion privileges, not application query authorisation. See [grants](../db/README.md).
 
 ## SQL, Prisma, DTO, and RPC are different interfaces
 
@@ -55,15 +55,14 @@ These are query/service isolation rules, not a claim of per-DAO PostgreSQL row-l
 - `indexed_at` on a DAO is its registry ingestion timestamp, not proof that every recent vote/listing has projected.
 - `DaoConfig` is defined in [dao-db.ts](../apps/web/src/lib/dao-db.ts); network/client configuration is adapted in [dao-config.ts](../apps/web/src/lib/dao-config.ts).
 
-Member/token list responses now expose bounded pagination, counts, and scoped
+Member and token list responses expose bounded pagination, counts, and scoped
 identities. Holder detail labels live versus indexed ownership; mutations recheck
-live ownership. Treasury history reads existing `treasury.calls`, and claim
-history reads `claims.claims`, separate from the chain reads that decide what a
-wallet can claim. These
-new consumers add no writable offchain application tables.
+live ownership. Treasury history reads `treasury.calls`, and claim history reads
+`claims.claims`, separate from the chain reads that decide what a wallet can
+claim. None of these consumers adds a writable offchain application table.
 
 The lookup endpoint is `GET /api/dao/<daoId>` and returns `daoId`, `status`, `indexedAt`, not a full configuration response. Proposal detail and marketplace services combine scoped indexed rows with live contract reads. An unavailable read does not justify broadening the tenant query.
 
 ## Local workspaces
 
-Creation drafts, artwork plans, and launch/home preferences use network, Manager, and wallet scope, with guest drafts supported. Proposal drafts use wallet/DAO scope. Marketplace favorites/private labels are browser-local and deployment-scoped, not wallet-private encrypted records. None are shared database rows, on-chain tags, or collaboration permissions. Clearing browser storage removes local data, not contracts or indexed events.
+Creation drafts, artwork plans, and launch and home preferences use network, Manager, and wallet scope, with guest drafts supported. Proposal drafts use wallet and DAO scope. Marketplace favourites and the Market home choice are browser-local and deployment-scoped, not wallet-private encrypted records. None are shared database rows, on-chain tags, or collaboration permissions. Clearing browser storage removes local data, not contracts or indexed events.
