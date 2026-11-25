@@ -33,8 +33,11 @@ function ClaimListSummary({ value, network = getConfiguredAuctionNetwork() }: Ac
       <Text>
         Opens {BigInt(value.price || '0') === 0n ? 'a free list' : 'a list'} of {value.total.toLocaleString()}{' '}
         {value.total === 1 ? 'token' : 'tokens'}
-        {BigInt(value.price || '0') === 0n ? '' : ` at ${claimPriceLabel(network, value)}`}, open until{' '}
-        {formatClaimDate(value.expiresAt)}. Listed people claim their tokens themselves; paid claims go to the treasury.
+        {BigInt(value.price || '0') === 0n ? '' : ` at ${claimPriceLabel(network, value)}`}
+        {formatClaimDate(value.expiresAt)
+          ? `, open until ${formatClaimDate(value.expiresAt)}`
+          : ', with no closing date'}
+        . Listed people claim their tokens themselves; paid claims go to the treasury.
       </Text>
       <Disclosure title="Technical details">
         <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>

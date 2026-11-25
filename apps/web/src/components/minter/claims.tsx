@@ -31,6 +31,7 @@ import { claimMinterClient } from '@/lib/minter/client';
 import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
 import {
   claimAmountLabel,
+  claimListEndText,
   claimPriceLabel,
   formatClaimDate,
   listPhase,
@@ -599,8 +600,8 @@ function ClaimListCard({
       </div>
       <p>
         {claimPriceLabel(config.name, list)} · {list.minted.toLocaleString()} of {list.total.toLocaleString()} tokens
-        claimed by {list.claimers.toLocaleString()} {list.claimers === 1 ? 'person' : 'people'} · closes{' '}
-        {formatClaimDate(list.expiresAt)}
+        claimed by {list.claimers.toLocaleString()} {list.claimers === 1 ? 'person' : 'people'} ·{' '}
+        {claimListEndText(list.expiresAt)}
       </p>
       {drive ? (
         <>
@@ -612,7 +613,9 @@ function ClaimListCard({
                 ? state.live
                   ? 'Enough people claimed and the tribe launched.'
                   : 'Enough people have claimed. Anyone can launch the tribe now.'
-                : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed by ${formatClaimDate(drive.deadline)}. Payments are held until launch.`}
+                : `${list.claimers.toLocaleString()} of ${drive.thresholdClaimers.toLocaleString()} people needed${
+                    formatClaimDate(drive.deadline) ? ` by ${formatClaimDate(drive.deadline)}` : ', with no deadline'
+                  }. Payments are held until launch.`}
           </p>
           {drive.state === 'met' && !state.live ? (
             <>

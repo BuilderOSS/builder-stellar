@@ -46,6 +46,23 @@ export function listPhase(list: ClaimListView, now = Math.floor(Date.now() / 100
   return 'open';
 }
 
-export function formatClaimDate(seconds: number) {
-  return new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+/** The latest time a JavaScript Date can hold, in milliseconds (about the year 275760). */
+const MAX_DATE_MS = 8.64e15;
+
+/**
+ * A list's expiry or a drive's deadline as a local date and time. Null for a time a Date cannot
+ * hold: the ClaimMinter takes any future u64 (up to u64::MAX), and such a list has no end date in
+ * practice, so each sentence says so in its own words instead of "Invalid Date".
+ */
+export function formatClaimDate(seconds: number): string | null {
+  const ms = seconds * 1000;
+  if (!Number.isFinite(ms) || Math.abs(ms) > MAX_DATE_MS) return null;
+  return new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** The end of a list in a sentence: "closes 3 Dec 2026, 14:05", "closed …", or "no closing date". */
+export function claimListEndText(expiresAt: number, now = Math.floor(Date.now() / 1000)) {
+  const date = formatClaimDate(expiresAt);
+  if (!date) return 'no closing date';
+  return now >= expiresAt ? `closed ${date}` : `closes ${date}`;
 }
