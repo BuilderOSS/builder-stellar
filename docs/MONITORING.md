@@ -6,10 +6,12 @@ Monitor database access, matching event freshness, RPC access, and contract TTL 
 
 | Endpoint | Meaning and status |
 | --- | --- |
-| `GET /api/health` | Chain head, the pipeline's own position and Goldsky status (with `GOLDSKY_API_TOKEN`), the newest ledger with a DAO event, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. |
-| `GET /api/goldsky/health` | Read-only `app.indexer_status` query. `healthy` returns 200, `unhealthy` 503; no-store. A missing row can still return healthy with null latest ledger/zero events. |
+| `GET /api/health` | Chain head, the pipeline's own position and Goldsky status (with `GOLDSKY_API_TOKEN`), the newest ledger with a DAO event, DAO count, recent activity, timings, alerts. `healthy` or `degraded` returns 200; `unhealthy` returns 503; outer error returns 500. One result is reused for 10 seconds (`Cache-Control: public, max-age=0, s-maxage=10`). |
+| `GET /api/goldsky/health` | Read-only `app.indexer_status` query. `healthy` returns 200, `unhealthy` 503; no-store. One result is reused for 10 seconds. A missing row can still return healthy with null latest ledger/zero events. |
 
-The first endpoint emits `rpc_latest_ledger`, `pipeline_last_ledger`, `pipeline_lag_ledgers`, `db_latest_ledger`, `db_latest_event_age_ledgers`, `dao_count`, `recent_activity_1h`, and a `pipeline` object (`configured`, `status`, `errors`); timings include `rpc_check`, `event_check`, `pipeline_check`, `dao_check`, `total`. Alerts include `pipeline_lag`, `pipeline_failed`, `pipeline_unknown`, `no_recent_activity`, `db_slow`, `rpc_unreachable`.
+Both endpoints are public and share a limit of 30 requests a minute per client address; past it they answer 429 with `Retry-After`. Poll at most every 10 seconds, since faster polling sees the same result.
+
+The first endpoint emits `rpc_latest_ledger`, `pipeline_last_ledger`, `pipeline_lag_ledgers`, `db_latest_ledger`, `db_latest_event_age_ledgers`, `dao_count`, `recent_activity_1h`, and a `pipeline` object (`configured`, `status`, `error_count`); timings include `rpc_check`, `event_check`, `pipeline_check`, `dao_check`, `total`. Alerts include `pipeline_lag`, `pipeline_failed`, `pipeline_unknown`, `no_recent_activity`, `db_slow`, `rpc_unreachable`. Goldsky's error messages can name the sink's hosts and tables, so the endpoint returns only their count; the messages are in the server log as `[api:health] Goldsky pipeline errors:`, or in `goldsky turbo` and the Goldsky dashboard.
 
 How status is decided:
 
@@ -28,6 +30,10 @@ curl -s http://localhost:4242/api/goldsky/health
 An inactive DAO deployment can have no recent matching events while the pipeline is processing normally. Event age is not source processing lag; that is what `pipeline_lag_ledgers` measures. A 200 response is not proof that the last mutation is indexed or that every contract is usable.
 
 Sources: [health route](../apps/web/src/app/api/health/route.ts), [Goldsky route](../apps/web/src/app/api/goldsky/health/route.ts), [health helper](../apps/web/src/lib/goldsky.ts).
+
+## Application logs
+
+API routes log the detail of a failure they don't pass to the client as `[api:<route>]` (for example `[api:proposals]`); the client sees only a short message. Content-Security-Policy violations arrive as `[csp-report]` lines with the directive, the blocked address (origin and path), and the page. While the page policy is report-only, check these before setting `CSP_MODE=enforce` (see [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)).
 
 ## Database/event checks
 

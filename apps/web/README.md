@@ -190,7 +190,10 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 | `GET /api/health`, `/api/goldsky/health` | Different health semantics; see [monitoring](../../docs/MONITORING.md) |
 | `/api/uploads/*`, `/api/pinata/*` | Upload services; feature flags and server credentials apply; no AI generation endpoint |
 | `GET /api/render/[daoId]/[tokenId]`, `GET /api/render?contract=&token=` | Token artwork renderer; the query form is the `renderer_base` on-chain `token_uri` points at |
+| `POST /api/csp-report` | Content-Security-Policy violation reports from browsers; logged as `[csp-report]`, never stored |
 | `GET /api/dao/[daoId]/token/[tokenId]` | The decoded on-chain `token_uri` JSON |
+
+Rendering, transaction preparation, claims, health and CSP reports are rate limited per client (429 with `Retry-After`), and unexpected failures answer with a short message while the detail goes to the server log; see "API errors and rate limits" in [SECURITY_MODEL.md](../../docs/SECURITY_MODEL.md#api-errors-and-rate-limits). Response headers and the page Content-Security-Policy are described under "Response headers" there.
 
 The member directory accepts `order=asc|desc` (descending votes by default); ordering is applied before pagination and includes an address tie-breaker. `GET /api/dao/[daoId]/initial-allocations` returns paginated original mint recipients before launch from `token.transfers` and `manager.dao_launches`, scoped to the deployment and Token contract. These records include any launch-drive claims and are not a list of current holders.
 

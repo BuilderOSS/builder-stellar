@@ -97,6 +97,11 @@ Protection (team login), and lifting that would make every PR preview public too
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_PINATA_GATEWAY`, `NEXT_PUBLIC_IMAGE_GENERATION_ENABLED` | as production |
 | `PINATA_JWT`, `NEXT_PUBLIC_PINATA_UPLOADS_ENABLED` | as production (`true`); the JWT was added by hand, since a sensitive value can't be copied |
 
+`CSP_MODE` is left unset on both projects, so the page Content-Security-Policy is report-only
+(see "Response headers" in [SECURITY_MODEL.md](SECURITY_MODEL.md#response-headers)). Set it to
+`enforce` and redeploy once the `[csp-report]` lines in the function logs show no unexpected
+violations. It is read at build time, so a change needs a new deployment.
+
 `builder-stellar-web` gains `MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json` on
 Production (see above).
 Its Ignored Build Step `[ "$VERCEL_GIT_COMMIT_REF" = "dev" ] && exit 0 || exit 1` skips `dev`,
@@ -113,6 +118,9 @@ which `builder-stellar-dev` builds; `main` and PR previews still build there.
 
 - `https://dev.tribes.build/api/health`: the chain head, the database, and the pipeline
   `builder-stellar-testnet-dev` near the head.
+- `curl -sI https://dev.tribes.build/` shows `content-security-policy-report-only` with a
+  `'nonce-…'` source, `content-security-policy: frame-ancestors 'none'; …`,
+  `x-frame-options: DENY`, and `x-content-type-options: nosniff`.
 - Connect a wallet and sign in (SEP-53) on dev.tribes.build.
 - Create a tribe on dev: it appears in Discover within the indexer's lag, and not on tribes.build.
 - docs.tribes.build serves the home page, search and both themes.
