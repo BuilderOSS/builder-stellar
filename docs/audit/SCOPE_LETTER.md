@@ -82,7 +82,7 @@ Please don't report the items in KNOWN_ISSUES.md as new findings, unless you fin
 2. **Funds without a proposal.** Can any path move a DAO's funds or tokens without a passed proposal, other than the permissionless paths `SECURITY_MODEL.md` lists? Do the Treasury's `authorize` trees authorize only what voters see?
 3. **Escrow.** Is every escrowed amount (auction bids, listings, pool stock, ClaimMinter escrow) always either paid out once or returned once? Can anyone block refunds or settlement?
 4. **Votes and quorum.** Do voting units, the voting supply, and the quorum stay correct on every transfer, mint, custody, and delegation path? Can a vote count twice, or a quorum be lowered after a proposal is created?
-5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Governor's and Treasury's storage-layout gate and recovery proposals, the Manager's notice period, and recovery upgrades of a failed drive sound?
+5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the storage-layout gate, the Governor's and Treasury's recovery proposals, the Manager's notice period, and recovery upgrades of a failed drive sound?
 6. **Isolation between DAOs.** Can one DAO affect another DAO's state, mints, or escrow through the Manager or shared code?
 7. **Resource limits and archival.** Can a passed proposal, a claim, or a settlement become impossible to complete because of event, footprint, or CPU limits, or because an entry archives?
 8. **Claims.** Are the Merkle proofs and claim checks sound?

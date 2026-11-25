@@ -6,7 +6,7 @@ repository's scripts and the intended practice; it does not record who holds whi
 
 ## Rules for every secret
 
-- A secret lives in one store: Vercel (sensitive variables), the Goldsky secret store, Neon, the stellar CLI's
+- A secret lives in one store: Vercel (sensitive variables), the Goldsky secret store, Neon, the Stellar CLI's
   key store, or a password manager. It is never committed, pasted into an issue or chat, or printed in a log.
 - It never goes on a command line, where `ps` shows it to every local user. The `db/` scripts read
   `DATABASE_URL` from the environment and hand psql a service file and a password file
@@ -21,8 +21,8 @@ repository's scripts and the intended practice; it does not record who holds whi
 
 | Secret | What it can do | Where it is stored | Used by |
 | --- | --- | --- | --- |
-| Manager admin key | Register and revoke implementations, set what new tribes deploy, approve upgrades, pause the factory, upgrade the Manager after the notice, hand over the admin | stellar CLI key store of the person who deploys | `deploy-manager.mjs`, `upgrade-contract.mjs`, `/platform` (wallet) |
-| Renewal payer (`<network>-renewer`) | Pay for TTL extensions and restores; no admin rights | stellar CLI key store | `renew-code-ttl.mjs`, `renew-dao.mjs` |
+| Manager admin key | Register and revoke implementations, set what new tribes deploy, approve upgrades, pause the factory, upgrade the Manager after the notice, hand over the admin | Stellar CLI key store of the person who deploys | `deploy-manager.mjs`, `upgrade-contract.mjs`, `/platform` (wallet) |
+| Renewal payer (`<network>-renewer`) | Pay for TTL extensions and restores; no admin rights | Stellar CLI key store | `renew-code-ttl.mjs`, `renew-dao.mjs` |
 | `IRON_PASSWORD` | Seal and open session cookies; sign upload tokens | Vercel, per project | the web app |
 | `STELLAR_WEB_AUTH_SECRET` | Sign SEP-10 sign-in challenges as the server | Vercel, per project | the web app |
 | `PINATA_JWT` | Upload and manage files on the Pinata account the key belongs to | Vercel, per project | the web app's upload routes |
@@ -36,7 +36,7 @@ repository's scripts and the intended practice; it does not record who holds whi
 
 ### Today
 
-The production testnet Manager and the dev Manager have the same admin, the stellar CLI identity
+The production testnet Manager and the dev Manager have the same admin, the Stellar CLI identity
 `testnet-admin` (`GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO`), a single key in a plain CLI
 config file. A leak of that file gives the holder both Managers.
 
@@ -139,8 +139,9 @@ tribe is created on it.
 ## Renewal payer
 
 Extending a TTL needs no admin rights, so renewals are paid by a separate low-value key. Both renewal
-scripts default to the identity `<network>-renewer` (`RENEW_IDENTITY` or `--source` / `--identity`
-override it), sign through the stellar CLI and never read the seed into Node. They refuse the Manager admin as
+scripts default to the identity `<network>-renewer` (`RENEW_IDENTITY` overrides it, as do `--identity` for
+`renew-code-ttl.mjs` and `--source` for `renew-dao.mjs`), sign through the Stellar CLI and never read the
+seed into Node. They refuse the Manager admin as
 payer unless `--allow-admin-payer` is passed.
 
 ```bash
