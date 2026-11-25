@@ -1558,8 +1558,9 @@ mod return_listing {
         );
     }
 
-    /// A token sent here directly, which no listing or pool records, can go
-    /// to the Treasury once the marketplace is paused and every pool swept.
+    /// A token no listing or pool records (sent before the Token refused
+    /// direct sends) can go to the Treasury once the marketplace is paused
+    /// and every pool swept.
     #[test]
     fn recover_token_moves_only_unrecorded_tokens_to_the_treasury() {
         let fixture = fixture();

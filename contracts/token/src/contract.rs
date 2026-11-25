@@ -489,7 +489,8 @@ impl DaoTokenContract {
     ///
     /// A `non_voting` module must hold no tokens (`ModuleHoldsTokens`): settle
     /// or cancel the auction, return the Marketplace's listings, sweep its
-    /// pools, and recover tokens sent to either directly, first. A voting
+    /// pools, and recover any token sent to either directly before the
+    /// custody rule (`# Module custody`), first. A voting
     /// module's tokens already count as votes (for its delegate), and still
     /// do after it leaves, so it may be unregistered while holding them.
     pub fn unregister_module(e: &Env, address: Address) {

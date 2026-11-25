@@ -767,15 +767,15 @@ impl MarketplaceContract {
 
     /// Send `token_id`, a membership token this contract holds that no
     /// listing or pool records, to the Treasury (the admin, while paused,
-    /// `NotPaused`). For a token someone transferred here directly. A listed
-    /// token is refused (`ListingExists`: use `return_listing`), and so is
-    /// any token while a pool is not yet swept empty (`PoolOpen`), because
-    /// stock pages are not indexed by token. The Token's `Transfer` records
-    /// the move; no marketplace event is emitted.
+    /// `NotPaused`). A listed token is refused (`ListingExists`: use
+    /// `return_listing`), and so is any token while a pool is not yet swept
+    /// empty (`PoolOpen`), because stock pages are not indexed by token. The
+    /// Token's `Transfer` records the move; no marketplace event is emitted.
     ///
     /// The Token refuses to unregister the Marketplace while it holds
-    /// tokens, so without this anyone could keep it registered by sending it
-    /// one.
+    /// tokens. It also refuses a token sent here by anyone but this contract
+    /// (`ModuleCustodyClosed`), so such a token was sent before that rule;
+    /// without this call it would keep the Marketplace registered.
     pub fn recover_token(e: &Env, token_id: u32) {
         Self::require_current_layout(e);
         common::ttl::extend_instance(e);

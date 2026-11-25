@@ -519,15 +519,16 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     /// Send `token_id`, a membership token this contract holds but is not
-    /// auctioning, to the Treasury (the admin, while paused). For a token
-    /// someone transferred here directly, which no auction records. The
-    /// token of an auction that has not settled is refused
-    /// (`TokenInAuction`): it belongs to the winner or, after
+    /// auctioning, to the Treasury (the admin, while paused): a token no
+    /// auction records. The token of an auction that has not settled is
+    /// refused (`TokenInAuction`): it belongs to the winner or, after
     /// `cancel_auction`, to the Treasury. The Token's `Transfer` records the
     /// move; no auction event is emitted.
     ///
-    /// The Token refuses to unregister the Auction while it holds tokens,
-    /// so without this anyone could keep it registered by sending it one.
+    /// The Token refuses to unregister the Auction while it holds tokens. It
+    /// also refuses a token sent here by anyone but this contract
+    /// (`ModuleCustodyClosed`), so such a token was sent before that rule;
+    /// without this call it would keep the Auction registered.
     #[when_paused]
     fn recover_token(e: &Env, token_id: u32) {
         Self::require_current_layout(e);

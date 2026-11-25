@@ -1441,9 +1441,9 @@ mod refunds {
         assert!(!c.auction.get_auction().settled);
     }
 
-    /// A token sent here directly can go to the Treasury, so no one can keep
-    /// the Auction registered by sending it one; the running auction's token
-    /// cannot.
+    /// A token no auction records (sent before the Token refused direct
+    /// sends) can go to the Treasury, so it cannot keep the Auction
+    /// registered; the running auction's token cannot.
     #[test]
     fn recover_token_sends_a_stray_token_to_the_treasury_but_never_the_lot() {
         let mut c = setup();
