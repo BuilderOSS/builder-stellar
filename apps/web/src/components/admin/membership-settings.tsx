@@ -7,12 +7,14 @@ import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { ModulesCard } from '@/components/admin/modules/modules-card';
+import { FounderSupply } from '@/components/minter/founder-supply';
 import { PageSection } from '@/components/page-section';
 import { ActionSubmit } from '@/components/proposal-actions/action-submit';
 import { EditingActionNotice } from '@/components/proposal-actions/editing-action-notice';
 import { PendingValue, usePendingActions } from '@/components/proposal-actions/pending-value';
 import { Badge, Callout, Card, Chip, Heading, HelpTip, Skeleton, Switch } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { daoRoute } from '@/lib/dao-routes';
 import { type MembershipState, useMembershipState } from '@/lib/membership-state';
 import { ACTION_SOURCES } from '@/lib/proposal-actions/action-request';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
@@ -105,7 +107,7 @@ const SWITCHES = [
  * directly; after launch every change is a proposal action.
  */
 export function MembershipSettings() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const state = useMembershipState(config, address);
@@ -367,6 +369,15 @@ export function MembershipSettings() {
             onChangeAllowance={changeAllowance}
             onProposeOpen={proposeOpen}
           />
+
+          {config.claimsContractId ? (
+            <FounderSupply
+              daoId={config.tokenContractId}
+              allowance={data.modules.find((entry) => entry.address === config.claimsContractId)?.allowance ?? null}
+              live={data.live}
+              manageHref={daoRoute(routeId, 'admin/claims')}
+            />
+          ) : null}
         </Stack>
       </PageSection>
     </>

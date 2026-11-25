@@ -66,3 +66,45 @@ export function claimListEndText(expiresAt: number, now = Math.floor(Date.now() 
   if (!date) return 'no closing date';
   return now >= expiresAt ? `closed ${date}` : `closes ${date}`;
 }
+
+const UNLIMITED_ALLOWANCE = 0xffffffff;
+const tokens = (count: number) => `${count.toLocaleString()} ${count === 1 ? 'token' : 'tokens'}`;
+
+/**
+ * Founder supply in words: tokens left on the free claim lists opened in Setup. They are not in
+ * the token's supply until claimed, and a list stays claimable after launch until it closes, up to
+ * the claims module's mint allowance. Null when there are none.
+ */
+export function founderSupplyText({
+  unclaimed,
+  lists,
+  allowance,
+  live
+}: {
+  unclaimed: number;
+  lists: number;
+  /** The claims module's remaining mint allowance (4294967295 is unlimited); null for none. */
+  allowance: number | null;
+  live: boolean;
+}): { title: string; description: string } | null {
+  if (unclaimed <= 0) return null;
+  const cap = allowance === null ? 0 : allowance >= UNLIMITED_ALLOWANCE ? unclaimed : Math.min(unclaimed, allowance);
+  const where = `${lists === 1 ? 'a claim list' : `${lists.toLocaleString()} claim lists`} opened during setup`;
+  const parts = [
+    `${tokens(unclaimed)} on ${where} ${unclaimed === 1 ? 'is' : 'are'} not claimed yet, so ${unclaimed === 1 ? 'it is' : 'they are'} not in the token supply.`,
+    `People on ${lists === 1 ? 'that list' : 'those lists'} can still claim them until ${lists === 1 ? 'it closes' : 'each list closes'}.`
+  ];
+  if (cap === 0)
+    parts.push('The claims module has no mint allowance left, so none can be minted until a proposal raises it.');
+  else if (cap < unclaimed)
+    parts.push(`The claims module can mint ${tokens(cap)} of them, its remaining mint allowance.`);
+  parts.push(
+    live
+      ? 'A proposal can close a list early to stop this.'
+      : 'They stay claimable after launch, until each list closes.'
+  );
+  return {
+    title: cap === 0 ? 'Founder supply on setup lists' : `Founder supply: ${tokens(cap)} can still be minted`,
+    description: parts.join(' ')
+  };
+}
