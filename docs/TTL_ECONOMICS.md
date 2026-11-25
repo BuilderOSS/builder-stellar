@@ -220,6 +220,10 @@ logic runs on the command line:
 node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <identity> [--dry-run]
 ```
 
+`--source` defaults to `RENEW_IDENTITY`, else `<network>-renewer`: a low-value payer, never the Manager admin
+([key custody](KEY_CUSTODY.md#renewal-payer)). The stellar CLI signs (`stellar tx sign`), so the payer's seed
+never enters the Node process.
+
 The e2e test `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` keeps an idle DAO alive with nothing but
 this sweep (and the platform renewal) every 150 days while archiving everything else that expires. After a year it
 settles an auction, a new member proposes and executes a Treasury spend, a year-old claim list is claimed, and an
@@ -241,7 +245,8 @@ It finds code from the Manager's `current_implementations()` and each name's lat
 running `wasm_hash()`, and what every known DAO contract runs (DAO deploy artifacts, `--token` with the modules
 its registry lists, or the indexer's `manager.module_versions` with `DATABASE_URL`), so a DAO that skipped an
 upgrade keeps its code alive. It also renews each hash's `Implementation(hash)` record, every
-`LatestImplementation(name)`, and the Manager instance.
+`LatestImplementation(name)`, and the Manager instance. It pays with `--identity`, else `RENEW_IDENTITY`, else
+`<network>-renewer`, and warns when that is the Manager admin.
 
 Code rent is the platform's largest cost: a dry run on 2026-10-12 quoted about 900 XLM to bring nine code hashes
 to 170 days (Auction 264 XLM, Marketplace 251 XLM, Governor ~300 XLM). Every extension is simulated first; one

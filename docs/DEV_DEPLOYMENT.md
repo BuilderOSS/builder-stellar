@@ -43,7 +43,8 @@ implementations and writes `deploys/dev-testnet-manager.json` (commit it to `dev
 after contract changes: see [Manager deployment](MANAGER_DEPLOYMENT.md), including
 `DEPLOY_SALT_SUFFIX` for a genuinely fresh Manager and the redeploy checklist (which also means
 steps 2 and 3 again). Renew code TTLs with
-`node scripts/renew-code-ttl.mjs deploys/dev-testnet-manager.json --days 170`.
+`node scripts/renew-code-ttl.mjs deploys/dev-testnet-manager.json --days 170`, paid by the renewal payer
+`testnet-renewer` ([key custody](KEY_CUSTODY.md#renewal-payer)).
 
 ## 2. Database (Neon branch `dev`)
 

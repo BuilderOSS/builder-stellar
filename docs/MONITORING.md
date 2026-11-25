@@ -69,10 +69,10 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
-**Shared contract code is the platform's to renew, and nothing renews it automatically.** Owner: whoever holds the
-Manager admin identity (`DEPLOY_IDENTITY`, `<network>-admin` by default); the renewal is a plain extend, so a
-non-admin funded key can run it too. Cadence: a dry run every Monday, a renewal whenever any hash is under 60
-days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
+**Shared contract code is the platform's to renew, and nothing renews it automatically.** The renewal is a plain
+extend, so it needs no admin rights: the script pays with the renewal payer, `<network>-renewer` by default
+(`RENEW_IDENTITY` or `--identity` overrides it), a separate low-value key ([key custody](KEY_CUSTODY.md#renewal-payer)).
+Cadence: a dry run every Monday, a renewal whenever any hash is under 60 days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
 for 4 days after the platform lapses has its code archived and every call fails until a permissionless restore.
 
 ```bash
