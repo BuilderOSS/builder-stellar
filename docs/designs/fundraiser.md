@@ -28,10 +28,10 @@ event. Tribe Builder can host it as a **template on the general tribe**, not as 
 - **Where we compete.** Kenya's fundraising tradition (harambee) is already served well by M-Pesa-based apps. We will
   not be easier to give to. We can be more accountable: the money moves only by the group's vote, and everyone can see
   each payment.
-- **Why fundraising first.** It is lower risk than the savings circle: no loans, caps or share-out. It still tests
+- **Why fundraising first.** It is lower risk than the savings circle: no loans, caps, or share-out. It still tests
   the hard parts: the M-Pesa ramp, onboarding people with no wallet, and money held by a contract instead of a
   treasurer.
-- **Recommendation.** Keep-what-you-raise fundraisers, built from what exists plus indexing, a template and M-Pesa
+- **Recommendation.** Keep-what-you-raise fundraisers, built from what exists plus indexing, a template, and M-Pesa
   giving. No new contract for the pilot. An all-or-nothing fundraiser module comes later, if a group needs one.
 
 ```text
@@ -107,7 +107,7 @@ circle" preset. The Fundraiser template is the same kind of thing.
   and its date are shown in the details.
 - **Spent so far** lists executed spending proposals, each with its vote.
 - **Updates** are short posts by the organisers. Each one is an event carrying a URI (IPFS text and photos), with no
-  storage on-chain. That fits the chain-only rule in STORAGE_DIET. Posting needs an organiser's authorization, but not a
+  storage on-chain. That fits the chain-only rule in STORAGE_DIET. Posting needs an organiser's authorisation, but not a
   vote. Which contract carries the entry point is an F1 design question.
 - **Share image.** The tribe page's existing `opengraph-image` gains the progress bar, so a link shared on WhatsApp
   shows the target and how much has been raised.
@@ -160,7 +160,7 @@ multisig is possible, but it brings back the treasurer risk this product exists 
 
 The treasury page says it today: "Contributions don't appear in it." A gift is a plain asset transfer into the
 treasury. The Treasury contract has no deposit entry point and emits no event, and the Goldsky pipeline only ingests
-events from contracts on its allowlist (token, metadata, governor, treasury and modules, taken from Manager events).
+events from contracts on its allowlist (token, metadata, governor, treasury, and modules, taken from Manager events).
 The asset contracts' `transfer` events are not ingested.
 
 **Proposed:** ingest `transfer` events from the supported asset contracts (XLM and USDC) whose `to` is a known
@@ -182,7 +182,7 @@ Spending is an ordinary proposal: no change to the Treasury or Governor. Two add
 ([PROPOSAL_ACTIONS](../PROPOSAL_ACTIONS.md)):
 
 - **"Pay a supplier by M-Pesa":** a USDC transfer to the supplier's standing ramp account (question 7), with the
-  shilling amount, supplier name and the purpose shown in the description. A receipt is posted as an update after
+  shilling amount, supplier name, and the purpose shown in the description. A receipt is posted as an update after
   payment.
 - **"Refund a gift":** a transfer back to a wallet giver's address. It is useful for mistakes. M-Pesa givers cannot
   be refunded this way, because we do not know their wallet. It would need the ramp's off-ramp to their number.

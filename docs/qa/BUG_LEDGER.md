@@ -7,7 +7,7 @@ GitHub issue labelled `walkthrough`.
 
 | Level | Meaning |
 |---|---|
-| P0 | Funds, authority or data correctness |
+| P0 | Funds, authority, or data correctness |
 | P1 | A flow is blocked |
 | P2 | Wrong or misleading copy or state |
 | P3 | Polish |
@@ -106,7 +106,7 @@ None. Two known items aren't app bugs:
 - **Expected:** every section whose changes go to a vote reads "Needs a vote".
 - **Actual:** Market ("Listings, fees and pausing") and Artwork had no chip, as if anyone could change
   them, though launch hands the Marketplace and Metadata admin to the Treasury like the rest.
-- **Root cause:** the overview's per-section access map listed profile, token, governance, owner and
+- **Root cause:** the overview's per-section access map listed profile, token, governance, owner, and
   auction only.
 - **Fix:** the map moved to `apps/web/src/lib/manage-access.ts` (`manageSectionAccess`) with
   `artwork` and `marketplace` added; `apps/web/src/app/dao/[daoId]/admin/page.tsx` uses it.
@@ -147,7 +147,7 @@ None. Two known items aren't app bugs:
 
 ### BUG-W09-5 · Add a module and Remove a module add nothing to the proposal
 - **Flow:** W09 (Manage → Membership), every viewport and theme.
-- **Severity:** P1 (`create-module`, `register-module` and `unregister-module` could not be proposed).
+- **Severity:** P1 (`create-module`, `register-module`, and `unregister-module` could not be proposed).
 - **Steps:** Manage → Membership → Add a module → Invite lists → "Add 2 actions to your proposal"
   (or a module's options → Remove from tribe… → "Add 1 action to your proposal").
 - **Expected:** the "Add this to your proposal?" review (the steps are high-risk), then the steps in
@@ -286,7 +286,7 @@ None. Two known items aren't app bugs:
 - **Flow:** W13 rotation run, the same payout proposed a second time (tablet after desktop). Any
   proposal the Governor refuses in simulation: already exists, too few votes.
 - **Severity:** P2.
-- **Steps:** submit a proposal identical to one that exists (same actions, title and reason).
+- **Steps:** submit a proposal identical to one that exists (same actions, title, and reason).
 - **Expected:** "Proposal failed · The proposal already exists.", nothing signed.
 - **Actual:** "The first argument must be one of type string, Buffer, ArrayBuffer, Array, or
   Array-like Object. Received type object".
@@ -325,7 +325,7 @@ None. Two known items aren't app bugs:
 - **Steps:** open Sell a token you own and enter a price of 5 XLM.
 - **Expected:** "You receive 4.875 XLM if it sells", and prices such as "5 XLM", like the rest of the
   app.
-- **Actual:** "You receive 4.8750000 XLM", and every market price, fee, summary and spendable balance
+- **Actual:** "You receive 4.8750000 XLM", and every market price, fee, summary, and spendable balance
   padded to seven decimals ("5.0000000 XLM").
 - **Root cause:** `formatMarketplaceAmount` in `lib/marketplace/amount.ts` always printed all seven
   decimal places, unlike `formatStroops` and `formatAuctionAmount`.
@@ -337,7 +337,7 @@ None. Two known items aren't app bugs:
 ### BUG-006 · Stopping a guided listing promised to "continue later from the Market page"
 - **Flow:** W10, list again while the permission is live (Stop here after Allow); Change price stopped
   after its Cancel. Every viewport and theme.
-- **Severity:** P2 (after a stopped Change price the token is simply unlisted).
+- **Severity:** P2 (after a stopped Change price the token is unlisted).
 - **Steps:** start List for sale or Change price, confirm the first step, then read the note and press
   Stop here.
 - **Expected:** the note says what stays in place, and a token that came back is easy to list again.
@@ -376,7 +376,7 @@ None. Two known items aren't app bugs:
 - **Root cause:** `components/marketplace/admin-marketplace.tsx` listed every marketplace setting
   handler without the composer's `actionAvailability` check, and its copy predated the action names.
 - **Fix:** the settings list filters by `actionAvailability` with the live market state; heading, back
-  link and notice use the current names.
+  link, and notice use the current names.
 - **Regression test:** W10's Market @matrix case asserts the heading and that only Pause the market
   shows on an open market.
 
@@ -387,7 +387,7 @@ None. Two known items aren't app bugs:
 - **Expected:** a plain sentence such as "This pool has sold as many tokens as it can for now. Try
   again when its next sales period starts."
 - **Actual:** the raw simulation error.
-- **Root cause:** `lib/marketplace/errors.ts` mapped only the resale codes; 7701, 7711 and 7716-7727
+- **Root cause:** `lib/marketplace/errors.ts` mapped only the resale codes; 7701, 7711, and 7716-7727
   (comments and pools, `contracts/marketplace/src/error.rs`) had no message.
 - **Fix:** every marketplace contract error, 7701 to 7727, has a plain message.
 - **Regression test:** `lib/marketplace/errors.test.ts` checks each code from 7701 to 7727.
@@ -402,7 +402,7 @@ None. Two known items aren't app bugs:
   render. Closing the first dialog returns focus to the Change price button, outside the new dialog,
   and `components/marketplace/sell-sequence.tsx` closed on any outside interaction
   (`closeOnInteractOutside={!busy}`).
-- **Fix:** the guided sequence never closes on an outside press or focus; Close, Stop here, Done and
+- **Fix:** the guided sequence never closes on an outside press or focus; Close, Stop here, Done, and
   Escape still close it. This also keeps a stray press from dropping a sequence part way.
 - **Regression test:** `components/marketplace/sell-sequence.test.tsx`; W10's Change price case.
 
@@ -427,13 +427,13 @@ None. Two known items aren't app bugs:
 - **Severity:** P2 (the cancel went through, but the member never saw it confirm; a Change price on
   the only listing lost its sequence after the Cancel step).
 - **Steps:** with one listing, press Cancel listing in Your listings, Check, then Sign and send.
-- **Expected:** "Confirmed", the transaction and Done, then the row is gone.
+- **Expected:** "Confirmed", the transaction, and Done, then the row is gone.
 - **Actual:** on confirmation the whole dialog vanished with the row.
 - **Root cause:** a confirmed cancel hides its listing at once (the pending change), and
   `components/marketplace/your-listings.tsx` returned nothing when no rows were left, unmounting the
   review and the Change price sequence it renders. `ListingCard` likewise hid its own card, with its
   review inside, on confirmation.
-- **Fix:** Your listings renders its review, Change price dialog and sequence outside the section, so
+- **Fix:** Your listings renders its review, Change price dialog, and sequence outside the section, so
   they stay mounted, with their state, when no rows are left; a public card reports its cancel or
   return only when its review closes.
 - **Regression test:** W10's cancel and listing-end cases (each acts on the seller's only listing).
@@ -530,7 +530,7 @@ None. Two known items aren't app bugs:
   own Treasury (the walkthrough's first check only passed because the navigation's "Treasury" link
   matched, which is hidden on phones, so the mobile rotation caught it).
 - **Root cause:** only the member directory mapped the tribe's contracts to names, in a local table.
-- **Fix:** `lib/member-directory/system-holders.ts` (`systemHolderName`) names the Treasury, Auction
+- **Fix:** `lib/member-directory/system-holders.ts` (`systemHolderName`) names the Treasury, Auction,
   and Marketplace; the directory and the token page's "Held by" both use it ("Treasury (tribe
   contract)").
 - **Regression test:** `lib/member-directory/system-holders.test.ts`; W11's Treasury purchase case
@@ -732,7 +732,7 @@ apart from two that were fixed or closed elsewhere:
 - **Severity:** P2.
 - **Root cause:** the menu read a fixed list of required sections, never the checklist.
 - **Fix:** during setup the menu and the overview read the launch checklist (`useLaunchPlan`); a done step
-  shows Done (`components/admin/manage-nav.tsx`, `app/dao/[daoId]/admin/layout.tsx` and `page.tsx`).
+  shows Done (`components/admin/manage-nav.tsx`, `app/dao/[daoId]/admin/layout.tsx`, and `page.tsx`).
 - **Regression test:** none at unit level; the setup shots show it.
 
 ### BUG-CAP-12 · Founders were offered Manage during setup
@@ -759,9 +759,9 @@ apart from two that were fixed or closed elsewhere:
 - **Regression test:** none at unit level.
 
 ### BUG-CAP-15 · Action sentences showed full account addresses
-- **Flow:** the composer, its review and the draft bar. Phones especially.
+- **Flow:** the composer, its review, and the draft bar. Phones especially.
 - **Severity:** P2.
-- **Fix:** Send, Give and Mint sentences name accounts short ("GAKU…OAEP"); each action's details keep the
+- **Fix:** Send, Give, and Mint sentences name accounts short ("GAKU…OAEP"); each action's details keep the
   full address (`apps/web/src/lib/proposal-call.ts`).
 - **Regression test:** `apps/web/src/lib/proposal-call.test.ts`; W07 and W08 assert the summaries.
 
@@ -782,7 +782,7 @@ apart from two that were fixed or closed elsewhere:
 - **Flow:** any form with a required field (the composer's Title first). All viewports.
 - **Severity:** P3.
 - **Root cause:** the input recipe's `_invalid` matched the native `:invalid`.
-- **Fix:** the error border shows for `aria-invalid`, `data-invalid` or `:user-invalid` only
+- **Fix:** the error border shows for `aria-invalid`, `data-invalid`, or `:user-invalid` only
   (`packages/design-tokens/src/recipes.ts`).
 
 ### BUG-CAP-20 · The Market settings bar covered listings on phones
@@ -794,7 +794,7 @@ apart from two that were fixed or closed elsewhere:
   (`components/admin/community-profile.tsx`, `auction-settings-builder.tsx`). **Severity:** P3.
 
 ### BUG-CAP-22 · An empty Why box said "46 used"
-- **Fix:** the line says the title, the reason and the links share the byte budget
+- **Fix:** the line says the title, the reason, and the links share the byte budget
   (`app/dao/[daoId]/proposals/create/page.tsx`). **Severity:** P3.
 - **Reopened (rerun, 2026-11-20):** the first fix kept the count, so an empty box still read "(46 used)":
   the budget includes fixed framing. The count now shows only past three quarters of the budget, as
@@ -822,18 +822,18 @@ apart from two that were fixed or closed elsewhere:
 - **Root cause:** BUG-CAP-9 named the market only for the allowance a pool adds from Manage → Market; the
   composer's own form left `moduleName` empty.
 - **Fix:** the allowance step names the tribe's own modules wherever it is made: "the market", "the
-  auction" or "the claim lists" (`apps/web/src/lib/proposal-actions/membership-actions.tsx`).
+  auction", or "the claim lists" (`apps/web/src/lib/proposal-actions/membership-actions.tsx`).
 - **Regression test:** `apps/web/src/lib/proposal-actions/membership-actions.test.ts`.
 
 ### BUG-RUN-3 · The composer's member reference listed the tribe's contracts as members
 - **Flow:** the composer's For reference → Members. Rows read "CBYT…P3EC, 0 votes".
 - **Severity:** P3.
-- **Fix:** the Treasury, Auction and Marketplace contracts are named "Treasury (tribe contract)" and so on,
+- **Fix:** the Treasury, Auction, and Marketplace contracts are named "Treasury (tribe contract)" and so on,
   as on the Members page (`apps/web/src/components/proposal/proposal-context-rail.tsx`, through
   `systemHolderName`).
 
 ### BUG-RUN-4 · Some walkthrough tribes showed "Artwork unavailable"
-- **Flow:** dev.tribes.build, tokens of the script-deployed fixture tribes (e2e-w07, e2e-w09, e2e-w11-2 and
+- **Flow:** dev.tribes.build, tokens of the script-deployed fixture tribes (e2e-w07, e2e-w09, e2e-w11-2, and
   others). Not the app: the starter collection that founders pick renders.
 - **Severity:** P3 (test fixtures only).
 - **Root cause:** the fixture template `configs/e2e-testnet-dao.json`, copied into each walkthrough

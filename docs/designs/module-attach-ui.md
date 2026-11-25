@@ -2,11 +2,11 @@
 
 Status: shipped in PR #57; § 12 records what changed during the build and what was proven on testnet. The clickable design preview was removed once the build landed; it is in git at `431e9b6:docs/design/module-attach-preview.html`.
 
-Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events and the `manager.daos` view that resolves auction, marketplace and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
+Contracts and indexer already support all of this (`Manager.create_module`, `Token.register_module` / `unregister_module`, the `module_created` / `module_registered` events and the `manager.daos` view that resolves auction, marketplace, and claims from the registry). The web app has no way to build any of it. The audit that found the gap: `web-audit-040` finding F2.
 
 ## 1. Brief
 
-- **Product and place:** Tribe Builder, Manage → Membership → Modules. Today the card lists each module, its allowance and badges ("Not deployed by the Manager", "Holds tokens without votes", votes held). It cannot add or remove one.
+- **Product and place:** Tribe Builder, Manage → Membership → Modules. Today the card lists each module, its allowance, and badges ("Not deployed by the Manager", "Holds tokens without votes", votes held). It cannot add or remove one.
 - **Who:** a tribe member who proposes a change (often a founder, new to DAOs), and the voters who read the proposal afterwards. Before launch, the launch admin.
 - **Job:** "Let my tribe sell, auction or hand out memberships in a new way", and later "stop doing that, safely".
 - **Idea level (Pollard):** an execution inside an existing surface. It has to feel like part of Manage, not like a new product.
@@ -17,7 +17,7 @@ The contract rules that shape the design:
 | Fact | Consequence for the UI |
 |---|---|
 | After launch, adding a module is several actions that run together: `create_module`, then `register_module`, then optionally an allowance and an opening call. Nothing is registered by `create_module` alone once Live. | One review that reads as plain steps, added to the proposal as a batch. |
-| The module is deployed at an address that is a pure function of tribe, kind and a module number, and `create_module` must be given that number (`StaleModuleIndex` if another module of the kind was added first). | Read the number and the predicted address from the Manager while drafting. Show the address up front. Re-check before submit and again when the proposal is queued. |
+| The module is deployed at an address that is a pure function of tribe, kind, and a module number, and `create_module` must be given that number (`StaleModuleIndex` if another module of the kind was added first). | Read the number and the predicted address from the Manager while drafting. Show the address up front. Re-check before submit and again when the proposal is queued. |
 | A module created after launch starts closed: the market is paused, the auction has not started, a claims module has no list. | "Open it when this passes" is a choice, and a closed module shows a row-level nudge. |
 | Each built-in kind appears at most once; 16 modules at most. | Tiles disable with their reason. |
 | Removing a module zeroes its allowance and its transfer-agent flag. Since 25 November 2026 the Token refuses to remove a module without votes while it holds any token (`ModuleHoldsTokens`); before then, tokens it still held became that contract's own votes. | A readiness checklist that warns and offers the clean-up as steps. The removal check passes only when the chosen clean-up empties the module. |
@@ -65,21 +65,21 @@ Where: the existing Modules card in Manage → Membership. Heading stays "Module
 ### The card
 
 - A secondary "Add a module" button in the card header.
-- Each row keeps its title, address, chips and allowance chip, and gains an overflow menu (44px target): "Change allowance" (the form that sits under the list today moves here) and "Remove from tribe…".
+- Each row keeps its title, address, chips, and allowance chip, and gains an overflow menu (44px target): "Change allowance" (the form that sits under the list today moves here) and "Remove from tribe…".
 - A module that is attached but closed shows a "Closed" chip and, for the auction and the market, a "Propose opening" (market) or "Propose starting auctions" (auction) button using the existing resume and reopen actions.
 
 ### Add (a sheet, two screens)
 
 1. **Choose.** Three tiles in a radio group: Daily auction, Market, Invite lists. Plain goal first, module term one line beneath. A tile that cannot be chosen says why under its text and stays focusable.
 2. **Set up and review**, one screen with a sticky action bar:
-   - Fields by kind: auction (price asset, starting price, how long each runs, open it when this passes); market (price asset, resale fee in percent, open it when this passes); invite lists (price asset).
+   - Fields by kind: auction (price asset, starting price, how long each runs, open it when this passes); market (price asset, resale fee in per cent, open it when this passes); invite lists (price asset).
    - "When this passes, in order", numbered, rewriting as fields change, with the address the module will have.
    - A check line (checking, ok, or why it would not run) that runs on its own when the fields are valid.
    - The primary button names its outcome and counts: "Add 3 actions to your proposal". It stays disabled until the check passes.
 
 ### Remove (a sheet, one screen)
 
-A checklist of what the module holds, read live, then the clean-up as steps in the same proposal, then the same review, check and button.
+A checklist of what the module holds, read live, then the clean-up as steps in the same proposal, then the same review, check, and button.
 
 | Row | Source | If it is amber |
 |---|---|---|
@@ -125,13 +125,13 @@ The built-in "holds without votes" flag follows the contract (`builtin_non_votin
 
 ## 7. Copy rules applied
 
-Sentence case, contractions, no em dashes, plain words first with the DAO term one line beneath, buttons name their outcome, no "nonce", "SAC", "ledger" or "envelope" ("module number" instead of the index), durations as "5 minutes", "tribe" for the group, contract ids only in the Address pattern or under Technical details. "Tribe Builder did not deploy this contract" uses the brand name; the existing badge text "Not deployed by the Manager" changes to "Not deployed by Tribe Builder" for members.
+Sentence case, contractions, no em dashes, plain words first with the DAO term one line beneath, buttons name their outcome, no "nonce", "SAC", "ledger", or "envelope" ("module number" instead of the index), durations as "5 minutes", "tribe" for the group, contract ids only in the Address pattern or under Technical details. "Tribe Builder did not deploy this contract" uses the brand name; the existing badge text "Not deployed by the Manager" changes to "Not deployed by Tribe Builder" for members.
 
 ## 8. Motion and polish
 
 Summary. The full table was in the design preview (see the status line); the shipped code is now the reference.
 
-- No new authored moment. The sheet, press scale (.96, 160ms), menu (150ms from its trigger) and callouts are the primitives.
+- No new authored moment. The sheet, press scale (.96, 160ms), menu (150ms from its trigger), and callouts are the primitives.
 - The check line's icon swaps with scale .25 to 1, opacity and blur 4px to 0, `cubic-bezier(.2,0,0,1)`, 160ms. Its words change with it.
 - The choose-to-setup swap and the rows that appear or vanish are instant: keyboard Enter picks a tile, and people toggle these while reading.
 - Reduced motion keeps opacity and colour, drops scale and blur.
@@ -144,7 +144,7 @@ Summary. The full table was in the design preview (see the status line); the shi
 3. **The proposal page** must resolve those predicted addresses before it re-encodes a proposal from indexed data (`predict_module_address` per `create_module`), or queue and execute will refuse a proposal that is fine. This is the part to prove first with a real proposal.
 4. **Reads:** `module_count` and `predict_module_address` (Manager), `token.modules()` (exists), `token.balance` for a module, the market's pools and listings (the index already has `marketplace.pools` and `secondary_listings`), the running auction, the claims lists.
 5. **Setup direct path:** `manager.create_module` through the Manager client, signed by the launch admin, in the same sheet.
-6. **Tests:** pure plan builders (kind to ordered actions, counts, names, errors), the readiness checklist rules, encoder union round-trips (builder form and indexed form), the proposal-ID reproduction for an attach proposal, component tests for the tiles, check states and disabled reasons.
+6. **Tests:** pure plan builders (kind to ordered actions, counts, names, errors), the readiness checklist rules, encoder union round-trips (builder form and indexed form), the proposal-ID reproduction for an attach proposal, component tests for the tiles, check states, and disabled reasons.
 7. **Live proof:** extend the membership e2e (PR #55) with an attach and detach phase, then run it on testnet. Nothing in this document has been run live.
 
 ## 10. Risks (pre-mortem: "six months on, this failed because…")

@@ -15,7 +15,7 @@ light next.**
 - **Why lanterns.** People make and hang paper lanterns in many cultures, so no one region owns the
   image. A lantern is one person's work and shows up best alongside others, which is how a tribe works.
   The art is warm light on paper and suits both themes: it glows in dark mode and looks like paper in light.
-- **Tone.** Every proposal is small, concrete and easy to follow: buy paper, run a workshop, set a fee.
+- **Tone.** Every proposal is small, concrete, and easy to follow: buy paper, run a workshop, set a fee.
   No proposal is about price or returns.
 
 Discarded directions:
@@ -57,8 +57,8 @@ Roles appear only in proposal text.
 
 | Identity | Role | Tokens |
 |---|---|---|
-| `e2e-show-founder` | The founder. Creates, sets up and launches the tribe, writes proposal 1, and votes on, queues and executes every proposal. | 3 founder tokens |
-| `e2e-show-member-a` | The workshop lead. Wins the first auction, writes the other proposals, sells on the market and gives a lantern away. | 2 founder tokens, the first auction and a mint |
+| `e2e-show-founder` | The founder. Creates, sets up, and launches the tribe, writes proposal 1, and votes on, queues, and executes every proposal. | 3 founder tokens |
+| `e2e-show-member-a` | The workshop lead. Wins the first auction, writes the other proposals, sells on the market, and gives a lantern away. | 2 founder tokens, the first auction and a mint |
 | `e2e-show-member-b` | A new member. Buys their first lantern on the market and delegates their vote. | One bought, one minted |
 | `e2e-show-operator` | A second account. Settles the first auction and receives a lantern. | One received |
 
@@ -75,7 +75,7 @@ Roles appear only in proposal text.
 
 They are numbered in story order. Each one names the guide pages it illustrates.
 
-In the order the story makes them. The state key is the name in `fixtures/showcase/state.json`.
+The state key is the name in `fixtures/showcase/state.json`.
 
 | # | Key | Title | Actions | End state | Guides |
 |---|---|---|---|---|---|
@@ -131,7 +131,7 @@ bash apps/e2e/scripts/capture-story.sh            # the story, in order
   make one. `pin-art.mjs` pins the same folder from Node, and the spec answers the browser's upload
   with that CID. The app's own pin check still runs. The tribe image goes through the normal
   upload.
-- **Two processes.** A proposal's vote is open for only 10 minutes, so the founder votes, queues and
+- **Two processes.** A proposal's vote is open for only 10 minutes, so the founder votes, queues, and
   executes from `90-drive` while the story keeps drafting as the workshop lead. They sign from
   different accounts.
 - **Resuming.** `fixtures/showcase/state.json` records each step, and `drive-state.json` records the
@@ -140,7 +140,7 @@ bash apps/e2e/scripts/capture-story.sh            # the story, in order
 - **Shots.** `snap` (`apps/e2e/src/capture.ts`) photographs the page as it is at desktop and mobile,
   in light and dark, by resizing the same page and switching the theme the app's own way. It waits
   for loading placeholders to clear and hides toasts. A full account address that isn't a test key,
-  the platform key or an asset issuer fails the capture.
+  the platform key, or an asset issuer fails the capture.
 - **Retakes.** `13-retakes` photographs pages again without changing anything on chain (with
   `E2E_TIMELINE=showb` for the siblings' pages).
 - **The server.** Run `pnpm --dir apps/e2e serve:app` with `E2E_CAPTURE=1 E2E_APP_PORT=4545` in its own
