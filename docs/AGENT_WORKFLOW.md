@@ -1,4 +1,4 @@
-# Agent Workflow
+# Agent workflow
 
 This repository provides the same project-scoped agent roster to OpenCode and Claude
 Code. OpenCode definitions live in `.opencode/agent/`; Claude Code definitions live in
@@ -10,7 +10,7 @@ as the product data: contract event to indexer to read model to API to UI.
 
 `dev` is where all work lands, and it deploys to dev.tribes.build. `main` is what tribes.build
 runs: it holds the last promoted release and moves only by a **release promotion**. Release 1
-(2026-11-21, #114) was the first.
+(21 November 2026, #114) was the first.
 
 - Start work from an up-to-date `dev`: `git fetch origin && git switch -c <branch> origin/dev`.
 - Open every pull request against `dev`: `gh pr create --base dev`. Stacked pull
@@ -56,7 +56,8 @@ ingestion through its writer role.
 
 ## Commands
 
-Use the project commands to start work with the right ownership and guardrails:
+In OpenCode, use the project commands in `.opencode/command/` to start work with the right
+ownership and guardrails (OpenCode also has project skills in `.opencode/skills/`):
 
 - `/contract-change <task>` implements a contract change and records downstream impacts.
 - `/contract-review <scope>` performs an independent read-only contract review.
@@ -66,31 +67,40 @@ Use the project commands to start work with the right ownership and guardrails:
 - `/docs <task>` retrieves official references or reconciles documentation.
 
 In Claude Code, invoke the same specialist with `@agent-<name>`, for example
-`@agent-contract-reviewer review the governor authorization change`. Claude Code also
+`@agent-contract-reviewer review the governor authorisation change`. Claude Code also
 routes to agents from natural-language requests using their descriptions.
 
-## Required Checks
+## Required checks
 
 Run the relevant checks before handing work to another agent:
 
 | Surface | Checks |
 | --- | --- |
-| Contract | `pnpm contracts:test`, `cargo fmt --all --check` |
+| Contract | `pnpm contracts:test`, `cargo fmt --all --check`, and Clippy as CI runs it (`.github/workflows/ci.yml`) |
 | Indexer | `pnpm indexer:test`, then pipeline generation or validation when affected |
+| Scripts | `node --test scripts/*.test.mjs` |
+| Walkthrough harness | `pnpm --dir apps/e2e typecheck` and `test` |
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
-| Docs site | `pnpm --dir apps/docs lint`, `typecheck` and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
+| Docs site | `pnpm --dir apps/docs lint`, `typecheck`, and `test`, then `pnpm docs:build` and `pnpm docs:check` (see `docs/DOCS_SITE.md`) |
 | Docs screenshots | `pnpm --dir apps/e2e build:capture`, then the capture story on testnet (`docs/qa/SHOWCASE_TRIBE.md`, "Capturing") |
-| Database | Forward migration, rollback, permission, and query-plan evidence |
+| Database | `pnpm db:test` (with `TEST_DATABASE_URL` for the database tests), plus forward migration, rollback, permission, and query-plan evidence |
 
-Checks are requirements, not a claim of a passing run. Current CI runs Cargo
-workspace tests, web codegen before lint/typecheck/web tests, Goldsky tests, and
-a separate Build Web job, which also builds the docs site and checks every docs page in
-both themes, and a Secret Scan job (gitleaks over the whole history). CodeQL runs in its own
-workflow, and release tags are rebuilt by the Contract release build workflow
-(`docs/REPRODUCIBLE_BUILDS.md`). CI uses Node 24 LTS from `.nvmrc` and the Rust toolchain
-from `rust-toolchain.toml`, runs Cargo with `--locked`, and installs dependencies on every
-run. Configuration
-changes belong to implementation owners, not docs-steward.
+Checks are requirements, not a claim of a passing run. Current CI (`.github/workflows/ci.yml`)
+has four jobs:
+
+- **Rust Checks and Tests:** `cargo fmt`, Clippy, `stellar contract build --locked`, and the
+  Cargo workspace tests.
+- **TypeScript Checks:** web codegen, then web lint and type check, the design tokens and
+  glossary type checks, docs lint, type check, and tests, web tests, Goldsky tests, the
+  walkthrough harness, the script tests, and `pnpm db:test` against a Postgres service.
+- **Build Web:** `pnpm build`, then the docs site build and `pnpm docs:check` on every docs
+  page in both themes.
+- **Secret Scan:** gitleaks over the whole history.
+
+CodeQL runs in its own workflow, and the Contract release build workflow rebuilds release
+tags (`docs/REPRODUCIBLE_BUILDS.md`). CI uses Node 24 LTS from `.nvmrc` and the Rust
+toolchain from `rust-toolchain.toml`, runs Cargo with `--locked`, and installs dependencies
+on every run. Configuration changes belong to implementation owners, not docs-steward.
 
 ## Docs ship with the change
 
@@ -104,9 +114,9 @@ Before opening a PR, check each surface the change can touch and update it in th
 | --- | --- |
 | What a user sees or does: copy, a flow, a button, an error | The guide and reference pages in `apps/docs/content` that describe it. Search for the old wording |
 | A visible screen in a captured flow | Retake the affected shots (`docs/qa/SHOWCASE_TRIBE.md`), or name them under "Docs" in the PR if testnet can't take them now |
-| Contract interface, limits, errors or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md` and so on) |
-| API routes, views, indexer or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
-| A walkthrough, fixture or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
+| Contract interface, limits, errors, or events | `apps/docs/content/reference/*`, plus the internal docs that cite them (`docs/CONTRACT_UPGRADES.md`, `docs/STORAGE_DIET.md`, and so on) |
+| API routes, views, indexer, or deployment | `docs/*` runbooks (`DEV_DEPLOYMENT.md`, `GOLDSKY_SETUP.md`, `MONITORING.md`) |
+| A walkthrough, fixture, or how they run | `docs/qa/WALKTHROUGHS.md`; a defect also goes in `docs/qa/BUG_LEDGER.md` |
 | Design primitives or tokens | `DESIGN.md` |
 | Finished or new work items | `TODOS.md` |
 
@@ -117,33 +127,36 @@ merge it: fix the doc first.
 
 ## Documentation handoff and acceptance
 
-After an accepted interface change, send docs-steward: changed behavior, source
-paths/revision, checks actually run with outcomes, config/deployment impact, and
-remaining limitations. Contract writer reviews protocol facts; services reviews
-API/ABI behavior; database/indexer review projections; frontend/design review UX.
+After an accepted interface change, send docs-steward the changed behaviour, source
+paths and revision, checks actually run with their outcomes, configuration and deployment
+impact, and remaining limitations. The contract writer reviews protocol facts, services
+review API and ABI behaviour, database and indexer review projections, and frontend and
+design review UX.
 
 Before marking docs current:
 
-- Commands must exist with correct arguments/cwd; JSON examples and relative links
-  must be valid. Label generation, signing, deployment, and reset side effects.
+- Commands must exist with correct arguments and working directory; JSON examples and
+  relative links must be valid. Label generation, signing, deployment, and reset side effects.
 - Treasury/Governor references must match vector ABI, permissionless queue/execute,
   exact action encoding, atomicity, and scoped ordered execution events.
-- Creation/setup/launch docs must distinguish chain confirmation, simulation,
+- Creation, Setup, and launch docs must distinguish chain confirmation, simulation,
   local recovery, and indexing. Contract limits must not be confused with CLI budgets.
-- Views/Prisma/API fields and timestamp units must agree, with deployment/DAO/module
-  filters and chain/indexed state sources explicit.
+- View, Prisma, and API fields and timestamp units must agree, with deployment, DAO, and
+  module filters and chain or indexed state sources explicit.
 - TTL docs must link actual storage policies and distinguish extension, restoration,
   signed maintenance, and unavailable/missing reports.
-- UX guides must describe reachable implemented flows. Local drafts/home/preferences
-  and private labels are not shared collaboration, public tags, or writable app tables.
-- The binding generator now preserves existing authored READMEs around SDK overwrite;
-  direct SDK invocations do not. Reconcile interface descriptions after generation. Historical
-  plans belong in [the archive](README.md), linked to maintained replacements.
+- UX guides must describe reachable implemented flows. Local drafts, home and other
+  preferences, and marketplace favourites are not shared collaboration, public tags, or
+  writable app tables.
+- The binding generator preserves existing authored READMEs when the SDK overwrites a
+  package; direct SDK invocations do not. Reconcile interface descriptions after generation.
+- Retired plans are removed from `docs/` (git history keeps them); link readers to the
+  maintained replacement from [the index](README.md).
 
-Useful evidence: `contracts/e2e/src/test.rs`, Goldsky contract-alignment/read-model
-tests, web creation/recovery/store tests, proposal ABI/state/receipt tests, and
-marketplace scope/preparation tests. Live/scratch-database tests and network rehearsal
-require their own approved environment; do not claim them from source inspection.
+Useful evidence: `contracts/e2e/src/test.rs`, Goldsky contract-alignment and read-model
+tests, web creation, recovery, and store tests, proposal ABI, state, and receipt tests, and
+marketplace scope and preparation tests. Live or scratch-database tests and network
+rehearsals require their own approved environment; do not claim them from source inspection.
 
 Event, schema, and API work must retain both deployment and DAO identity filters. An
 event is not complete until it is indexed and exposed, explicitly indexed but internal,
@@ -165,10 +178,11 @@ inventing links. Recheck after replacements. Local ignored feedback records are
 useful context when available, but the check must work from tracked source alone.
 
 `ARTWORK_GUIDE_URL` in `apps/web/src/lib/help-links.ts` points to the artwork
-guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). Add new
-documentation links there, pointing to the matching docs.tribes.build page.
+guide on the docs site (https://docs.tribes.build/guides/setup/artwork/). New
+documentation links in the app use `docsHref()` (`apps/web/src/lib/site.ts`) with a page path
+that `apps/docs/src/lib/nav.ts` lists.
 
-## Optional Vendor Skills
+## Optional vendor skills
 
 The agent definitions use the following vendor skills when they are installed locally:
 

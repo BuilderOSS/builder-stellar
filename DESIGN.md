@@ -1,7 +1,7 @@
 ---
 # gstack: design-md-format=spec
 name: Tribe Builder
-description: A cozy, lamplit clubhouse for tribes that own things together. Warm neutrals, one confident blue, brass for what's yours.
+description: A cosy, lamplit clubhouse for tribes that own things together. Warm neutrals, one confident blue, brass for what's yours.
 colors:
   # Dark is the hero theme. Light values are in the Colors table below.
   canvas: "#141311"
@@ -80,7 +80,7 @@ components:
 
 **Creative North Star:** Warm Ink · Dusk. A lamplit clubhouse: warm charcoal and paper, one confident blue for "act here", brass for "this is yours". Each tribe's art and people carry the personality; chrome stays quiet.
 
-**Product context:** Tribe Builder (tribes.build) lets people discover, build and run tribes: NFT-membership DAOs on Stellar with auctions, proposals, a treasury, a marketplace and claims. Members come first, founders and admins second. Many users are new to wallets and DAOs; crypto natives who know Nouns are the second audience.
+**Product context:** Tribe Builder (tribes.build) lets people discover, build, and run tribes: NFT-membership DAOs on Stellar with auctions, proposals, a treasury, a marketplace, and claims. Members come first, founders and admins second. Many users are new to wallets and DAOs; crypto natives who know Nouns are the second audience.
 
 **Mode per surface:** Operate on every app screen. Persuade on the signed-out Home hero only.
 
@@ -101,9 +101,9 @@ components:
 Construction, on a 32-unit grid (viewBox `0 0 32 32`):
 
 - Table: `M9 9h14v14H9zM11 11v10h5V11z`, even-odd: a square frame with an open left half and a filled right half.
-- Heads: r 3.25 at (16, 3.75), (28.25, 16) and (3.75, 16).
+- Heads: r 3.25 at (16, 3.75), (28.25, 16), and (3.75, 16).
 - Empty seat (default): a ring at (16, 28.25), r 3, stroke 1.5. Joined seat: a disc at (16, 28.25), r 3.75, in brass.
-- The 16px drawing (`app/icon.svg`) is its own: table 6x6 at (5, 5) with a 2x4 hole at (6, 6); heads r 2 at (8, 2), (14, 8) and (2, 8); a seat ring r 1.5, stroke 1, at (8, 14). Every edge sits on whole pixels so it stays crisp.
+- The 16px drawing (`app/icon.svg`) is its own: table 6x6 at (5, 5) with a 2x4 hole at (6, 6); heads r 2 at (8, 2), (14, 8), and (2, 8); a seat ring r 1.5, stroke 1, at (8, 14). Every edge sits on whole pixels so it stays crisp.
 
 | Use | Version | Rule |
 |---|---|---|
@@ -125,11 +125,11 @@ Construction, on a 32-unit grid (viewBox `0 0 32 32`):
 | Glyph on the tile | #F3EDE5, seat #D9A35A | same | icon files only |
 | One colour | ink #221E19 or paper #F3EDE5 | | press kit |
 
-The mark uses `signal`, not `primary`: it says "here", it isn't a filled button. Components colour it with tokens only; raw hex lives only in icon files (`app/icon.svg`, `lib/brand-tile.tsx`) because browser chrome and image generation can't read CSS variables.
+The mark uses `signal`, not `primary`: it says "here", it isn't a filled button. Components colour it with tokens only; raw hex lives only in icon and image files (`app/icon.svg`, and `lib/brand-colors.ts` for `lib/brand-tile.tsx` and the share cards) because browser chrome and image generation can't read CSS variables.
 
 **Clear space and size:** one head's diameter on every side. The minimum size is 16px, using the 16px drawing.
 
-**Don'ts:** don't recolour the people, rotate the lens, add the noggle arm or bridge, put a gradient on the glyph, use brass for anything that isn't the viewer's own, or ship the mark without the lens table and the seat. No tribal imagery: patterns, feathers, masks or totems.
+**Don'ts:** don't recolour the people, rotate the lens, add the noggle arm or bridge, put a gradient on the glyph, use brass for anything that isn't the viewer's own, or ship the mark without the lens table and the seat. No tribal imagery: patterns, feathers, masks, or totems.
 
 **Where it lives:** `components/shell/brand-mark.tsx` (`BrandMark` with `joined`, `BrandWordmark`, `BrandLockup`, `BuilderDaoCredit`), `app/icon.svg`, `lib/brand-tile.tsx` (the Dusk tile behind `app/apple-icon.tsx` and the `app/manifest.ts` icons), and the press kit in `docs/brand/`.
 
@@ -137,7 +137,7 @@ The mark uses `signal`, not `primary`: it says "here", it isn't a filled button.
 
 **Strategy:** Restrained. One blue, warm neutrals, brass. No per-module hues; personality comes from each tribe's art and crest tint.
 
-**Light or dark:** Dark is the hero (evening, phone in hand, with your people). Light is a fully supported equal. First visit defaults to Dark; Light, Dark and System stay selectable.
+**Light or dark:** Dark is the hero (evening, phone in hand, with your people). Light is a fully supported equal. First visit defaults to Dark; Light, Dark, and System stay selectable.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
@@ -200,14 +200,14 @@ control 10, card 16, sheet 24, chips and avatars full. Nested radii are concentr
 
 ## Components
 
-All primitives live in `apps/web/src/components/ui` and are styled with Panda recipes over Ark UI. Every component handles default, hover, focus-visible, active, disabled, loading, empty and error. The dev-only `/design` route renders each one in both themes.
+All primitives live in `apps/web/src/components/ui` and are styled with Panda recipes over Ark UI. Every component handles default, hover, focus-visible, active, disabled, loading, empty, and error. The dev-only `/design` route renders each one in both themes.
 
 - **Actions:** Button (primary, secondary, ghost, danger), IconButton, ConfirmAction, ActionBar.
 - **Surfaces:** Card, ListRow, Section, PageHeader, Sheet, Dialog, Popover, Tooltip, Menu, Disclosure.
 - **Inputs:** Field, Input, Textarea, Select, AmountInput, DurationInput, Checkbox, Switch, ChoiceGroup, SegmentedControl, SearchInput, FilterRail.
 - **Feedback:** Callout, Toast, Skeleton, EmptyState, ErrorState, Spinner, ProgressSteps.
 - **Identity and data:** CommunityCard, Avatar, Crest, Address, Amount, Countdown, Chip, StatusBadge, VoteTally, MembershipCard, Pagination, DataList.
-- **Help for newcomers** (`components/help`, `components/shell/wallet-intro.tsx`): `WhatsATribe` (a Sheet from the home hero and footer), `WalletIntro` (before the first Connect, once per browser, reopened from the You sheet) and `GlossaryTerm` (a Popover, so it works on touch) for Treasury, Proposal, Delegate, Quorum, Launch admin and Safety delay. Each explains in plain words with the DAO term beneath.
+- **Help for newcomers** (`components/help`, `components/shell/wallet-intro.tsx`): `WhatsATribe` (a Sheet from the home hero and footer), `WalletIntro` (before the first Connect, once per browser, reopened from the You sheet), and `GlossaryTerm` (a Popover, so it works on touch) for Treasury, Proposal, Delegate, Quorum, Launch admin, and Safety delay. Each explains in plain words with the DAO term beneath.
 - **Share cards** (`lib/og`): one 1200x630 `next/og` card on the Dusk gradient, with an `opengraph-image.tsx` beside each shared route. Satori reads inline styles only, so these files take colours from `lib/brand-colors.ts` instead of Panda tokens.
 
 ## Do's and Don'ts
@@ -220,7 +220,7 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 - Don't: raw hex, inline `style={{}}`, CSS modules, `<style jsx>`, or new global classes in components.
 - Don't: cards in cards, coloured left borders, icon-in-circle decoration, gradient buttons, kickers above headings, emoji in UI.
 - Don't: block reading behind a network mismatch. Block only transactions.
-- Don't: say "world", "lobby", "envelope", "nonce", "SAC" or "ledger" in member-facing copy.
+- Don't: say "world", "lobby", "envelope", "nonce", "SAC", or "ledger" in member-facing copy.
 
 ## Motion
 
@@ -236,16 +236,16 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 
 ## Voice
 
-**Clear, calm and inclusive: a professional guide for communities that decide together.** People
+**Clear, calm, and inclusive: a professional guide for communities that decide together.** People
 trust a tribe with shared money and shared decisions, so the copy reads like a well-run
 organisation, not a party invitation. It is written for a global audience, many reading in a
 second language, and for both newcomers and crypto natives.
 
-1. **Literal over clever.** No idioms, metaphors, puns, slang or cultural references ("pull up
+1. **Literal over clever.** No idioms, metaphors, puns, slang, or cultural references ("pull up
    a chair", "kick off", "heads-up", "hold the floor", "a seat at the table", "jump in"). They
    don't translate, and they read as unserious next to a treasury. Say what happens.
-2. **Professional and calm.** Confident, neutral and polite. No jokes, hype or exclamation
-   marks, no "simply", "just", "easy", "magic" or "awesome". Headings describe the content
+2. **Professional and calm.** Confident, neutral, and polite. No jokes, hype, or exclamation
+   marks, no "simply", "just", "easy", "magic", or "awesome". Headings describe the content
    ("Start a tribe", "How voting works"), never a mood.
 3. **Community first.** The subject is the members and what they decide together: "Members
    vote on proposals", "The tribe's treasury". Inclusive and neutral: no gendered or
@@ -253,12 +253,12 @@ second language, and for both newcomers and crypto natives.
 4. **Plain term first, the precise term beneath.** Newcomers lead with the plain word; crypto
    natives find the exact term one line down or in a glossary link ("Membership token" with
    "an NFT on Stellar" beneath). Define a crypto term the first time a page uses it.
-5. **Safe and accurate.** Never promise returns, value, safety or permanence: no "earn",
-   "invest", "profit", "guaranteed", "secure", "risk-free" or "forever" as a claim. Say what the
+5. **Safe and accurate.** Never promise returns, value, safety, or permanence: no "earn",
+   "invest", "profit", "guaranteed", "secure", "risk-free", or "forever" as a claim. Say what the
    contracts do and what they don't. Testnet is labelled as testnet. Legal and money copy is
    factual and points to the relevant terms.
 6. **Short, global sentences.** One idea per sentence, active voice, common words. British
-   spelling and the Oxford comma; sentence case; contractions are fine. Write numbers, dates and
+   spelling and the Oxford comma; sentence case; contractions are fine. Write numbers, dates, and
    amounts unambiguously (2 days, 2,400 XLM, 3 March 2026). No em dashes in UI copy.
 
 Name things precisely: say "Proposals", "Treasury", "Members", "Your membership". A proposal is
@@ -266,8 +266,8 @@ what members vote on; "vote" is the act, never the page. Explain consequences: "
 to mira.xlm after a 2-day safety delay." Name the outcome on buttons: "Cast 3 votes For",
 "Place 200 XLM bid".
 
-- **Tribes are tribes in copy; DAO sits one line beneath.** Name a group "tribe" everywhere: Your tribes, Find a tribe, Build a tribe, Switch tribe. Crypto natives find the DAO term on a quiet line under the plain one: the home supporting line ("A DAO on Stellar: shared treasury, onchain votes, NFT membership."), the Members subtitle ("Each membership is an NFT with one vote."), the Treasury subtitle and the footer ("Tribe Builder · DAOs on Stellar · Built by Builder DAO").
-- Savings circles are "circles", "groups" or "savers", never tribes.
+- **Tribes are tribes in copy; DAO sits one line beneath.** Name a group "tribe" everywhere: Your tribes, Find a tribe, Build a tribe, Switch tribe. Crypto natives find the DAO term on a quiet line under the plain one: the home supporting line ("A DAO on Stellar: shared treasury, onchain votes, NFT membership."), the Members subtitle ("Each membership is an NFT with one vote."), the Treasury subtitle, and the footer ("Tribe Builder · DAOs on Stellar · Built by Builder DAO").
+- Savings circles are "circles", "groups", or "savers", never tribes.
 - Never call a real group of people a tribe in marketing.
 - Code identifiers (`CommunityCard`, `components/community`) keep their names; only visible copy says tribe.
 
@@ -276,8 +276,8 @@ Authority language is correctness, not style, and stays exact:
 - Before launch: **Launch admin**, **Setup**, and direct configuration transactions.
 - After launch: **Requires DAO governance**, not unilateral administrator power.
 - Queue and execute: any wallet can submit once a proposal is eligible; it pays fees.
-- **Local draft** does not mean deployed, shared or approved.
-- Keep wallet review, submission, confirmation and indexed visibility distinct. Signing alone is not "submitted". An unknown confirmation is a recovery state, not a failure.
+- **Local draft** does not mean deployed, shared, or approved.
+- Keep wallet review, submission, confirmation, and indexed visibility distinct. Signing alone is not "submitted". An unknown confirmation is a recovery state, not a failure.
 
 ## Decisions Log
 

@@ -1,38 +1,42 @@
 # Tribe Builder
 
-**Build a tribe.** Gather your people, pool what you put in, and decide together.
+**Build a tribe.** Bring your community together, share a treasury, and make decisions as members.
 
-Tribe Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and operating independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury, NFT membership (one token, one vote) and proposals any wallet can execute once they pass and their safety delay ends. It is built on Nouns Builder.
+Tribe Builder ([tribes.build](https://tribes.build)) is a Soroban DAO framework and web application for creating and running independent DAOs on Stellar. In the app a DAO is a tribe: a group with a shared onchain treasury and NFT membership (one token, one vote). Members vote on proposals. Once a proposal passes, any wallet can queue it, and after its safety delay any wallet can execute it; the wallet that submits pays the fee. Tribe Builder is built on Nouns Builder.
+
+User guides are at [docs.tribes.build](https://docs.tribes.build) (source in `apps/docs`, described in [the docs site guide](docs/DOCS_SITE.md)).
 
 ## Brand
 
-- **Voice:** a warm host. Plain words first, the DAO term one line beneath: "Members", then "Each membership is an NFT with one vote."
+- **Voice:** clear, calm, and inclusive. Plain words first, the DAO term one line beneath: "Members", then "Each membership is an NFT with one vote."
 - **Noun:** a group is a tribe everywhere in the app (Your tribes, Find a tribe, Build a tribe). Savings circles stay circles.
 - **Logo, "the lens is the table":** three people around a single Nouns lens, with an empty seat saved for you that turns brass when you join. Flat blue is the master; the Dusk tile is the app icon.
-- **Colour:** one blue for actions, brass for what's yours, warm neutrals, dark as the hero theme.
+- **Colour:** one blue for actions, brass for what's yours, warm neutrals, and dark as the hero theme.
 
-[DESIGN.md](DESIGN.md) has the full system: brand and logo rules, tokens, type, layout, motion and voice. The press kit (marks, lockups, the Dusk tile and the favicon) is in [docs/brand](docs/brand/README.md).
+[DESIGN.md](DESIGN.md) has the full system: brand and logo rules, tokens, type, layout, motion, and voice. The press kit (marks, lockups, the Dusk tile, and the favicon) is in [docs/brand](docs/brand/README.md).
 
 ## Community and support
 
-Questions, ideas and problems: join the [Tribe Builder Discord](https://discord.gg/bTygNksyRb).
+Questions, ideas, and problems: join the [Tribe Builder Discord](https://discord.gg/bTygNksyRb).
 
 ## System
 
-- Manager deploys four core contracts per DAO (Token, Metadata, Governor, Treasury) and the modules it chooses: Auction, Marketplace (quick-buy pools and resales) and ClaimMinter (claim lists and launch drives). A DAO can add its own modules by vote; each mints only within an allowance the DAO sets.
+- Manager deploys four core contracts per DAO (Token, Metadata, Governor, Treasury) and the modules the DAO chooses: Auction, Marketplace (quick-buy pools and resales), and ClaimMinter (claim lists and launch drives). A DAO can add its own modules by vote; each mints only within an allowance the DAO sets.
 - Manager is a factory and implementation registry. `create_dao` only requests a slug; `launch_dao` claims it (unique per Manager); a launched DAO can move to a new slug by vote. Manager deletes pending setup state at launch, keeps the claimed slug-to-DAO mappings, and has no DAO enumeration API.
-- Every module has one admin: the launch admin during Setup, the Treasury after launch (`admin()`; no ownership transfer or renounce). Launch requires a nonzero **voting** supply (tokens held by the Treasury, Auction and Marketplace carry no votes) and hands every module's admin, including the Treasury's, to the Treasury.
-- Proposals are created, voted on, and queued through Governor. Anyone can execute a ready proposal through **Treasury**, which consumes it on Governor and dispatches the actions in order.
-- Together with the Manager that makes eight deployable contracts; there is no shared platform minter. `common` and `dao-e2e` are support/test crates.
+- Every DAO contract has one admin: the launch admin during Setup and the Treasury after launch (`admin()`; no ownership transfer or renounce). Launch requires a nonzero **voting** supply (tokens held by the Treasury, Auction, and Marketplace carry no votes) and hands every contract's admin, including the Treasury's, to the Treasury.
+- Proposals are created, voted on, and queued through Governor. Any wallet can execute a ready proposal through **Treasury**, which consumes it on Governor and dispatches the actions in order.
+- With the Manager, that makes eight deployable contracts; there is no shared platform minter. `common` and `dao-e2e` are support and test crates, and `vote-adapter-mock` is a Governor vote source for tests and testnet only.
 - Goldsky writes events to PostgreSQL landing tables. Views provide discovery and history; the web app reads them through Prisma and the read-only app role.
+
+[Architecture](docs/ARCHITECTURE.md) explains how these parts fit together.
 
 ## Web application
 
-The current frontend includes DAO discovery, auction history/settlement, governance and ordered execution receipts, Treasury funding/history, paginated members and token-holder controls, claim lists (free or priced, launch drives with refunds), quick-buy pools and resales, membership switches (locked tokens, members-only delegation, DAO recovery) and one-click storage renewal. Creation uses a compact Identity → Membership → Governance → Review form, followed by separate Setup → Launch.
+The frontend covers tribe discovery, auction history and settlement, governance with ordered execution receipts, Treasury funding and history, paginated members and token-holder controls, claim lists (free or priced, and launch drives with refunds), quick-buy pools and resales, membership switches (locked tokens, members-only delegation, and DAO recovery), and one-click storage renewal. Creation is one form (Identity → Membership → Governance → Review), followed by separate Setup and Launch steps.
 
-The Warm Ink · Dusk design system ([DESIGN.md](DESIGN.md)) provides light, dark, and system appearance with one blue for actions and brass for what's yours, Bricolage Grotesque display type, Figtree interface type, and JetBrains Mono for figures. Brand files are in [docs/brand](docs/brand). Multiple creation drafts, marketplace favorites, and private labels are stored in this browser only. They are not shared collaboration or public tags.
+The Warm Ink · Dusk design system ([DESIGN.md](DESIGN.md)) offers Light, Dark, and System appearance, with Bricolage Grotesque for display type, Figtree for the interface, and JetBrains Mono for figures. Creation drafts (several at once) and marketplace favourites are stored in the browser only. They are not shared collaboration or public tags.
 
-See [the web README](apps/web/README.md) for setup, routes, recovery behavior, and limitations. Feature descriptions reflect source, not a live deployment check.
+See [the web README](apps/web/README.md) for setup, routes, recovery behaviour, and limitations. Feature descriptions reflect the source, not a check of a live deployment.
 
 ## Development
 
@@ -50,7 +54,7 @@ You need:
   ```
 
 - **Docker**, only for release builds and for verifying a release ([reproducible builds](docs/REPRODUCIBLE_BUILDS.md)).
-- **gitleaks** 8.25 or later, optional: the pre-commit hook uses it to scan staged changes for secrets when it is installed (`brew install gitleaks`). CI scans every push.
+- **gitleaks** 8.25 or later, optional: when it is installed, the pre-commit hook uses it to scan staged changes for secrets (`brew install gitleaks`). CI scans every push.
 
 `.env` and `.env.*` files are ignored by git; only the `.env.example` templates are tracked.
 
@@ -64,7 +68,7 @@ cp apps/web/.env.example apps/web/.env
 pnpm dev
 ```
 
-`contracts:bindings` builds WASMs, regenerates eight client packages, and runs `pnpm install`. Dev/build hooks generate deployment selection, Prisma, binding builds, and Panda CSS. The development server uses port **4242**. A configured indexed database is needed for DAO data; local drafts do not create on-chain DAOs.
+`contracts:bindings` builds the WASMs, regenerates the eight client packages, and runs `pnpm install`. The web app's `predev` and `prebuild` hooks (`pnpm --dir apps/web codegen`) generate the deployment selection and the Prisma client, build the bindings, and generate Panda CSS. The development server uses port **4242**. Tribe data needs a configured, indexed database. A local draft does not create an on-chain DAO.
 
 ## Commands
 
@@ -73,33 +77,37 @@ Run from the repository root unless noted. Deployment and generation commands ha
 | Command | Purpose |
 | --- | --- |
 | `pnpm contracts:build` | Build contract WASMs with `stellar contract build --locked`, for development and tests |
-| `pnpm contracts:build:release` | Build the checked-out commit in the pinned container; `--write-hashes` records `releases/hashes.json` |
+| `pnpm contracts:build:release` | Build a commit (default `HEAD`) in the pinned container; `--write-hashes` records `releases/hashes.json` |
 | `pnpm contracts:verify <tag>` | Rebuild a release tag and compare it with the hashes it publishes |
-| `pnpm contracts:bindings` | Regenerate eight TypeScript binding packages |
+| `pnpm contracts:bindings` | Regenerate the eight TypeScript binding packages ([bindings](docs/BINDINGS_GENERATION.md)) |
 | `pnpm contracts:test` | Run Cargo workspace tests, including in-memory integration tests |
 | `pnpm contracts:coverage` | Contract test coverage with `cargo llvm-cov` ([coverage](docs/COVERAGE.md)) |
+| `pnpm contracts:clean` | Remove Cargo build output (`cargo clean`) |
 | `pnpm indexer:test` | Run Goldsky package tests; DB assertions need a test database |
 | `pnpm db:test` | Migration static checks; also DB tests if `TEST_DATABASE_URL` is set |
 | `pnpm --dir apps/web test` | Run web Vitest tests |
-| `pnpm --dir apps/web codegen` | Generate web deployment/Prisma/styles and build bindings |
-| `pnpm lint` / `pnpm typecheck` / `pnpm build` | Web checks/build |
-| `pnpm deploy:manager configs/testnet-manager.json` | Deploy/resume the Manager and register the contract implementations |
+| `pnpm --dir apps/web codegen` | Generate the web deployment selection, Prisma client, and styles, and build the bindings |
+| `pnpm lint` / `pnpm typecheck` / `pnpm build` | Web lint, type check, and production build |
+| `pnpm docs:dev` / `pnpm docs:build` / `pnpm docs:check` | Run, build, and check the docs site ([docs site](docs/DOCS_SITE.md)) |
+| `pnpm docs:capture` | Run the screenshot capture story on testnet, after `pnpm --dir apps/e2e build:capture` ([showcase tribe](docs/qa/SHOWCASE_TRIBE.md)) |
+| `pnpm deploy:manager configs/testnet-manager.json` | Deploy or resume the Manager and register the contract implementations ([Manager deployment](docs/MANAGER_DEPLOYMENT.md)) |
 | `pnpm deploy:dao --validate-only configs/testnet-builder-dao.json` | Validate the CLI DAO configuration without deployment |
-| `pnpm indexer:generate` | Generate the pipeline from its selected Manager artifact |
+| `pnpm deploy:upgrade <module> …` | Upgrade one contract ([contract upgrades](docs/CONTRACT_UPGRADES.md)) |
+| `pnpm indexer:generate` | Generate the pipeline from the Manager artifact that `MANAGER_DEPLOYMENT_FILE` names ([Goldsky setup](docs/GOLDSKY_SETUP.md)) |
 
-For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md). Local network helper scripts exist but have no `local:*` package aliases.
+For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md). Local network helper scripts (`scripts/local-up.mjs`, `scripts/local-down.mjs`) exist but have no `local:*` package aliases.
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Architecture](docs/ARCHITECTURE.md) and [tenant/read-model boundaries](docs/MULTITENANT_ARCHITECTURE.md)
-- [Manager deployment](docs/MANAGER_DEPLOYMENT.md) and [DAO deployment](docs/DAO_DEPLOYMENT.md)
-- [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
-- [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
-- [Bindings regeneration](docs/BINDINGS_GENERATION.md)
-- [Reproducible contract builds](docs/REPRODUCIBLE_BUILDS.md), [dependencies and advisories](docs/DEPENDENCIES.md), and the [OpenZeppelin pin](docs/OPENZEPPELIN_PIN.md)
-- [Brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), [press kit](docs/brand/README.md) and [agent ownership](docs/AGENT_WORKFLOW.md)
+The [documentation index](docs/README.md) lists every guide. The main entry points:
 
-## Technology and license
+- **Audit:** the [audit package](docs/audit/README.md) (scope, state machines, invariants, known issues, and threat model), the [security model](docs/SECURITY_MODEL.md), and [proposal actions](docs/PROPOSAL_ACTIONS.md)
+- **How it works:** [architecture](docs/ARCHITECTURE.md), [tenant and read-model boundaries](docs/MULTITENANT_ARCHITECTURE.md), [storage design](docs/STORAGE_DIET.md), [who pays for storage](docs/STORAGE_COSTS.md), and the [storage and TTL reference](docs/TTL_ECONOMICS.md)
+- **Runbooks:** [Manager deployment](docs/MANAGER_DEPLOYMENT.md), [DAO deployment](docs/DAO_DEPLOYMENT.md), [contract upgrades](docs/CONTRACT_UPGRADES.md), [the dev deployment](docs/DEV_DEPLOYMENT.md), [monitoring](docs/MONITORING.md), [key custody](docs/KEY_CUSTODY.md), and the [incident runbook](docs/INCIDENT_RUNBOOK.md)
+- **Builds and dependencies:** [reproducible contract builds](docs/REPRODUCIBLE_BUILDS.md), [dependencies and advisories](docs/DEPENDENCIES.md), the [OpenZeppelin pin](docs/OPENZEPPELIN_PIN.md), and [bindings regeneration](docs/BINDINGS_GENERATION.md)
+- **Data:** the [database catalogue](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
+- **Brand and workflow:** [brand and frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md), the [press kit](docs/brand/README.md), and the [agent workflow](docs/AGENT_WORKFLOW.md)
 
-Rust/Soroban contracts; Next.js, React, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. MIT. The share-image fonts (Bricolage Grotesque and Figtree) are under the SIL Open Font License; see [apps/web/src/assets/fonts/OFL.txt](apps/web/src/assets/fonts/OFL.txt).
+## Technology and licence
+
+Rust and Soroban contracts; Next.js, React, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. The code is under the MIT licence. The share-image fonts (Bricolage Grotesque and Figtree) are under the SIL Open Font License; see [apps/web/src/assets/fonts/OFL.txt](apps/web/src/assets/fonts/OFL.txt).
