@@ -51,7 +51,7 @@ The Rust source is authoritative. Where any document here disagrees with the cod
 
 ## Status
 
-The pages were checked against `dev` at `f51d301`, which includes pull requests 118 to 130: the proposal lifetime and the storage-layout gate, the custody and payment-asset checks, the Manager's recovery notice and launch code checks, the ClaimMinter's threshold check and hashing vectors, the sign-in and session changes, the response headers and rate limits, the read-model role rule, and the reproducible build. No `TODO` markers are left. What the package still needs comes from the freeze itself:
+The pages were checked against `dev` at `f51d301`, which includes pull requests 118 to 130: the proposal lifetime and the storage-layout gate, the custody and payment-asset checks, the Manager's recovery notice and launch code checks, the ClaimMinter's threshold check and hashing vectors, the sign-in and session changes, the response headers and rate limits, the read-model role rule, and the reproducible build. Every placeholder marker from earlier versions is resolved. What the package still needs comes from the freeze itself:
 
 - `SCOPE.md` regenerated from the frozen tag. At `f51d301`, `releases/hashes.json` predates the contract changes, and `SCOPE.md` says so;
 - the published hashes and the release workflow's result for the frozen tag;
