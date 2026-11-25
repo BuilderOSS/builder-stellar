@@ -9,11 +9,11 @@ cargo test -p dao-e2e
 pnpm contracts:test
 ```
 
-Coverage includes mint hooks, voting snapshots, ordered Treasury execution, failed-action atomicity, replay and expiry, admin setters and upgrades, Treasury self-dispatch, auctions and refunds (including no early settlement while paused), and primary and secondary marketplace authorization. Notable tests:
+Coverage includes mint hooks, voting snapshots, ordered Treasury execution, failed-action atomicity, replay and expiry, admin setters and upgrades, Treasury self-dispatch, auctions and refunds (including no early settlement while paused), and primary and secondary marketplace authorisation. Notable tests:
 
 - `full_factory_flow_create_setup_launch_with_slug`: real factory path with the compiled WASMs from `target/wasm32v1-none/release`: a slug requested by two pending DAOs, setup-window founder mint and artwork, `launch_dao` claiming the slug, and the rival failing `SlugTaken` and renaming. Panics with a build hint if the WASMs are missing.
 - `batches_at_the_event_budget_fit_one_transaction`: the largest batches `common::batch_mint_fits` allows (43 tokens to one recipient, 18 recipients × 1, 5 recipients × 7) against real 16-trait metadata, each under 90% of the 16 KiB event limit, with a mainnet-like `max_entry_ttl`.
-- `treasury_buys_a_marketplace_listing_through_an_authorized_proposal`: nested authorization via an `authorize` action.
+- `treasury_buys_a_marketplace_listing_through_an_authorized_proposal`: nested authorisation via an `authorize` action.
 - `system_held_tokens_and_votes_through_a_real_proposal`: voting supply, quorum, delegation, and system contracts never voting.
 - `error_codes_are_unique_per_crate_block`.
 - `voting_units_match_balances_and_checkpoints_add_up` (`src/voting_invariant.rs`): fixed-seed random mints, batch mints, transfers between wallets and the Treasury, Auction, and Marketplace, and delegations, over eight seeds. After every step: voting units equal balance (zero for non-voting holders), `TotalSupply` equals the units, and the account checkpoints add up to `TotalSupply`. A vault module is registered and unregistered at random; unregistering it while it holds tokens is refused and moves nothing, so the sequence empties it first. It is the gate for the module registry in `docs/designs/membership-models.md` (Success Criteria, "Vote counts stay exact").

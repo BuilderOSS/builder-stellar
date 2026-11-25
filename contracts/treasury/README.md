@@ -20,7 +20,7 @@ The constructor receives the admin (launch admin), Governor, Manager, and curren
 
 Anyone may submit `execute` once the proposal is Queued, past ETA, and unexpired:
 
-1. Treasury calls `Governor.consume` with the exact vectors and hash. Governor requires Treasury authorization, marks the proposal Executed, emits `ProposalExecuted`, and returns the id.
+1. Treasury calls `Governor.consume` with the exact vectors and hash. Governor requires Treasury authorisation, marks the proposal Executed, emits `ProposalExecuted`, and returns the id.
 2. Treasury dispatches actions in order (see below). Governor has returned, so an action can call its admin setters without re-entry.
 3. Treasury emits one `Execute` per action: topics Governor, target, and proposal id; data function and zero-based index.
 
@@ -31,7 +31,7 @@ No action, and no node of an `authorize` tree, may call the Governor's `consume`
 ## Actions aimed at the Treasury
 
 - `upgrade(from_hash, to_hash)`, `migrate()`: internal dispatch (no re-entry). Anything else fails with `UnknownSelfCall` (7602); bad arguments with `InvalidSelfCallArgs` (7603).
-- `authorize(nodes: Vec<AuthNode>)`: adds authorization trees to the **next** action. Use it when the next call needs the Treasury's authorization deeper than the Treasury's own call, for example `marketplace.buy(token_id, treasury, max_price)` (the marketplace pulls the payment from the Treasury) or a router swap. `AuthNode { contract, fn_name, args, sub }` describes one exact invocation and the invocations below it. Trees are part of the proposal, so voters approve them. A dangling, repeated, empty, or malformed `authorize`, or one followed by a self call, fails with `InvalidAuthorization` (7605). Bounds: depth 4 and 16 nodes (`MAX_AUTH_DEPTH`, `MAX_AUTH_NODES`). `check_authorization` decodes the trees, applies the depth, node, and `consume` checks without executing anything, and returns the node count.
+- `authorize(nodes: Vec<AuthNode>)`: adds authorisation trees to the **next** action. Use it when the next call needs the Treasury's authorisation deeper than the Treasury's own call, for example `marketplace.buy(token_id, treasury, max_price)` (the marketplace pulls the payment from the Treasury) or a router swap. `AuthNode { contract, fn_name, args, sub }` describes one exact invocation and the invocations below it. Trees are part of the proposal, so voters approve them. A dangling, repeated, empty, or malformed `authorize`, or one followed by a self call, fails with `InvalidAuthorization` (7605). Bounds: depth 4 and 16 nodes (`MAX_AUTH_DEPTH`, `MAX_AUTH_NODES`). `check_authorization` decodes the trees, applies the depth, node, and `consume` checks without executing anything, and returns the node count.
 
 Example: buy listing `nft` at price 1,000 with a 2.5% fee:
 
@@ -44,7 +44,7 @@ action 1: target marketplace, function buy, args [nft, treasury, 1000]
 
 ## Admin
 
-The launch admin can upgrade during setup. Launch makes the Treasury its own admin (`AdminChanged`, then `TreasuryLaunched`); direct external calls can no longer authorize `upgrade`, so it runs through proposal self-dispatch. An assurance drive's Manager-only `handoff` makes the Treasury its own admin earlier (`AdminChanged` then, and none at launch), and the Treasury stays in Setup until launch. Both fail `TreasuryMismatch` (7601) unless `treasury` is this contract. Manager approvals and current-hash checks still apply.
+The launch admin can upgrade during setup. Launch makes the Treasury its own admin (`AdminChanged`, then `TreasuryLaunched`); direct external calls can no longer authorise `upgrade`, so it runs through proposal self-dispatch. An assurance drive's Manager-only `handoff` makes the Treasury its own admin earlier (`AdminChanged` then, and none at launch), and the Treasury stays in Setup until launch. Both fail `TreasuryMismatch` (7601) unless `treasury` is this contract. Manager approvals and current-hash checks still apply.
 
 Errors: block 7600.
 
