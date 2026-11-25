@@ -1871,7 +1871,7 @@ mod real_dao {
     #[test]
     fn launch_dao_rejects_payment_asset_changed_during_setup() {
         let dao = build();
-        let other = Address::generate(&dao.env);
+        let other = test_asset(&dao.env);
 
         // launch_admin swaps the auction payment token in setup.
         dao.auction.set_payment_token(&other);
@@ -2566,7 +2566,7 @@ fn module_on_revoked_hash_migrates_away_and_keeps_its_version() {
                 Address::generate(&env),
                 Address::generate(&env),
                 Address::generate(&env),
-                Address::generate(&env),
+                test_asset(&env),
                 client.address.clone(),
                 b.clone(),
                 250u32,
