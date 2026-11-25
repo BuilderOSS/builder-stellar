@@ -1641,3 +1641,56 @@ fn set_payment_token_refuses_anything_but_a_stellar_asset() {
     auction.set_payment_token(&other);
     assert_eq!(auction.payment_asset(), other);
 }
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Auction's own error, paused or not; the
+/// views keep answering, and `migrate` brings everything back.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    use common::assert_fails_with;
+    use stellar_contract_utils::pausable;
+
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, address, _payment) = setup_auction_contract(&e);
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&e, &address, stored);
+    let mismatch: soroban_sdk::Error = AuctionError::StorageVersionMismatch.into();
+    let bidder = Address::generate(&e);
+
+    // Paused, as in Setup: the entry points that need the pause reach the gate.
+    assert_fails_with!(mismatch, auction.try_pause(&owner));
+    assert_fails_with!(mismatch, auction.try_unpause(&owner));
+    assert_fails_with!(mismatch, auction.try_launch(&treasury, &false));
+    assert_fails_with!(mismatch, auction.try_handoff(&treasury));
+    assert_fails_with!(mismatch, auction.try_settle_auction());
+    assert_fails_with!(mismatch, auction.try_cancel_auction());
+    assert_fails_with!(mismatch, auction.try_recover_token(&1));
+    assert_fails_with!(mismatch, auction.try_withdraw_refund(&bidder));
+    assert_fails_with!(mismatch, auction.try_set_duration(&1000));
+    assert_fails_with!(mismatch, auction.try_set_reserve_price(&20_000_000));
+    assert_fails_with!(mismatch, auction.try_set_min_bid_increment(&5));
+    assert_fails_with!(mismatch, auction.try_set_time_buffer(&60));
+    assert_fails_with!(mismatch, auction.try_set_payment_token(&sac(&e)));
+
+    // Unpaused: bids and settlement reach it too.
+    e.as_contract(&address, || pausable::unpause(&e));
+    assert_fails_with!(
+        mismatch,
+        auction.try_create_bid(&bidder, &0, &20_000_000, &String::from_str(&e, ""))
+    );
+    assert_fails_with!(mismatch, auction.try_settle_and_create_new());
+
+    // The views stay open.
+    assert_eq!(auction.storage_version(), stored);
+    assert_eq!(auction.get_config().duration, 300);
+    assert_eq!(auction.admin(), owner);
+    assert!(!auction.paused());
+
+    // `migrate` is the way back.
+    auction.migrate();
+    assert_eq!(auction.storage_version(), crate::storage::STORAGE_VERSION);
+    auction.pause(&owner);
+    auction.set_duration(&1000);
+    assert_eq!(auction.get_config().duration, 1000);
+}

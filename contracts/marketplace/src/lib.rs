@@ -15,6 +15,12 @@
 //! is set. The Token refuses to unregister the Marketplace while it holds
 //! tokens; the DAO empties it with `return_listing` and `recover_token`
 //! (while paused), `close_pool`, and `sweep_pool`.
+//!
+//! While the stored data layout differs from the code's
+//! (`common::upgrade::is_current_layout`), every entry point that changes
+//! state fails `StorageVersionMismatch`; `upgrade`, `migrate` and the views
+//! stay open, so the Treasury can still finish or undo an upgrade by
+//! proposal.
 
 #![no_std]
 

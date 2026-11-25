@@ -37,6 +37,7 @@ impl MetadataContract {
     /// * `AlreadyLive` - a second call
     /// * `TreasuryMismatch` - `treasury` is not the Treasury wired at construction
     pub fn launch(env: Env, treasury: Address) {
+        Self::require_layout_or_panic(&env);
         let manager = Self::manager(&env);
         // Only the Manager launches, after its launch checks have passed.
         manager.require_auth();
@@ -70,6 +71,7 @@ impl MetadataContract {
     /// * `AlreadyLive` - the contract is already Live
     /// * `TreasuryMismatch` - `treasury` is not the Treasury wired at construction
     pub fn handoff(env: Env, treasury: Address) {
+        Self::require_layout_or_panic(&env);
         // Only the Manager freezes Setup, as part of opening a drive.
         Self::manager(&env).require_auth();
         // After launch the admin is already the Treasury; nothing to hand off.
@@ -175,14 +177,19 @@ impl MetadataContract {
 
     /// Advance the storage layout after an upgrade (admin only). Panics
     /// `NothingToMigrate` unless the stored layout is older than this code's
-    /// `STORAGE_VERSION`.
+    /// `STORAGE_VERSION`. Until it runs, every entry point that changes state
+    /// fails `StorageVersionMismatch`. A governance upgrade runs `upgrade`
+    /// and `migrate` in one proposal; the Treasury does not depend on this
+    /// contract, so a skipped migration can always be completed by proposal.
     pub fn migrate(env: Env) {
         // Rewrites stored data, so only the admin who upgraded may run it.
         common::admin::require_admin(&env);
         common::upgrade::migrate(&env, STORAGE_VERSION);
     }
 
-    /// Storage-layout version of the data held by this contract.
+    /// Storage-layout version of the data held by this contract. While it
+    /// differs from the code's `STORAGE_VERSION`, every entry point that
+    /// changes state fails `StorageVersionMismatch`.
     pub fn storage_version(env: Env) -> u32 {
         common::upgrade::storage_version(&env)
     }
@@ -250,6 +257,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // The artwork is the admin's: the launch admin in Setup, the
         // Treasury (by proposal) once Live.
@@ -278,6 +286,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // Replacing the artwork is the admin's decision, as adding to it is.
         Self::require_admin(&env);
@@ -315,7 +324,10 @@ impl MetadataContract {
     /// # Errors
     ///
     /// * `NotInitialized` - settings missing
+    /// * `StorageVersionMismatch` - a migration is due; the Token ignores the
+    ///   failure, so the token stays unseeded until `regenerate`
     pub fn on_minted(env: Env, token_id: u32) -> Result<bool, Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // Only the Token's mint path may seed: this overwrites the token's
         // selections, so any other caller could re-roll its traits.
@@ -346,6 +358,7 @@ impl MetadataContract {
     /// * `AlreadySeeded` - the token already has attributes
     /// * `NoProperties` - no properties are configured yet
     pub fn regenerate(env: Env, token_id: u32) -> Result<(), Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // A repair for the DAO's own tokens, so the admin's.
         Self::require_admin(&env);
@@ -387,6 +400,7 @@ impl MetadataContract {
     ///
     /// * `NotInitialized` - settings missing
     pub fn on_minted_batch(env: Env, first_token_id: u32, count: u32) -> Result<bool, Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // As `on_minted`: only the Token may write selections.
         Self::require_token(&env)?;
@@ -541,6 +555,7 @@ impl MetadataContract {
     /// * `StringTooLong` / `InvalidName` - longer than
     ///   `common::MAX_STRING_LENGTH`, or contains `"`, `\` or a control character
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // Where every token's image points is the admin's setting.
         Self::require_admin(&env);
@@ -569,6 +584,7 @@ impl MetadataContract {
     /// * `ProfileSeqMismatch` - `expected_seq` is not the current seq
     /// * `InvalidProfile` - empty or longer than `common::MAX_PROFILE_LENGTH`
     pub fn update_profile(env: Env, expected_seq: u32, profile: String) -> Result<(), Error> {
+        Self::require_current_layout(&env)?;
         common::ttl::extend_instance(&env);
         // The DAO's public profile is the admin's to change.
         Self::require_admin(&env);
@@ -858,6 +874,26 @@ impl MetadataContract {
         let hash = env.crypto().keccak256(&data);
         // Convert BytesN to Bytes
         Bytes::from_array(env, &hash.to_array())
+    }
+
+    /// `StorageVersionMismatch` unless the stored data layout is the one this
+    /// code expects, so this code never writes data in a layout it does not
+    /// know. The first check of every entry point that changes state;
+    /// `upgrade`, `migrate` and the views stay outside it.
+    fn require_current_layout(env: &Env) -> Result<(), Error> {
+        if common::upgrade::is_current_layout(env, STORAGE_VERSION) {
+            Ok(())
+        } else {
+            Err(Error::StorageVersionMismatch)
+        }
+    }
+
+    /// `require_current_layout` for the entry points that panic instead of
+    /// returning an error (`launch`, `handoff`).
+    fn require_layout_or_panic(env: &Env) {
+        if let Err(err) = Self::require_current_layout(env) {
+            soroban_sdk::panic_with_error!(env, err);
+        }
     }
 
     /// Require the module admin's authorization (`common::admin`).

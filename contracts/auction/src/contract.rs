@@ -127,6 +127,7 @@ impl Pausable for DaoAuctionContract {
     /// A running auction keeps its leader and end time: it settles with
     /// `settle_auction` once it ends, or the admin cancels it.
     fn pause(e: &Env, caller: Address) {
+        Self::require_current_layout(e);
         Self::require_caller_is_admin(e, &caller);
         common::ttl::extend_instance(e);
         pausable::pause(e);
@@ -136,6 +137,7 @@ impl Pausable for DaoAuctionContract {
     /// auction is running, starts one, which needs the Auction's mint
     /// allowance: with none left the call fails at the mint and stays paused.
     fn unpause(e: &Env, caller: Address) {
+        Self::require_current_layout(e);
         // Nothing holds mint authority before launch, so unpausing would fail at mint.
         common::lifecycle::require_live(e);
         Self::require_caller_is_admin(e, &caller);
@@ -150,6 +152,17 @@ impl Pausable for DaoAuctionContract {
 }
 
 impl DaoAuctionContract {
+    /// Panics `StorageVersionMismatch` unless the stored data layout is the
+    /// one this code expects, so this code never writes data in a layout it
+    /// does not know. Every entry point that changes state calls it (after
+    /// the pause check, where it has one); `upgrade`, `migrate` and the views
+    /// stay outside it.
+    fn require_current_layout(e: &Env) {
+        if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
+            panic_with_error!(e, AuctionError::StorageVersionMismatch);
+        }
+    }
+
     /// `caller` must be the admin and authorize the call.
     fn require_caller_is_admin(e: &Env, caller: &Address) {
         caller.require_auth();
@@ -178,6 +191,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// against the one recorded at `create_dao` before calling. A second call
     /// panics with `AlreadyLive`.
     fn launch(e: &Env, treasury: Address, start: bool) {
+        Self::require_current_layout(e);
         Self::manager(e).require_auth();
         common::lifecycle::mark_live(e);
         if treasury != get_config(e).treasury {
@@ -198,6 +212,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// module stays in Setup, so its setters and upgrades are frozen until
     /// launch. Panics `AlreadyLive` once launched.
     fn handoff(e: &Env, treasury: Address) {
+        Self::require_current_layout(e);
         Self::manager(e).require_auth();
         common::lifecycle::require_setup(e);
         if treasury != get_config(e).treasury {
@@ -320,13 +335,19 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     /// Advances the storage layout to this code's `STORAGE_VERSION` after an
-    /// upgrade (admin only; `NothingToMigrate` when already current).
+    /// upgrade (admin only; `NothingToMigrate` when already current). Until
+    /// it runs, every entry point that changes state fails
+    /// `StorageVersionMismatch`. A governance upgrade runs `upgrade` and
+    /// `migrate` in one proposal; the Treasury does not depend on this
+    /// module, so a skipped migration can always be completed by proposal.
     fn migrate(e: &Env) {
         common::admin::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
     /// Storage-layout version of the data held by this contract (read-only).
+    /// While it differs from the code's `STORAGE_VERSION`, every entry point
+    /// that changes state fails `StorageVersionMismatch`.
     fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -360,6 +381,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// bid locks the payment token.
     #[when_not_paused]
     fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128, comment: String) {
+        Self::require_current_layout(e);
         bidder.require_auth();
         common::ttl::extend_instance(e);
 
@@ -405,6 +427,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// `Paused`). The admin's `unpause` resumes once an allowance is granted.
     #[when_not_paused]
     fn settle_and_create_new(e: &Env) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         settle_auction_internal(e);
         start_next_or_pause(e);
@@ -415,6 +438,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// end time (`AuctionActive`).
     #[when_paused]
     fn settle_auction(e: &Env) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         settle_auction_internal(e);
     }
@@ -437,6 +461,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// new auction starts until `unpause`. Emits `AuctionCancelled`.
     #[when_paused]
     fn cancel_auction(e: &Env) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         let auction = get_auction(e);
@@ -505,6 +530,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// so without this anyone could keep it registered by sending it one.
     #[when_paused]
     fn recover_token(e: &Env, token_id: u32) {
+        Self::require_current_layout(e);
         common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         // The running auction's token is owed to its winner or, when
@@ -541,6 +567,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// cleared before the transfer, and a failing transfer reverts both.
     /// Emits `RefundWithdrawn`.
     fn withdraw_refund(e: &Env, bidder: Address) {
+        Self::require_current_layout(e);
         bidder.require_auth();
         common::ttl::extend_instance(e);
 
@@ -589,6 +616,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// while paused; `InvalidConfig`). Emits `DurationUpdated`.
     #[when_paused]
     fn set_duration(e: &Env, duration: u64) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration) {
@@ -606,6 +634,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// (the admin, while paused; `InvalidBid`). Emits `ReservePriceUpdated`.
     #[when_paused]
     fn set_reserve_price(e: &Env, reserve_price: i128) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         // SECURITY: Validate reserve price is reasonable
@@ -624,6 +653,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// paused; `InvalidConfig`). Emits `MinBidIncrementUpdated`.
     #[when_paused]
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         if min_bid_increment_percent == 0 || min_bid_increment_percent > MAX_BID_INCREMENT_PERCENT {
@@ -641,6 +671,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// paused; `InvalidTimeBuffer`). Emits `TimeBufferUpdated`.
     #[when_paused]
     fn set_time_buffer(e: &Env, time_buffer: u64) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         if time_buffer == 0 || time_buffer > MAX_TIME_BUFFER {
@@ -660,6 +691,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// always use one asset. Emits `PaymentTokenUpdated`.
     #[when_paused]
     fn set_payment_token(e: &Env, payment_token: Address) {
+        Self::require_current_layout(e);
         let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         if is_payment_token_locked(e) {

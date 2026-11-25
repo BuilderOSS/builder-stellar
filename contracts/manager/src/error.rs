@@ -119,4 +119,10 @@ pub enum ManagerError {
     /// A payment asset is not a Stellar Asset Contract (`create_dao`,
     /// `create_module`, `open_assurance`)
     InvalidPaymentAsset = 7146,
+    /// The stored data layout is not the one this code expects: an
+    /// `upgrade_manager` whose `migrate` has not run yet, or an upgrade to
+    /// code with an older layout. Every entry point that changes state
+    /// refuses, apart from `migrate`, `upgrade_manager` and the registry
+    /// steps for the Manager's own upgrade
+    StorageVersionMismatch = 7147,
 }

@@ -4,6 +4,11 @@ use soroban_sdk::{
     contracttype, Address, BytesN, Env, IntoVal, String, Symbol, TryFromVal, Val, Vec,
 };
 
+/// The layout version of the data this code reads and writes. A Manager
+/// deployed before storage versions were recorded has none stored, and reads
+/// as 1, the layout it was built with.
+pub const STORAGE_VERSION: u32 = 1;
+
 /// A registry record (`register_implementation`). Immutable once written,
 /// except that `revoke_implementation` sets `revoked`, permanently.
 #[contracttype]

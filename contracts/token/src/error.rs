@@ -54,4 +54,10 @@ pub enum TokenError {
     /// pools): once unregistered it is no longer DAO custody, so in a locked
     /// DAO it could not move those tokens out
     ModuleHoldsTokens = 7222,
+    /// The stored data layout is not the one this code expects: an upgrade
+    /// whose `migrate` has not run yet, or an upgrade to code with an older
+    /// layout. Every entry point that changes state refuses until `migrate`
+    /// (or, for an older layout, another `upgrade`) brings the two back in
+    /// step
+    StorageVersionMismatch = 7223,
 }

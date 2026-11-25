@@ -992,6 +992,93 @@ fn migrate_is_admin_gated_and_needs_a_newer_layout() {
     );
 }
 
+use common::assert_fails_with;
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Token's own error; the views keep
+/// answering, so the Governor can still count votes on the proposal that
+/// migrates, and `migrate` brings everything back.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    let (e, client, owner, _manager) = setup_with_manager();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let token_id = client.mint(&owner, &alice);
+    let custom = module(&e, &client, "custom_shop", false);
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&e, &client.address, stored);
+    let mismatch: soroban_sdk::Error = TokenError::StorageVersionMismatch.into();
+    let x = Address::generate(&e);
+    let name = String::from_str(&e, "Name");
+    let symbol = String::from_str(&e, "SYM");
+    let kind = Symbol::new(&e, "custom_more");
+
+    assert_fails_with!(mismatch, client.try_set_transfers_locked(&true));
+    assert_fails_with!(mismatch, client.try_set_members_only_delegation(&true));
+    assert_fails_with!(mismatch, client.try_set_dao_recovery(&true));
+    assert_fails_with!(mismatch, client.try_dao_transfer(&token_id, &bob));
+    assert_fails_with!(mismatch, client.try_set_transfer_agent(&custom, &true));
+    assert_fails_with!(
+        mismatch,
+        client.try_agent_transfer(&custom, &alice, &bob, &token_id)
+    );
+    assert_fails_with!(mismatch, client.try_set_metadata(&name, &symbol));
+    assert_fails_with!(mismatch, client.try_increase_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_decrease_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_release_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_register_module(&kind, &x, &false));
+    assert_fails_with!(mismatch, client.try_unregister_module(&custom));
+    assert_fails_with!(mismatch, client.try_handoff(&x));
+    assert_fails_with!(mismatch, client.try_launch(&x, &grants(&e, &[])));
+    assert_fails_with!(mismatch, client.try_mint(&owner, &bob));
+    assert_fails_with!(
+        mismatch,
+        client.try_batch_mint(&owner, &vec![&e, bob.clone()], &vec![&e, 1u128])
+    );
+    assert_fails_with!(mismatch, client.try_transfer(&alice, &bob, &token_id));
+    assert_fails_with!(
+        mismatch,
+        client.try_transfer_from(&bob, &alice, &bob, &token_id)
+    );
+    assert_fails_with!(mismatch, client.try_approve(&alice, &bob, &token_id, &1000));
+    assert_fails_with!(mismatch, client.try_approve_for_all(&alice, &bob, &1000));
+    assert_fails_with!(mismatch, client.try_delegate(&alice, &bob));
+
+    // The views stay open: balances, ownership, votes and the layout itself.
+    assert_eq!(client.balance(&alice), 1);
+    assert_eq!(client.owner_of(&token_id), alice);
+    assert_eq!(client.get_votes(&alice), 1);
+    assert_eq!(client.storage_version(), stored);
+    assert_eq!(client.mint_allowance(&custom), 0);
+
+    // `migrate` is the way back; afterwards the Token works as before.
+    client.migrate();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    client.transfer(&alice, &bob, &token_id);
+    assert_eq!(client.owner_of(&token_id), bob);
+}
+
+/// Code older than its data (an upgrade to a lower `STORAGE_VERSION`) has
+/// nothing to migrate: it stays halted, and only `upgrade` is left open.
+#[test]
+fn code_older_than_its_data_stays_halted_with_upgrade_open() {
+    let (e, client, owner, _manager) = setup_with_manager();
+    let alice = Address::generate(&e);
+    common::testutils::set_stored_layout(&e, &client.address, crate::storage::STORAGE_VERSION + 1);
+    let mismatch: soroban_sdk::Error = TokenError::StorageVersionMismatch.into();
+    assert_fails_with!(mismatch, client.try_mint(&owner, &alice));
+    assert_fails_with!(
+        soroban_sdk::Error::from(CommonError::NothingToMigrate),
+        client.try_migrate()
+    );
+    // `upgrade` passes the gate and fails only on its own checks (here the
+    // stand-in hash is not the running one).
+    let other = BytesN::from_array(&e, &[7u8; 32]);
+    let error = client.try_upgrade(&other, &other).err().unwrap().unwrap();
+    assert_ne!(error, mismatch);
+    assert_eq!(error, CommonError::HashMismatch.into());
+}
+
 /// Voting power and delegation around the three non-voting system holders
 /// (Treasury, Auction, Marketplace). Each test checks votes, delegates and the
 /// voting supply after every step, because a mistake here either inflates

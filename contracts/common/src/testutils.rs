@@ -18,6 +18,31 @@ pub fn advance_ledgers(e: &Env, n: u32) {
     e.ledger().with_mut(|l| l.sequence_number += n);
 }
 
+/// Asserts that a client's `try_` call failed with the contract error
+/// `expected` (a `soroban_sdk::Error`), naming the call when it did not.
+#[macro_export]
+macro_rules! assert_fails_with {
+    ($expected:expr, $call:expr) => {
+        assert_eq!(
+            $call.err().expect(stringify!($call)).unwrap(),
+            $expected,
+            "{}",
+            stringify!($call)
+        )
+    };
+}
+
+/// Overwrite `contract`'s stored layout version (`UpgradeKey::StorageVersion`),
+/// as an upgrade to code with another `STORAGE_VERSION` would leave it.
+pub fn set_stored_layout(e: &Env, contract: &Address, version: u32) {
+    e.as_contract(contract, || {
+        e.storage().instance().set(
+            &crate::ns(e, crate::upgrade::UpgradeKey::StorageVersion),
+            &version,
+        );
+    });
+}
+
 /// Minimal valid Soroban wasm (env-meta section only). Uploading it yields a
 /// hash that `update_current_contract_wasm` accepts.
 pub fn empty_wasm(e: &Env) -> BytesN<32> {

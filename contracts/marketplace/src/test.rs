@@ -1633,3 +1633,57 @@ mod return_listing {
         assert_eq!(mp.admin(), fixture.treasury);
     }
 }
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Marketplace's own error; the views keep
+/// answering, and `migrate` brings everything back.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    use common::assert_fails_with;
+
+    let f = fixture();
+    let e = &f.env;
+    let m = &f.marketplace;
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(e, &m.address, stored);
+    let mismatch: soroban_sdk::Error = MarketplaceError::StorageVersionMismatch.into();
+    let asset = f.payment.address.clone();
+    let body = String::from_str(e, "hello");
+
+    assert_fails_with!(mismatch, m.try_launch(&f.treasury, &true));
+    assert_fails_with!(mismatch, m.try_handoff(&f.treasury));
+    assert_fails_with!(
+        mismatch,
+        m.try_open_pool(&100, &asset, &10_000, &5, &1, &5, &3600)
+    );
+    assert_fails_with!(mismatch, m.try_restock(&0));
+    assert_fails_with!(mismatch, m.try_buy_from_pool(&0, &0, &1, &f.buyer, &100));
+    assert_fails_with!(mismatch, m.try_close_pool(&0));
+    assert_fails_with!(mismatch, m.try_sweep_pool(&0));
+    assert_fails_with!(
+        mismatch,
+        m.try_list(&1, &f.seller, &100, &10_000, &250, &asset)
+    );
+    assert_fails_with!(mismatch, m.try_buy(&1, &f.buyer, &100));
+    assert_fails_with!(mismatch, m.try_cancel(&1, &f.seller));
+    assert_fails_with!(mismatch, m.try_expire(&1));
+    assert_fails_with!(mismatch, m.try_return_listing(&1));
+    assert_fails_with!(mismatch, m.try_recover_token(&1));
+    assert_fails_with!(mismatch, m.try_comment_listing(&1, &body, &f.buyer));
+    assert_fails_with!(mismatch, m.try_pause());
+    assert_fails_with!(mismatch, m.try_unpause());
+    assert_fails_with!(mismatch, m.try_set_secondary_fee_bps(&100));
+    assert_fails_with!(mismatch, m.try_set_payment_asset(&asset));
+
+    // The views stay open.
+    assert_eq!(m.storage_version(), stored);
+    assert_eq!(m.admin(), f.treasury);
+    assert_eq!(m.next_pool_id(), 0);
+    assert!(m.get_listing(&1).is_none());
+
+    // `migrate` is the way back.
+    m.migrate();
+    assert_eq!(m.storage_version(), crate::storage::STORAGE_VERSION);
+    m.pause();
+    assert!(m.get_config().paused);
+}

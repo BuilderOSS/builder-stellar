@@ -47,4 +47,10 @@ pub enum AuctionError {
     /// `recover_token` for the token of the auction in progress (settle or
     /// cancel it first)
     TokenInAuction = 7420,
+    /// The stored data layout is not the one this code expects: an upgrade
+    /// whose `migrate` has not run yet, or an upgrade to code with an older
+    /// layout. Every entry point that changes state refuses until `migrate`
+    /// (or, for an older layout, another `upgrade`) brings the two back in
+    /// step
+    StorageVersionMismatch = 7421,
 }
