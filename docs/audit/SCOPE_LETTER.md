@@ -23,8 +23,8 @@ Tribe Builder ([tribes.build](https://tribes.build)) is a framework and web app 
 | Frozen tag | [for example `audit-1-freeze`] |
 | Commit | [full commit hash of the tag] |
 | `contracts/` tree | [the tree hash from SCOPE.md; `git rev-parse <tag>:contracts` prints it] |
-| WASM hashes | [link to the published hashes for the tag] |
-| Build | `stellar contract build` with Stellar CLI [version], Rust [toolchain], target `wasm32v1-none`; see [SCOPE.md](SCOPE.md#build) |
+| WASM hashes | [link to `releases/hashes.json` at the tag]; `node scripts/verify-wasm.mjs <tag>` rebuilds the tag and compares |
+| Build | `stellar contract build --locked` with Stellar CLI [version], Rust [toolchain from `rust-toolchain.toml`], target `wasm32v1-none`; see [SCOPE.md](SCOPE.md#build). Published hashes come from the pinned container build in [`docs/REPRODUCIBLE_BUILDS.md`](../REPRODUCIBLE_BUILDS.md) |
 
 ### Crates in scope
 
@@ -51,10 +51,10 @@ Code lines leave out blank lines, comments, and test-only code; SCOPE.md explain
 | OpenZeppelin `stellar-contracts` | [revision or tag], commit [hash] |
 | OpenZeppelin modules used | `stellar_governance::governor`, `stellar_governance::votes`, `stellar_tokens::non_fungible`, `stellar_contract_utils::pausable`, `stellar_macros` (`when_paused`, `when_not_paused`); confirm against SCOPE.md at the freeze |
 
-[Choose one, and delete the others:]
+[Choose one, and delete the others. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records which OpenZeppelin audits cover the pinned revision; it finds that no published report covers the changes from `239a2a7` to `fbfde38`, and recommends the third option unless OpenZeppelin confirms that a published review covers them.]
 
 - [The OpenZeppelin modules used are covered by OpenZeppelin's published audit of [release], and the revision we use is that release. They are out of scope.]
-- [The revision we use differs from the audited release [release]. The difference is recorded in `docs/OPENZEPPELIN_PIN.md`; please review that difference as part of the scope.]
+- [The revision we use differs from the audited release [release]. The difference is recorded in [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md); please review that difference as part of the scope.]
 - [Please include the OpenZeppelin modules used in the scope.]
 
 ## 3. Out of scope
@@ -70,8 +70,9 @@ Code lines leave out blank lines, comments, and test-only code; SCOPE.md explain
 - This folder: [README.md](README.md) (start here), [SCOPE.md](SCOPE.md), [STATE_MACHINES.md](STATE_MACHINES.md), [INVARIANTS.md](INVARIANTS.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md), and [THREAT_MODEL.md](THREAT_MODEL.md).
 - [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md): roles, the admin model, the lifecycle, voting supply, the execution path, upgrades, and error codes.
 - The design documents in [`docs/designs/`](../designs), and each crate's README.
-- [Test and coverage results for the frozen commit: link.]
-- [Reproducible build instructions and published hashes: link.]
+- [Test results and the coverage report for the frozen commit (`scripts/coverage.sh`, see [`docs/COVERAGE.md`](../COVERAGE.md)): link.]
+- The reproducible build: [`docs/REPRODUCIBLE_BUILDS.md`](../REPRODUCIBLE_BUILDS.md), with the hashes the frozen tag publishes in `releases/hashes.json` [and the release workflow run for the tag: link].
+- The operations documents, if the app and indexer tier is in scope: [`docs/KEY_CUSTODY.md`](../KEY_CUSTODY.md) and [`docs/INCIDENT_RUNBOOK.md`](../INCIDENT_RUNBOOK.md).
 
 Please don't report the items in KNOWN_ISSUES.md as new findings, unless you find that one is worse than it describes.
 
@@ -81,7 +82,7 @@ Please don't report the items in KNOWN_ISSUES.md as new findings, unless you fin
 2. **Funds without a proposal.** Can any path move a DAO's funds or tokens without a passed proposal, other than the permissionless paths `SECURITY_MODEL.md` lists? Do the Treasury's `authorize` trees authorize only what voters see?
 3. **Escrow.** Is every escrowed amount (auction bids, listings, pool stock, ClaimMinter escrow) always either paid out once or returned once? Can anyone block refunds or settlement?
 4. **Votes and quorum.** Do voting units, the voting supply, and the quorum stay correct on every transfer, mint, custody, and delegation path? Can a vote count twice, or a quorum be lowered after a proposal is created?
-5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Manager's notice period, and recovery upgrades sound?
+5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Governor's and Treasury's storage-layout gate and recovery proposals, the Manager's notice period, and recovery upgrades of a failed drive sound?
 6. **Isolation between DAOs.** Can one DAO affect another DAO's state, mints, or escrow through the Manager or shared code?
 7. **Resource limits and archival.** Can a passed proposal, a claim, or a settlement become impossible to complete because of event, footprint, or CPU limits, or because an entry archives?
 8. **Claims.** Are the Merkle proofs and claim checks sound?
