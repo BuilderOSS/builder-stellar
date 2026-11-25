@@ -8,7 +8,7 @@ indexed events remain the durable directory/history layer.
 
 - A Manager artifact with network, Manager, and deployment/transaction ledger.
 - A PostgreSQL database with the [migrations/roles/grants](../db/README.md) applied by its administrator.
-- A named Goldsky Postgres secret whose database credentials can write the three landing tables and maintain the pipeline's `streamling` dynamic allowlists.
+- A named Goldsky Postgres secret whose database credentials can write the three landing tables and maintain the pipeline's `streamling` dynamic allowlists. The `goldsky_writer` role has `CREATE` on the database, which the sink needs, and an event trigger limits it to the `streamling` schema ([db operations](../db/README.md#scripts)).
 - A configured Goldsky CLI/session. The package does not declare a Goldsky CLI dependency.
 
 ## Configure and generate

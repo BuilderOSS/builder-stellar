@@ -181,7 +181,7 @@ redeploy_guard() {
   populated=$(psql "$DATABASE_URL" -X -t -A -c "SELECT EXISTS (SELECT 1 FROM chain.raw_events)" 2>/dev/null || echo "")
   if [ "$populated" = "t" ]; then
     echo -e "${RED}✗ chain.raw_events still holds events. A replay cannot overwrite them.${NC}"
-    echo "  With the pipeline stopped: DROP SCHEMA streamling CASCADE; db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh"
+    echo "  With the pipeline stopped: DROP SCHEMA streamling CASCADE; db/reset-database.sh (type the database name) && db/migrate.sh && db/grant-permissions.sh"
     echo "  then run redeploy again (or pass --force to skip this check)."
     exit 1
   fi
@@ -198,7 +198,7 @@ cmd_redeploy() {
   echo -e "${YELLOW}The landing tables (chain.raw_events, chain.decoded_events, app.activity_feed_events)${NC}"
   echo -e "${YELLOW}are immutable, and the DAO allowlists in schema streamling persist across pipelines.${NC}"
   echo -e "${YELLOW}A changed transform or a new Manager needs, with the pipeline stopped:${NC}"
-  echo "  DROP SCHEMA streamling CASCADE;  then  db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh"
+  echo "  DROP SCHEMA streamling CASCADE;  then  db/reset-database.sh (type the database name) && db/migrate.sh && db/grant-permissions.sh"
   echo -e "${YELLOW}(see db/README.md) so the replay starts from an empty read model.${NC}"
   echo ""
 

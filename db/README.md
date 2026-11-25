@@ -93,18 +93,49 @@ Rules:
 
 | Script | Purpose |
 | --- | --- |
-| `setup-roles.sh` | one-time: create `goldsky_writer` and `app_server` |
+| `setup-roles.sh [--rotate <role>]` | once per database: create `goldsky_writer` and `app_server`; `--rotate` sets a new password for one of them |
 | `migrate.sh` | apply pending migrations (idempotent) |
-| `grant-permissions.sh` | (re)apply role privileges; run after every migrate |
-| `rollback.sh [--steps N] [--yes]` | roll back newest N (default all) migrations |
-| `reset-database.sh [--yes]` | drop every schema and the ledger: empty database |
-| `test-migrations.sh` | static checks; with `TEST_DATABASE_URL` also migrate → rollback → migrate and the read-model integration test |
+| `grant-permissions.sh` | (re)apply role privileges and the writer's DDL guard; run after every migrate |
+| `rollback.sh [--steps N] [--confirm-database NAME]` | roll back newest N (default all) migrations |
+| `reset-database.sh [--confirm-database NAME]` | drop every schema and the ledger: empty database |
+| `test-migrations.sh` | static checks; with `TEST_DATABASE_URL` also migrate → rollback → migrate, the destructive scripts' refusals, the grants and the writer's guard, and the read-model integration tests |
 | `debug-database.sh` | inspect roles, schemas, ledger and privileges |
+
+**The database URL.** Every script reads it from `DATABASE_URL` only, and refuses
+one given as an argument: arguments are visible to every local user through `ps`,
+password included. `lib.sh` writes the URL's settings to a libpq service file and
+its password to a password file, both mode 0600 in a private temporary directory
+that is removed on exit, and psql reads those. The service file's settings take
+precedence over `PGHOST` and the other libpq variables, so a stray variable can't
+point a script at another database.
+
+**Destructive scripts.** `rollback.sh` and `reset-database.sh` show the target
+host, the database and the deployments it indexes, then ask for the database name,
+typed in full. `--yes` is refused. `--confirm-database NAME` is the
+non-interactive form for scratch databases and must name the database the URL
+connects to; without a terminal and without it, the scripts refuse.
+
+**Role passwords.** `setup-roles.sh` creates each role without LOGIN, then runs
+psql's `\password`: psql asks for the password twice on the terminal and sends
+only its SCRAM-SHA-256 hash, so the plain password is never in a shell variable,
+a command line, SQL text the server could log, or the script's output. The role
+gets LOGIN after that. A run interrupted in between finishes on the next run.
+Where to store each password: [key custody](../docs/KEY_CUSTODY.md).
 
 Privileges: `goldsky_writer` receives `SELECT/INSERT/UPDATE` on the three landing
 tables and `USAGE/CREATE` on `chain`/`app` for sink startup. Append-only triggers
 reject changed updates/deletes. Goldsky's dynamic-table backend also needs its
 separate `streamling` setup; the landing grants do not prove that setup is complete.
+
+The writer keeps `CREATE` on the database (`setup-roles.sh`): the Goldsky sink and
+dynamic tables issue `CREATE SCHEMA IF NOT EXISTS`, which PostgreSQL authorises
+against the database before it checks whether the schema exists. That privilege
+alone would let the writer create any schema, extension or publication, so
+`grant-permissions.sh` installs an event trigger, `goldsky_writer_ddl_guard`, that
+refuses each of those the writer runs except the `streamling` schema. A no-op
+`IF NOT EXISTS` passes, and renaming `streamling` is refused. Creating an event
+trigger needs a superuser, or `neon_superuser` on Neon, so run `grant-permissions.sh`
+as the database owner.
 `app_server` is read-only on the view schemas and has **no** access to
 `chain.*` or the landing tables; views read them with their owner's privileges,
 which is why application checks use `app.indexer_status` or `app.activity_feed`,
@@ -113,8 +144,8 @@ not raw events. These grants are role boundaries, not per-DAO row-level security
 ## Fresh database
 
 ```bash
-export DATABASE_URL=postgres://admin:...@host/neondb     # admin role
-./db/setup-roles.sh        # once per database
+export DATABASE_URL=postgres://admin:...@host/neondb     # admin role; set it in the shell, not on a command line
+./db/setup-roles.sh        # once per database; asks for each role's password
 ./db/migrate.sh
 ./db/grant-permissions.sh
 ```
@@ -132,7 +163,7 @@ first so it cannot repopulate half-reset tables.
 cd packages/goldsky && ./scripts/deploy.sh delete && cd ../..
 
 # 2. Reset and rebuild the schema
-./db/reset-database.sh          # type 'yes'
+./db/reset-database.sh          # type the database name
 ./db/migrate.sh
 ./db/grant-permissions.sh
 
@@ -158,6 +189,10 @@ CLI prerequisite/compatibility caveat is in [the Goldsky README](../packages/gol
 ./db/test-migrations.sh                                   # static
 TEST_DATABASE_URL=postgres://admin@localhost:5432/postgres ./db/test-migrations.sh   # full
 ```
+
+The full run needs a superuser on a throwaway server (it creates a scratch
+database, roles and the writer's event trigger), for example
+`docker run -d --name pg16-scratch -e POSTGRES_PASSWORD=<password> -p 127.0.0.1:55432:5432 postgres:16`.
 
 The integration test replays a full DAO lifecycle through the real pipeline
 transforms into a scratch database and asserts on the views, that every pipeline

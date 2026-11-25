@@ -52,9 +52,10 @@ independent:
 
 1. New passwords for `neondb_owner`, `goldsky_writer` and `app_server` on the `dev` branch only
    (Neon roles are per branch; production's passwords are unchanged).
-2. `./db/reset-database.sh --yes`, then `DROP SCHEMA streamling CASCADE` as `goldsky_writer`
-   (it owns the allowlists), then `./db/migrate.sh` and `./db/grant-permissions.sh`, all with the
-   dev branch's owner `DATABASE_URL` (direct host, not the pooler).
+2. `./db/reset-database.sh` (it asks for the database name, typed in full), then
+   `DROP SCHEMA streamling CASCADE` as `goldsky_writer` (it owns the allowlists), then `./db/migrate.sh`
+   and `./db/grant-permissions.sh`, all with the dev branch's owner URL in `DATABASE_URL` (direct host, not
+   the pooler). The scripts read the URL from the environment only.
 
 The dev branch's credentials live only in Neon, Goldsky (the secret) and Vercel (the env var).
 Get them from the Neon console (branch `dev`); never commit them.
