@@ -50,7 +50,7 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 | Add artwork layers | Adds artwork layers and items that new tokens are drawn from. | Prepared in Manage → Artwork. At most 16 layers and 30 items in one action. |
 | Change the artwork renderer | Changes where token images are drawn from. Existing token images can change too. | Prepared in Manage → Artwork. |
 | Seed traits for a token | Gives artwork traits to a token minted before the artwork was added. | Prepared in Manage → Artwork. |
-| Add a module | Creates a new auction, market or claims module for the tribe. | Prepared in Manage → Membership. A tribe has at most one module of each kind. |
+| Add a module | Creates a new auction, market, or claims module for the tribe. | Prepared in Manage → Membership. A tribe has at most one module of each kind. |
 | Register a module | Adds an existing contract to the tribe as a module. | Prepared in Manage → Membership. Any deployed contract can be registered, a member's contract wallet included. See [Modules](/concepts/modules#modules-from-outside-tribe-builder). |
 | Remove a module | Removes a module from the tribe. | Prepared in Manage → Membership. An auction or market must hold no memberships first, so add its clean-up steps before it. See [Modules](/concepts/modules#removing-a-module). |
 
@@ -64,7 +64,7 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 | Change the votes needed to propose | Sets how many votes someone needs to make a proposal (proposal threshold). | At least 1 vote |
 | Change the quorum | Sets the share of all votes that must be For or Abstain for a proposal to pass. | 0.01% to 100% |
 
-The wait before voting, the voting period and the quorum are fixed when each proposal is made. The safety delay in force when a proposal is queued is the one it waits for. See [Manage: governance](/guides/manage/governance).
+The wait before voting, the voting period, and the quorum are fixed when each proposal is made. The safety delay in force when a proposal is queued is the one it waits for. See [Manage: governance](/guides/manage/governance).
 
 ## Selling: auctions
 
@@ -100,9 +100,9 @@ See [Marketplace pools](/guides/marketplace/pools) and [Manage: marketplace](/gu
 
 | Action | What it does | Notes |
 |---|---|---|
-| Rename the tribe | Changes the tribe's name and token symbol. | No quotes, backslashes or control characters. |
+| Rename the tribe | Changes the tribe's name and token symbol. | No quotes, backslashes, or control characters. |
 | Change the tribe link | Changes the tribe's link on tribes.build. | Prepared in Manage → Tribe profile. Propose it on its own: if another tribe takes the link first, the whole proposal fails. |
-| Update the tribe profile | Replaces the description, links and image people see. | Prepared in Manage → Tribe profile. If another profile update runs first, this one fails, and you propose again. |
+| Update the tribe profile | Replaces the description, links, and image people see. | Prepared in Manage → Tribe profile. If another profile update runs first, this one fails, and you propose again. |
 
 See [Manage: profile](/guides/manage/profile).
 

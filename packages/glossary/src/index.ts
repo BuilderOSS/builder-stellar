@@ -1,5 +1,5 @@
 // One source for terms (docs/plans/walkthroughs-and-docs.md §5.5). The app's
-// GlossaryTerm popover, the docs glossary page and guide tooltips read this, so the
+// GlossaryTerm popover, the docs glossary page, and guide tooltips read this, so the
 // copy can't drift. Plain words first, the DAO term one line beneath (DESIGN.md, Voice).
 
 export type GlossaryEntry = {
