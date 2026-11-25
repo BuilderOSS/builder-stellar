@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  analyze:
-    name: Analyze (${{ matrix.language }})
+  analyse:
+    name: Analyse (${{ matrix.language }})
     runs-on: ubuntu-latest
     # Uploading results to code scanning is the only write this job needs.
     permissions:
