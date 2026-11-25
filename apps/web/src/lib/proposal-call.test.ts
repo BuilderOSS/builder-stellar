@@ -67,6 +67,60 @@ describe('restored mint allocation summaries', () => {
     );
     expect(getProposalActionSummary({ ...pool, asset: recipient })).toContain(`at 1 of asset ${recipient} each`);
   });
+  describe('closing dates a Date cannot hold', () => {
+    // The contracts take any future u64; u64::MAX and anything past the year 275760 have no date.
+    const U64_MAX = '18446744073709551615';
+    const PAST_DATE_RANGE = String(8.64e12 + 1);
+    const claimList = {
+      id: 'list',
+      type: 'open-claim-list' as const,
+      recipient: '',
+      amount: '',
+      total: 12,
+      price: '0',
+      treeUri: 'ipfs://bafyclaims'
+    };
+    const pool = {
+      id: 'pool',
+      type: 'open-pool' as const,
+      recipient: '',
+      amount: '1',
+      price: '1',
+      asset: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+      size: '3',
+      maxPerBuyer: '1',
+      maxSoldPerPeriod: '2',
+      periodHours: '24'
+    };
+
+    it('summarises a claim list with its closing date in UTC', () => {
+      expect(getProposalActionSummary({ ...claimList, expiresAt: '1800000000' })).toBe(
+        'Open a claim list of 12 tokens at 0 base units each, closing 15 Jan 2027, 08:00 UTC; the full list is at ipfs://bafyclaims'
+      );
+    });
+
+    it.each([U64_MAX, PAST_DATE_RANGE])('says a claim list closing at %s has no closing date', (expiresAt) => {
+      const summary = getProposalActionSummary({ ...claimList, expiresAt });
+      expect(summary).toBe(
+        'Open a claim list of 12 tokens at 0 base units each, with no closing date; the full list is at ipfs://bafyclaims'
+      );
+      expect(summary).not.toContain('Invalid Date');
+    });
+
+    it('says a pool closing at u64::MAX has no closing date', () => {
+      const summary = getProposalActionSummary({ ...pool, expiresAt: U64_MAX });
+      expect(summary).toBe(
+        'Open a quick-buy pool: 3 tokens at 1 XLM each, at most 1 per wallet and 2 sold every 24h, with no closing date'
+      );
+    });
+
+    it('keeps the last date a Date can hold', () => {
+      // The month's short name varies between ICU versions ("Sep", "Sept").
+      expect(getProposalActionSummary({ ...claimList, expiresAt: String(8.64e12) })).toMatch(
+        /, closing 13 \w+ 275760, 00:00 UTC;/
+      );
+    });
+  });
   it('names a pool’s allowance step and shortens an unnamed module (BUG-CAP-9)', () => {
     const market = 'CCCIPLJSN5BWQWLAH5JTIDKPYGV3S5K2AEGMJJPYAO45WWWAZP7R6CNY';
     const grant = {

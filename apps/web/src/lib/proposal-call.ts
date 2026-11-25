@@ -180,14 +180,21 @@ function seconds(value: unknown) {
   return /^\d+$/.test(text) ? formatDuration(Number(text), { style: 'long', maxUnits: 4 }) : `${text} seconds`;
 }
 
+/** The latest time a JavaScript Date can hold, in milliseconds (about the year 275760). */
+const MAX_DATE_MS = 8.64e15;
+
 /**
  * "4 Dec 2026, 12:30 UTC" for a unix time in seconds. Summaries can go into a proposal's text, which
  * every voter reads, so they use one fixed form rather than the reader's locale and time zone.
+ * Null for a time a Date cannot hold: the contracts take any future u64, and such an end is no end
+ * in practice, so the sentence says so instead of "Invalid Date".
  */
-function utcDateTime(unixSeconds: unknown) {
+function utcDateTime(unixSeconds: unknown): string | null {
   const text = String(unixSeconds ?? '');
   if (!/^\d+$/.test(text)) return text;
-  const formatted = new Date(Number(text) * 1000).toLocaleString('en-GB', {
+  const ms = Number(text) * 1000;
+  if (!Number.isFinite(ms) || ms > MAX_DATE_MS) return null;
+  const formatted = new Date(ms).toLocaleString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -196,6 +203,12 @@ function utcDateTime(unixSeconds: unknown) {
     timeZone: 'UTC'
   });
   return `${formatted} UTC`;
+}
+
+/** "closing 4 Dec 2026, 12:30 UTC", or "with no closing date" for an end a Date cannot hold. */
+function closingText(unixSeconds: unknown) {
+  const date = utcDateTime(unixSeconds);
+  return date === null ? 'with no closing date' : `closing ${date}`;
 }
 
 /** "GCLG…U6CO": enough to recognise a contract or account in a sentence. */
@@ -217,7 +230,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${shortId(action.recipient)}`;
   if (action.type === 'open-claim-list')
-    return `Open a claim list of ${action.total} tokens at ${action.price} base units each, closing ${utcDateTime(action.expiresAt)}; the full list is at ${action.treeUri}`;
+    return `Open a claim list of ${action.total} tokens at ${action.price} base units each, ${closingText(action.expiresAt)}; the full list is at ${action.treeUri}`;
   if (action.type === 'change-mint-allowance')
     // Named when the step was made for a known module (a pool's grant names "the market").
     return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.moduleName || shortId(action.module || action.recipient)} by ${action.amount} tokens`;
@@ -295,8 +308,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     // The price with its asset and the sales limit too: members vote on all of it (BUG-W11-4).
     const code = knownAssetCode(action.asset);
     const price = code ? `${action.price} ${code}` : `${action.price} of asset ${action.asset}`;
-    const closing = utcDateTime(action.expiresAt);
-    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${price} each, at most ${action.maxPerBuyer} per wallet and ${action.maxSoldPerPeriod} sold every ${action.periodHours}h, closing ${closing}`;
+    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${price} each, at most ${action.maxPerBuyer} per wallet and ${action.maxSoldPerPeriod} sold every ${action.periodHours}h, ${closingText(action.expiresAt)}`;
   }
   if (action.type === 'close-pool') return `Close pool #${action.poolId}`;
   if (action.type === 'close-claim-list') {
