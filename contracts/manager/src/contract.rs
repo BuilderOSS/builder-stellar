@@ -7,12 +7,14 @@
 
 use common::clients::{
     ClaimsClient, DaoModuleClient, GovernorVoteSourceClient, NftClient, TreasuryLaunchClient,
-    VoteSourceClient, WasmHashClient,
+    VoteSourceClient,
 };
 use common::modules::{
     AssuranceState, AssuranceTerms, MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE,
 };
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec};
+use soroban_sdk::{
+    contract, contractimpl, Address, Bytes, BytesN, Env, Executable, String, Symbol, Val, Vec,
+};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -47,6 +49,10 @@ const MIN_BID_INCREMENT_PERCENT: u32 = 10;
 /// Longest an assurance drive may run (90 days, seconds): it bounds how long
 /// a drive holds its slug and keeps members' fees in escrow (review S2).
 pub const MAX_ASSURANCE_WINDOW: u64 = 90 * 86_400;
+/// Seconds per ledger used to measure the upgrade notice from a timestamp
+/// (a failed drive's deadline, in `recover_claims`): 86,400 seconds over
+/// `common::ttl::DAY_IN_LEDGERS`.
+pub const SECONDS_PER_LEDGER: u64 = 86_400 / common::ttl::DAY_IN_LEDGERS as u64;
 
 #[contractimpl]
 impl ManagerContract {
@@ -948,7 +954,9 @@ impl ManagerContract {
     /// - The requested slug must still be unclaimed (`SlugTaken`; change it with
     ///   `update_pending_slug`)
     /// - The core contracts and every registered module must CURRENTLY run a
-    ///   registered, non-revoked hash (`PendingDaoUsesRevokedImplementation`)
+    ///   registered, non-revoked hash, as the host reports their code
+    ///   (`executable()`, not their own `wasm_hash()`), checked before the
+    ///   Manager calls into them (`PendingDaoUsesRevokedImplementation`)
     /// - Every module's `payment_asset()` must equal the asset recorded at its
     ///   creation (`PaymentAssetMismatch`)
     ///
@@ -1045,6 +1053,10 @@ impl ManagerContract {
             .claims_payment_asset
             .clone()
             .ok_or(ManagerError::NoClaimMinter)?;
+        // Checked again here, not only at creation: a DAO created before the
+        // creation check existed may have recorded any contract, and the
+        // drive's escrow and refunds move through this asset.
+        Self::require_stellar_asset(&asset)?;
         if list.deadline
             > env
                 .ledger()
@@ -1163,15 +1175,35 @@ impl ManagerContract {
     }
 
     /// Upgrade a failed drive's ClaimMinter, for refunds its code cannot pay
-    /// (review B2). Only the launch admin recorded in PendingDao, only once
-    /// the drive has failed (the Manager's own rule: the deadline passed and
-    /// the Token is not Live; ClaimMinter's state machine is never asked), and
-    /// only to a hash the registry approves for the running ClaimMinter.
+    /// (review B2).
+    ///
+    /// # Authorization
+    ///
+    /// Only the launch admin recorded in `PendingDao`.
+    ///
+    /// # Guarantees
+    ///
+    /// - The drive has failed by the Manager's own rule (the deadline passed
+    ///   and the Token is not Live; ClaimMinter's state machine is never
+    ///   asked), so the upgrade cannot change whether the DAO launches.
+    /// - `to_hash` is approved from `from_hash` in the registry, not revoked,
+    ///   and is the hash announced as latest for its name (`latest_pointer`).
+    /// - The Manager's upgrade notice (`upgrade_delay()` ledgers) has passed
+    ///   since the approval and since the announcement, and the same notice,
+    ///   in seconds (`SECONDS_PER_LEDGER` each), has passed since the drive's
+    ///   deadline. Members therefore have the whole notice after the drive
+    ///   fails to take their refunds with the code they paid into, and the
+    ///   only possible recovery target is visible for that time.
     ///
     /// # Errors
     ///
     /// * `DaoNotFound` / `NoAssurance`
     /// * `AssuranceNotFailed` - the drive may still launch
+    /// * `InvalidUpgradePath` - the path is not approved, or the target is
+    ///   revoked or named differently
+    /// * `UpgradeNotLatest` - `to_hash` is not the latest for its name
+    /// * `UpgradeDelayNotElapsed` - the notice has not passed since the
+    ///   approval, the announcement or the deadline
     pub fn recover_claims(
         env: Env,
         token_address: Address,
@@ -1197,6 +1229,30 @@ impl ManagerContract {
         let version: ImplementationVersion =
             get_persistent(&env, &ManagerKey::Implementation(to_hash.clone()))
                 .ok_or(ManagerError::ImplementationNotFound)?;
+        // The new code takes over the escrow, so a recovery waits out the
+        // same notice as the Manager's own upgrade (D42): only to the
+        // announced latest, counted from the later of the approval and the
+        // announcement. Without this, a newly approved hash could apply at
+        // once and move the escrow before members claim their refunds.
+        let latest = Self::latest_pointer(env.clone(), version.name.clone())
+            .ok_or(ManagerError::UpgradeNotLatest)?;
+        if latest.wasm_hash != to_hash {
+            return Err(ManagerError::UpgradeNotLatest);
+        }
+        let approved =
+            Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
+                .ok_or(ManagerError::InvalidUpgradePath)?;
+        if !common::upgrade::notice_passed(&env, approved.max(latest.set_ledger)) {
+            return Err(ManagerError::UpgradeDelayNotElapsed);
+        }
+        // The notice also counts from the deadline: refunds open only when
+        // the drive fails, so a target announced long before it would
+        // otherwise race the first refunds.
+        let refund_window =
+            (common::upgrade::delay(&env) as u64).saturating_mul(SECONDS_PER_LEDGER);
+        if env.ledger().timestamp() <= assurance.deadline.saturating_add(refund_window) {
+            return Err(ManagerError::UpgradeDelayNotElapsed);
+        }
         ClaimsClient::new(&env, &assurance.claim_minter).recovery_upgrade(
             &from_hash,
             &to_hash,
@@ -1481,9 +1537,27 @@ impl ManagerContract {
         }
         let addresses = pending.addresses.clone();
         let treasury = addresses.treasury.clone();
+        // Every contract must currently run a registered, non-revoked hash,
+        // checked before the Manager calls into it. The CURRENT code is read
+        // (not the hash recorded at create_dao) so a pre-launch `upgrade` to
+        // an approved hash is honoured.
+        for core in [
+            &addresses.token,
+            &addresses.metadata,
+            &addresses.governor,
+            &addresses.treasury,
+        ] {
+            Self::require_active_code(&env, core)?;
+        }
         // Typed clients (common::clients) rather than the module crates:
         // linking those would export their functions from the Manager WASM.
         let nft = NftClient::new(&env, &addresses.token);
+        // In Setup only the Manager registers modules, and a drive freezes
+        // the registry, so a drive's ClaimMinter is among these.
+        let registry = nft.modules();
+        for entry in registry.iter() {
+            Self::require_active_code(&env, &entry.address)?;
+        }
         match &assurance {
             Some(drive) => {
                 if Self::drive_failed(&env, &token_address, drive) {
@@ -1507,31 +1581,6 @@ impl ManagerContract {
             == Some(pending.slug.clone());
         if !slug_held {
             Self::require_slug_unclaimed(&env, &pending.slug)?;
-        }
-        let registry = nft.modules();
-        // Every contract must currently run a registered, non-revoked hash. The
-        // CURRENT hash is read from each (not the one recorded at create_dao)
-        // so a pre-launch `upgrade` to an approved hash is honored.
-        let mut contracts: Vec<Address> = Vec::from_array(
-            &env,
-            [
-                addresses.token.clone(),
-                addresses.metadata.clone(),
-                addresses.governor.clone(),
-                addresses.treasury.clone(),
-            ],
-        );
-        for entry in registry.iter() {
-            contracts.push_back(entry.address);
-        }
-        for contract in contracts.iter() {
-            let current = WasmHashClient::new(&env, &contract).wasm_hash();
-            let record =
-                get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
-            match record {
-                Some(r) if !r.revoked => {}
-                _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
-            }
         }
         // At least one voting-capable token must exist.
         if nft.total_supply() <= 0 {
@@ -1619,6 +1668,23 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// `PendingDaoUsesRevokedImplementation` unless `contract` runs WASM whose
+    /// hash is registered and not revoked.
+    ///
+    /// The host reports the code (`executable()`). A contract's own
+    /// `wasm_hash()` is only what its storage says, and a contract running
+    /// other code could report any registered hash.
+    fn require_active_code(env: &Env, contract: &Address) -> Result<(), ManagerError> {
+        let hash = match contract.executable() {
+            Some(Executable::Wasm(hash)) => hash,
+            _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
+        };
+        match get_persistent::<ImplementationVersion>(env, &ManagerKey::Implementation(hash)) {
+            Some(record) if !record.revoked => Ok(()),
+            _ => Err(ManagerError::PendingDaoUsesRevokedImplementation),
+        }
+    }
+
     /// The Manager's failure rule (review 2 A3): the deadline passed and the
     /// Token is not Live. ClaimMinter's `refund` applies the same rule.
     fn drive_failed(env: &Env, token: &Address, assurance: &Assurance) -> bool {
@@ -1673,7 +1739,9 @@ impl ManagerContract {
         get_persistent(&env, &ManagerKey::LatestImplementation(name))
     }
 
-    /// The upgrade notice in force for `upgrade_manager`.
+    /// The upgrade notice in force, in ledgers, for `upgrade_manager` and for
+    /// `recover_claims` (which also measures it from the drive's deadline,
+    /// at `SECONDS_PER_LEDGER` seconds per ledger).
     pub fn upgrade_delay(env: Env) -> u32 {
         common::upgrade::delay(&env)
     }
@@ -1953,8 +2021,23 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Bounds on a module's creation config (each module checks them again).
+    /// `InvalidPaymentAsset` unless `asset` is a Stellar Asset Contract.
+    ///
+    /// Modules move escrow and refunds through the asset's `transfer`. A SAC's
+    /// code is the host's; any other contract runs code of its own choosing,
+    /// which could report balances it does not hold, refuse chosen refunds,
+    /// or spend the call's budget inside a refund and block a module.
+    fn require_stellar_asset(asset: &Address) -> Result<(), ManagerError> {
+        match asset.executable() {
+            Some(Executable::StellarAsset) => Ok(()),
+            _ => Err(ManagerError::InvalidPaymentAsset),
+        }
+    }
+
+    /// Bounds on a module's creation config (each module checks them again),
+    /// and its payment asset must be a Stellar Asset Contract.
     fn validate_module_spec(spec: &ModuleSpec) -> Result<(), ManagerError> {
+        Self::require_stellar_asset(&spec.payment_asset())?;
         match spec {
             ModuleSpec::Auction(auction) => {
                 if auction.duration < MIN_AUCTION_DURATION

@@ -256,6 +256,9 @@ fn a_failed_drive_refunds_recovers_and_frees_its_slug() {
         &to,
     );
     f.manager.approve_upgrade(&from, &to);
+    // A recovery target must be the announced latest for its name.
+    f.manager
+        .set_latest_implementation(&String::from_str(e, "ClaimMinter"), &to);
     // Not before the drive has failed.
     assert_eq!(
         f.manager.try_recover_claims(&f.dao.token, &from, &to),
@@ -276,6 +279,16 @@ fn a_failed_drive_refunds_recovers_and_frees_its_slug() {
     let first = leaves[0].0.clone();
     assert_eq!(claims.refund(&0, &first), PRICE * 3);
     assert_eq!(pay.balance(&first), 1_000);
+    // Refunds come first: no recovery until the upgrade notice has also
+    // passed since the deadline.
+    assert_eq!(
+        f.manager.try_recover_claims(&f.dao.token, &from, &to),
+        Err(Ok(M::UpgradeDelayNotElapsed))
+    );
+    e.ledger().with_mut(|l| {
+        l.sequence_number += TEST_UPGRADE_DELAY;
+        l.timestamp += TEST_UPGRADE_DELAY as u64 * manager::SECONDS_PER_LEDGER;
+    });
 
     // Only the recorded launch admin recovers, to the approved hash.
     let stranger = Address::generate(e);
