@@ -454,7 +454,7 @@ sign-in (`apps/web/src/lib/api-rate-limit.ts`):
 | --- | --- |
 | Artwork rendering (`/api/render`) | 300 a minute |
 | Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
-| Claim state and claim history | 120 a minute, shared |
+| Claim state, claim history, and open claim lists | 120 a minute, shared |
 | `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
 | `POST /api/csp-report` | 30 a minute |
 

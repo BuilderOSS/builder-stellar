@@ -13,7 +13,7 @@ export const API_RATE_LIMITS = {
   render: { limit: 300, windowMs: 60_000 },
   /** Transaction preparation (claims, marketplace, tokens, treasury): one simulation each. Room for a group on one network. */
   prepare: { limit: 60, windowMs: 60_000 },
-  /** Claim state and history: chain reads and the claim list from IPFS. */
+  /** Claim state, history and open lists: chain reads, the claim list from IPFS, and read-model queries. */
   claims: { limit: 120, windowMs: 60_000 },
   /** Health checks; the result is also cached for a few seconds. */
   health: { limit: 30, windowMs: 60_000 },
