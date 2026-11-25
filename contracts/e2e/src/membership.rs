@@ -285,6 +285,10 @@ fn a_failed_drive_refunds_recovers_and_frees_its_slug() {
         f.manager.try_recover_claims(&f.dao.token, &from, &to),
         Err(Ok(M::UpgradeDelayNotElapsed))
     );
+    // The wait is a week of ledgers: renew storage first, as the platform
+    // and the DAO's sweep do on the network.
+    run_platform_renewal(e, &f);
+    run_dao_sweep(e, &f);
     e.ledger().with_mut(|l| {
         l.sequence_number += TEST_UPGRADE_DELAY.max(manager::MIN_RECOVERY_NOTICE_LEDGERS);
         l.timestamp += (TEST_UPGRADE_DELAY as u64 * manager::SECONDS_PER_LEDGER)
