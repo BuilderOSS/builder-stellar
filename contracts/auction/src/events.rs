@@ -14,6 +14,7 @@
 
 use soroban_sdk::{contractevent, Address, Env, String};
 
+/// Emitted once by the constructor, with the starting configuration.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionInitialized {
@@ -28,6 +29,7 @@ pub struct AuctionInitialized {
     pub payment_token: Address,
 }
 
+/// A new auction opened for `token_id`, minted into the Auction's custody.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionCreated {
@@ -39,6 +41,8 @@ pub struct AuctionCreated {
     pub payment_token: Address,
 }
 
+/// A bid became the highest. `extended` is true when it moved the end time
+/// to `new_end_time`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BidPlaced {
@@ -53,6 +57,8 @@ pub struct BidPlaced {
     pub comment: String,
 }
 
+/// An auction settled: the token went to `winner` and `amount` to the
+/// Treasury, or the token went to the Treasury when `winner` is `None`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionSettled {
@@ -62,6 +68,7 @@ pub struct AuctionSettled {
     pub amount: i128,
 }
 
+/// `set_duration`: later auctions last `duration` seconds.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DurationUpdated {
@@ -69,6 +76,7 @@ pub struct DurationUpdated {
     pub changed_by: Address,
 }
 
+/// `set_reserve_price`: the smallest first bid of later auctions.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReservePriceUpdated {
@@ -76,6 +84,7 @@ pub struct ReservePriceUpdated {
     pub changed_by: Address,
 }
 
+/// `set_min_bid_increment`: the percentage a new bid must add.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MinBidIncrementUpdated {
@@ -83,6 +92,7 @@ pub struct MinBidIncrementUpdated {
     pub changed_by: Address,
 }
 
+/// `set_time_buffer`: the window in which a bid extends the end time.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TimeBufferUpdated {
@@ -90,6 +100,8 @@ pub struct TimeBufferUpdated {
     pub changed_by: Address,
 }
 
+/// `set_payment_token`: bids are now paid in `payment_token`, a Stellar
+/// Asset Contract.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaymentTokenUpdated {
@@ -107,6 +119,7 @@ pub struct AuctionLaunched {
     pub started: bool,
 }
 
+/// An outbid or cancelled bid was pushed back to `bidder`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BidRefunded {
@@ -138,6 +151,8 @@ pub struct RefundWithdrawn {
     pub amount: i128,
 }
 
+/// `cancel_auction`: the admin ended a running auction. The token went to
+/// the Treasury. `reason` is 0 (cancelled by the admin).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionCancelled {

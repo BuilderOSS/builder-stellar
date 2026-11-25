@@ -111,28 +111,32 @@ impl MockToken {
     }
 }
 
-#[contract]
-struct MockPayment;
+/// A Stellar Asset Contract the tests pay in (the Marketplace takes no other
+/// kind of asset), with the two calls the tests use.
+struct Payment {
+    address: Address,
+    admin: soroban_sdk::token::StellarAssetClient<'static>,
+    token: soroban_sdk::token::TokenClient<'static>,
+}
 
-#[contractimpl]
-impl MockPayment {
-    pub fn mint(e: &Env, to: Address, amount: i128) {
-        let balance = Self::balance(e, to.clone());
-        e.storage().persistent().set(&to, &(balance + amount));
+impl Payment {
+    fn new(env: &Env) -> Self {
+        let address = env
+            .register_stellar_asset_contract_v2(Address::generate(env))
+            .address();
+        Payment {
+            admin: soroban_sdk::token::StellarAssetClient::new(env, &address),
+            token: soroban_sdk::token::TokenClient::new(env, &address),
+            address,
+        }
     }
 
-    pub fn balance(e: &Env, account: Address) -> i128 {
-        e.storage().persistent().get(&account).unwrap_or(0)
+    fn mint(&self, to: &Address, amount: &i128) {
+        self.admin.mint(to, amount);
     }
 
-    pub fn transfer(e: &Env, from: Address, to: Address, amount: i128) {
-        let from_balance = Self::balance(e, from.clone());
-        assert!(from_balance >= amount);
-        let to_balance = Self::balance(e, to.clone());
-        e.storage()
-            .persistent()
-            .set(&from, &(from_balance - amount));
-        e.storage().persistent().set(&to, &(to_balance + amount));
+    fn balance(&self, account: &Address) -> i128 {
+        self.token.balance(account)
     }
 }
 
@@ -140,7 +144,7 @@ struct Fixture {
     env: Env,
     marketplace: crate::contract::MarketplaceContractClient<'static>,
     token: MockTokenClient<'static>,
-    payment: MockPaymentClient<'static>,
+    payment: Payment,
     treasury: Address,
     launch_admin: Address,
     seller: Address,
@@ -167,15 +171,14 @@ fn fixture_setup() -> Fixture {
     let token_id = env.register(MockToken, ());
     let token = MockTokenClient::new(&env, &token_id);
     token.initialize();
-    let payment_id = env.register(MockPayment, ());
-    let payment = MockPaymentClient::new(&env, &payment_id);
+    let payment = Payment::new(&env);
     let marketplace_id = env.register(
         MarketplaceContract,
         (
             token_id,
             launch_admin.clone(),
             treasury.clone(),
-            payment_id,
+            payment.address.clone(),
             manager,
             BytesN::from_array(&env, &[0; 32]),
             250u32,
@@ -199,7 +202,7 @@ fn constructor_starts_paused_and_stores_config() {
     let env = Env::default();
     let token = Address::generate(&env);
     let treasury = Address::generate(&env);
-    let payment = Address::generate(&env);
+    let payment = Payment::new(&env).address;
     let manager = Address::generate(&env);
     let launch_admin = Address::generate(&env);
     let address = env.register(
@@ -443,27 +446,24 @@ fn secondary_buy_uses_captured_asset_and_fee_after_config_changes() {
         &crate::storage::MAX_FEE_BPS,
         &fixture.marketplace.get_config().payment_asset,
     ); // fee 250 bps captured
-    let other = fixture.env.register(MockPayment, ());
+    let other = Payment::new(&fixture.env);
 
-    mp.set_payment_asset(&other);
+    mp.set_payment_asset(&other.address);
     mp.set_secondary_fee_bps(&1_000);
 
     fixture.payment.mint(&fixture.buyer, &1_000);
     mp.buy(&token_id, &fixture.buyer, &i128::MAX);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 25);
     assert_eq!(fixture.payment.balance(&fixture.seller), 975);
-    assert_eq!(
-        MockPaymentClient::new(&fixture.env, &other).balance(&fixture.treasury),
-        0
-    );
+    assert_eq!(other.balance(&fixture.treasury), 0);
 }
 
 #[test]
 fn listing_keeps_payment_asset_captured_at_list_time() {
     let fixture = fixture();
     let mp = &fixture.marketplace;
-    let new_asset_id = fixture.env.register(MockPayment, ());
-    let new_asset = MockPaymentClient::new(&fixture.env, &new_asset_id);
+    let new_asset = Payment::new(&fixture.env);
+    let new_asset_id = new_asset.address.clone();
 
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
     mp.list(
@@ -581,7 +581,7 @@ mod upgrade_via_common {
                 Address::generate(&env),
                 Address::generate(&env),
                 Address::generate(&env),
-                Address::generate(&env),
+                Payment::new(&env).address,
                 mgr.address.clone(),
                 from.clone(),
                 250u32,
@@ -615,7 +615,7 @@ mod upgrade_via_common {
                 Address::generate(&env),
                 Address::generate(&env),
                 Address::generate(&env),
-                Address::generate(&env),
+                Payment::new(&env).address,
                 mgr.address.clone(),
                 from.clone(),
                 250u32,
@@ -643,7 +643,7 @@ mod upgrade_via_common {
                 Address::generate(&env),
                 Address::generate(&env),
                 Address::generate(&env),
-                Address::generate(&env),
+                Payment::new(&env).address,
                 mgr.address.clone(),
                 from.clone(),
                 250u32,
@@ -681,7 +681,7 @@ mod upgrade_via_common {
                 Address::generate(&env),
                 Address::generate(&env),
                 Address::generate(&env),
-                Address::generate(&env),
+                Payment::new(&env).address,
                 mgr.address.clone(),
                 from.clone(),
                 250u32,
@@ -713,7 +713,7 @@ fn payment_asset_reports_the_configured_asset() {
     let fixture = fixture_setup();
     let mp = &fixture.marketplace;
     assert_eq!(mp.payment_asset(), fixture.payment.address);
-    let other = Address::generate(&fixture.env);
+    let other = Payment::new(&fixture.env).address;
     mp.set_payment_asset(&other);
     assert_eq!(mp.payment_asset(), other);
 }
@@ -1432,4 +1432,204 @@ fn storage_keys_do_not_collide() {
     // Every variant, checked exhaustively next to the enum.
     let module = all(crate::storage::key_samples::all(&e));
     assert_keys_disjoint(&[("DataKey", module), ("common", common_key_shapes(&e))]);
+}
+
+/// Payment assets must be Stellar Asset Contracts wherever one is set.
+mod payment_assets {
+    use super::*;
+
+    /// A Wasm token contract posing as a payment asset: it reports any
+    /// balance and accepts every transfer without moving anything.
+    #[contract]
+    struct HostileAsset;
+
+    #[contractimpl]
+    impl HostileAsset {
+        pub fn balance(_e: Env, _id: Address) -> i128 {
+            i128::MAX
+        }
+        pub fn transfer(_e: Env, _from: Address, _to: Address, _amount: i128) {}
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #7728)")] // NotStellarAsset
+    fn the_constructor_refuses_an_asset_that_is_not_a_stellar_asset() {
+        let env = Env::default();
+        let hostile = env.register(HostileAsset, ());
+        env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                hostile,
+                Address::generate(&env),
+                BytesN::from_array(&env, &[0; 32]),
+                250u32,
+            ),
+        );
+    }
+
+    #[test]
+    fn set_payment_asset_refuses_anything_but_a_stellar_asset() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let hostile = fixture.env.register(HostileAsset, ());
+        // A Stellar account (`G...`) has no contract code at all.
+        let account = Address::from_string(&String::from_str(
+            &fixture.env,
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        ));
+        for candidate in [hostile, account, Address::generate(&fixture.env)] {
+            assert_eq!(
+                mp.try_set_payment_asset(&candidate).err().unwrap().unwrap(),
+                MarketplaceError::NotStellarAsset.into()
+            );
+        }
+        assert_eq!(mp.payment_asset(), fixture.payment.address);
+    }
+
+    /// Without the check a pool priced in a hostile asset would hand out
+    /// tokens for payments that never happened.
+    #[test]
+    fn a_pool_refuses_an_asset_that_is_not_a_stellar_asset() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        fixture.token.set_mint_allowance(&mp.address, &10);
+        let hostile = fixture.env.register(HostileAsset, ());
+        assert_eq!(
+            mp.try_open_pool(&50, &hostile, &100_000, &10, &2, &3, &3_600)
+                .err()
+                .unwrap()
+                .unwrap(),
+            MarketplaceError::NotStellarAsset.into()
+        );
+        assert!(mp.open_pools().is_empty());
+        assert_eq!(mp.next_pool_id(), 0);
+    }
+}
+
+/// The DAO can empty the Marketplace's escrow without the sellers.
+mod return_listing {
+    use super::*;
+    use crate::events::ListingCancelled;
+    use soroban_sdk::{testutils::Events as _, Event as _};
+
+    fn listed(fixture: &Fixture, expires_at: u64) -> u32 {
+        let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+        fixture.marketplace.list(
+            &token_id,
+            &fixture.seller,
+            &100,
+            &expires_at,
+            &crate::storage::MAX_FEE_BPS,
+            &fixture.payment.address,
+        );
+        token_id
+    }
+
+    #[test]
+    fn the_admin_returns_a_listing_to_its_seller_while_paused() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        // A listing that would otherwise stay in escrow for good.
+        let token_id = listed(&fixture, u64::MAX);
+        assert_eq!(fixture.token.owner_of(&token_id), mp.address);
+
+        assert_eq!(
+            mp.try_return_listing(&token_id).err().unwrap().unwrap(),
+            MarketplaceError::NotPaused.into()
+        );
+        mp.pause();
+        mp.return_listing(&token_id);
+        assert_eq!(
+            fixture.env.events().all().events().last().unwrap(),
+            &ListingCancelled {
+                token_id,
+                seller: fixture.seller.clone(),
+            }
+            .to_xdr(&fixture.env, &mp.address)
+        );
+        assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+        assert_eq!(mp.get_listing(&token_id), None);
+        assert_eq!(
+            mp.try_return_listing(&token_id).err().unwrap().unwrap(),
+            MarketplaceError::ListingNotFound.into()
+        );
+    }
+
+    /// A token sent here directly, which no listing or pool records, can go
+    /// to the Treasury once the marketplace is paused and every pool swept.
+    #[test]
+    fn recover_token_moves_only_unrecorded_tokens_to_the_treasury() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let listed_id = listed(&fixture, 2_000);
+        let stray = fixture.token.mint(&fixture.seller, &mp.address);
+        let pool = super::pools::open(&fixture, 1);
+        mp.restock(&pool);
+
+        assert_eq!(
+            mp.try_recover_token(&stray).err().unwrap().unwrap(),
+            MarketplaceError::NotPaused.into()
+        );
+        mp.pause();
+        assert_eq!(
+            mp.try_recover_token(&listed_id).err().unwrap().unwrap(),
+            MarketplaceError::ListingExists.into()
+        );
+        // Pool stock is not indexed by token, so nothing is recovered until
+        // every pool is swept.
+        assert_eq!(
+            mp.try_recover_token(&stray).err().unwrap().unwrap(),
+            MarketplaceError::PoolOpen.into()
+        );
+        mp.close_pool(&pool);
+        assert_eq!(mp.sweep_pool(&pool), 0);
+        mp.recover_token(&stray);
+        assert_eq!(fixture.token.owner_of(&stray), fixture.treasury);
+        assert_eq!(fixture.token.owner_of(&listed_id), mp.address);
+    }
+
+    #[test]
+    fn only_the_admin_recovers_a_token() {
+        let fixture = fixture();
+        let env = &fixture.env;
+        let mp = &fixture.marketplace;
+        let stray = fixture.token.mint(&fixture.seller, &mp.address);
+        mp.pause();
+        env.mock_auths(&[MockAuth {
+            address: &fixture.seller,
+            invoke: &MockAuthInvoke {
+                contract: &mp.address,
+                fn_name: "recover_token",
+                args: (stray,).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(mp.try_recover_token(&stray).is_err());
+        assert_eq!(fixture.token.owner_of(&stray), mp.address);
+    }
+
+    #[test]
+    fn only_the_admin_returns_a_listing() {
+        let fixture = fixture();
+        let env = &fixture.env;
+        let mp = &fixture.marketplace;
+        let token_id = listed(&fixture, 2_000);
+        mp.pause();
+        // The seller is not the admin; once live the admin is the Treasury.
+        env.mock_auths(&[MockAuth {
+            address: &fixture.seller,
+            invoke: &MockAuthInvoke {
+                contract: &mp.address,
+                fn_name: "return_listing",
+                args: (token_id,).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(mp.try_return_listing(&token_id).is_err());
+        assert_eq!(fixture.token.owner_of(&token_id), mp.address);
+        assert_eq!(mp.admin(), fixture.treasury);
+    }
 }

@@ -42,4 +42,9 @@ pub enum AuctionError {
     InvalidTimeBuffer = 7417,
     /// Bid comment exceeds `MAX_COMMENT_LENGTH`
     CommentTooLong = 7418,
+    /// The payment token is not a Stellar Asset Contract
+    NotStellarAsset = 7419,
+    /// `recover_token` for the token of the auction in progress (settle or
+    /// cancel it first)
+    TokenInAuction = 7420,
 }

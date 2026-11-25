@@ -11,7 +11,7 @@ pub enum MarketplaceError {
     InvalidPrice = 7702,
     /// Expiry is not in the future
     InvalidExpiry = 7703,
-    /// The token is already listed
+    /// The token is already listed (or, for `recover_token`, is listed)
     ListingExists = 7704,
     /// No such listing
     ListingNotFound = 7705,
@@ -54,10 +54,16 @@ pub enum MarketplaceError {
     NotInPool = 7723,
     /// `MAX_OPEN_POOLS` pools are open (close and sweep one first)
     TooManyPools = 7724,
-    /// `sweep_pool` on a pool that is still open
+    /// `sweep_pool` on a pool that is still open, or `recover_token` while
+    /// any pool is not yet swept empty
     PoolOpen = 7725,
     /// A pool size, buyer cap, sales rate or period of zero
     InvalidPool = 7726,
     /// The pool has stocked its whole size
     PoolFullyStocked = 7727,
+    /// The payment asset is not a Stellar Asset Contract
+    NotStellarAsset = 7728,
+    /// `return_listing` or `recover_token` while the marketplace is open
+    /// (pause it first)
+    NotPaused = 7729,
 }

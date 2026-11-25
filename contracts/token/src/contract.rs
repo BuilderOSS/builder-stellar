@@ -35,16 +35,18 @@ use crate::storage::*;
 /// `transfer_voting_units(Some(from), None, 1)`) and moving it out mints the
 /// unit again. The votes `TotalSupply` checkpoint therefore counts only tokens
 /// that can actually vote, which is what the Governor's quorum and
-/// proposal-threshold checks read. Registering or unregistering a non-voting
-/// module moves the votes of whatever it already holds the same way, so
-/// balances and voting units can never drift apart
+/// proposal-threshold checks read. Registering a non-voting module moves the
+/// votes of whatever it already holds out of the supply the same way, and
+/// unregistering one is refused while it holds tokens (`ModuleHoldsTokens`),
+/// so balances and voting units can never drift apart
 /// (docs/designs/membership-models.md §1).
 ///
 /// # Minting
 ///
 /// The admin (the launch admin in Setup, the Treasury once live) mints without
-/// limit. A registered module mints against its `MintAllowance`. Before launch
-/// only the `claims` module may use its allowance.
+/// limit. A registered module mints against its `MintAllowance`; an allowance
+/// of `u32::MAX` is unlimited and never spent. Before launch only the `claims`
+/// module may use its allowance.
 #[contract]
 pub struct DaoTokenContract;
 
@@ -261,6 +263,11 @@ impl DaoTokenContract {
         .publish(e);
     }
 
+    /// Replaces this contract's WASM with `to_hash` (admin only: the launch
+    /// admin in Setup, the Treasury by proposal once live). `from_hash` must
+    /// be the running hash, and the Manager must have approved the
+    /// `from_hash` to `to_hash` step (`common::upgrade::apply`). Run `migrate`
+    /// afterwards when the new code has a newer storage layout.
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         common::admin::require_admin(e);
         common::upgrade::apply(e, &Self::manager(e), &from_hash, &to_hash);
@@ -315,6 +322,12 @@ impl DaoTokenContract {
     /// Raises a registered module's allowance by `amount` (admin only;
     /// `NotAModule` otherwise). Adds rather than overwrites, so a grant for a
     /// second list never erases the first. Emits `MintAllowanceChanged`.
+    ///
+    /// The sum saturates at `u32::MAX`, and `u32::MAX` means unlimited: a
+    /// mint never spends it. So an increase that reaches the cap, for example
+    /// a second large grant on top of a first, makes the module's minting
+    /// unlimited, not capped at the sum. `decrease_mint_allowance` makes it
+    /// finite again (by a non-zero amount).
     pub fn increase_mint_allowance(e: &Env, module: Address, amount: u32) {
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
@@ -326,7 +339,12 @@ impl DaoTokenContract {
     }
 
     /// Lowers `module`'s allowance by `amount`, saturating at 0 (admin only).
-    /// Emits `MintAllowanceChanged`.
+    /// Any address is accepted, so a proposal can zero the allowance of a
+    /// module that was unregistered meanwhile. Lowering an unlimited
+    /// (`u32::MAX`) allowance by any non-zero amount makes it finite. An auction in
+    /// progress still settles after its allowance is cut: the Auction pauses
+    /// itself instead of starting the next one. Emits `MintAllowanceChanged`
+    /// when the value changes.
     pub fn decrease_mint_allowance(e: &Env, module: Address, amount: u32) {
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
@@ -365,12 +383,19 @@ impl DaoTokenContract {
     /// may register (during `create_dao` / `create_module`); once live only
     /// the admin (the Treasury, by proposal).
     ///
-    /// `address` must be a deployed Wasm contract (`NotAContract`): wallets,
-    /// Stellar Asset Contracts and predicted addresses are refused, so a
-    /// proposal can never mark a holder's wallet non-voting. `kind` is a
-    /// built-in kind or `custom_<name>` (`InvalidKind`) and unique
-    /// (`KindTaken`). If the module is `non_voting` and already holds tokens,
-    /// their votes leave the supply now. Emits `ModuleRegistered`.
+    /// `address` must be a deployed Wasm contract (`NotAContract`): account
+    /// (`G...`) wallets, Stellar Asset Contracts, and predicted addresses are
+    /// refused, as is the Treasury. A smart-contract wallet is a Wasm
+    /// contract, so a proposal can register a member's contract wallet. As a
+    /// `non_voting` module it becomes DAO custody: its tokens carry no votes
+    /// (its own or its delegate's), it may move them out and approve anyone
+    /// for them under the transfer lock, and `dao_transfer` cannot touch them
+    /// (`ModuleCustody`). The registration interface does not ask the
+    /// module to consent, so voters check the address a proposal registers.
+    ///
+    /// `kind` is a built-in kind or `custom_<name>` (`InvalidKind`) and
+    /// unique (`KindTaken`). If the module is `non_voting` and already holds
+    /// tokens, their votes leave the supply now. Emits `ModuleRegistered`.
     pub fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool) {
         Self::require_registrar(e);
         common::ttl::extend_instance(e);
@@ -414,12 +439,14 @@ impl DaoTokenContract {
     }
 
     /// Removes `address` from the registry (same authority as
-    /// `register_module`; `NotAModule` if absent). Its allowance drops to 0.
-    /// If it was `non_voting` and still holds tokens, it is self-delegated
-    /// first and their votes return to the supply under its own address, so
-    /// the account checkpoints keep adding up to `TotalSupply`. Empty a module
-    /// before unregistering it: leftover tokens become that contract's own
-    /// votes. Emits `ModuleUnregistered`.
+    /// `register_module`; `NotAModule` if absent). Its allowance drops to 0
+    /// and it stops being a transfer agent. Emits `ModuleUnregistered`.
+    ///
+    /// A `non_voting` module must hold no tokens (`ModuleHoldsTokens`): settle
+    /// or cancel the auction, return the Marketplace's listings, sweep its
+    /// pools, and recover tokens sent to either directly, first. A voting
+    /// module's tokens already count as votes (for its delegate), and still
+    /// do after it leaves, so it may be unregistered while holding them.
     pub fn unregister_module(e: &Env, address: Address) {
         let changed_by = Self::require_registrar(e);
         common::ttl::extend_instance(e);
@@ -428,16 +455,16 @@ impl DaoTokenContract {
             panic_with_error!(e, TokenError::NotAModule);
         };
         let entry = entries.get_unchecked(index as u32);
+        // A non-voting module's tokens are usually held for others (escrowed
+        // listings, the auctioned token, pool stock). Once unregistered it is
+        // no longer custody, so in a locked DAO `check_locked_path` would
+        // refuse every move out and strand them.
+        if entry.non_voting && Base::balance(e, &address) > 0 {
+            panic_with_error!(e, TokenError::ModuleHoldsTokens);
+        }
         let old = Self::mint_allowance(e, address.clone());
         if old > 0 {
             Self::set_allowance(e, &address, old, 0, &changed_by);
-        }
-        if entry.non_voting {
-            let held = u128::from(Base::balance(e, &address));
-            if held > 0 {
-                Self::ensure_self_delegate(e, &address);
-                transfer_voting_units(e, None, Some(&address), held);
-            }
         }
         entries.remove(index as u32);
         Self::write_modules(e, &entries);
@@ -473,7 +500,8 @@ impl DaoTokenContract {
     ///
     /// Hands the admin to `treasury` (unless `handoff` already did), raises
     /// each registered module's allowance by its grant (`NotAModule` for
-    /// anything else), marks the token live and emits `TokenLaunched`. The
+    /// anything else; the sum saturates at `u32::MAX`, unlimited, as in
+    /// `increase_mint_allowance`), marks the token live, and emits `TokenLaunched`. The
     /// Treasury needs no grant: as admin it mints without limit. A second call
     /// panics with `AlreadyLive`, so after launch the Manager has no authority
     /// over the token.

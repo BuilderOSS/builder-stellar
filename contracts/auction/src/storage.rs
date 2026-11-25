@@ -52,6 +52,7 @@ pub enum DataKey {
     /// Current auction state (token ID, bids, timing, etc.). Absent until the
     /// first auction is created, which is how `has_auction` is derived.
     Auction,
+    /// The Manager that approves upgrades and performs the launch.
     Manager,
     /// Set by the first bid; the payment token can no longer change.
     PaymentTokenLocked,
@@ -93,10 +94,8 @@ pub struct AuctionConfig {
     /// If a bid arrives within this window of the auction end, the end time extends
     /// by the buffer amount (up to [`MAX_AUCTION_EXTENSIONS`] times).
     pub time_buffer: u64,
-    /// SAC token address for payments.
-    ///
-    /// All auctions use this SAC token for bids and payments.
-    /// Native XLM payments are not supported.
+    /// The Stellar Asset Contract bids are paid in (for XLM, its native
+    /// asset contract). Any other contract is refused (`NotStellarAsset`).
     pub payment_token: Address,
 }
 

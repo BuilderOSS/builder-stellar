@@ -1530,26 +1530,44 @@ mod registry {
     }
 
     #[test]
-    fn unregistering_a_holding_module_self_delegates_before_votes_return() {
+    fn a_non_voting_module_holding_tokens_cannot_be_unregistered_until_empty() {
         let (e, client, owner, _m) = setup_with_manager();
         let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
-        // Tokens reach the module only while it is non-voting: no delegate.
         client.batch_mint(
             &owner,
             &vec![&e, marketplace.clone(), alice.clone()],
-            &vec![&e, 4u128, 1u128],
+            &vec![&e, 2u128, 1u128],
         );
-        assert_eq!(client.get_delegate(&marketplace), None);
         assert_books(&client, &[&marketplace, &alice], 1);
 
+        let r = client.try_unregister_module(&marketplace);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            TokenError::ModuleHoldsTokens.into()
+        );
+        assert_eq!(client.marketplace(), Some(marketplace.clone()));
+        assert_books(&client, &[&marketplace, &alice], 1);
+
+        // Emptied (the token ids are 0 and 1), it leaves with no votes to return.
+        client.transfer(&marketplace, &alice, &0);
+        client.transfer(&marketplace, &alice, &1);
         client.unregister_module(&marketplace);
-        // review 2 A1: without the self-delegation TotalSupply would grow by 4
-        // with nobody's checkpoint following.
-        assert_eq!(client.get_delegate(&marketplace), Some(marketplace.clone()));
-        assert_eq!(client.get_votes(&marketplace), 4);
-        assert_books(&client, &[&marketplace, &alice], 5);
         assert_eq!(client.marketplace(), None);
+        assert_eq!(client.get_votes(&marketplace), 0);
+        assert_books(&client, &[&marketplace, &alice], 3);
+    }
+
+    #[test]
+    fn a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let claims = module(&e, &client, "claims", false);
+        client.mint(&owner, &claims);
+        assert_eq!(client.get_votes(&claims), 1);
+        client.unregister_module(&claims);
+        assert_eq!(client.module(&Symbol::new(&e, "claims")), None);
+        assert_eq!(client.get_votes(&claims), 1);
+        assert_books(&client, &[&claims], 1);
     }
 
     #[test]
@@ -1687,6 +1705,24 @@ fn an_unlimited_allowance_is_never_spent() {
     launch(&e, &client, &[(&shop, u32::MAX)]);
     client.batch_mint(&shop, &vec![&e, Address::generate(&e)], &vec![&e, 3u128]);
     assert_eq!(client.mint_allowance(&shop), u32::MAX);
+}
+
+#[test]
+fn an_increase_that_reaches_the_cap_saturates_to_unlimited() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let shop = module(&e, &client, "custom_shop", false);
+    launch(&e, &client, &[]);
+    // Two grants whose sum overflows u32 saturate at u32::MAX...
+    client.increase_mint_allowance(&shop, &(u32::MAX - 1));
+    client.increase_mint_allowance(&shop, &5);
+    assert_eq!(client.mint_allowance(&shop), u32::MAX);
+    // ...which is unlimited: a mint does not spend it.
+    client.mint(&shop, &Address::generate(&e));
+    assert_eq!(client.mint_allowance(&shop), u32::MAX);
+    // Lowering it by a non-zero amount makes it finite, and mints spend it again.
+    client.decrease_mint_allowance(&shop, &1);
+    client.mint(&shop, &Address::generate(&e));
+    assert_eq!(client.mint_allowance(&shop), u32::MAX - 2);
 }
 
 #[test]
@@ -2384,5 +2420,77 @@ mod locked {
         assert_eq!(d.token.get_votes(&outsider), 1);
         assert_eq!(d.token.get_votes(&bob), 1);
         assert_eq!(d.token.get_delegate(&alice), Some(bob.clone()));
+    }
+
+    /// Listings made before the lock sit in the Marketplace's custody. While
+    /// it is registered, custody may move them out under the lock (cancel,
+    /// expire, buy). Unregistering it first would strand them, so it is
+    /// refused until the Marketplace is empty.
+    #[test]
+    fn unregistering_a_custody_module_holding_escrow_under_the_lock_is_refused() {
+        let d = Dao::new(TokenSettings::default());
+        let seller = Address::generate(&d.e);
+        let listed = d.mint(&seller);
+        d.launch();
+        // Listed while unlocked, then the DAO locks transfers.
+        d.token.transfer(&seller, &d.market, &listed);
+        d.token.set_transfers_locked(&true);
+
+        assert_eq!(
+            d.token
+                .try_unregister_module(&d.market)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::ModuleHoldsTokens.into()
+        );
+        // Still custody, so the seller's token can come back under the lock.
+        d.token.transfer(&d.market, &seller, &listed);
+        assert_eq!(d.token.owner_of(&listed), seller);
+        assert_eq!(d.token.get_votes(&seller), 1);
+        // Empty, it unregisters.
+        d.token.unregister_module(&d.market);
+        assert_eq!(d.token.marketplace(), None);
+    }
+
+    /// `agent_transfer` moves a token only from its owner: naming any other
+    /// `from`, even one that signs, fails and moves no votes.
+    #[test]
+    fn agent_transfer_from_someone_other_than_the_owner_fails() {
+        let d = Dao::new(LOCKED);
+        let agent = stub(&d.e);
+        d.token
+            .register_module(&Symbol::new(&d.e, "custom_circle"), &agent, &false);
+        d.token.set_transfer_agent(&agent, &true);
+        let (alice, bob, carol) = (
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+        );
+        let a = d.mint(&alice);
+        d.mint(&bob);
+        d.launch();
+
+        // `bob` signs (all auths are mocked) but does not own `a`.
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&agent, &bob, &carol, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            stellar_tokens::non_fungible::NonFungibleTokenError::IncorrectOwner.into()
+        );
+        assert_eq!(d.token.owner_of(&a), alice);
+        assert_eq!(
+            (
+                d.token.get_votes(&alice),
+                d.token.get_votes(&bob),
+                d.token.get_votes(&carol)
+            ),
+            (1, 1, 0)
+        );
+        // The owner as `from` works.
+        d.token.agent_transfer(&agent, &alice, &carol, &a);
+        assert_eq!(d.token.owner_of(&a), carol);
     }
 }
