@@ -1,8 +1,8 @@
 # Known issues
 
-These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
+These are behaviours of the contracts and the read model that the project has accepted and documented. They are listed so that an auditor can see them before reporting them as new. Each entry restates an item from "Known limitations" in [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md#known-limitations), with the code it concerns. Where `SECURITY_MODEL.md` documents closely related accepted behaviour in another section, the entry adds it under **Also documented**, with a link to that section. Where this page and `SECURITY_MODEL.md` differ, `SECURITY_MODEL.md` is the reference and this page needs updating.
 
-This page was checked against `dev` at `b1ef765`, which includes pull requests 118 to 120. An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders, or front ends should check.
+This page was checked against `dev` at `f51d301`, which includes pull requests 118 to 130. IDs are stable, so a new entry takes the next number. An entry is not a claim that the behaviour is safe for every DAO: several depend on how a DAO configures itself, and say what voters, holders, or front ends should check.
 
 | ID | Issue | Area |
 | --- | --- | --- |
@@ -23,6 +23,10 @@ This page was checked against `dev` at `b1ef765`, which includes pull requests 1
 | [KI-15](#ki-15-outside-modules) | Outside modules | Token, read model |
 | [KI-16](#ki-16-indexer-allowlisting) | Indexer allowlisting | Indexer, read model |
 | [KI-17](#ki-17-archival-assumptions) | Archival assumptions | All contracts |
+| [KI-18](#ki-18-a-non-voting-module-that-will-not-release-its-tokens-stays-registered) | A non-voting module that will not release its tokens stays registered | Token |
+| [KI-19](#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao) | Removing the Auction or Marketplace can be delayed in an unlocked DAO | Auction, Marketplace, Token |
+| [KI-20](#ki-20-a-drive-holds-its-slug-until-its-deadline) | A drive holds its slug until its deadline | Manager |
+| [KI-21](#ki-21-claim-list-hashing) | Claim list hashing | ClaimMinter |
 
 ## KI-01: Metadata seed grinding
 
@@ -46,13 +50,13 @@ This page was checked against `dev` at `b1ef765`, which includes pull requests 1
 
 ## KI-04: Unclaimed Setup lists
 
-**Behaviour.** A free claim list that the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` does not show until they are claimed, and they become votes as soon as they are. The DAO can end such a list by proposal with `close_list`, which sets `expires_at` to now and emits `ListClosed`; a claim can still land before that proposal executes. `close_list` exists only in ClaimMinters from the release that adds it, and the app's proposal composer offers it separately.
+**Behaviour.** A free claim list that the launch admin opens in Setup stays claimable after launch until its `expires_at`, up to the ClaimMinter's remaining mint allowance. Its unclaimed allocations are founder supply that `total_supply` does not show until they are claimed, and they become votes as soon as they are. The DAO can end such a list by proposal with `close_list`, which sets `expires_at` to now and emits `ListClosed`; a claim can still land before that proposal executes. `close_list` exists only in ClaimMinters from the release that adds it.
+
+**In the app.** The claims page and Manage, Membership show this founder supply from the read model (`claims.lists.opened_in_setup`, migration 0014), capped at the ClaimMinter's remaining allowance, and mark each such list. The proposal composer's "Close a claim list" action calls `close_list`. The app first simulates the call and offers the action only when the function exists.
 
 **Guidance.** Voters and front ends should read open Setup lists and the ClaimMinter's allowance when judging supply.
 
-**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `close_list`.
-
-TODO: app changes in progress relate to this entry; link them when they merge.
+**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `close_list`; [`db/migrations/0014_claim_list_closed.sql`](../../db/migrations/0014_claim_list_closed.sql); [`apps/web/src/lib/minter/close-list.ts`](../../apps/web/src/lib/minter/close-list.ts) and [`founder-supply.tsx`](../../apps/web/src/components/minter/founder-supply.tsx).
 
 ## KI-05: Treasury-held tokens never vote
 
@@ -68,11 +72,11 @@ TODO: app changes in progress relate to this entry; link them when they merge.
 
 ## KI-07: Opaque upgrade hashes and authorization trees
 
-**Behaviour.** The chain checks that an upgrade's target hash is registered and approved, not what the code does. Voters must check `to_hash` against audited, reproducible builds, and must read any `authorize` trees a proposal carries, because each tree authorizes exactly the call it describes.
+**Behaviour.** The chain checks that an upgrade's target hash is registered and approved, not what the code does. Voters must check that `to_hash` is the published build of a release tag, and must read any `authorize` trees a proposal carries, because each tree authorizes exactly the call it describes.
 
-**Code.** [`common/src/upgrade.rs`](../../contracts/common/src/upgrade.rs) `apply`; [`treasury/src/contract.rs`](../../contracts/treasury/src/contract.rs) the `authorize` action and `check_authorization`.
+**Guidance.** Run `node scripts/verify-wasm.mjs <tag>`; see [Reproducible contract builds](../REPRODUCIBLE_BUILDS.md).
 
-TODO: link the published WASM hashes and the reproducible build instructions once the build work merges.
+**Code.** [`common/src/upgrade.rs`](../../contracts/common/src/upgrade.rs) `apply`; [`treasury/src/contract.rs`](../../contracts/treasury/src/contract.rs) the `authorize` action and `check_authorization`; [`scripts/verify-wasm.mjs`](../../scripts/verify-wasm.mjs).
 
 ## KI-08: Proposal ids do not include the proposer
 
@@ -88,31 +92,35 @@ TODO: link the published WASM hashes and the reproducible build instructions onc
 
 ## KI-10: Payment assets must be plain Stellar Asset Contracts
 
-**Behaviour.** Payment assets must be plain, non-regulated Stellar Asset Contracts. An asset with `AUTH_REQUIRED`, clawback, a fee on transfer, or a rebasing balance can freeze or misprice settlement.
+**Behaviour.** Payment assets must be plain, non-regulated Stellar Asset Contracts. The Manager (at `create_dao`, `create_module`, and `open_assurance`, `InvalidPaymentAsset`), the Auction, and the Marketplace (`NotStellarAsset`) refuse anything that is not a Stellar Asset Contract ([INV-35](INVARIANTS.md#inv-35-payment-assets-are-stellar-asset-contracts)), but cannot tell which issuer flags an asset has. An asset with `AUTH_REQUIRED`, clawback, a fee on transfer, or a rebasing balance can freeze or misprice settlement.
 
 **Guidance.** DAOs should price auctions, listings, pools, and claim lists in plain assets.
 
-**Code.** The payment paths in [`auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs), [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs), and [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs).
+**Also documented** ([Lifecycle](../SECURITY_MODEL.md#lifecycle-setup-window-and-launch)). Launch checks that each module's payment asset equals the one recorded at `create_dao` or `create_module`; it does not check again that the asset is a Stellar Asset Contract. A DAO created before the Manager's check keeps the asset it recorded.
 
-TODO: contract changes in progress may change this entry; update it when they merge.
+**Code.** `require_stellar_asset` in [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs), [`auction/src/helpers.rs`](../../contracts/auction/src/helpers.rs), and [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs); the payment paths in those modules and in [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs).
 
 ## KI-11: Manager admin trust
 
-**Behaviour.** The Manager admin selects the hashes that future DAOs deploy, can revoke implementations, and can pause the factory. It holds no minting power over any DAO: every module that mints belongs to the DAO, is capped by an allowance the DAO sets, and is upgraded only by the DAO's proposal.
+**Behaviour.** The Manager admin selects the hashes that future DAOs deploy, can revoke implementations, and can pause the factory. It holds no minting power over any DAO: every module that mints belongs to the DAO, is capped by an allowance the DAO sets, and is upgraded only by the DAO's proposal, apart from `recover_claims` on a failed drive.
 
-The Manager's own upgrade is visible for a notice period: it applies only `upgrade_delay()` ledgers after the approval, and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement. Re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule.
+The Manager's own upgrade is visible for a notice period: it applies only `upgrade_delay()` ledgers after the approval, and only to the hash the registry announces as latest (`latest_pointer(name)`), counting from the later of the approval and that announcement. Re-announcing or re-approving never restarts the clock, and a reduction of the delay waits out the notice in force. Manage shows the pending upgrade with the ledger it can apply from. DAO contracts keep per-path approvals (a migration can pass through v2 on the way to v3) and need no latest-only rule, except a recovery upgrade.
 
-The admin is a single address with a two-step handover and no timelock. `PendingAdmin` has no expiry; the admin withdraws it with `cancel_pending_admin`. The admin can also end an assurance drive in refunds, by pausing the factory or revoking an implementation the DAO runs until the deadline passes ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)).
+The admin is a single address with a two-step handover and no timelock. `PendingAdmin` has no expiry; the admin withdraws it with `cancel_pending_admin`. The admin can also end an assurance drive in refunds, by pausing the factory or revoking an implementation the DAO runs until the deadline passes. With the launch admin of a failed drive, it can also replace that drive's ClaimMinter code once the upgrade notice has passed ([Assurance launch](../SECURITY_MODEL.md#assurance-launch), [INV-26](INVARIANTS.md#inv-26-recovery-upgrades-of-a-failed-drive)).
 
 **Guidance.** Creators should check `DaoCreated.wasm_hashes` before launch.
 
-**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs): the registry, `pause_factory`, `upgrade_manager`, `propose_admin`, and `accept_admin`.
+**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs): the registry, `pause_factory`, `upgrade_manager`, `recover_claims`, `propose_admin`, and `accept_admin`.
 
 ## KI-12: Assurance proves a launch, not a community
 
 **Behaviour.** A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs. The threshold counts addresses, not people.
 
-**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`.
+**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). The ClaimMinter a drive opens on runs the code its launch admin chose in Setup: any registered, non-revoked hash that approved upgrades reach from the one it was created with. `open_assurance` checks only that the code is registered and not revoked.
+
+**Guidance.** Members should check the ClaimMinter's hash against the published releases before paying in.
+
+**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`; [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `open_assurance`.
 
 ## KI-13: Issuer-controlled payment assets
 
@@ -130,11 +138,9 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 **Behaviour.** After launch, the Treasury can register any contract as a module by proposal, under any kind, including a built-in one. Its mint allowance caps what it can mint, but the platform cannot vouch for its code, and its records are not covered by one-click renewal.
 
-In the read model, a known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code: the indexer fills those roles only from the Manager's `DaoCreated` and `ModuleCreated` events, and the read model takes a registration's role from the kind the Manager deployed it as (`manager.manager_modules`). Every other registered contract has the role `module`: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` does not list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage, Membership marks it "Not deployed by the Manager".
+In the read model, a known role (`auction`, `marketplace`, `claims`) means the Manager deployed the code for that DAO: the indexer fills those roles only from the Manager's `DaoCreated` and `ModuleCreated` events, and the read model takes a registration's role from the kind the Manager deployed it as, only when the registering DAO is the one it was deployed for (`manager.created_modules`, migration 0015). A DAO that registers another DAO's module sees it as role `module`, so it cannot present that DAO's market or claim list as its own and send buyers' payments to the other DAO. Every other registered contract has the role `module` too: its events are indexed for its DAO but stay out of the domain views (pools, claim lists, auctions) and the public feed, `manager.daos` does not list it as the DAO's module of that kind, the claims page refuses to prepare calls against it, and Manage, Membership marks it "Not deployed by the Manager".
 
-**Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `register_module`; [`db/migrations/0002_manager_views.sql`](../../db/migrations/0002_manager_views.sql).
-
-TODO: read-model changes in progress may change this entry; update it when they merge.
+**Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `register_module`; [`db/migrations/0015_known_role_owner.sql`](../../db/migrations/0015_known_role_owner.sql), which replaces the registration views of [`0002_manager_views.sql`](../../db/migrations/0002_manager_views.sql).
 
 ## KI-16: Indexer allowlisting
 
@@ -142,10 +148,34 @@ TODO: read-model changes in progress may change this entry; update it when they 
 
 The views ignore malformed values from outside modules: a view that casts an event field reads only the roles the Manager deployed, and `manager.module_versions` and `manager.module_launches` do not take an outside module's own upgrade, storage-migration, or launch events, so such a contract's events cannot stop a shared view from reading for every DAO (migration 0012).
 
-**Remedies.** The DAO unregisters the contract by vote, which ends its window in every view. Or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`), and checks that new events stop. Whether a running pipeline notices a deleted row without re-applying is not verified. Rows already indexed stay, because the landing tables are append-only.
+**Remedies.** The DAO unregisters the contract by vote (once it holds no tokens, if it is non-voting; see [KI-18](#ki-18-a-non-voting-module-that-will-not-release-its-tokens-stays-registered)), which ends its window in every view. Or the operator deletes its row from `streamling.dao_modules`, the only allowlist an outside contract is in, re-applies the pipeline (`packages/goldsky/scripts/deploy.sh deploy`), and checks that new events stop. Whether a running pipeline notices a deleted row without re-applying is not verified. Rows already indexed stay, because the landing tables are append-only.
 
 **Code.** [`packages/goldsky/`](../../packages/goldsky/README.md); [`db/migrations/`](../../db/migrations).
 
 ## KI-17: Archival assumptions
 
 **Behaviour.** The design assumes protocol 23 or later, with automatic restoration where footprints allow, plus periodic maintenance. See [`docs/TTL_ECONOMICS.md`](../TTL_ECONOMICS.md) and [`docs/MONITORING.md`](../MONITORING.md).
+
+## KI-18: A non-voting module that will not release its tokens stays registered
+
+**Behaviour.** The Token refuses to unregister a non-voting module while it holds tokens (`ModuleHoldsTokens`, 7222), and `dao_transfer` cannot move tokens out of a module. An outside module whose code holds tokens and offers no way to release them, or a member's contract wallet registered as non-voting custody that keeps its tokens, can then never be unregistered. It stays custody (it may move its tokens out and approve anyone for them under the lock), keeps its kind, and stays in the indexer's allowlist. The DAO can still cut its allowance to 0 and revoke it as a transfer agent, and the operator can remove it from the indexer's allowlist ([KI-16](#ki-16-indexer-allowlisting)).
+
+**Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `dao_transfer`.
+
+## KI-19: Removing the Auction or Marketplace can be delayed in an unlocked DAO
+
+**Behaviour.** The DAO can empty both modules by proposal, but `return_listing` and `recover_token` name the token ids known when the proposal is drafted. While transfers are unlocked, anyone can send a token straight to the module, or list one before the market is paused, between drafting and execution. The removal then fails and the proposal reverts. Each attempt costs the sender that token, which the next proposal recovers to the Treasury. A locked DAO is not exposed: under the lock a holder can neither send a token to a module nor list one.
+
+**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `return_listing` and `recover_token`; [`auction/src/contract.rs`](../../contracts/auction/src/contract.rs) `recover_token`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
+
+## KI-20: A drive holds its slug until its deadline
+
+**Behaviour.** `open_assurance` reserves the slug when the drive opens, and `release_slug` frees it only once the drive has failed. A drive nobody intends to meet can therefore keep a slug from other DAOs for up to 90 days (`MAX_ASSURANCE_WINDOW`).
+
+**Code.** [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `open_assurance` and `release_slug`.
+
+## KI-21: Claim list hashing
+
+**Behaviour.** Merkle leaves and nodes carry no tag, and a root is not bound to a list, a ClaimMinter, or a network. The contract computes every leaf itself from the claimer and amount. No leaf `claim` can hash has a node's length: a node hashes 64 bytes, an account leaf 60, and a contract leaf 56; a muxed address would give 64, but `claim` takes an `Address`, which a muxed address never converts to. A root takes effect only when an admin opens a list with it, so a root opened on two lists lets each listed address claim on both, as the admins chose. Binding the list id would need the id when the tree is built, but a proposal opens its list under the id current when it executes.
+
+**Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `leaf_hash`, `node_hash`, and `claim`; the shared vectors in [`contracts/minter/test-vectors/merkle-v1.json`](../../contracts/minter/test-vectors/merkle-v1.json) pin the format for the contract and the web's tree builder ([INV-25](INVARIANTS.md#inv-25-claims)).

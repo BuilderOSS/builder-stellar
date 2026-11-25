@@ -10,15 +10,15 @@ This folder is the documentation package for an external security audit of the T
 | [STATE_MACHINES.md](STATE_MACHINES.md) | Diagrams, with transitions and guards, for the module lifecycle (Setup, handoff, Live), proposals, the assurance drive and claim lists, the auction, listings, and quick-buy pools |
 | [INVARIANTS.md](INVARIANTS.md) | The properties the code must keep, each linked to the tests that check it, with missing tests marked |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Accepted, documented behaviours, so they are not reported as new findings |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | The app and indexer tier: what a session proves, the cost of uploads, the indexer's trust in outside modules, the `goldsky_writer` role, and per-instance replay state |
+| [THREAT_MODEL.md](THREAT_MODEL.md) | The app and indexer tier: what a session proves, the cost of uploads, the indexer's trust in outside modules, the `goldsky_writer` role, per-instance replay and rate-limit state, and the response headers and server-side fetches |
 | [SCOPE_LETTER.md](SCOPE_LETTER.md) | A template for the letter that agrees the scope with the audit firm |
 
 ## For auditors
 
 A suggested reading order:
 
-1. [SCOPE.md](SCOPE.md), for what to review and how to build it.
-2. [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md), for roles, the admin model, the lifecycle, voting supply, the execution path, upgrades, and error codes. It also states design trade-offs outside its known limitations, for example in the membership switches, quick-buy pools, assurance launch, and slugs sections.
+1. [SCOPE.md](SCOPE.md), for what to review and how to build it. It links the [reproducible build](../REPRODUCIBLE_BUILDS.md) and the [OpenZeppelin pin record](../OPENZEPPELIN_PIN.md), which says what the contracts use from OpenZeppelin, how the pinned revision differs from the nearby tags, and which OpenZeppelin audits cover it.
+2. [`docs/SECURITY_MODEL.md`](../SECURITY_MODEL.md), for roles, the admin model, the lifecycle, voting supply, the execution path, upgrades and migrations, and error codes. It also states design trade-offs outside its known limitations, for example in the membership switches, quick-buy pools, assurance launch, and slugs sections.
 3. [STATE_MACHINES.md](STATE_MACHINES.md), then [INVARIANTS.md](INVARIANTS.md).
 4. [KNOWN_ISSUES.md](KNOWN_ISSUES.md), before writing findings.
 5. The design documents for the areas you go deeper into: [membership models](../designs/membership-models.md) (allowances, the module registry, the ClaimMinter, assurance drives, and pools), [locked tokens](../designs/locked-tokens.md) (the membership switches), and the [governance adapter](../designs/governance-adapter.md) (other vote sources). Each crate's README describes its interface.
@@ -27,21 +27,33 @@ The Rust source is authoritative. Where any document here disagrees with the cod
 
 ## For the project team
 
-**At the freeze.** Tag the audit commit, then regenerate the scope list from the tag and commit the result:
+**At the freeze.**
 
-```bash
-node scripts/audit-scope.mjs --ref <tag>
-```
+1. Publish the contract hashes for the frozen commit and commit them, as [`docs/REPRODUCIBLE_BUILDS.md`](../REPRODUCIBLE_BUILDS.md) describes:
 
-`node scripts/audit-scope.mjs --check` exits with an error when `SCOPE.md` no longer matches `HEAD`, for example after a contract change. Then fill in [SCOPE_LETTER.md](SCOPE_LETTER.md) from the new `SCOPE.md`, and resolve the TODO markers below.
+   ```bash
+   node scripts/build-wasm.mjs --write-hashes
+   ```
+
+2. Tag that commit (`audit-<n>-freeze`). Pushing the tag runs the Contract release build workflow, which rebuilds it in the container and natively and attests the WASM files.
+3. Regenerate the scope list from the tag and commit the result. `SCOPE.md` then states whether `releases/hashes.json` describes the contracts at the tag:
+
+   ```bash
+   node scripts/audit-scope.mjs --ref <tag>
+   ```
+
+4. Run the tests and the coverage report at the tag (`cargo test --locked`, `pnpm contracts:coverage`; see [`docs/COVERAGE.md`](../COVERAGE.md)).
+5. Fill in [SCOPE_LETTER.md](SCOPE_LETTER.md) from the new `SCOPE.md`.
+
+`node scripts/audit-scope.mjs --check` exits with an error when `SCOPE.md` no longer matches `HEAD`, for example after a contract change.
 
 **When the contracts change.** Regenerate `SCOPE.md`, update the state machine or invariant a change touches, and link any new test from [INVARIANTS.md](INVARIANTS.md). A new accepted limitation goes in `docs/SECURITY_MODEL.md` first and then in [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Only accepted, documented behaviour belongs in this folder.
 
-## Status and TODO markers
+## Status
 
-The pages were checked against `dev` at `b1ef765`, which includes the proposal threshold cap and `close_list`, the upload access checks, and the read-model casts. Other contract, app, and database changes are in progress; where they will change what a page says, the page carries a `TODO` marker instead of a guess. Before sending the package:
+The pages were checked against `dev` at `f51d301`, which includes pull requests 118 to 130: the proposal lifetime and the storage-layout gate, the custody and payment-asset checks, the Manager's recovery notice and launch code checks, the ClaimMinter's threshold check and hashing vectors, the sign-in and session changes, the response headers and rate limits, the read-model role rule, and the reproducible build. Every placeholder marker from earlier versions is resolved. What the package still needs comes from the freeze itself:
 
-- resolve every `TODO` in this folder (`grep -rn TODO docs/audit`);
-- link the OpenZeppelin pin record. TODO: link `docs/OPENZEPPELIN_PIN.md` here once it exists; it will record why the project uses its OpenZeppelin revision and how that differs from the nearest release. `SCOPE.md` links it automatically when it is regenerated after the file lands;
-- link the reproducible build instructions and the published WASM hashes for the frozen tag;
-- attach test and coverage results for the frozen commit.
+- `SCOPE.md` regenerated from the frozen tag. At `f51d301`, `releases/hashes.json` predates the contract changes, and `SCOPE.md` says so;
+- the published hashes and the release workflow's result for the frozen tag;
+- test and coverage results for the frozen commit ([`docs/COVERAGE.md`](../COVERAGE.md) records an earlier run, of the release 0.5.0 source);
+- a decision on the OpenZeppelin scope in the scope letter. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) finds that no published OpenZeppelin report covers the changes from `239a2a7` to the pinned `fbfde38`, so it recommends including the modules used, unless OpenZeppelin confirms that a published review covers them.

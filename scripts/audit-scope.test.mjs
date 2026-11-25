@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { analyseRustFile, cfgIsTrueInRelease, lexRust } from './audit-scope.mjs';
+import { analyseRustFile, cfgIsTrueInRelease, lexRust, moduleFileCandidates } from './audit-scope.mjs';
 
 test('blank lines, line comments, doc comments and nested block comments are not code', () => {
   const src = [
@@ -101,4 +101,19 @@ test('a test-only enum variant or struct field ends at its comma, not at the clo
   const r = analyseRustFile(src);
   assert.equal(r.testCodeLines, 4);
   assert.equal(r.codeLines, 9);
+});
+
+test('a module declared outside lib.rs and mod.rs lives in a folder named after its parent', () => {
+  assert.deepEqual(moduleFileCandidates('contracts/x/src/lib.rs', 'test'), [
+    'contracts/x/src/test.rs',
+    'contracts/x/src/test/mod.rs'
+  ]);
+  assert.deepEqual(moduleFileCandidates('contracts/x/src/a/mod.rs', 'b'), [
+    'contracts/x/src/a/b.rs',
+    'contracts/x/src/a/b/mod.rs'
+  ]);
+  assert.deepEqual(moduleFileCandidates('contracts/x/src/storage.rs', 'page_properties'), [
+    'contracts/x/src/storage/page_properties.rs',
+    'contracts/x/src/storage/page_properties/mod.rs'
+  ]);
 });
