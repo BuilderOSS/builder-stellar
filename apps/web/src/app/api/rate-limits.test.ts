@@ -20,6 +20,10 @@ vi.mock('@/lib/minter/service', async (importOriginal) => ({
   claimHistory: work,
   currentClaims: work
 }));
+vi.mock('@/lib/minter/open-lists', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/minter/open-lists')>()),
+  openClaimLists: work
+}));
 vi.mock('@/lib/goldsky', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/goldsky')>()),
   getGoldskyHealth: work
@@ -28,6 +32,7 @@ vi.mock('@/lib/goldsky', async (importOriginal) => ({
 import { API_RATE_LIMITS, limitApiRequest, type LimitedRoute } from '@/lib/api-rate-limit';
 
 import { GET as claimHistory } from './dao/[daoId]/claims/history/route';
+import { GET as claimLists } from './dao/[daoId]/claims/lists/route';
 import { POST as claimPrepare } from './dao/[daoId]/claims/prepare/route';
 import { GET as claims } from './dao/[daoId]/claims/route';
 import { POST as marketplacePrepare } from './dao/[daoId]/marketplace/prepare/route';
@@ -67,6 +72,7 @@ describe.each<[string, LimitedRoute, (ip: string) => Promise<Response>]>([
   ['POST treasury/prepare', 'prepare', (ip) => treasuryPrepare(post(ip), dao)],
   ['GET claims', 'claims', (ip) => claims(get(ip), dao)],
   ['GET claims/history', 'claims', (ip) => claimHistory(get(ip), dao)],
+  ['GET claims/lists', 'claims', (ip) => claimLists(get(ip), dao)],
   ['GET /api/goldsky/health', 'health', (ip) => goldskyHealth(get(ip))]
 ])('%s', (_name, route, call) => {
   beforeEach(() => vi.stubEnv('VERCEL', '1'));

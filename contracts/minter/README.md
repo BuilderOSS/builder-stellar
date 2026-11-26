@@ -16,7 +16,7 @@ launch(treasury, open); handoff(treasury); payment_asset(); renewal_keys(cursor,
 upgrade(from, to); recovery_upgrade(from, to); migrate(); version(); wasm_hash(); storage_version(); admin()
 ```
 
-While the stored layout differs from the code's `STORAGE_VERSION`, every entry point that changes state fails `StorageVersionMismatch` (7831); `upgrade`, `recovery_upgrade`, `migrate` and the views stay open ([upgrade path](../../docs/SECURITY_MODEL.md#upgrade-path-and-migrations)). `refund` is gated too, so `migrate` needs no authorization: during a drive the admin is the Treasury, which can't act before launch.
+While the stored layout differs from the code's `STORAGE_VERSION`, every entry point that changes state fails `StorageVersionMismatch` (7831); `upgrade`, `recovery_upgrade`, `migrate` and the views stay open ([upgrade path](../../docs/SECURITY_MODEL.md#upgrade-path-and-migrations)). `refund` is gated too, so `migrate` needs no authorisation: during a drive the admin is the Treasury, which can't act before launch.
 
 **Lists.** Each list is a root of `(claimer, amount)` leaves with an asset, a price per token (0 for free), an expiry and a total across claimers. A claimer proves the full leaf and claims it in parts: `mint_now` is at most what is left of the leaf and at most `common::MAX_BATCH_MINT` (43) per call. Each claim pays `price × mint_now` and mints through the Token's `batch_mint`, spending this module's mint allowance (the Token's `AllowanceExceeded` propagates). All lists share that one allowance. `close_list` (the admin) ends a list early by moving its `expires_at` to now; the assurance list can't be closed before launch.
 

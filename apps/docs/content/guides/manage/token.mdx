@@ -27,15 +27,15 @@ A tribe's membership token is an NFT on Stellar: each token is one membership wi
 ### Other token settings
 
 - **Name and symbol.** These are changed in **Manage → Tribe profile**. See [Manage: profile](/guides/manage/profile/).
-- **How memberships move.** **Manage → Membership** has three settings: **Lock memberships**, **Members-only delegation** and **DAO recovery**. During setup each one is a switch the launch admin changes directly. After launch each shows **On** or **Off**, with a **Turn on in proposal** or **Turn off in proposal** button.
-- **Module allowances.** Modules such as the auction, the market and claim lists mint tokens within an allowance set by the tribe. Choose **Module allowances** on the Mint tokens page to see and change them in **Manage → Membership**.
+- **How memberships move.** **Manage → Membership** has three settings: **Lock memberships**, **Members-only delegation**, and **DAO recovery**. During setup each one is a switch the launch admin changes directly. After launch each shows **On** or **Off**, with a **Turn on in proposal** or **Turn off in proposal** button.
+- **Module allowances.** Modules such as the auction, the market, and claim lists mint tokens within an allowance set by the tribe. Choose **Module allowances** on the Mint tokens page to see and change them in **Manage → Membership**.
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Minting calls `batch_mint` on the tribe's Token contract. Only the token's admin can mint this way: the launch admin during setup, and the tribe's Treasury after launch. After launch the mint runs when the proposal is executed, with the Treasury as the minter.
 
-  Each new token held by a member adds one vote to the voting supply. Tokens held by the tribe's Treasury, Auction and Marketplace don't count. Quorum is a share of that supply, so minting raises the votes needed for proposals made afterwards. Proposals already made keep the quorum they were created with.
+  Each new token held by a member adds one vote to the voting supply. Tokens held by the tribe's Treasury, Auction, and Marketplace don't count. Quorum is a share of that supply, so minting raises the votes needed for proposals made afterwards. Proposals already made keep the quorum they were created with.
 
   Each transaction has a limit on the contract events it can write, which is why one mint fits up to 43 tokens to one recipient, or 18 recipients with one token each.
 

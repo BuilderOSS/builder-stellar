@@ -266,6 +266,20 @@ describe('A claim list open until u64::MAX', () => {
     expect(html).toContain('no closing date');
     expect(html).not.toContain('Invalid Date');
   });
+
+  it('reads as a launch drive with no deadline', () => {
+    const far = Number('18446744073709551615');
+    const drive = {
+      ...baseList,
+      expiresAt: far,
+      assurance: { thresholdClaimers: 5, deadline: far, state: 'open' as const }
+    };
+    state.claims = claimsState([drive]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN };
+    const html = render();
+    expect(html).toContain('2 of 5 people needed, with no deadline. Payments are held until launch.');
+    expect(html).not.toContain('Invalid Date');
+  });
 });
 
 describe('The code holding a launch drive\u2019s payments', () => {

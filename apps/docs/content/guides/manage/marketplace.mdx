@@ -10,19 +10,19 @@
 
 ## Steps
 
-1. **Open Market.** Choose **Manage** in the tribe's navigation, then **Market**. The page is headed **Manage the marketplace**. The notice at the top says whether the market is open or paused, the asset prices are in, and the resale fee.
+1. **Open Market.** Choose **Manage** in the tribe's navigation, then **Market**. The page is headed **Market settings**. The notice at the top says whether the market is open or paused, the asset prices are in, and the resale fee.
 
    <Shot id="manage/marketplace/01" alt="The Manage the marketplace page with the notice showing the market is open, prices in XLM and the resale fee" />
 
-2. **Change the payment asset or the resale fee.** Under **Payment, fee and pause changes**, use **Change the market payment asset** to choose the asset buyers pay in: XLM or USDC. Use **Change the resale fee** to set the fee on each resale, from 0% to 25%. The seller pays the fee, and it goes to the tribe's [Treasury](/reference/glossary#treasury). Choose **Add to proposal** on the setting you changed. Listings already open keep their asset and fee.
+2. **Change the payment asset or the resale fee.** Under **Payment, fee and pause changes**, the last section on the page, use **Change the market payment asset** to choose the asset buyers pay in: XLM or USDC. Use **Change the resale fee** to set the fee on each resale, from 0% to 25%. The seller pays the fee, and it goes to the tribe's [Treasury](/reference/glossary#treasury). Choose **Add to proposal** on the setting you changed. Listings already open keep their asset and fee.
 
    <Shot id="manage/marketplace/02" alt="The Change the resale fee setting with a new percentage and its Add to proposal button" />
 
-3. **Pause or reopen the market.** **Pause the market** stops sales until a vote reopens it. **Reopen the market** lets sales start again. Choose **Add to proposal** on the one you need.
+3. **Pause or reopen the market.** The same section shows the one that applies now. While the market is open, **Pause the market** stops sales until a vote reopens it. While it is paused, **Reopen the market** lets sales start again. Choose **Add to proposal** on it.
 
    <Shot id="manage/marketplace/03" alt="The Pause the market setting with its Add to proposal button" />
 
-4. **Propose a quick-buy pool.** A pool sells new tokens at a fixed price. Under **Propose a quick-buy pool**, fill in **Price per token**, **Tokens in the pool**, **Maximum per wallet**, **Maximum sales per period**, **Period (hours)** and **Closes at (local time)**. Choose a closing time that leaves enough time for the vote and execution. Then choose **Add the pool to proposal**. It joins your draft as one item with two steps: raising the market's mint allowance, then opening the pool.
+4. **Propose a quick-buy pool.** A pool sells new tokens at a fixed price. Under **Propose a quick-buy pool**, fill in **Price per token**, **Tokens in the pool**, **Maximum per wallet**, **Maximum sales per period**, **Period (hours)**, and **Closes at (local time)**. Choose a closing time that leaves enough time for the vote and execution. Then choose **Add the pool to proposal**. It joins your draft as one item with two steps: raising the market's mint allowance, then opening the pool.
 
    <Shot id="manage/marketplace/04" alt="The Propose a quick-buy pool form filled in, with the Each token sold adds a vote warning beneath it" />
 
@@ -40,8 +40,8 @@ The same page also has a section for the Treasury to buy a listed token. See [Tr
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  These actions call the tribe's Marketplace contract: `set_payment_asset`, `set_secondary_fee_bps`, `pause`, `unpause`, `open_pool`, `close_pool` and `sweep_pool`. After launch the Treasury is the market's admin, so each call runs only as part of a proposal that passes and is executed.
+<Disclosure title="Contracts, fees, and waits">
+  These actions call the tribe's Marketplace contract: `set_payment_asset`, `set_secondary_fee_bps`, `pause`, `unpause`, `open_pool`, `close_pool`, and `sweep_pool`. After launch the Treasury is the market's admin, so each call runs only as part of a proposal that passes and is executed.
 
   The resale fee is stored in basis points, at most 2,500 (25%). A new fee or payment asset applies to listings made afterwards.
 
@@ -49,13 +49,13 @@ The same page also has a section for the Treasury to buy a listed token. See [Tr
 
   A pool mints new tokens against the market's mint allowance, so the proposal raises that allowance by the pool's size before opening it. Proceeds from pool sales go to the Treasury.
 
-  The wallet that submits each proposal step pays the Stellar network fee in XLM. Tribe Builder takes no fee. Settings, pools and sales are public on chain.
+  The wallet that submits each proposal step pays the Stellar network fee in XLM. Tribe Builder takes no fee. Settings, pools, and sales are public on chain.
 </Disclosure>
 
 ## If something goes wrong
 
 - **"Connect your wallet. Pools can be proposed once the tribe has launched."** Connect and sign in, and check that the tribe has launched.
-- **"The marketplace is paused."** A pool can't open while the market is paused. Add a **Reopen the market** action before the pool in the same proposal, or wait until a reopen proposal is executed.
+- **"The market is paused."** A pool can't open while the market is paused. Add a **Reopen the market** action before the pool in the same proposal, or wait until a reopen proposal is executed.
 - **"The market has to take XLM or USDC before a pool can be priced."** Change the market payment asset first.
 - **"Choose a closing time in the future, allowing time for the vote and execution."** Pick a later closing time. If the time passes before the proposal is executed, opening the pool fails.
 - **"Pool #3 is still open: close it first, then sweep it."** Close the pool in one proposal. Sweep it once it is closed.

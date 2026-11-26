@@ -21,6 +21,8 @@ const get = (ip = '203.0.113.10') =>
 
 describe('GET /api/health', () => {
   beforeEach(() => {
+    // Each test counts calls from zero (Vitest 4's restoreAllMocks no longer clears vi.fn() calls).
+    vi.clearAllMocks();
     vi.stubEnv('VERCEL', '1');
     clearServerCache();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);

@@ -1,5 +1,5 @@
 // One source for terms (docs/plans/walkthroughs-and-docs.md §5.5). The app's
-// GlossaryTerm popover, the docs glossary page and guide tooltips read this, so the
+// GlossaryTerm popover, the docs glossary page, and guide tooltips read this, so the
 // copy can't drift. Plain words first, the DAO term one line beneath (DESIGN.md, Voice).
 
 export type GlossaryEntry = {
@@ -16,7 +16,7 @@ export type GlossaryEntry = {
 export const GLOSSARY = {
   treasury: {
     term: 'Treasury',
-    plain: 'The funds the tribe holds together. They move only when a proposal passes.',
+    plain: 'The funds the tribe holds together. They move only when a proposal passes and runs.',
     dao: 'An onchain treasury contract. Every payment in and out is public.',
     slug: 'treasury'
   },
@@ -37,7 +37,7 @@ export const GLOSSARY = {
     term: 'Quorum',
     plain:
       'How many For and Abstain votes a proposal needs before it can pass, so a few people can’t decide for everyone.',
-    dao: 'The governor’s quorum, a share of all votes. After launch it changes only by vote.',
+    dao: 'The Governor’s quorum, a share of all votes. After launch it changes only by vote.',
     slug: 'quorum'
   },
   'launch-admin': {
@@ -50,7 +50,7 @@ export const GLOSSARY = {
   'safety-delay': {
     term: 'Safety delay',
     plain: 'The wait between a vote passing and the proposal running, so members can review what will happen.',
-    dao: 'The governor’s queue delay, a timelock.',
+    dao: 'The Governor’s queue delay, a timelock.',
     slug: 'safety-delay'
   }
 } as const satisfies Record<string, GlossaryEntry>;

@@ -17,7 +17,13 @@ export function docsHref(path = ''): string {
 /** Community and support: questions, problems and legal requests all start here. */
 export const DISCORD_URL = 'https://discord.gg/bTygNksyRb';
 
-const DEFAULT_SITE_URL = 'https://tribes.build';
+/**
+ * The production site. Every deployment allows images from it (and its www host): tribes created
+ * before a deployment had its own site URL, such as early tribes on dev.tribes.build, store their
+ * default image here.
+ */
+export const PRODUCTION_SITE_ORIGIN = 'https://tribes.build';
+const DEFAULT_SITE_URL = PRODUCTION_SITE_ORIGIN;
 
 /**
  * The app's old production host. Testnet tribes deployed before the rename keep its URLs in their

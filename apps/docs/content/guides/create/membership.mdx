@@ -5,7 +5,7 @@ Membership is section 2 of **Build a tribe**. You choose how people become membe
 ## Before you start
 
 - Complete the [Identity](/guides/create/identity) section and select **Continue to Membership**.
-- Prices, timings, and membership rules start with defaults. You can change any of them later by a vote. The payment asset for each sale is set when you create the tribe, so choose it with care.
+- Prices, timings, and membership rules start with defaults. You can change any of them later by a vote. Payment assets are the exception: see the note in step 3.
 
 ## Steps
 
@@ -19,7 +19,7 @@ Membership is section 2 of **Build a tribe**. You choose how people become membe
 
 2. Under **Who can hold a membership?**, choose one option.
    - **Open membership**: members can sell, give, or [delegate](/reference/glossary#delegate) their tokens freely.
-   - **Members-only club**: a membership changes hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example to rescue a lost key.
+   - **Members-only club**: a membership changes hands only with the tribe's approval, votes stay among members, and the tribe can move any membership by vote, for example when a member loses access to their wallet.
 
    <Shot id="create/membership/02" alt="The Who can hold a membership? choices with Open membership selected" />
 
@@ -37,11 +37,11 @@ Membership is section 2 of **Build a tribe**. You choose how people become membe
 
    <Shot id="create/membership/04" alt="The Voting section opening below a completed Membership section" />
 
-Modules you leave out can be added later by vote. If you turn off every way to join, only founder tokens exist until a vote adds one. You mint at least one founder token in Setup before launch. See [Set up: founders](/guides/setup/founders).
+Modules you leave out can be added later: directly in Setup, or by vote after launch. See [Set up: contracts](/guides/setup/contracts). If you turn off every way to join, only founder tokens exist until a vote adds one. You mint at least one founder token in Setup before launch. See [Set up: founders](/guides/setup/founders).
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Nothing in this section is sent to the network yet. Your choices are saved in the draft in this browser.
 
   When you create the tribe, the factory contract (the Manager) deploys only the modules your choice needs: an auction contract, a market contract, a claims contract (ClaimMinter), or a combination. It records each module's payment asset. At launch, the Manager checks that each module still uses that asset.

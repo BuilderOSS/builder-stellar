@@ -4,7 +4,7 @@ Tribe Builder runs on Stellar testnet. Test XLM has no value, and tribes on test
 
 Each site has one **Manager**, the platform contract that creates tribes, launches them, and keeps the list of approved contract releases.
 
-Each tribe then has its own contracts: a token, a governor, a treasury, metadata, and the modules it chose, such as an auction, a market or claims. Their addresses are different for every tribe. To find them, open the tribe and expand **Technical details** at the foot of its home page, or **Contracts** in the tribe's **More** menu.
+Each tribe then has its own contracts: a Token, a Governor, a Treasury, a Metadata contract, and the modules it chose, such as an auction, a market, or claims. Their addresses are different for every tribe. To find them, open the tribe and expand **Technical details** at the foot of its home page, or **Contracts** in the tribe's **More** menu.
 
 A new tribe is created from the releases the Manager lists as current. A tribe moves to a newer release only by its own vote. See [Upgrades](/concepts/upgrades).
 
@@ -31,7 +31,7 @@ Current releases for new tribes:
 | Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
 | Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
 
-Source: `deploys/builder-testnet-manager.json`.
+Source: `deploys/builder-testnet-manager.json` (the first deploy) and `deploys/release-1/post-release-state.json` (release 1).
 
 ## dev.tribes.build
 
@@ -58,7 +58,7 @@ Current releases for new tribes:
 | Marketplace | 0.4.0 | `f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4` |
 | Claims | 0.4.0 | `e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa` |
 
-Both sites run the same code. tribes.build registers the Manager, Metadata and Governor as 0.5.0 (release 1, 21 November 2026), while dev.tribes.build's own registry records the same hashes as 0.4.0, so the version numbers differ but the code doesn't. Tribes created on tribes.build before release 1 run Governor and Metadata 0.4.0 (`41ad48e8…`, `44a0c4b6…`) until they upgrade by vote.
+Both sites run the same code, but their version numbers differ. On tribes.build, the Manager, Metadata, and Governor are registered as 0.5.0 (release 1, 21 November 2026). dev.tribes.build's own registry records the same hashes as 0.4.0. Tribes created on tribes.build before release 1 run Governor and Metadata 0.4.0 (`41ad48e8…`, `44a0c4b6…`) until they upgrade by vote.
 
 Source: `deploys/dev-testnet-manager.json`.
 

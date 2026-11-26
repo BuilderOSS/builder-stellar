@@ -38,14 +38,14 @@ In a tribe with locked memberships, **Send** is replaced by **Give back** ("Retu
 To move a locked token to another wallet, for example a new wallet of your own, the tribe has to approve it by vote:
 
 1. In **Your token**, choose **Approve the tribe** ("Let a vote move this token"). The approval is set to last about 120 days, long enough for a vote. Sign it.
-2. Choose **Draft the proposal**. Add the action **Approve a membership transfer**, which names this token, your wallet and the new wallet.
+2. Choose **Draft the proposal**. Add the action **Approve a membership transfer**, which names this token, your wallet, and the new wallet.
 3. If the proposal passes, the Treasury moves the token when the proposal runs.
 
 See [Approvals](/guides/members/approvals/) for how the approval works.
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   **Send** and **Give back** call `transfer` on the tribe's Token contract, signed by you. The token's voting unit moves from your delegate to the recipient's delegate. A recipient with no delegate is delegated to themselves. Any single-token approval on the token is cleared when it moves.
 
   When a tribe locks memberships, the Token refuses transfers between members with `TransfersLocked`. It allows a token to move back to the Treasury, out of the tribe's own contracts (for example, auction settlement), and by `transfer_from` when the Treasury is the approved spender, which is how a passed proposal moves it. The lock is a tribe setting. It changes only by a vote.

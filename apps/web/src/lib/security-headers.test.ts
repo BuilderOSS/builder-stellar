@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { config as middlewareConfig, middleware } from '@/middleware';
 
 import { API_CONTENT_SECURITY_POLICY, HSTS_VALUE, securityHeaderRules } from '../../security-headers.mjs';
-import { BASELINE_CONTENT_SECURITY_POLICY, buildContentSecurityPolicy, cspMode } from './content-security-policy';
+import { buildContentSecurityPolicy, cspMode } from './content-security-policy';
 
 async function nextConfig(): Promise<NextConfig> {
   // A runtime path keeps TypeScript from resolving the untyped .mjs config.
@@ -25,6 +25,8 @@ function directive(policy: string, name: string) {
 }
 
 describe('baseline headers (next.config.mjs)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it.each([
     'https://tribes.build/',
     'https://tribes.build/dao/abc',
@@ -42,21 +44,20 @@ describe('baseline headers (next.config.mjs)', () => {
   });
 
   it('lets API responses load nothing and never be framed', async () => {
-    // The page baseline rule comes later in the list, so this also shows it never matches /api.
     expect((await configHeaders('https://tribes.build/api/render/x/1')).get('content-security-policy')).toBe(
       API_CONTENT_SECURITY_POLICY
     );
   });
 
-  it('enforces the page baseline while the page policy is report-only', async () => {
+  it.each(['enforce', 'report-only'])('sends no page CSP of its own with CSP_MODE=%s', async (mode) => {
+    // A nonce-free page policy here took the place of the middleware's on dev.tribes.build, so
+    // Next's scripts lost their nonce. The middleware's policy is the only one on pages.
+    vi.stubEnv('CSP_MODE', mode);
     for (const url of ['https://tribes.build/', 'https://tribes.build/dao/x/proposals']) {
-      expect((await configHeaders(url)).get('content-security-policy'), url).toBe(BASELINE_CONTENT_SECURITY_POLICY);
+      const headers = await configHeaders(url);
+      expect(headers.get('content-security-policy'), url).toBeNull();
+      expect(headers.get('content-security-policy-report-only'), url).toBeNull();
     }
-    // With CSP_MODE=enforce the middleware's full policy is the only one.
-    const enforced = securityHeaderRules({ CSP_MODE: 'enforce' });
-    expect(
-      enforced.some((rule) => rule.headers.some((header) => header.value === BASELINE_CONTENT_SECURITY_POLICY))
-    ).toBe(false);
   });
 
   it('sends HSTS itself only off Vercel, which already sends it', () => {
@@ -74,35 +75,35 @@ describe('page Content-Security-Policy (middleware)', () => {
   const page = (path = '/dao/abc') => middleware(new NextRequest(`https://tribes.build${path}`));
   const nonceOf = (policy: string) => /'nonce-([A-Za-z0-9+/=]+)'/.exec(policy)?.[1];
 
-  it('is report-only by default, and sets one CSP header', () => {
+  it('is enforced by default, and sets one CSP header', () => {
     const response = page();
-    // Next copies middleware response headers onto the request; a nonce-free CSP here would hide
-    // the nonce from Next's own scripts. The baseline comes from next.config.mjs instead.
-    expect(response.headers.get('content-security-policy')).toBeNull();
-    const policy = response.headers.get('content-security-policy-report-only')!;
+    // Next copies middleware response headers onto the request; a second, nonce-free CSP would
+    // hide the nonce from Next's own scripts.
+    expect(response.headers.get('content-security-policy-report-only')).toBeNull();
+    const policy = response.headers.get('content-security-policy')!;
     expect(directive(policy, 'script-src')).toMatch(/^script-src 'self' 'nonce-[A-Za-z0-9+/=]{24}' 'strict-dynamic'$/);
     expect(directive(policy, 'frame-ancestors')).toBe("frame-ancestors 'none'");
     expect(directive(policy, 'object-src')).toBe("object-src 'none'");
     expect(directive(policy, 'report-uri')).toBe('report-uri /api/csp-report');
-    // Ignored (with a console warning) in a report-only policy.
-    expect(policy).not.toContain('upgrade-insecure-requests');
+    expect(policy).toContain('upgrade-insecure-requests');
   });
 
-  it('enforces the full policy with CSP_MODE=enforce', () => {
-    vi.stubEnv('CSP_MODE', 'enforce');
+  it('only reports with CSP_MODE=report-only', () => {
+    vi.stubEnv('CSP_MODE', 'report-only');
     const response = page();
-    const policy = response.headers.get('content-security-policy')!;
+    const policy = response.headers.get('content-security-policy-report-only')!;
     expect(policy).toContain("'strict-dynamic'");
-    expect(policy).toContain('upgrade-insecure-requests');
-    expect(response.headers.get('content-security-policy-report-only')).toBeNull();
+    expect(response.headers.get('content-security-policy')).toBeNull();
+    // Ignored (with a console warning) in a report-only policy.
+    expect(policy).not.toContain('upgrade-insecure-requests');
   });
 
   it('gives each response a fresh nonce and hands the same one to the page', () => {
     const first = page();
     const second = page();
-    const nonce = nonceOf(first.headers.get('content-security-policy-report-only')!);
+    const nonce = nonceOf(first.headers.get('content-security-policy')!);
     expect(nonce).toBeTruthy();
-    expect(nonce).not.toBe(nonceOf(second.headers.get('content-security-policy-report-only')!));
+    expect(nonce).not.toBe(nonceOf(second.headers.get('content-security-policy')!));
     // NextResponse.next({ request }) forwards request headers to the page as x-middleware-request-*.
     expect(first.headers.get('x-middleware-request-x-nonce')).toBe(nonce);
     expect(nonceOf(first.headers.get('x-middleware-request-content-security-policy')!)).toBe(nonce);
@@ -125,6 +126,8 @@ describe('page Content-Security-Policy (middleware)', () => {
 });
 
 describe('buildContentSecurityPolicy', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   const build = (overrides: Partial<Parameters<typeof buildContentSecurityPolicy>[0]> = {}) =>
     buildContentSecurityPolicy({
       nonce: 'abc',
@@ -155,6 +158,20 @@ describe('buildContentSecurityPolicy', () => {
     expect(images).toContain('https://*.tribes.build');
   });
 
+  it('allows the production site’s images on every deployment', () => {
+    // Early tribes on dev.tribes.build store https://tribes.build/images/dao-logo.png as their image.
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://dev.tribes.build');
+    const images = directive(build(), 'img-src')!.split(' ');
+    expect(images).toEqual(
+      expect.arrayContaining([
+        'https://dev.tribes.build',
+        'https://*.dev.tribes.build',
+        'https://tribes.build',
+        'https://*.tribes.build'
+      ])
+    );
+  });
+
   it("connects to the network's RPC and Horizon", () => {
     expect(directive(build(), 'connect-src')).toContain('https://soroban-testnet.stellar.org');
     expect(directive(build(), 'connect-src')).toContain('https://horizon-testnet.stellar.org');
@@ -162,11 +179,10 @@ describe('buildContentSecurityPolicy', () => {
     expect(directive(build({ network: 'local' }), 'connect-src')).toContain('http://localhost:8000');
   });
 
-  it("allows the frames and relay the wallet kit's wallets open", () => {
-    expect(directive(build(), 'frame-src')).toBe(
-      'frame-src https://albedo.link https://connect.trezor.io https://hot-labs.org'
-    );
-    expect(directive(build(), 'connect-src')).toContain('https://h4n.app');
+  it('allows frames only for the wallets the app registers', () => {
+    // lib/wallet-kit.ts registers the kit's default modules and WalletConnect: no Trezor or HOT.
+    expect(directive(build(), 'frame-src')).toBe('frame-src https://albedo.link');
+    for (const host of ['trezor.io', 'hot-labs.org', 'h4n.app', 'herewallet.app']) expect(build()).not.toContain(host);
   });
 
   it('allows WalletConnect hosts only when WalletConnect is configured', () => {
@@ -175,10 +191,12 @@ describe('buildContentSecurityPolicy', () => {
     expect(directive(build({ walletConnect: true }), 'frame-src')).toContain('https://verify.walletconnect.org');
   });
 
-  it('enforces only on an exact CSP_MODE=enforce', () => {
+  it('enforces unless CSP_MODE is exactly report-only', () => {
+    expect(cspMode(undefined)).toBe('enforce');
+    expect(cspMode('')).toBe('enforce');
     expect(cspMode('enforce')).toBe('enforce');
-    expect(cspMode(' Enforce ')).toBe('enforce');
-    expect(cspMode(undefined)).toBe('report-only');
-    expect(cspMode('on')).toBe('report-only');
+    expect(cspMode('off')).toBe('enforce');
+    expect(cspMode('report-only')).toBe('report-only');
+    expect(cspMode(' Report-Only ')).toBe('report-only');
   });
 });

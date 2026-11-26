@@ -284,7 +284,7 @@ ledgers), and the same notice in seconds (five per ledger, never less than seven
 (`UpgradeDelayNotElapsed`, 7130 until then). Announcing the fix as
 latest also offers it to every DAO's ClaimMinter, so release it as an ordinary ClaimMinter version
 (SECURITY_MODEL, Assurance launch). A recovery to a release with a newer layout is followed by anyone calling
-the ClaimMinter's `migrate()` (no authorization needed); refunds wait for it.
+the ClaimMinter's `migrate()` (no authorisation needed); refunds wait for it.
 
 **Opening a drive.** `open_assurance` refuses a ClaimMinter that runs anything other than the current `claims`
 implementation (`set_current_implementations`) or the hash announced as latest for `ClaimMinter` at least

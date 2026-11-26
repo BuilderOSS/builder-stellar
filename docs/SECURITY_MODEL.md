@@ -146,13 +146,13 @@ The Governor and the Treasury refuse to run on a layout that differs from their 
 
 The recovery path reads only storage that a release must keep readable by both its own code and the code before it: the Governor's proposal records (`ProposalTime`, `ProposalId`, `ProposalCount`, `RecoveryProposal`), its settings (`Treasury`, `Manager`, `QueueDelay`, and OpenZeppelin's voting settings, quorum checkpoints, vote tallies, and `HasVoted` records), the vote source, the Treasury's `Governor` and `Manager`, and both modules' admin, lifecycle, and upgrade keys. It also calls the vote source's checkpoint reads and the Manager's `is_upgrade_approved` and `get_implementation_version`. A release whose migration rewrites any of these keys, or changes those interfaces, needs its own recovery design.
 
-On these two modules `migrate()` needs no authorization: it runs only the migration that the installed code defines, once per layout, so a migration that is due never waits for a proposal.
+On these two modules `migrate()` needs no authorisation: it runs only the migration that the installed code defines, once per layout, so a migration that is due never waits for a proposal.
 
 **Every other module has the same gate.** The Token, Metadata, Auction, Marketplace, ClaimMinter and Manager refuse every entry point that changes state while their stored layout differs from their code's, each with its own `StorageVersionMismatch` (Token 7223, Metadata 7320, Auction 7421, Marketplace 7730, ClaimMinter 7831, Manager 7147). One check, the first in each entry point (after the pause check where the Auction has one); `upgrade`, `migrate`, `recovery_upgrade` and the views stay outside it. The unit tests `a_skipped_migration_halts_every_state_change_until_migrate` (Token, Metadata, Auction, Marketplace), `a_skipped_migration_halts_every_state_change` (ClaimMinter) and `a_skipped_migration_halts_the_manager_except_its_own_upgrade` call every gated entry point.
 
 - **Token, Metadata, Auction, Marketplace:** `migrate` stays admin-only, run by proposal in the same proposal as `upgrade`. Neither the Governor nor the Treasury calls their gated entry points to run a proposal, and the Token's vote reads (`get_votes`, checkpoints, supply) are views, so a DAO with one of these modules halted can still vote on, queue and execute the proposal that migrates or upgrades it. While the Token is halted nothing mints, transfers or delegates; while the Metadata contract is halted the Token's mint hooks fail, which the Token ignores, so a token minted meanwhile has no attributes until `regenerate` after the migration (Metadata `a_skipped_migration_halts_every_state_change_until_migrate`).
-- **ClaimMinter:** `migrate` needs no authorization. During a drive its admin is the Treasury, which cannot act before launch, and `recover_claims` can install code with a newer layout; refunds (gated like every other state change) then wait only for anyone to call `migrate` (`after_a_failed_drive_anyone_migrates_and_refunds_pay_out`).
-- **Manager:** `migrate` needs no authorization: `upgrade_manager` swaps the code at the end of its own call, so a layout change is migrated in a second transaction. Until it runs, no DAO can be created, launched, or have a drive opened, launched or recovered, and no slug moves; a `Met` drive whose deadline passes meanwhile fails. Its recovery path stays open: `register_implementation` and `set_latest_implementation` for the name `Manager`, `approve_upgrade` to a hash registered as `Manager`, and `upgrade_manager` (after the usual notice), so a failed migration is fixed by upgrading again. That path reads and writes only the admin, the upgrade notice, `CurrentManagerWasm`, `CurrentManagerVersion`, and the registry's `Implementation`, `LatestImplementation` and `UpgradeApproval` records, which a release must keep readable by both its code and the code before it. The registry views stay open throughout, so every DAO's own upgrades keep working.
+- **ClaimMinter:** `migrate` needs no authorisation. During a drive its admin is the Treasury, which cannot act before launch, and `recover_claims` can install code with a newer layout; refunds (gated like every other state change) then wait only for anyone to call `migrate` (`after_a_failed_drive_anyone_migrates_and_refunds_pay_out`).
+- **Manager:** `migrate` needs no authorisation: `upgrade_manager` swaps the code at the end of its own call, so a layout change is migrated in a second transaction. Until it runs, no DAO can be created, launched, or have a drive opened, launched or recovered, and no slug moves; a `Met` drive whose deadline passes meanwhile fails. Its recovery path stays open: `register_implementation` and `set_latest_implementation` for the name `Manager`, `approve_upgrade` to a hash registered as `Manager`, and `upgrade_manager` (after the usual notice), so a failed migration is fixed by upgrading again. That path reads and writes only the admin, the upgrade notice, `CurrentManagerWasm`, `CurrentManagerVersion`, and the registry's `Implementation`, `LatestImplementation` and `UpgradeApproval` records, which a release must keep readable by both its code and the code before it. The registry views stay open throughout, so every DAO's own upgrades keep working.
 
 **The Treasury migrates in two steps.** The Treasury runs a proposal on the code it started with until the proposal ends, so a `migrate` action after its own `upgrade` in the same proposal still runs the old code, finds nothing to do (`NothingToMigrate`) and reverts the whole proposal, upgrade included. A Treasury release that changes its layout is installed by a proposal that only upgrades the Treasury; anyone then calls `treasury.migrate()`. Until that call, `treasury.execute` runs only recovery proposals. A later proposal made only of the allowlisted `migrate` self-call is one, and runs the installed code's migration, but the direct call does the same work without a vote. The Governor has no such limit: it has finished with the proposal before the Treasury dispatches the actions, so its `upgrade` and `migrate` run in one proposal, and a failing `migrate` reverts the upgrade with it.
 
@@ -413,22 +413,26 @@ add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The r
 Pages get a Content-Security-Policy from `apps/web/src/middleware.ts`, with a fresh nonce for
 each response. Scripts run only with that nonce (`'strict-dynamic'` lets them load the app's
 chunks), so markup injected into a page can't run script. The policy also lists the hosts the
-app and the wallet kit use for images, connections, and frames: the IPFS gateways, the site and
-its old host, Stellar RPC and Horizon, Pinata uploads, the wallet icons, WalletConnect, the
-frames Albedo, Trezor, and HOT open, and HOT's request relay. Reading the nonce makes every page
-render per request. Since no page may be framed, the app can't run inside another site's frame,
-including a wallet that opens apps in one (HOT inside Telegram).
+app and its wallets use for images, connections, and frames: the IPFS gateways, this site, the
+production site (tribes.build and its `www` host), the old host, Stellar RPC and Horizon, Pinata
+uploads, the wallet icons, WalletConnect, and Albedo. It covers the wallets
+`apps/web/src/lib/wallet-kit.ts` registers: the kit's default modules and WalletConnect. Trezor,
+HOT, and Ledger are not offered, so their hosts are not listed; adding one of them means adding
+the hosts it loads. Albedo signs in a popup, which the page policy does not govern. Reading the
+nonce makes every page render per request. Since no page may be framed, the app can't run inside
+another site's frame, including a wallet that opens apps in one.
 
-The page policy is report-only for now, because several wallets (WalletConnect, Albedo, Trezor,
-HOT, and Ledger) can't be tried on a local server and may need hosts the list lacks. Browsers
-send violations to `POST /api/csp-report`, which logs a trimmed summary as `[csp-report]` and
-stores nothing. While the policy is report-only, pages enforce `frame-ancestors 'none';
-object-src 'none'; base-uri 'self'; form-action 'self'`. Setting `CSP_MODE=enforce` and
-redeploying enforces the whole policy; do that once the log shows no unexpected violations.
-The Vercel toolbar on preview deployments loads a script without the nonce, so an enforced
-policy blocks it there. A tribe's image, and a token image from a renderer other than this site,
-can be any `https:` address the tribe chose; the policy reports those, and enforcing it hides
-them, so decide whether to allow such hosts before enforcing.
+The page policy is enforced. Setting `CSP_MODE=report-only` and redeploying makes it report
+only, for checking a change; pages then enforce nothing beyond `X-Frame-Options: DENY`. Pages get
+exactly one policy, the middleware's: Next reads the script nonce from the request's policy
+header, and while `next.config.mjs` also sent a nonce-free page policy, dev.tribes.build served
+Next's own scripts without the nonce. Browsers send violations to `POST /api/csp-report`, which
+logs a trimmed summary as `[csp-report]` and stores nothing. In the browser, Zod runs in jitless
+mode (`apps/web/src/instrumentation-client.ts`): its compiled parsers use `new Function`, which
+the policy refuses, and validation gives the same results without them. The Vercel toolbar on
+preview deployments loads a script without the nonce, so the policy blocks it there. A tribe's
+image, and a token image from a renderer other than this site, can be any `https:` address the
+tribe chose; an image on a host the policy does not list does not show.
 
 ### Member-written content
 
@@ -461,7 +465,7 @@ sign-in (`apps/web/src/lib/api-rate-limit.ts`):
 | --- | --- |
 | Artwork rendering (`/api/render`) | 300 a minute |
 | Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
-| Claim state and claim history | 120 a minute, shared |
+| Claim state, claim history, and open claim lists | 120 a minute, shared |
 | `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
 | `POST /api/csp-report` | 30 a minute |
 

@@ -37,8 +37,8 @@ Your tribe is now in Setup. On its page you see "You are the launch admin" and a
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  **Create tribe** sends one transaction to the Tribe Builder factory contract (the Manager). In that transaction the Manager deploys the four core contracts: the membership token, the artwork and profile contract (Metadata), the governor (proposals and votes), and the [treasury](/reference/glossary#treasury). It also deploys each module your membership choice needs: an auction, a market, a claims contract, or a combination. It registers each module on the token and applies your membership rules and voting rules.
+<Disclosure title="Contracts, fees, and waits">
+  **Create tribe** sends one transaction to the Tribe Builder factory contract (the Manager). In that transaction the Manager deploys the four core contracts: the membership token, the artwork and profile contract (Metadata), the Governor (proposals and votes), and the [Treasury](/reference/glossary#treasury). It also deploys each module your membership choice needs: an auction, a market, a claims contract, or a combination. It registers each module on the token and applies your membership rules and voting rules.
 
   The addresses are worked out in advance from your wallet and a random number saved with the draft (a nonce). If you have to try again, the app reuses the same settings and addresses, so the tribe is not created twice. You can see the transaction, your wallet, the nonce, and each contract address under **Technical details**.
 
@@ -51,7 +51,7 @@ Your tribe is now in Setup. On its page you see "You are the launch admin" and a
 
 - **Create tribe is not available.** Read the line under the button. It says what is missing: connect your wallet, switch your wallet to the right network, or upload your image in Identity first.
 - **"One field needs attention. We took you to it."** A field changed since you checked it. Fix the field the page moved you to, then select **Create tribe** again.
-- **You closed the wallet window, or the transaction failed.** The panel says "That attempt didn't go through". Select **Try again**. It checks the network first and reuses the same settings.
+- **You closed the wallet window, or the transaction failed.** Select **Try again**. It checks the network first and reuses the same settings and addresses. After a failed transaction, the panel says "That attempt didn't go through".
 - **Your wallet signed, but the network's reply is unknown.** Select **Check the transaction**. If the signed transaction is still valid, **Send the same signed transaction again** sends the exact same bytes. Neither one signs anything new.
 - **"Your tribe is created, but the directory hasn't updated yet."** The tribe exists. Don't create it a second time. Wait a moment and select **Continue to setup**, or open it later from **Drafts**.
 - **"Connect the wallet you created this with to continue."** Recovery needs the same wallet that signed. Connect it and sign in.

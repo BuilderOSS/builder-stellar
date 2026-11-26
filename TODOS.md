@@ -162,16 +162,11 @@
 **Priority:** P2
 **Depends on:** the external audit, unless the audit is rescoped to `v0.8.0`
 
-### Vitest 4 in the web, docs, and walkthrough packages
-
-**What:** Move `apps/web`, `apps/docs`, and `apps/e2e` from Vitest 3 to Vitest 4.
-
-**Why:** Vitest 3, `tinypool`, and `@vitest/mocker` have advisories fixed only in Vitest 4 (`docs/DEPENDENCIES.md`). They run only in local and CI test runs.
-
-**Effort:** S
-**Priority:** P3
-
 ## Completed
+
+### Vitest 4 in the web, docs, and walkthrough packages (2026-11-25)
+
+`apps/web`, `apps/docs`, and `apps/e2e` run Vitest 4.1.12, which clears the Vitest 3, `@vitest/mocker`, and `tinypool` advisories (`docs/DEPENDENCIES.md`). The web config gained a `styled-system` alias, as the docs config already had, and the `/api/health` test clears its mocks' calls itself, since `vi.restoreAllMocks()` no longer does.
 
 ### Governance adapter: vote source interface and configuration (2026-11-18)
 
