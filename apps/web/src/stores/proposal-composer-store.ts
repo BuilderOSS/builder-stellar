@@ -410,7 +410,8 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
       name: STORAGE_KEY,
       storage,
       onRehydrateStorage: () => (state) => {
-        if (!state) return;
+        // With no saved drafts there is nothing to check, so the action registry isn't loaded.
+        if (!state || Object.keys(state.draftsByWallet ?? {}).length === 0) return;
         void import('@/lib/proposal-actions/registry').then(({ isRegisteredActionType }) => {
           const { draftsByWallet, changed } = sanitizeDrafts(state.draftsByWallet, isRegisteredActionType);
           if (changed) useProposalComposerStore.setState({ draftsByWallet });
