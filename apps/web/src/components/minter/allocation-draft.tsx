@@ -18,6 +18,7 @@ import {
   SegmentedControl
 } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import type { NetworkName } from '@/config/networks';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { parseMarketplaceAmount } from '@/lib/marketplace/amount';
@@ -486,31 +487,13 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
         }
       >
         {confirmDrive ? (
-          <ul className={terms}>
-            <li>
-              {confirmDrive.people.toLocaleString()} {confirmDrive.people === 1 ? 'person' : 'people'} can claim{' '}
-              {confirmDrive.tokens.toLocaleString()} {confirmDrive.tokens === 1n ? 'token' : 'tokens'},{' '}
-              {confirmDrive.price === 0n
-                ? 'for free'
-                : `paying ${claimAmountLabel(config.name, asset, confirmDrive.price)} per token`}
-              .
-            </li>
-            <li>
-              The tribe launches once {confirmDrive.needed.toLocaleString()} of them claim
-              {formatClaimDate(confirmDrive.deadline) ? `, by ${formatClaimDate(confirmDrive.deadline)}` : ''}
-              {launchAuction || launchMarketplace
-                ? `, and then ${[launchAuction ? 'auctions start' : null, launchMarketplace ? 'the market opens' : null].filter(Boolean).join(' and ')}`
-                : ''}
-              .
-            </li>
-            <li>
-              If that many people do not claim in time, the tribe does not launch
-              {confirmDrive.price === 0n ? '.' : ' and everyone who paid can take their payment back.'}
-            </li>
-            <li>
-              Control of the tribe, its settings and its modules moves to its Treasury now. You sign one transaction.
-            </li>
-          </ul>
+          <LaunchDriveTerms
+            drive={confirmDrive}
+            network={config.name}
+            asset={asset}
+            launchAuction={launchAuction}
+            launchMarketplace={launchMarketplace}
+          />
         ) : null}
       </Dialog>
     </div>
@@ -518,3 +501,42 @@ export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; on
 }
 
 type DriveSummary = { people: number; needed: number; tokens: bigint; price: bigint; deadline: number };
+
+/** What opening the launch drive commits to, listed in its confirmation before the admin signs. */
+export function LaunchDriveTerms({
+  drive,
+  network,
+  asset,
+  launchAuction,
+  launchMarketplace
+}: {
+  drive: DriveSummary;
+  network: NetworkName;
+  asset: string;
+  launchAuction: boolean;
+  launchMarketplace: boolean;
+}) {
+  const by = formatClaimDate(drive.deadline);
+  return (
+    <ul className={terms}>
+      <li>
+        {drive.people.toLocaleString()} {drive.people === 1 ? 'person' : 'people'} can claim{' '}
+        {drive.tokens.toLocaleString()} {drive.tokens === 1n ? 'token' : 'tokens'},{' '}
+        {drive.price === 0n ? 'for free' : `paying ${claimAmountLabel(network, asset, drive.price)} per token`}.
+      </li>
+      <li>
+        The tribe launches once {drive.needed.toLocaleString()} of them claim
+        {by ? `, by ${by}` : ''}
+        {launchAuction || launchMarketplace
+          ? `, and then ${[launchAuction ? 'auctions start' : null, launchMarketplace ? 'the market opens' : null].filter(Boolean).join(' and ')}`
+          : ''}
+        .
+      </li>
+      <li>
+        If that many people do not claim in time, the tribe does not launch
+        {drive.price === 0n ? '.' : ' and everyone who paid can take their payment back.'}
+      </li>
+      <li>Control of the tribe, its settings and its modules moves to its Treasury now. You sign one transaction.</li>
+    </ul>
+  );
+}

@@ -33,6 +33,7 @@ docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:v2.6.0 scan source 
 | `effect` (through `@prisma/config`) | 3.18.4 | 3.22.5 | Override |
 | `sharp` | 0.35.4 | 0.35.5 | Specifier |
 | `undici` | 6.28.1 | 6.29.1 | Specifier |
+| `vitest`, `@vitest/mocker` (web, docs, and walkthrough tests) | 3.2.7 | 4.1.12 | Specifiers raised to `^4.1.12`. Fixes GHSA-82fw-gwwq-j7x9 and GHSA-qxg6-89mg-rqv8; Vitest 4 no longer uses `tinypool` (GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr) |
 | `postcss` (through Next and Panda CSS) | 8.4.31, 8.5.14 | 8.5.33 | Override |
 | `browserslist`, `postcss-selector-parser` (through Panda CSS) | 4.28.1, 7.1.1 | 4.29.6, 7.2.1 | Override |
 | `smol-toml`, `source-map-js`, `follow-redirects`, `vite`, `zod` 4, and the Panda CSS MCP server's `@modelcontextprotocol/sdk`, `hono`, `@hono/node-server`, `body-parser`, `qs`, `ip-address`, and `fast-uri` | | Latest within their ranges | `pnpm update` |
@@ -52,9 +53,7 @@ version, the parent package has to adopt it, or the update needs its own change 
 | `zod` 3.22.4, 3.25.76 | GHSA-mrhx-c7xc-m3w5 | 4.6.6 | Wallets Kit → `@reown/appkit` packages | Browser, inside the WalletConnect and Coinbase wallet libraries |
 | `deepmerge-ts` 7.1.5 | GHSA-ggr8-5vv4-36mx | 8.0.0 | `prisma` → `@prisma/config` | Prisma CLI at code generation, merging local configuration |
 | `minimatch` 10.2.6 | GHSA-g3hv-75wg-m249 | 11.0.1 | Panda CSS → `ts-morph` | Style generation at build time, with the repository's own globs |
-| `vitest`, `@vitest/mocker` 3.2.7; `tinypool` 1.1.1 | GHSA-82fw-gwwq-j7x9, GHSA-qxg6-89mg-rqv8; GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr | Vitest 4.1.12; tinypool 2.1.2 | The web, docs, and walkthrough test suites | Local and CI test runs only; never in a build that ships |
 
-The move to Vitest 4 changes test configuration in three packages and is a separate change.
 
 ### Rust
 

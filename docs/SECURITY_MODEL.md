@@ -406,22 +406,26 @@ add `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The r
 Pages get a Content-Security-Policy from `apps/web/src/middleware.ts`, with a fresh nonce for
 each response. Scripts run only with that nonce (`'strict-dynamic'` lets them load the app's
 chunks), so markup injected into a page can't run script. The policy also lists the hosts the
-app and the wallet kit use for images, connections, and frames: the IPFS gateways, the site and
-its old host, Stellar RPC and Horizon, Pinata uploads, the wallet icons, WalletConnect, the
-frames Albedo, Trezor, and HOT open, and HOT's request relay. Reading the nonce makes every page
-render per request. Since no page may be framed, the app can't run inside another site's frame,
-including a wallet that opens apps in one (HOT inside Telegram).
+app and its wallets use for images, connections, and frames: the IPFS gateways, this site, the
+production site (tribes.build and its `www` host), the old host, Stellar RPC and Horizon, Pinata
+uploads, the wallet icons, WalletConnect, and Albedo. It covers the wallets
+`apps/web/src/lib/wallet-kit.ts` registers: the kit's default modules and WalletConnect. Trezor,
+HOT, and Ledger are not offered, so their hosts are not listed; adding one of them means adding
+the hosts it loads. Albedo signs in a popup, which the page policy does not govern. Reading the
+nonce makes every page render per request. Since no page may be framed, the app can't run inside
+another site's frame, including a wallet that opens apps in one.
 
-The page policy is report-only for now, because several wallets (WalletConnect, Albedo, Trezor,
-HOT, and Ledger) can't be tried on a local server and may need hosts the list lacks. Browsers
-send violations to `POST /api/csp-report`, which logs a trimmed summary as `[csp-report]` and
-stores nothing. While the policy is report-only, pages enforce `frame-ancestors 'none';
-object-src 'none'; base-uri 'self'; form-action 'self'`. Setting `CSP_MODE=enforce` and
-redeploying enforces the whole policy; do that once the log shows no unexpected violations.
-The Vercel toolbar on preview deployments loads a script without the nonce, so an enforced
-policy blocks it there. A tribe's image, and a token image from a renderer other than this site,
-can be any `https:` address the tribe chose; the policy reports those, and enforcing it hides
-them, so decide whether to allow such hosts before enforcing.
+The page policy is enforced. Setting `CSP_MODE=report-only` and redeploying makes it report
+only, for checking a change; pages then enforce nothing beyond `X-Frame-Options: DENY`. Pages get
+exactly one policy, the middleware's: Next reads the script nonce from the request's policy
+header, and while `next.config.mjs` also sent a nonce-free page policy, dev.tribes.build served
+Next's own scripts without the nonce. Browsers send violations to `POST /api/csp-report`, which
+logs a trimmed summary as `[csp-report]` and stores nothing. In the browser, Zod runs in jitless
+mode (`apps/web/src/instrumentation-client.ts`): its compiled parsers use `new Function`, which
+the policy refuses, and validation gives the same results without them. The Vercel toolbar on
+preview deployments loads a script without the nonce, so the policy blocks it there. A tribe's
+image, and a token image from a renderer other than this site, can be any `https:` address the
+tribe chose; an image on a host the policy does not list does not show.
 
 ### Member-written content
 
@@ -454,7 +458,7 @@ sign-in (`apps/web/src/lib/api-rate-limit.ts`):
 | --- | --- |
 | Artwork rendering (`/api/render`) | 300 a minute |
 | Transaction preparation (claims, marketplace, tokens, treasury `prepare`) | 60 a minute, shared |
-| Claim state and claim history | 120 a minute, shared |
+| Claim state, claim history, and open claim lists | 120 a minute, shared |
 | `/api/health` and `/api/goldsky/health` | 30 a minute, shared |
 | `POST /api/csp-report` | 30 a minute |
 

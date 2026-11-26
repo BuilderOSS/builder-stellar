@@ -3,14 +3,14 @@
  *
  * Scripts run only with the request's nonce ('strict-dynamic' lets those scripts load the app's
  * chunks), so injected markup can't run script. The other directives list what the app and the
- * wallet kit load. The policy is report-only until CSP_MODE=enforce (docs/SECURITY_MODEL.md,
- * "Response headers"); until then next.config.mjs enforces a smaller baseline.
+ * wallets in lib/wallet-kit.ts load. The policy is enforced unless CSP_MODE=report-only
+ * (docs/SECURITY_MODEL.md, "Response headers").
  */
 import { type NetworkName, NETWORKS } from '@/config/networks';
 import { IPFS_GATEWAYS } from '@/lib/ipfs-uri';
-import { LEGACY_SITE_ORIGIN, siteUrl } from '@/lib/site';
+import { LEGACY_SITE_ORIGIN, PRODUCTION_SITE_ORIGIN, siteUrl } from '@/lib/site';
 
-export { BASELINE_CONTENT_SECURITY_POLICY, cspMode } from '../../security-headers.mjs';
+export { cspMode } from '../../security-headers.mjs';
 
 /** Where browsers send violation reports (rate limited; logged on the server). */
 export const CSP_REPORT_PATH = '/api/csp-report';
@@ -26,16 +26,13 @@ const HORIZON: Partial<Record<NetworkName, string>> = {
   public: 'https://horizon.stellar.org'
 };
 
-// Hosts the wallet kit and its wallets use: icons, the WalletConnect relay and modal, the frames
-// Albedo, Trezor and HOT open, and HOT's request relay.
-const WALLET_KIT_IMAGES = [
-  'https://stellar.creit.tech',
-  'https://scopuly.com',
-  'https://storage.herewallet.app',
-  'https://uni.onekey-asset.com'
-];
-const WALLET_FRAMES = ['https://albedo.link', 'https://connect.trezor.io', 'https://hot-labs.org'];
-const WALLET_CONNECTIONS = ['https://h4n.app'];
+// Hosts the wallets in lib/wallet-kit.ts use: the kit's default modules (browser extensions,
+// Albedo) and WalletConnect. Albedo signs in a popup, which the page policy does not govern; its
+// frame serves only implicit sessions, which the kit does not request. Adding a wallet module
+// means adding the hosts it loads (Trezor Connect frames suite.trezor.io; HOT frames hot-labs.org
+// and polls h4n.app).
+const WALLET_KIT_IMAGES = ['https://stellar.creit.tech', 'https://scopuly.com', 'https://uni.onekey-asset.com'];
+const WALLET_FRAMES = ['https://albedo.link'];
 const WALLETCONNECT = {
   connect: [
     'https://*.walletconnect.com',
@@ -108,8 +105,8 @@ export function buildContentSecurityPolicy({
     // The wallet kit and its modal inject style elements at runtime.
     ['style-src', ["'self'", "'unsafe-inline'"]],
     // Member-written Markdown loads images only from IPFS (components/ui/markdown.tsx). Tribe
-    // images and artwork may also sit on the public site (which redirects to its www host) or its
-    // old host (next.config.mjs images).
+    // images and artwork may also sit on this site, on the production site (which redirects to its
+    // www host), or on the old host (next.config.mjs images).
     [
       'img-src',
       [
@@ -118,6 +115,8 @@ export function buildContentSecurityPolicy({
         'blob:',
         siteUrl().origin,
         `https://*.${siteUrl().host}`,
+        PRODUCTION_SITE_ORIGIN,
+        `https://*.${new URL(PRODUCTION_SITE_ORIGIN).host}`,
         LEGACY_SITE_ORIGIN,
         ...gateways,
         ...WALLET_KIT_IMAGES,
@@ -133,7 +132,6 @@ export function buildContentSecurityPolicy({
         ...origin(HORIZON[config.name]),
         ...gateways,
         ...PINATA_UPLOADS,
-        ...WALLET_CONNECTIONS,
         ...wc.connect,
         // The HMR socket and local dev tools (the Agentation toolbar).
         ...(dev ? ['ws:', 'http://localhost:*', 'ws://localhost:*'] : [])

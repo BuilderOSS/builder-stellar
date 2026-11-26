@@ -20,28 +20,27 @@ export const PERMISSIONS_POLICY = [
 /** API responses are data or images, never documents: they may load nothing and never be framed. */
 export const API_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'none'";
 
-/** Enforced on pages while the full policy is report-only: no framing, plugins or base-URL changes. */
-export const BASELINE_CONTENT_SECURITY_POLICY =
-  "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
-
 /**
- * `enforce` only when CSP_MODE says exactly that; anything else keeps the page policy report-only.
+ * The page policy is enforced unless CSP_MODE says exactly `report-only`, so a missing or mistyped
+ * value never turns it off.
  *
  * @param {string | undefined} value
  * @returns {'enforce' | 'report-only'}
  */
 export function cspMode(value) {
-  return value?.trim().toLowerCase() === 'enforce' ? 'enforce' : 'report-only';
+  return value?.trim().toLowerCase() === 'report-only' ? 'report-only' : 'enforce';
 }
 
 /**
  * The header rules for next.config.mjs.
  *
- * While the page policy is report-only, the baseline is enforced from here and not from the
- * middleware: Next copies a middleware's response headers onto the request it renders, and a
- * nonce-free `Content-Security-Policy` there would hide the nonce from Next's own scripts.
+ * Pages get their Content-Security-Policy from the middleware only, in either CSP_MODE. Next reads
+ * the script nonce from the request's `content-security-policy` header before the report-only one.
+ * While this file also sent a nonce-free page policy (the report-only baseline), dev.tribes.build
+ * served Next's scripts without the nonce, though a local `next start` did not. X-Frame-Options
+ * still forbids framing.
  *
- * @param {{ VERCEL?: string; NODE_ENV?: string; CSP_MODE?: string }} env
+ * @param {{ VERCEL?: string; NODE_ENV?: string }} env
  * @returns {{ source: string; headers: { key: string; value: string }[] }[]}
  */
 export function securityHeaderRules(env = process.env) {
@@ -58,15 +57,8 @@ export function securityHeaderRules(env = process.env) {
   if (env.VERCEL !== '1' && env.NODE_ENV === 'production') {
     headers.push({ key: 'Strict-Transport-Security', value: HSTS_VALUE });
   }
-  const rules = [
+  return [
     { source: '/:path*', headers },
     { source: '/api/:path*', headers: [{ key: 'Content-Security-Policy', value: API_CONTENT_SECURITY_POLICY }] }
   ];
-  if (cspMode(env.CSP_MODE) === 'report-only') {
-    rules.push({
-      source: '/:path((?!api/).*)',
-      headers: [{ key: 'Content-Security-Policy', value: BASELINE_CONTENT_SECURITY_POLICY }]
-    });
-  }
-  return rules;
 }
