@@ -56,6 +56,17 @@ fn locked_factory(settings: TokenSettings, agents: &[&str]) -> DaoFixture {
 /// Propose, vote (the founder), queue and execute `actions` in one
 /// proposal, executing with nothing but the Treasury's own authorization.
 fn pass_proposal(f: &DaoFixture, actions: &[(&Address, &str, Vec<Val>)], description: &str) {
+    pass_proposal_with(f, actions, description, || {});
+}
+
+/// `pass_proposal`, running `during_vote` after the proposal is made and
+/// before it executes, for what others do while it is open.
+pub(super) fn pass_proposal_with(
+    f: &DaoFixture,
+    actions: &[(&Address, &str, Vec<Val>)],
+    description: &str,
+    during_vote: impl FnOnce(),
+) {
     let e = &f.e;
     let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
     let mut targets = Vec::new(e);
@@ -77,6 +88,7 @@ fn pass_proposal(f: &DaoFixture, actions: &[(&Address, &str, Vec<Val>)], descrip
         l.sequence_number += 10;
     });
     governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
+    during_vote();
     e.ledger().with_mut(|l| {
         l.timestamp = now + 601;
         l.sequence_number += 10;

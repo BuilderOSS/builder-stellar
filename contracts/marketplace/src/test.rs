@@ -1552,10 +1552,49 @@ mod return_listing {
         );
         assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
         assert_eq!(mp.get_listing(&token_id), None);
+        // Returned already, it is skipped: nothing moves, no event.
+        mp.return_listing(&token_id);
+        assert!(fixture.env.events().all().events().is_empty());
+        assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+    }
+
+    /// A removal proposal names the listings open when it was drafted. A
+    /// seller who cancels one, or anyone who expires one, before it executes
+    /// cannot make it fail: the missing listing is skipped and the rest go
+    /// back.
+    #[test]
+    fn a_listing_cancelled_or_expired_before_execution_is_skipped() {
+        let fixture = fixture();
+        let env = &fixture.env;
+        let mp = &fixture.marketplace;
+        let kept = listed(&fixture, u64::MAX);
+        let cancelled = listed(&fixture, u64::MAX);
+        let expired = listed(&fixture, 2_000);
+        // Proposal 1 paused the market; the removal is drafted now.
+        mp.pause();
+        // During its vote the seller cancels one listing and another expires.
+        mp.cancel(&cancelled, &fixture.seller);
+        env.ledger().set_timestamp(2_000);
+        mp.expire(&expired);
+        // Executed: the listing still open goes back to its seller...
+        mp.return_listing(&kept);
         assert_eq!(
-            mp.try_return_listing(&token_id).err().unwrap().unwrap(),
-            MarketplaceError::ListingNotFound.into()
+            env.events().all().events().last().unwrap(),
+            &ListingCancelled {
+                token_id: kept,
+                seller: fixture.seller.clone(),
+            }
+            .to_xdr(env, &mp.address)
         );
+        // ...and the two that are gone are skipped, with no event.
+        for token_id in [cancelled, expired] {
+            mp.return_listing(&token_id);
+            assert!(env.events().all().events().is_empty());
+        }
+        for token_id in [kept, cancelled, expired] {
+            assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+            assert_eq!(mp.get_listing(&token_id), None);
+        }
     }
 
     /// A token no listing or pool records (sent before the Token refused

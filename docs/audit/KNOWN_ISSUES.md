@@ -24,7 +24,7 @@ This page was checked against `dev` at `f51d301`, which includes pull requests 1
 | [KI-16](#ki-16-indexer-allowlisting) | Indexer allowlisting | Indexer, read model |
 | [KI-17](#ki-17-archival-assumptions) | Archival assumptions | All contracts |
 | [KI-18](#ki-18-a-non-voting-module-that-will-not-release-its-tokens-stays-registered) | A non-voting module that will not release its tokens stays registered | Token |
-| [KI-19](#ki-19-removing-the-marketplace-can-be-delayed-by-its-listings) | Removing the Marketplace can be delayed by its listings | Marketplace, Token |
+| [KI-19](#ki-19-a-listing-made-during-the-vote-can-delay-removing-the-marketplace) | A listing made during the vote can delay removing the Marketplace | Marketplace, Token |
 | [KI-20](#ki-20-a-drive-holds-its-slug-until-its-deadline) | A drive holds its slug until its deadline | Manager |
 | [KI-21](#ki-21-claim-list-hashing) | Claim list hashing | ClaimMinter |
 
@@ -162,11 +162,11 @@ The views ignore malformed values from outside modules: a view that casts an eve
 
 **Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `dao_transfer`.
 
-## KI-19: Removing the Marketplace can be delayed by its listings
+## KI-19: A listing made during the vote can delay removing the Marketplace
 
-**Behaviour.** The Token refuses a token sent to the Auction or the Marketplace by anyone but the module itself (`ModuleCustodyClosed`, 7224), so a direct send can no longer keep either registered. The Auction gains tokens only by minting its own lot, which `cancel_auction` in the removal proposal handles whichever lot is running. The Marketplace still takes tokens through `list`, and `return_listing` names the listings known when the proposal is drafted. While transfers are unlocked, a member can list a token before the removal proposal's `pause` runs; and in any DAO, a seller can cancel a listing the proposal returns, which then fails `ListingNotFound`. Either makes the removal revert. Pausing the market in an earlier proposal stops new listings, and a cancelled listing delays the removal only once, because the next proposal leaves it out.
+**Behaviour.** The Token refuses a token sent to the Auction or the Marketplace by anyone but the module itself (`ModuleCustodyClosed`, 7224), and `return_listing` skips a listing that is gone, so neither a direct send nor a seller who cancels a listing can make a removal fail. The Auction gains tokens only by minting its own lot, which `cancel_auction` in the removal proposal handles whichever lot is running. The Marketplace still takes tokens through `list` until it is paused. In a DAO whose transfers are unlocked, a member can list a token while a removal proposal that pauses the market itself is open; the proposal does not return that listing, so the removal reverts. Pausing the market in an earlier proposal closes this: once it is paused no listing can be made, so a removal drafted after the pause names every listing there will be. A locked DAO is not exposed, because a holder cannot list under the lock.
 
-**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `list`, `cancel` and `return_listing`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `require_custody_entry`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
+**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `list` and `return_listing`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `require_custody_entry`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
 
 ## KI-20: A drive holds its slug until its deadline
 

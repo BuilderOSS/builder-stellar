@@ -740,6 +740,12 @@ impl MarketplaceContract {
     /// before unregistering it, which the Token refuses while the Marketplace
     /// holds tokens. Without it, one listing with a distant expiry would keep
     /// the Marketplace registered.
+    ///
+    /// A `token_id` with no listing is skipped: nothing moves and no event is
+    /// emitted. A listing its seller cancelled, or anyone expired, after the
+    /// proposal was drafted therefore cannot make that proposal fail. Once
+    /// the market is paused no listing can be made, so a removal drafted
+    /// after the pause names every listing there will be.
     pub fn return_listing(e: &Env, token_id: u32) {
         Self::require_current_layout(e);
         common::ttl::extend_instance(e);
@@ -749,7 +755,9 @@ impl MarketplaceContract {
         if !config.paused {
             panic_with_error!(e, MarketplaceError::NotPaused);
         }
-        let listing = Self::load_listing(e, token_id);
+        let Some(listing) = storage::get_listing(e, token_id) else {
+            return;
+        };
         storage::remove_listing(e, token_id);
         Self::token_transfer(
             e,

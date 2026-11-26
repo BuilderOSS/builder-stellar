@@ -51,7 +51,7 @@ A module that holds memberships without votes, such as the auction or the market
 
 If the clean-up you choose won't empty the module, the app says so and doesn't add the removal to your proposal.
 
-Nobody can send a membership directly to the auction or the market. Each takes memberships only through its own actions: the auction mints the membership it sells, and the market takes a membership when someone lists it. In a tribe whose memberships are not locked, a member can still list a membership while the vote is open, because the proposal pauses the market only when it runs. The removal then fails. To remove a market that members may still list on, pause it in an earlier proposal. A proposal that returns listings also fails if a seller cancels one of them first.
+Nobody can send a membership directly to the auction or the market. Each takes memberships only through its own actions: the auction mints the membership it sells, and the market takes a membership when someone lists it. In a tribe whose memberships are not locked, a member can still list a membership while the vote is open, because the proposal pauses the market only when it runs. The removal then fails. To remove a market that members may still list on, pause it in an earlier proposal. If the proposal returns listings, one that its seller cancels during the vote is skipped.
 
 Removal ends the module's allowance and any right it had to move memberships. A module that holds memberships with votes, such as a claims module, can be removed while holding them, and it keeps them.
 

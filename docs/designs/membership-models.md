@@ -146,8 +146,9 @@ all use the same registration, allowance, and upgrade path.
     someone sent the module directly. This replaces the earlier choice not to block removal because anyone
     could send the module an NFT. Since 25 November 2026 nobody can: the Token refuses a transfer or mint into
     a non-voting module unless the module makes the call (`ModuleCustodyClosed`), so `recover_token` is needed
-    only for a token sent before that. One risk remains: a listing made, or cancelled, while the removal
-    proposal is pending makes it fail, so pause the market in an earlier proposal. See
+    only for a token sent before that. `return_listing` skips a listing cancelled meanwhile. One risk remains:
+    a listing made while the removal proposal is pending makes it fail, so pause the market in an earlier
+    proposal. See
     `docs/SECURITY_MODEL.md`, "Known limitations".
   - Sending an NFT to a predicted module address can't block anything.
   - A wallet can't be registered at all (see "Only contracts can be modules"), so registration can't be used to

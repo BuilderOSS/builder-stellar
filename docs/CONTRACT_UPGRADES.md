@@ -300,6 +300,12 @@ from outside the Manager that expects tokens sent to it, such as a vault or a co
 non-voting custody, must pull them with `transfer_from` after the upgrade. Proposals and scripts that send a
 Treasury token straight to a module fail; list it through the Marketplace instead.
 
+**Removing the Marketplace.** From the Marketplace release in which `return_listing` skips a token with no listing,
+a seller who cancels a listing that a removal proposal names can no longer make it fail. On an older Marketplace
+the proposal still reverts with `ListingNotFound` (7705) there, so upgrade the Marketplace before removing it, or
+draft the removal again without that listing. Either way, pause the market in an earlier proposal when members
+may still list: a listing made before the removal's own `pause` runs is not among those it returns.
+
 ## Approving upgrade paths for DAO modules
 
 DAO modules keep directional approvals (`approve_upgrade(from, to)`) and no latest-only rule, because a DAO's
