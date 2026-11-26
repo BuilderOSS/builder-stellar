@@ -13,8 +13,8 @@ Sections 4 to 9 were written as the 0.3.0 change list: "today" means the layout 
 1. **Chain-complete operation.** Someone must be able to create and operate a DAO with nothing but public RPC, the
    contract addresses (or the Manager plus a slug), the published interfaces and their own keys. A new client
    must be able to resume an existing DAO from current or restorable chain state: setup, artwork, minting,
-   auctions, market, proposals through execution, upgrades and renewal. No frontend, indexer, database, hosted
-   API or event archive is required. The indexer is a read cache for discovery, feeds, galleries and history.
+   auctions, market, proposals through execution, upgrades, and renewal. No frontend, indexer, database, hosted
+   API or event archive is required. The indexer is a read cache for discovery, feeds, galleries, and history.
    The rule is about **operation**: every write, every executable flow and every input they need. Display text
    (the DAO profile, proposal descriptions, comments) is recoverable from events and the indexer only, and its
    absence never blocks an operation (see the exceptions below).
@@ -30,7 +30,7 @@ Sections 4 to 9 were written as the 0.3.0 change list: "today" means the layout 
 **Three explicit exceptions.**
 - *Merkle claims* need a proof computed off-chain from the claim list. Claims are merkle-only (the on-chain
   allowlist is removed). Every root is published with its full tree at an on-chain `tree_uri` (§ 4 Minter), so a
-  claimer needs the pinned file or the organizer, never our servers; the file is verified against the root before
+  claimer needs the pinned file or the organiser, never our servers; the file is verified against the root before
   any claim is offered. This is the one place an operation needs something no RPC read can give.
 - *Display text* (profile description, links and image; proposal descriptions; comments) lives in events. A fresh
   client with no event archive sees `profile_hash()` and `profile_seq()` only and shows "profile unavailable";
@@ -49,10 +49,10 @@ on-chain **id list** so a client can find every proposal and read its state from
 
 ## 2. What a DAO stores
 
-[TTL_ECONOMICS.md](TTL_ECONOMICS.md) lists every entry class with its storage class, size bound, TTL and renewer,
+[TTL_ECONOMICS.md](TTL_ECONOMICS.md) lists every entry class with its storage class, size bound, TTL, and renewer,
 and it must change with any storage layout change. In short: module instances renew on every call; artwork, live
-proposals, listings, claim lists, pool stock and the slug are DAO-owned and in the renewal sweep (§ 7); balances,
-delegations, checkpoints, refunds, vote records and claim records belong to their holders and renew when they act;
+proposals, listings, claim lists, pool stock, and the slug are DAO-owned and in the renewal sweep (§ 7); balances,
+delegations, checkpoints, refunds, vote records, and claim records belong to their holders and renew when they act;
 shared contract code is the platform's.
 
 ## 3. The main decisions
@@ -129,8 +129,8 @@ quorum snapshot per proposal; compaction C = byte-level codecs for attributes an
 - Public shapes of `get_property`, `get_items` (paged), `get_ipfs_group`, `get_attributes` and `properties_count`
   are unchanged. Add `property_headers()` returning at most 16 `(name, count)` pairs so a fresh client resumes
   setup without reading every item.
-- `add_properties` and `delete_and_recreate_properties` update names, counts, items and groups atomically with
-  today's authorization, validation rollback and reset semantics (reset removes the pages and re-adds in batches).
+- `add_properties` and `delete_and_recreate_properties` update names, counts, items, and groups atomically with
+  today's authorisation, validation rollback and reset semantics (reset removes the pages and re-adds in batches).
   New caps (§ 5): names ≤ 64 bytes, group `base_uri` ≤ 256, `extension` ≤ 16, items per property ≤ 1,024 (32 pages),
   groups ≤ 64; these were unvalidated before. Names containing `"`, `\` or a control character (U+0000–U+001F)
   are rejected with `InvalidName` so the on-chain JSON needs no escaping (D22); the token name is
@@ -150,7 +150,7 @@ Add the six missing SEP-50 functions (`name`, `symbol`, `token_uri`, `get_approv
 already uses (`Base::set_metadata` stores name and symbol today). `token_uri` forwards to Metadata, so the OZ
 `base_uri` is dead state: the constructor and `set_metadata(name, symbol)` drop the `uri` argument and store an
 empty OZ `base_uri` (D24; removing the field itself would mean bypassing OZ `Base` for ~8 bytes, skipped).
-Manager `create_dao`, bindings, `proposal-supported-calls` and the token actions follow. Operator
+Manager `create_dao`, bindings, `proposal-supported-calls`, and the token actions follow. Operator
 transfers run the same vote-checkpoint hook as direct transfers; approvals expire at their ledger and a single
 token approval clears on transfer (OZ behaviour). Add wiring getters `manager()`, `treasury()`, `auction()`,
 `marketplace()` over the existing instance keys, plus `minter() -> Address` over a new instance key `Minter`:
@@ -253,7 +253,7 @@ mint counter (no burn extension).
   contract change. Publishing the full allocation before claims is a deliberate transparency choice.
 - The Minter is a platform module: one instance and one code hash for all DAOs, renewed by the platform (§ 7);
   its per-DAO keys are DAO-owned and in the DAO's sweep. It adopts `common::upgrade` with the Manager admin as its
-  upgrade authority, is registered, approved and current in the registry like the modules, and gains `wasm_hash`,
+  upgrade authority, is registered, approved, and current in the registry like the modules, and gains `wasm_hash`,
   `version` (derived per S3) and `storage_version`; before 0.3.0 it had no upgrade path at all. The e2e
   suite upgrades the shared Minter and claims against an existing root afterwards.
 
@@ -263,7 +263,7 @@ mint counter (no burn extension).
   `ProposalId(sequence) -> id` (about 60 bytes, proposer-paid, the core's 120-day lifecycle TTL). Add
   `proposal_count()`, a bounded `proposal_ids(start, limit)` view and a full `proposal(id)` core getter (window,
   eta, state). Never a list in instance storage.
-- `queue`, `execute`, Treasury nested authorization, consumption-before-call and rollback are unchanged; the
+- `queue`, `execute`, Treasury nested authorisation, consumption-before-call, and rollback are unchanged; the
   caller supplies the preimage as today.
 - Id entries renew with the core on lifecycle calls; after completion they stay persistent and may archive.
 - Quorum checkpoints, `quorum(ledger)`, `cancel` rules: unchanged. Override `version()` per S3 and `name()` as
@@ -341,7 +341,7 @@ returned as `data:application/json;base64,<…>`.
 - URL rules as markdown links (`https`, `http`, `mailto`, `ipfs`); at most 8 links, labels ≤ 32 code points.
   Readers enforce these as well as writers: non-conforming links and images are dropped. The description renders
   through the existing sanitised `Markdown` component.
-- Editors validate the **serialized byte length** against `MAX_PROFILE_LENGTH` and show the remaining budget.
+- Editors validate the **serialised byte length** against `MAX_PROFILE_LENGTH` and show the remaining budget.
 - App verification: the indexer stores the `ProfileUpdated` string byte-for-byte with the emitted hash beside
   it; the app hashes those raw bytes and compares with `profile_hash()` (cached per contract for 60 s,
   invalidated on a new `seq`); mismatch or missing shows "Profile unavailable right now", never a block.
@@ -369,7 +369,7 @@ DAO-owned key can be **listed from chain state**.
 | Marketplace listings | `next_listing_id`, per-token `get_listing` |
 | Module-owned keys: ClaimMinter lists and escrow balances, Marketplace pools and stock pages | each registered module's `renewal_keys(cursor, limit)` (D43); an external module without it gets its instance and code renewed and a "not covered" warning |
 | Manager `SlugToDao(slug)`, `DaoSlug(token)` | the slug |
-| Shared WASM code, the Manager instance and its `Implementation(hash)` records | platform duty: `scripts/renew-code-ttl.mjs` (a `/platform` dashboard is in TODOS.md); `version()` and upgrades depend on them |
+| Shared WASM code, the Manager instance and its `Implementation(hash)` records | platform duty: `scripts/renew-code-ttl.mjs` and the `/platform` dashboard (§ 8); `version()` and upgrades depend on them |
 
 The reference rules live in the e2e test `protocol_runs_on_chain_state_only` (`dao_renewal_inventory`), which
 asserts that the list equals the DAO's persistent keys on the ledger minus the per-holder ones; `lib/chain-reads`
@@ -418,7 +418,7 @@ transaction-level operation, so a DAO reimburses by proposal if it wants to.
 
 Storage key shapes (the seven storage enums and the OZ `Owner`/`Balance` keys) thereby become published
 interfaces: they live in one module, `apps/web/src/lib/chain-reads/` (key shapes, renewal inventory, token layer
-derivation), used by the Renewal tab, `/api/render`, the artwork inspector and `scripts/renew-dao.mjs`; they are
+derivation), used by the Renewal tab, `/api/render`, the artwork inspector, and `scripts/renew-dao.mjs`; they are
 documented in `TTL_ECONOMICS.md` next to the bindings, and the § 9 enumeration test is the regression
 guard for any storage or OZ change.
 
@@ -473,17 +473,16 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
 - **Fee guard.** Before signing, if the transaction's maximum fee exceeds a threshold, stop and explain
   ("This action would pay ~N XLM in network fees, most of it to renew shared contract code…") instead of the SDK's
   u32 overflow error or a silent charge. **Implemented at 50 XLM, not the 10 XLM first planned:** testnet rent
-  measured at implementation is ~0.0098 XLM per KB-day, so creating a DAO already pays ~10 XLM of instance rent
-  (TTL_ECONOMICS.md). The 2× resource fee was stellar-sdk 17.1.0 `AssembledTransaction.sign` passing
-  `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; patched until SDK 17.4.0 shipped the
-  fix, and pinned by a regression test (`lib/fee/sdk-sign-fee.test.ts`).
+  measured at implementation is ~0.0098 XLM per KB-day, so creating a DAO already pays ~10 XLM of instance rent.
+  The 2× resource fee was a stellar-sdk 17.1.0 double count, patched until SDK 17.4.0 shipped the fix and pinned
+  by a regression test (`lib/fee/sdk-sign-fee.test.ts`); see [Fee guard](TTL_ECONOMICS.md#fee-guard).
 - **Platform admin dashboard:** `/platform` (`components/platform`, `lib/platform`). It renews the platform's keys
   (the Manager instance, every running code hash, its `Implementation(hash)` record and each `LatestImplementation(name)`,
   collected as `scripts/renew-code-ttl.mjs` does) with the same quote-before-sign sweep as the Renewal tab, lists every
   tribe's storage worst first, and runs the registry and factory actions for the Manager admin. The script stays as the
   command-line path.
 - **`TTL_ECONOMICS.md` is the storage and TTL reference** (D17): for every module and key, the storage class,
-  contents, size bound, TTL target and threshold, who renews it and the measured cost. It changes with any storage
+  contents, size bound, TTL target, and threshold, who renews it and the measured cost. It changes with any storage
   layout change.
 
 ## 9. Tests
@@ -497,7 +496,7 @@ upgrade a module and read `version()`. Renewal and restoration are transaction-l
 env cannot submit; the fresh-client acceptance below is meant to cover them.
 
 **Fresh-client acceptance: not built yet.** The plan is an automated run over the bindings and RPC against a local
-network, with our frontend, database, indexer and API off: start a DAO and leave setup, proposals and listings
+network, with our frontend, database, indexer, and API off: start a DAO and leave setup, proposals and listings
 outstanding; then a second process with only network settings, a Manager and slug or token address, and signers
 discovers the wiring, resumes artwork, renders a token, lists and executes an outstanding proposal from its
 preimage (exception 3), operates auctions and listings, claims with a supplied proof, and runs the renewal sweep and
@@ -510,7 +509,7 @@ a restore. Until it exists, `protocol_runs_on_chain_state_only` and
 - Key-collision guard per module: the `ScVal` of every variant of the module's key enums, with dummy arguments,
   is disjoint by `(first symbol, length)` from the OZ key enums that module links.
 - Namespace walk (D30, e2e `every_protocol_storage_key_is_namespaced`): after artwork, a launch with auction and
-  marketplace, Minter claims, both listing kinds and a governed rename, every key the Manager, the Minter and the
+  marketplace, Minter claims, both listing kinds, and a governed rename, every key the Manager, the Minter and the
   six modules own is `("builder", variant)` or a listed OZ shape (`common::testutils::OZ_KEY_SHAPES`). The
   namespaced key XDR is pinned in Rust (`common` `namespaced_key_xdr_is_pinned`) and in the app
   (`storage-key.test.ts`).
@@ -531,18 +530,18 @@ the renewal inventory enumerates **every** persistent key the e2e flow wrote (as
 
 **Web and indexer.** Profile parse, sanitise (disallowed schemes, >8 links, long labels dropped) and verify;
 degraded states; `lib/chain-reads/` layer derivation against a fixture with non-ASCII names (pins the percent-encoding rule);
-`/api/render` and `/api/token` with the indexer off; tree file build, upload, fetch and root recomputation
+`/api/render` and `/api/token` with the indexer off; tree file build, upload, fetch, and root recomputation
 (mismatched and unreachable files refuse claims); proposal list from chain; renewal batching
 and cost display; Goldsky unit tests and the migration cycle with scenarios (seq ordering, version derivation).
 
 ## 10. Budget and acceptance gates
 
 Record the source commit, network resource settings and fixtures, then measure baseline and candidate: total
-key+value bytes and entry counts by storage class; instance size; footprint keys, read/write bytes, CPU and event
+key+value bytes and entry counts by storage class; instance size; footprint keys, read/write bytes, CPU, and event
 bytes; simulated fees and rent for initial write, ordinary touch, threshold renewal, archive restoration; and
 lifecycle totals (create, add artwork, mint, claim, govern, renew, restore). Fixtures: 0/1/16 properties, small
 and large catalogues, maximum settings and profile, 30-item adds, mint batch boundaries, proposal action and
-description boundaries with nested Treasury authorization.
+description boundaries with nested Treasury authorisation.
 
 Gates: a compaction ships only with measured benefit in its target dimension; `token_uri` for a 256-byte token
 name and 16 maximum-length (64-byte) traits, and each per-trait getter at 256-byte base URIs, stay within the
@@ -576,7 +575,7 @@ within budget and their measured per-call fees are published.
 | D15 | **Superseded by D43.** The Minter is a required shared platform module; the launch config pins it (`minter: Address`) and the token records it | Owner: the Minter is central to the protocol; the pin keeps the pre-launch review property | Optional per-DAO minter (`enable_minter`) |
 | D16 | Renewal is a Manage tab with expiry dates, a duration choice and a simulated quote before signing; a platform admin dashboard does the same for platform-owned state | Owner's ask; a DAO decides how much to pay and for how long with the cost in front of it | Blind "renew everything" button; scripts only |
 | D17 | `TTL_ECONOMICS.md` is rewritten as the storage, TTL and cost reference and gates completion | Owner's ask; the numbers come from § 10 measurements | Leave it as a policy summary |
-| D18 | Every merkle root is published with its full tree at an on-chain `tree_uri` (IPFS), in the Uniswap merkle-distributor shape with an explicit algorithm header; consumers recompute the root before offering claims | Common practice (Uniswap-style files on IPFS; Sablier and thirdweb store the URI beside the root); removes the organizer as a single point of failure for ~60 bytes per round | Organizer-supplied proofs only; OZ `StandardMerkleTree` dump (no per-claim proofs, EVM hashing); leaves in events (16 KiB limit) |
+| D18 | Every merkle root is published with its full tree at an on-chain `tree_uri` (IPFS), in the Uniswap merkle-distributor shape with an explicit algorithm header; consumers recompute the root before offering claims | Common practice (Uniswap-style files on IPFS; Sablier and thirdweb store the URI beside the root); removes the organiser as a single point of failure for ~60 bytes per round | Organiser-supplied proofs only; OZ `StandardMerkleTree` dump (no per-claim proofs, EVM hashing); leaves in events (16 KiB limit) |
 | D19 | Artwork items chunked per property, IPFS groups in one vector, attributes paged 64 tokens per key, per-holder OZ entries out of the sweep | Makes the DAO sweep one transaction (≈ 60–80 keys against a 400-entry limit) at ~0.0035 XLM per `add_properties` rewrite and ~0.0004 XLM per mint | Per-key layouts with a seven-transaction sweep; a platform renewal service as the only path; whole catalogue in the instance (64 KB cliff) |
 | D20 | `/platform` dashboard deferred to its own wave; acceptance is automated tests, not a CLI; one `chain-reads` module owns key shapes; base64 in metadata | Smaller first release; one owner for key shapes | Keep the dashboard; a published CLI; separate libs |
 | D21 | Items in pages of 32 per property (≤ 32 pages) | One vector per property writes 160 KB at a 400-item cap, over the 132 KB per-transaction limit; 64-item pages measured 155,032 bytes, 32-item pages 89,496 | One vector with an 80-item cap; one key per item |

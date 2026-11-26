@@ -13,7 +13,7 @@ When someone outbids you, your bid comes back to your wallet automatically. You 
 There are three cases:
 
 - **You are outbid.** Your full bid goes back to your wallet in the same transaction as the new, higher bid. This is the usual case.
-- **The automatic transfer fails.** For example, your wallet can't receive the payment asset at that moment. The auction carries on, and the amount is held for you as a waiting refund. It stays held until you claim it.
+- **The automatic transfer fails.** For example, your wallet can't receive the payment asset at that moment. The auction continues, and the amount is held for you as a waiting refund. It stays held until you claim it.
 - **The tribe cancels the auction.** A tribe can cancel a running auction by proposal. The top bid is refunded in the same way, and the token goes to the tribe's [Treasury](/reference/glossary#treasury).
 
 The winning bid is not refunded. When the auction is settled, it goes to the Treasury.
@@ -28,10 +28,10 @@ The winning bid is not refunded. When the auction is settled, it goes to the Tre
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  When a new bid is placed, the Auction contract tries to transfer the previous top bid back to that bidder. If the transfer succeeds, it emits `BidRefunded`. If it fails, the contract adds the amount to a pending refund for that bidder and emits `RefundDeferred`. A failed transfer moves nothing, so no funds are lost.
+<Disclosure title="Contracts, fees, and waits">
+  When a new bid is placed, the Auction contract tries to transfer the previous top bid back to that bidder. If the transfer succeeds, it emits `BidRefunded`. If it fails, the contract adds the amount to a pending refund for that bidder and emits `RefundDeferred`. A failed transfer moves nothing, and the amount stays in the Auction contract until you claim it.
 
-  **Claim refund** calls `withdraw_refund` on the Auction contract. It needs your signature, takes no amount and pays out the whole pending balance to your wallet. It emits `RefundWithdrawn`. You can check your balance at any time with `pending_refund`.
+  **Claim refund** calls `withdraw_refund` on the Auction contract. It needs your signature, takes no amount, and pays out the whole pending balance to your wallet. It emits `RefundWithdrawn`. You can check your balance at any time with `pending_refund`.
 
   A pending refund is stored as your own entry on chain. Like other stored data on Stellar, it has a lifetime and can be archived if no one touches it for a long time. The amount stays recorded. If your entry was archived, the app restores it first, which asks for one extra wallet signature and its own network fee. See [Storage and renewal](/concepts/storage-and-renewal/).
 

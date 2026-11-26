@@ -14,7 +14,7 @@ Voting is section 3 of **Build a tribe**. You choose how votes are counted and h
    <Shot id="create/voting/01" alt="The How are votes counted? choices with Token-weighted selected and NQG marked Soon" />
 
 2. Under **How fast should decisions happen?**, choose a pace. Each pace sets five rules: the wait before voting opens, how long voting stays open, the [safety delay](/reference/glossary#safety-delay), the [quorum](/reference/glossary#quorum), and the votes needed to propose.
-   - **Super fast** (Testnet only): votes open after 5 minutes and run 10 minutes, a 5-minute safety delay, 1% quorum, and 1 vote to propose. It also sets auctions to 5 minutes, with 1 minute added by a late bid. Use it to try the whole cycle on testnet.
+   - **Super fast** (marked Testnet): votes open after 5 minutes and run 10 minutes, a 5-minute safety delay, 1% quorum, and 1 vote to propose. It also sets auctions to 5 minutes, with 1 minute added by a late bid. Use it to try the whole cycle on testnet.
    - **Fast**: votes open after 5 minutes and run 1 hour, a 10-minute safety delay, 5% quorum, and 1 vote to propose.
    - **Balanced** (Recommended): votes open after 1 day and run 3 days, a 1-hour safety delay, 10% quorum, and 1 vote to propose.
    - **Deliberate**: votes open after 2 days and run 7 days, a 1-day safety delay, 20% quorum, and 2 votes to propose.
@@ -41,18 +41,18 @@ Check the votes needed to propose against your founder tokens. If the founders h
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   Nothing in this section is sent to the network yet. Your choices are saved in the draft in this browser.
 
-  When you create the tribe, these rules are set on its governor contract (the contract for proposals and votes): voting delay, voting period, queue delay (the safety delay), quorum in basis points (1,000 basis points is 10%), and the proposal threshold. The governor reads voting power from the tribe's token, or from the vote source you chose.
+  When you create the tribe, these rules are set on its Governor contract (the contract for proposals and votes): voting delay, voting period, queue delay (the safety delay), quorum in basis points (1,000 basis points is 10%), and the proposal threshold. The Governor reads voting power from the tribe's token, or from the vote source you chose.
 
-  The contracts accept each timing from 5 minutes (300 seconds) to 30 days (2,592,000 seconds). After launch, the governor's admin is the tribe's treasury, so only a passed proposal can change a rule.
+  The contracts accept each timing from 5 minutes (300 seconds) to 30 days (2,592,000 seconds). After launch, the Governor's admin is the tribe's Treasury, so only a passed proposal can change a rule.
 </Disclosure>
 
 ## If something goes wrong
 
 - **"Voting delay must be at least 5 minutes"**, or a similar message for the voting period or queue delay. Set the timing to at least 5 minutes and no more than 30 days.
-- **"Proposal threshold must be at least 1 vote"**. Enter a whole number of 1 or more in **Votes needed to propose**.
+- **An error under Votes needed to propose.** Enter a whole number of 1 or more.
 - **Super fast is missing.** It is offered only on testnet.
 - **You don't see a Vote source field.** No other vote source is approved on this network, so votes are token-weighted.
 - **The vote source shows "No longer approved".** The platform has withdrawn its approval of the source in your draft. Choose another source, or the tribe's token.

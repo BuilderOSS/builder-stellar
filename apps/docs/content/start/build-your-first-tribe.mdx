@@ -27,7 +27,7 @@ The form saves your progress as a draft in this browser, under **Your drafts**. 
 
 ## 2. Set it up
 
-After creation, the tribe is in **Setup**. It exists on the network, but nobody can join yet. The **Setup** page lists what is left to do, in order.
+After creation, the tribe is in **Setup**. It exists on the network, but nobody can bid, trade, propose, or vote until it launches. The **Setup** page lists what is left to do, in order.
 
 1. **Add your artwork.** The layers every token is drawn from. Do this first, because each token gets its traits when it is created. See [Set up: artwork](/guides/setup/artwork).
 2. **Mint founder tokens.** At least one token, so someone can vote once you launch. See [Set up: founders](/guides/setup/founders).
@@ -45,14 +45,14 @@ Anyone can see the Setup page and its progress. Only the launch admin can comple
 
 When every step is done, the Setup page shows **Ready to launch**. Choose whether to **Start auctions** and **Open the market** at launch, if the tribe has them. Then select **Launch**, followed by the tribe's name, and approve the transaction.
 
-At launch, your setup admin rights pass to the tribe's treasury. After that, every change goes through a proposal that members vote on. Read [Setup versus launched](/concepts/setup-and-launch) before you launch. See [Launch your tribe](/guides/setup/launch).
+At launch, control of every setting passes from you, the launch admin, to the tribe's treasury. After that, every change goes through a proposal that members vote on. Read [Setup versus launched](/concepts/setup-and-launch) before you launch. See [Launch your tribe](/guides/setup/launch).
 
 <Callout
   title="Launch can't be undone"
   description="After launch, no single wallet can change the tribe's settings, artwork, or treasury. Check every setting in Setup first."
 />
 
-Instead of launching straight away, you can open an **assurance drive**. The tribe then launches only if enough people commit to join before a deadline. If the deadline passes first, everyone can get a refund. See [Assurance drives](/guides/setup/assurance-drives).
+Instead of launching directly, you can open a **launch drive**, also called an assurance drive. The tribe then launches only if enough people commit to join before a deadline. If the deadline passes first, everyone who paid can get a refund. See [Assurance drives](/guides/setup/assurance-drives).
 
 <Shot id="start/build-your-first-tribe/03" alt="The launch card with the Start auctions choice and the Launch button" />
 
@@ -60,7 +60,7 @@ Instead of launching straight away, you can open an **assurance drive**. The tri
 
 Once the tribe is live, any member with enough votes can write a proposal from **Proposals** by selecting **New proposal**. A good first proposal is small and clear, such as updating the tribe's profile or paying a contributor.
 
-Members vote during the voting period. If the proposal passes, it waits for the [safety delay](/reference/glossary#safety-delay). After that, any wallet can queue and execute it.
+Members vote during the voting period. If the proposal passes, any wallet can queue it, which starts the [safety delay](/reference/glossary#safety-delay). When the delay ends, any wallet can execute it. The wallet that queues or executes pays the network fee.
 
 See [Write a proposal](/guides/proposals/write), [Vote](/guides/proposals/vote), and [Queue and execute](/guides/proposals/queue-and-execute).
 
@@ -68,11 +68,11 @@ See [Write a proposal](/guides/proposals/write), [Vote](/guides/proposals/vote),
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
 
 - **Create tribe** sends one transaction to the Tribe Builder Manager contract. It deploys the tribe's own token, metadata, governor, and treasury contracts, plus the auction, market, and claims modules you chose. The launch admin is the admin of each one during Setup.
 - **Artwork** and **founder tokens** are separate transactions. A later transaction that fails does not undo earlier ones.
-- **Launch** is one transaction. It checks the setup, makes every contract live, hands every admin role to the treasury, and claims the tribe's link. If any check fails, nothing changes.
+- **Launch** is one transaction. It checks the setup, makes every contract live, passes every admin role to the treasury, and claims the tribe's link. If any check fails, nothing changes.
 - Each transaction has a network fee in XLM. Creation costs the most, because it stores new contracts.
 - Everything a tribe does is public on the network, including during Setup.
 
@@ -80,9 +80,9 @@ See [Write a proposal](/guides/proposals/write), [Vote](/guides/proposals/vote),
 
 ## If something goes wrong
 
-- **Creation did not confirm.** Your settings are saved. Trying again uses the same addresses, and the app checks for the earlier transaction before it signs a new one.
-- **The link is taken.** Several tribes in Setup can ask for the same link, and the first to launch gets it. Pick a new link on the Setup page.
-- **Founder tokens have no traits.** Artwork must be added before founder tokens are minted. See [Set up: artwork](/guides/setup/artwork).
+- **Creation did not confirm.** Your settings are saved. Trying again uses the same addresses, and the app checks for the earlier transaction before it asks you to sign a new one.
+- **The link is taken.** Several tribes in Setup can ask for the same link. The first to launch, or to open a launch drive, gets it. Pick a new link on the Setup page.
+- **Founder tokens have no traits.** They were minted before the artwork was added. The **Artwork** page lists tokens without traits, and you can seed them there. See [Set up: artwork](/guides/setup/artwork).
 - **Launch is blocked.** The Setup page says why, in one sentence, next to the launch button.
 
 ## Related

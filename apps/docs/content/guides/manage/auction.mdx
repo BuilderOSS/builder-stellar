@@ -11,7 +11,7 @@
 
 ## Steps
 
-1. **Open Auction.** Choose **Manage** in the tribe's navigation, then **Auction**. The **Auction now** card shows the current token and whether it is settled, a **Running**, **Paused** or **Not launched yet** label, and the current settings.
+1. **Open Auction.** Choose **Manage** in the tribe's navigation, then **Auction**. The **Auction now** card shows the current token and whether it is settled, a **Running**, **Paused**, or **Not launched yet** label, and the current settings.
 
    <Shot id="manage/auction/01" alt="The Auction now card with the Running label and the current auction settings" />
 
@@ -24,7 +24,7 @@
 
    <Shot id="manage/auction/02" alt="The Change auction settings card with a new starting price and the Changed label" />
 
-3. **Choose what happens to the current auction.** After launch, two more choices appear. **Also cancel the current auction** refunds the top bid and sends the token to the Treasury. **When the changes are done** offers **Resume auctions**, so bidding restarts with the new settings, or **Keep auctions paused**, to resume later with its own vote.
+3. **Choose what happens to the current auction.** After launch, more choices appear. While an auction is running and not yet settled, **Also cancel the current auction** refunds the top bid and sends the token to the Treasury. **When the changes are done** offers **Resume auctions**, so bidding restarts with the new settings, or **Keep auctions paused**, to resume later with its own vote.
 
    <Shot id="manage/auction/03" alt="The Also cancel the current auction checkbox and the When the changes are done choice" />
 
@@ -42,8 +42,8 @@
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  Each setting is changed on the tribe's Auction contract: `set_reserve_price`, `set_min_bid_increment`, `set_duration` and `set_time_buffer`. The contract accepts these only while auctions are paused. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch they run only as part of a proposal that passes and is executed.
+<Disclosure title="Contracts, fees, and waits">
+  Each setting is changed on the tribe's Auction contract: `set_reserve_price`, `set_min_bid_increment`, `set_duration`, and `set_time_buffer`. The contract accepts these only while auctions are paused. During setup, only the launch admin can call them. At launch, control passes to the tribe's Treasury, so after launch they run only as part of a proposal that passes and is executed.
 
   While auctions are paused, nobody can bid. The current auction can still be settled. Resuming starts a new auction if the last one was settled. Cancelling the current auction refunds the top bidder and sends the token to the Treasury.
 

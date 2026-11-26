@@ -7,7 +7,7 @@ The tribe profile is what people see first: the name, symbol, image, description
 - **During setup**, the [launch admin](/reference/glossary#launch-admin) changes the profile directly. Connect the launch admin wallet. Each change is a direct transaction.
 - **After launch**, changes require DAO governance. Any connected wallet can add them to a proposal draft, and they apply only if members vote for them. To submit the proposal, you need enough votes. See [Write a proposal](/guides/proposals/write/).
 - Connect your wallet on the tribe's network. Testnet is the live network today.
-- Have the new image ready, if you are changing it: a PNG, JPEG, WebP or GIF file.
+- Have the new image ready, if you are changing it: a PNG, JPEG, WebP, or GIF file.
 
 ## Steps
 
@@ -23,7 +23,7 @@ The tribe profile is what people see first: the name, symbol, image, description
 
    <Shot id="manage/profile/03" alt="The Name and Symbol fields with the Changed label and Undo button" />
 
-4. **Change the description and links.** Write in **Description**, which accepts Markdown. Under **Links**, choose **Add a link**, then enter a label, such as "Website", and an address. You can add up to 8 links. Each address starts with https://, http://, mailto: or ipfs://. The description, links and image together can use up to 4,096 bytes.
+4. **Change the description and links.** Write in **Description**, which accepts Markdown. Under **Links**, choose **Add a link**, then enter a label, such as "Website", and an address. You can add up to 8 links. Each address starts with https://, http://, mailto:, or ipfs://. The description, links, and image together can use up to 4,096 bytes.
 
    <Shot id="manage/profile/04" alt="The Description field and two labelled links under Links" />
 
@@ -41,8 +41,8 @@ The **Link** field sets the tribe's address, /dao/ followed by the link. During 
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  The name and symbol are stored on the tribe's Token contract (`set_metadata`). The description, links and image are stored together as one profile on the tribe's Metadata contract (`update_profile`). The image itself is uploaded first, and the profile stores its address. The link is stored by the platform's Manager contract (`change_slug`).
+<Disclosure title="Contracts, fees, and waits">
+  The name and symbol are stored on the tribe's Token contract (`set_metadata`). The description, links, and image are saved together as one profile by the tribe's Metadata contract (`update_profile`), which publishes the profile in an event and stores its hash. The image itself is uploaded first, and the profile holds its address. The link is stored by the platform's Manager contract: `update_pending_slug` during setup, and `change_slug` after launch.
 
   The profile update names the revision it replaces. If someone else changes the profile first, the update fails, so one change can't overwrite another by accident.
 
@@ -57,7 +57,7 @@ The **Link** field sets the tribe's address, /dao/ followed by the link. During 
 - **"The profile changed since this page loaded."** Someone changed the profile after you opened the page. Reload the page, review the current profile, and make your changes again.
 - **"Profile exceeds the 4,096-byte limit."** Shorten the description or remove a link.
 - **"Upload the new image to include it."** You chose an image but didn't upload it. Choose **Upload image**.
-- **"The current profile can't be shown right now."** The app couldn't check the profile against the chain. Saving a new description, links or image replaces the current one, so check carefully before you continue.
+- **"The current profile can't be shown right now."** The app couldn't check the profile against the chain. Saving a new description, links, or image replaces the current one, so check carefully before you continue.
 - **A link field shows an error.** Give each link a label of up to 32 characters, and start the address with one of the accepted prefixes.
 
 ## Related

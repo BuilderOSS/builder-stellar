@@ -29,18 +29,18 @@ You don't need this page to sell on the tribe's market. The sell form asks for i
 
    <Shot id="members/approvals/04" alt="The approval end field filled in, with the approximate end date below it" />
 
-5. **Review, then sign and send.** Choose **Review** to see the summary. It names the spender, the token and the end, and says ownership doesn't change. Choose **Sign and send**, then sign in your wallet.
+5. **Review, then sign and send.** Choose **Review** to see the summary. It names the spender, the token, and the end, and says ownership doesn't change. Choose **Sign and send**, then sign in your wallet.
 
    <Shot id="members/approvals/05" alt="The approval review with the summary and the Sign and send button" />
 
 ### Cancel an approval
 
-Choose **Cancel token approval** ("Remove permission to transfer this token"), then **Review** and **Sign and send**. It removes the token's approval at once. The page can't show the current spender, so you can cancel without knowing it.
+Choose **Cancel token approval** ("Remove permission to transfer this token"). The card shows the spender approved now, under **Approved now**. Choose **Review**, then **Sign and send**. It removes the token's approval at once. If no one is approved, the card says so and there is nothing to cancel.
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
-  **Approve** calls `approve` on the tribe's Token contract, with you as owner, the spender, the token and the expiration ledger. Each token has one single-token approval at a time, so a new approval replaces the old one. It is cleared when the token moves, and it ends at the expiration ledger.
+<Disclosure title="Contracts, fees, and waits">
+  **Approve** calls `approve` on the tribe's Token contract, with you as owner, the spender, the token, and the expiration ledger. Each token has one single-token approval at a time, so a new approval replaces the old one. It is cleared when the token moves, and it ends at the expiration ledger.
 
   **Cancel token approval** calls `approve` again with an expiration of 0, which removes the single-token approval. It doesn't change collection-wide operator approvals (`approve_for_all`), which this page doesn't create.
 

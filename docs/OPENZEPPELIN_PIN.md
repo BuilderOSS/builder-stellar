@@ -4,8 +4,9 @@ The contracts use OpenZeppelin's [`stellar-contracts`](https://github.com/OpenZe
 at git commit `fbfde388e1b72afa93d6b1c922067879b20e81db` (`rev = "fbfde38"` in
 [`Cargo.toml`](../Cargo.toml); `Cargo.lock` records the full commit). That commit is on
 OpenZeppelin's `main` branch and is not a tagged release. This page records what the contracts use
-from it, how it differs from the nearest tags, why it stays pinned for now, and which OpenZeppelin
-audits cover it. Checked on 25 November 2026 by reading the diffs between `fbfde38` and each tag.
+from it, how it differs from the nearest tags, why it stays pinned for now, which OpenZeppelin
+audits cover it, and why it is outside the audit scope. Checked on 25 November 2026 by reading the
+diffs between `fbfde38` and each tag.
 
 ## What the contracts use
 
@@ -63,15 +64,43 @@ Either move changes every contract hash and needs its own release. The pin there
 
 ## Audit coverage
 
-OpenZeppelin publishes its audits in the repository's `audits/` folder.
+OpenZeppelin publishes its audits in the repository's `audits/` folder. Checked on 25 November 2026
+by reading the reports and `git diff` over the folders of the modules the contracts use (`governor`,
+`votes`, `non_fungible`, `pausable`, and the macros).
 
 - **v0.7.0 audit** (`audits/Stellar Contracts Library v0.7.0 Audit.pdf`): a diff audit of HEAD
-  `239a2a7` (`v0.7.0-rc.1`) against base `82f9711` (`v0.6.0`). `239a2a7` is an ancestor of `fbfde38`.
+  `239a2a7` (`v0.7.0-rc.1`) against base `82f9711` (`v0.6.0`). The report adds that the fixes for its
+  findings were all merged at commit `d55dd37`, and names the pull request for each fix. `239a2a7` and
+  `d55dd37` are both ancestors of `fbfde38`.
 - **v0.8.0 audit** (`audits/Stellar Contracts Library v0.8.0 Audit.pdf`, added in `v0.8.0`): a diff
   audit of the changes "between base snapshot fbfde38 and target snapshot a5bd8cb", and a second range
   from `9c5e279` to `2128f11`. It reviews changes made after `fbfde38`; the governor and
   `non_fungible` storage files are in its scope.
 
-No published report covers the changes from `239a2a7` to `fbfde38` as a range. The external audit
-should therefore include the modules above at `fbfde38`, unless OpenZeppelin confirms that a published
-review covers them.
+### Changes the reports do not name
+
+From `239a2a7` to `d55dd37`, the modules the contracts use change in the fix pull requests the
+v0.7.0 report names (the governor's dynamic quorum, queueing, the `vote_snapshot` rename, and the
+quorum fixes), and in four other commits:
+
+- `684bb89` re-exports the governor's storage functions from its module. No behaviour changes.
+- `20981b1` reformats one `match` arm in `votes`. No behaviour changes.
+- `b20a206` adds `#[contracttrait]` to the `Pausable` trait. The Auction's
+  `#[contractimpl(contracttrait)] impl Pausable` relies on it to export the trait's functions.
+- `96a2152` hashes a proposal description with `to_bytes` instead of `to_xdr`, in the governor's
+  `propose` and `cancel` and in the trait's default `get_proposal_id`. The Governor here overrides
+  `propose` and `cancel` and hashes descriptions with `to_bytes` itself; it uses the default
+  `get_proposal_id`.
+
+From `d55dd37` to `fbfde38`, leaving out doc comments, tests, READMEs, and Cargo metadata, the only
+source changes in those modules are change A and change B above. Both make the module reject more
+inputs. `votes`, `pausable`, and the macros have no code change in that range. The `non_fungible`
+extensions that changed (burnable, consecutive, royalties) are not used.
+
+## Decision: the OpenZeppelin modules are out of the audit scope
+
+The OpenZeppelin modules are outside the scope of the external audit. The pin stays frozen at
+`fbfde38`, and the project relies on OpenZeppelin's published audits for the modules' own code. The
+contracts' use of those modules stays in scope, because that is this repository's code: how the
+Governor, Token, and Auction call them, and the checks they add around them, such as the Governor's
+own voting-period check. The changes listed above are the ones the published reports do not name.

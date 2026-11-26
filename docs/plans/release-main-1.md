@@ -29,7 +29,7 @@ so no `migrate()` step.
 
 ## Decisions needed before step 1
 
-1. **Version numbers: decided, Manager, Governor and Metadata 0.5.0** (`releases/contracts.json`); the other
+1. **Version numbers: decided, Manager, Governor, and Metadata 0.5.0** (`releases/contracts.json`); the other
    five stay 0.4.0. A version is a registry label, not part of the build (`version()` reads the Manager's
    registry), so 0.5.0 is byte for byte the code dev runs today. The dev Manager keeps its own records,
    which label the same hashes 0.4.0; records are write-once and dev is a test environment, so that stays.
@@ -48,7 +48,7 @@ so no `migrate()` step.
 
 ## Phase 1: prepare on `dev` (a normal PR, docs in the same PR)
 
-1. Done: Manager, Governor and Metadata are 0.5.0 in `releases/contracts.json`, with release notes for
+1. Done: Manager, Governor, and Metadata are 0.5.0 in `releases/contracts.json`, with release notes for
    members in `apps/web/src/lib/release-notes.ts`.
 2. Done: the build reproduces the dev Manager's hashes exactly. Release hashes: Manager `ab1d0d17…`,
    Governor `8bc3a922…`, Metadata `a378c228…`.
@@ -56,7 +56,7 @@ so no `migrate()` step.
    (fixtures fetched by hash, `contracts/e2e/fixtures/README.md`). It checks that the other five modules are
    byte-identical to production, then runs, in order: pause; the Manager upgrade, refused before its 720
    ledgers and done after; stored tribes and slugs still read; Governor and Metadata 0.5.0 registered,
-   approved and made current; no creation while paused; unpause; a tribe left in setup launches on its
+   approved, and made current; no creation while paused; unpause; a tribe left in setup launches on its
    0.4.0 Governor; a new tribe gets 0.5.0 and votes by token; a live tribe upgrades Governor and Metadata in
    one proposal through the Treasury (same art, stale `from` refused) and then passes a quorum change on
    the new code. Production already records its Manager as 0.4.0, so the upgrade script needs no
@@ -67,7 +67,7 @@ so no `migrate()` step.
    promoted build would pick the newer dev Manager artifact (`docs/DEV_DEPLOYMENT.md`).
    `builder-stellar-dev` pins `deploys/dev-testnet-manager.json`.
 5. Docs in the same PR: `docs/CONTRACT_UPGRADES.md` (this release as the worked example), the upgrades
-   concept page and release notes on docs.tribes.build, `TODOS.md`.
+   concept page and release notes on docs.tribes.build, and `TODOS.md`.
 
 ## Phase 2: rehearse on a copy of production (done 2026-11-21, e2e keys only)
 
@@ -108,7 +108,7 @@ Production runs its own deployment, separate from dev.tribes.build, so each piec
 
 | Piece | Production today | Release impact |
 |---|---|---|
-| Contracts | All 8 hashes rebuild from `c20c822` | Only Manager, Governor and Metadata change |
+| Contracts | All 8 hashes rebuild from `c20c822` | Only Manager, Governor, and Metadata change |
 | Tribes | 9; all on Governor `41ad48e8…` and Metadata `44a0c4b6…` (`manager.module_versions`) | The two approvals in phase 5 cover every tribe |
 | Vercel `builder-stellar-web` (team Nouns Builder) | Builds `main` from `apps/web` | The only new variables `dev` reads: `MANAGER_DEPLOYMENT_FILE` (now set), `NEXT_PUBLIC_DOCS_URL` (defaults to docs.tribes.build), and two walkthrough-only ones that must stay unset there. `NEXT_PUBLIC_SITE_URL` falls back to `https://tribes.build`, as today |
 | Database (Neon `production`) | Migrations 0001 to 0010 | The ten files on `dev` match production's recorded checksums byte for byte, so `migrate.sh` applies 0011 only |
@@ -161,7 +161,7 @@ Done 2026-11-21:
    Approve any other `from` hash found in phase 3 with `approve_upgrade`.
 4. Announce Governor only: `set_latest_implementation --name Governor --wasm_hash 8bc3a922…` (Metadata
    stays unannounced, decision 1).
-5. New tribes: `set_current_implementations` with Governor `8bc3a922…`, Metadata `a378c228…` and the five
+5. New tribes: `set_current_implementations` with Governor `8bc3a922…`, Metadata `a378c228…`, and the five
    unchanged hashes (Token `3f36abc9…`, Auction `8130c851…`, Treasury `597a9e04…`, Marketplace
    `f28ebc99…`, ClaimMinter `e1c18db9…`).
 6. Verify read-only: the Manager's `version` and `wasm_hash`; `latest_pointer --name Governor`;
@@ -187,7 +187,7 @@ Done 2026-11-21:
 | 5.2 | Manager 0.5.0 (`ab1d0d17…`) after its 720-ledger notice; tribes and slugs resolved |
 | 5.3 to 5.5 | Governor and Metadata 0.5.0 registered and approved from `41ad48e8…` and `44a0c4b6…`; Governor announced; current hashes set |
 | 6.1 | `dev` → `main` (#114) merged by an admin, as `main` requires one review; Vercel `dpl_5er9v1Jv…` logged "Web deployment set to manager:CCLBJAC5… (builder-testnet-manager.json)", with the test wallet absent |
-| 6.2 | Smoke test: health, every tribe page and Manage → Contract upgrades answer; the indexer had each event within about 2 seconds |
+| 6.2 | Smoke test: health, every tribe page, and Manage → Contract upgrades answer; the indexer had each event within about 2 seconds |
 | 6.3 | Factory unpaused, `12ea377d…`. `create_dao` was proven by **simulation** with `dev`'s parameters (`DaoCreated`), so no permanent test tribe sits on production |
 | 6.4 | Freighter release check on a real device: **to do by hand** |
 | 6.5 | `builder-auctions` upgraded Governor and Metadata by proposal `2967c11f…`, executed 13:27 UTC through its Treasury (same art, same vote source) |

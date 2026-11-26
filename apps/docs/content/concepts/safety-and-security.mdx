@@ -7,7 +7,7 @@ For crypto natives: the Soroban contracts in the repository are the authority. T
 - **Funds move only by passed proposals.** The treasury has no function that pays out on request. It runs a proposal's actions only after the proposal passes, is queued, and its [safety delay](/reference/glossary#safety-delay) ends.
 - **Actions are fixed.** A proposal's actions can't change after it is created. What members vote on is what runs.
 - **Votes are counted at a fixed point in time.** Voting power and quorum are fixed when the proposal is created. Tokens bought or moved afterwards don't change the result.
-- **Setup ends at launch.** At launch, every contract's admin becomes the tribe's treasury. There is no function to hand a contract to another address, or to give up control entirely.
+- **Setup ends at launch.** At launch, every contract's admin becomes the tribe's treasury. There is no function to pass a contract to another address, or to give up control entirely.
 - **Modules are capped.** A module can mint only up to its mint allowance, which the tribe sets.
 - **Each tribe has its own contracts.** A tribe's modules hold only that tribe's escrow and mint only that tribe's tokens. Tribes on the same release share its code, so a flaw in a release affects every tribe that runs it.
 
@@ -23,16 +23,16 @@ The operator controls the Manager, Tribe Builder's registry and factory contract
 
 By pausing or withdrawing, the operator can stop a launch drive that has enough claims, so that it ends in refunds.
 
-If a launch drive fails and its claims contract can't pay refunds, the operator can publish a fixed claims release, which the tribe's launch admin may then apply to that contract. The fix takes over the held payments, so it can apply only at least seven days after the drive's deadline and after the fix is published. Members can take their payments back with the original code in that time. See [Claim refunds](/guides/claims/refund).
+If a launch drive fails and its claims contract can't pay refunds, the operator can publish a fixed claims release, which the tribe's launch admin may then apply to that contract. The fix takes over the held payments, so it can apply only once at least 7 days have passed since the drive's deadline and since the fix was published. Members can take their payments back with the original code in that time. See [Claim refunds](/guides/claims/refund).
 
-The operator is a single address. Handing it to someone else takes two steps. Its own upgrades of the Manager wait out a notice period, which Manage → Contract upgrades shows.
+The operator is a single address. Passing the role to another address takes two steps: one to propose it and one to accept it. Its own upgrades of the Manager wait out a notice period, which Manage → Contract upgrades shows.
 
 ## What the platform operator can't do
 
 - Mint tokens for any tribe.
 - Move a tribe's funds or tokens. The one exception is the fix for a failed launch drive, described above.
 - Change a tribe's settings after launch.
-- Apply an upgrade to a tribe. Only the tribe can, by vote, apart from the fix for a failed launch drive, which its launch admin applies.
+- Apply an upgrade to a tribe. Only the tribe can: its launch admin during setup, or a vote after launch. The fix for a failed launch drive is also applied by the tribe's launch admin.
 
 ## What the app does
 

@@ -95,7 +95,7 @@ OpenZeppelin requires `ledger < current` (`FutureLookup`, `oz-votes:102`, `oz-vo
 | **Negative powers** | `I256` into `u128` would trap, or wrap if cast carelessly. Intermediate layers can be negative, and the final clamp lives in NQG code that an upgrade could change. | Clamp `< 0` to 0 in the adapter whatever NQG does. Use checked conversion, and fail staging rather than wrap. |
 | **Fractional powers** | The Governor's units are integers (one NFT is one vote). An 18-decimal score doesn't fit the UI's assumptions, and `I256` doesn't fit `u128` without scaling. | Scale `10^18` to `10^decimals` with floor division. `decimals` defaults to 9, which matches SCF's token (`contract.rs:16-18`). The adapter exposes `decimals()`. Threshold and quorum are in these units, and the UI must format them. |
 | **Round finalised after a proposal's snapshot** | Ambiguous: a proposal could vote on round N's powers but be counted, or have its quorum computed, on N+1's. | It's well defined. A proposal always uses the epoch active at its `vote_snapshot`. A later activation affects only later proposals. This is the intended behaviour, matching token voting, where buying after the snapshot doesn't count. |
-| **No epoch yet** | — | Everything reads 0 before the first activation. Since `proposal_threshold >= 1`, nobody can propose, and since weight 0 is rejected, nobody can vote. The DAO is safely inert until its first activation. |
+| **No epoch yet** | Not applicable | Everything reads 0 before the first activation. Since `proposal_threshold >= 1`, nobody can propose, and since weight 0 is rejected, nobody can vote. The DAO is safely inert until its first activation. |
 | **`quorum_now` calls a non-`Votes` method** | The Governor would trap on an adapter that doesn't implement `voting_supply_at_previous_ledger`. | Preferred: the vote-source work changes `quorum_now` to call `get_total_supply_at_checkpoint(seq − 1)` for non-NFT sources. Fallback: the adapter also exposes `voting_supply_at_previous_ledger() -> u128` with exactly that meaning. The adapter implements both, so either Governor shape works. |
 | **Delegation** | NQG's quorum delegation is a per-vote, per-submission choice resolved off-chain (`nqg:neurons/src/quorum.rs:29-104`). It doesn't map onto OpenZeppelin's one-delegate-per-account model. | Unsupported: `delegate` panics with `ActionNotSupported`, and `get_delegate(a)` returns `Some(a)`, so every account votes its own power. Quorum delegation inside a Builder DAO is out of scope (§8, Q6). |
 
@@ -184,10 +184,10 @@ TTL: the renewal sweep must keep `Power` and `Epoch` entries of the **active epo
 | NQG upgraded to an incompatible interface | `stage` traps | Already-active epochs keep working, because reads never touch NQG. Governance repoints `source` with `set_config`. |
 | NQG never publishes a new round | The epoch goes stale | Voting continues on the last epoch. This is a governance and liveness issue, not a safety one. The UI should show the epoch's age. |
 | Malicious or compromised NQG admin | Arbitrary powers | **Trusted input**, by design, since NQG's admin writes the neuron results (`lib.rs:315-330`). Mitigations: `activation_delay` (for example 72 hours) gives members a window to inspect a staged epoch and pass a proposal calling `abandon_epoch`. Point `source` only at an NQG instance whose admin the DAO accepts (§7). |
-| Power overflow on scaling | — | Checked arithmetic: `stage` fails rather than truncating high bits. |
+| Power overflow on scaling | Not applicable | Checked arithmetic: `stage` fails rather than truncating high bits. |
 | No epoch yet | Inert DAO | §3.2. The UI must show "voting starts after the first NQG round is synced". |
 | Archived old epoch | A historical read fails | Restore the entries. Live proposals are covered by the TTL policy in §4.3. |
-| Snapshot ledger equals the activation ledger | — | Activation at ledger `S` means the epoch is active for reads at ledgers `>= S`. The Governor snapshots at `seq − 1`, so a proposal created in ledger `S + 1` is the first to see the new epoch. Tests must pin this boundary. |
+| Snapshot ledger equals the activation ledger | Not applicable | Activation at ledger `S` means the epoch is active for reads at ledgers `>= S`. The Governor snapshots at `seq − 1`, so a proposal created in ledger `S + 1` is the first to see the new epoch. Tests must pin this boundary. |
 
 ## 5. Integration
 
@@ -279,7 +279,7 @@ Off-chain infrastructure for (B):
 | Keeper | Calls `open_epoch`, `stage`, and `activate` on the adapter. It is permissionless, so the platform can run one keeper for all tribes. | The Tribe Builder platform, or anyone. |
 | Privacy | SCF keeps neuron inputs off-chain to avoid linking people to keys (`nqg:examples/README.md`, "Why not upload all data"). Published per-neuron results still reveal each address's score components. | DAO policy. |
 
-Bounds to respect: about 1 000 accounts per NQG round (§4.4). Rounds should be much longer than voting delay plus voting period. Neuron results are in temporary storage, so upload and `calculate_voting_powers` must finish within one TTL window (`storage.rs:71-80`).
+Bounds to respect: about 1,000 accounts per NQG round (§4.4). Rounds should be much longer than voting delay plus voting period. Neuron results are in temporary storage, so upload and `calculate_voting_powers` must finish within one TTL window (`storage.rs:71-80`).
 
 ## 8. Open questions for SDF/SCF
 

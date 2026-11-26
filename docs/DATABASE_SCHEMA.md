@@ -1,4 +1,4 @@
-# Database Schema
+# Database schema
 
 PostgreSQL read model for the Goldsky-indexed DAO deployment. Operational
 guide, migrations and scripts: [`db/README.md`](../db/README.md). The Prisma
@@ -22,6 +22,9 @@ models in `apps/web/prisma/schema.prisma` map onto the views marked **Prisma**.
    the exact value is on chain (migration 0013). A cast in a condition reads
    only the view's own rows ([Casts in conditions](#casts-in-conditions),
    migration 0016).
+
+All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
+by `dao_id` (the DAO token contract address).
 
 ### Casts in conditions
 
@@ -59,14 +62,11 @@ names and fields of the domain events. It checks those reads on the default and
 sequential-scan plans, the `governance.proposals` reads on hash and merge joins
 too, and every view in full.
 
-All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
-by `dao_id` (the DAO token contract address).
-
 ## Event conventions
 
 - `event_name` is the on-chain topic 0 symbol in snake_case (`dao_created`,
   `vote_cast`, `pool_purchased`).
-- `topics` is a JSON object of the named topics after the name, e.g.
+- `topics` is a JSON object of the named topics after the name, for example
   `proposal_created` → `{"proposal_id": "<hex>", "proposer": "G…"}`.
 - `args` is a JSON object of the event data fields.
 - The decoder's topic names are tested against the Rust sources
@@ -109,9 +109,10 @@ settings, artwork definitions, the renderer, platform registry pointers) has no 
 | `module_versions` | `upgraded`, `migrated` (each contract the Manager deployed) + `dao_modules` | per DAO contract: `current_hash` (latest `to_hash`, else the creation hash), `current_version` (the registry version of `current_hash`, as the contract's `version()` reads it), `storage_version` (the latest `to_storage_version`, else 1), `upgrade_count`, `last_upgraded_*`. A module deployed outside the Manager (role `module`) has no `current_hash` or `current_version`: the view ignores its own `upgraded` and `migrated` events (migration 0012). `scripts/renew-code-ttl.mjs` reads `current_hash` |
 | `settings` | `manager_initialized`, `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `factory_paused`/`factory_unpaused` | one row per deployment: `admin`, `pending_admin` (NULL after an accept or a cancel), `factory_paused` (the contract has no getter; a pause blocks `create_dao`, `create_module`, `open_assurance`, `launch_dao`, `launch_when_ready` and `change_slug`) |
 
-Not projected: `latest_implementation_set`, `current_implementations_updated`,
-`upgrade_approved`, `manager_upgraded`, `upgrade_delay_changed` (the app reads
-the registry pointers and the upgrade notice from chain; the last two are feed rows).
+Not projected: `latest_implementation_set`, `upgrade_approved`, `manager_upgraded`,
+`upgrade_delay_changed` (the app reads the registry pointers and the upgrade notice
+from chain; the last two are feed rows). `current_implementations_updated` is read
+only for `created_modules`' hashes.
 
 ### token
 
@@ -121,7 +122,7 @@ the registry pointers and the upgrade notice from chain; the last two are feed r
 | `inventory` **Prisma** | transfers | current owner per token |
 | `delegate_state` | `delegate_changed`, `delegate_votes_changed` | latest delegate and voting power per address (the half of `members` that does not need the inventory) |
 | `members` **Prisma** | inventory, `delegate_state` | owned count, delegate, voting power, `last_activity_ledger` (latest ledger of a held token); holders plus addresses that hold nothing but have a delegation |
-| `delegates` **Prisma** | `delegate_state`, inventory, `modules` | the delegate picker's list: everyone who holds votes or is delegated to: `voting_power`, `owned_token_count`, `delegator_count`, `custody`, and `is_member` by the Token's members-only rule (holds a token and is not custody; a member whose tokens are all escrowed on the Marketplace is not one while listed) |
+| `delegates` **Prisma** | `delegate_state`, inventory, `modules` | the delegate picker's list of everyone who holds votes or is delegated to: `voting_power`, `owned_token_count`, `delegator_count`, `custody`, and `is_member` by the Token's members-only rule (holds a token and is not custody; a member whose tokens are all escrowed on the Marketplace is not one while listed) |
 | `mint_allowances` | `mint_allowance_changed` | the last allowance set per module, with `changed_by` (mints spend silently, so this is an upper bound; the live amount is `mint_allowance()` on chain; `4294967295` is unlimited). The admin mints without an allowance and is never listed |
 | `modules` | `module_registered`, `module_unregistered` | registered modules per Token: `kind`, `module`, `non_voting` |
 | `settings` **Prisma** | `token_initialized`, `transfers_lock_changed`, `members_only_delegation_changed`, `dao_recovery_changed` | the membership switches in force: the creation settings, each overridden by its latest change |
@@ -153,7 +154,7 @@ event (`app.proposal_detail.actions`), matched by `call_index`. OpenZeppelin's
 `snapshot_ledger` is the vote snapshot ledger; `vote_start_seconds` /
 `vote_end_seconds` are unix timestamps and `quorum_votes` the For + Abstain total
 needed, all from `proposal_scheduled` (quorum is fixed at proposal time). State:
-executed/canceled from events; queued until `eta + 14d`, then expired; otherwise
+`executed` and `canceled` from events; queued until `eta + 14d`, then expired; otherwise
 pending before `vote_start`, active until `vote_end`, then succeeded (quorum met
 and for > against) until `vote_end + 14d` and expired after, or defeated.
 
@@ -186,7 +187,7 @@ and the founder supply that Setup lists can still mint.
 | View | Reads | Notes |
 | --- | --- | --- |
 | `claims.lists` **Prisma** | `list_opened` with running totals from `claimed`, `escrow_released`, `refunded`, and the close from `list_closed` | one row per list: `root`, `tree_uri`, `asset`, `price`, `expires_at` (as opened), `total`, `is_assurance`, `threshold_claimers`, `deadline` (`expires_at` and `deadline` past the bigint range read as its maximum), `claimed`, `claimers`, `paid`, `escrowed`, `released`, `refunded`, `opened_*`, then `closed` (closed early by `close_list`), `closed_ledger`, `closed_at`, `effective_expires_at` (unix seconds when claims stop: the close time for a closed list, otherwise `expires_at`), and `opened_in_setup` (opened before the ClaimMinter's `claim_minter_launched`) |
-| `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), the claimer's running `claimed` |
+| `claims.claims` **Prisma** | `claimed` | every claim: claimer, `amount` (ids `first_token_id` .. + `amount` - 1), `paid`, `escrowed` (bool), `claimer_total` (the claimer's running total, the event's `claimed`) |
 | `claims.claimers` **Prisma** | `claimed`, `refunded` | each claimer's position per list: `claimed`, `paid`, `escrowed`, `refunded` |
 
 Not projected: `claim_minter_launched` (`manager.module_launches`).
@@ -209,18 +210,19 @@ Not projected: `claim_minter_launched` (`manager.module_launches`).
 `contract.<event_name>` and `system` visibility; events from a module under the
 catch-all `module` role are `module.<event_name>` and `admin`.
 
-`visibility` curates the feed. **public/governance** rows are what a member acts
-on: launches, proposals (created, queued, executed, cancelled), votes and comments,
-real delegation, a rename or a new link, auctions (started, bid, settled,
-cancelled), marketplace listings (opened, sold, cancelled, expired) and comments,
-quick-buy pools (opened, each sale, closed), claim lists and claims, launch
-drives, modules joining or leaving, the membership switches and DAO transfers,
-profile updates (seq > 0), and upgrades (DAO contracts and the Manager, the
-upgrade notice, a revoked implementation). Their side effects are
-**admin/system**: per-token `mint` / `mint_with_minter` / `mint_batch_with_minter`
-(the module's own row is the public one), restocks, sweeps, claim refunds, transfers, `delegate_votes_changed`, seeds, slug claims, setup and launch
-internals, refunds, migrations, and the automatic self-delegation on a holder's
-first token. Public feeds read only public and governance rows (the web formats
+`visibility` curates the feed. **public/governance** rows are what a member acts on:
+launches, proposals (created, queued, executed, cancelled), votes and comments, real
+delegation, a rename or a new link, auctions (started, bid, settled, cancelled),
+marketplace listings (opened, sold, cancelled, expired) and comments, quick-buy
+pools (opened, each sale, closed), claim lists and claims, launch drives, modules
+joining or leaving, the membership switches and DAO transfers, profile updates
+(`seq` > 0), and upgrades (DAO contracts and the Manager, the upgrade notice, a revoked
+implementation). Their side effects are **admin/system**: per-token `mint` /
+`mint_with_minter` / `mint_batch_with_minter` (the module's own row is the public
+one), restocks, sweeps, claim refunds, transfers, `delegate_votes_changed`, seeds,
+slug claims, setup and launch internals, refunds, migrations, and the automatic
+self-delegation on a holder's first token (`from_delegate` empty, `to_delegate` =
+the delegator). Public feeds read only public and governance rows (the web formats
 them into sentences, see `apps/web/src/lib/activity-feed.ts`); `userFacing` in
 `packages/goldsky/src/activity-feed.script.js` is the source.
 
@@ -234,20 +236,20 @@ display `awaiting-expiry`; terminal state still comes from contract events.
 
 Indexed proposal state mirrors `Governor.proposal_state`, with `vote_start_seconds`
 and `quorum_votes` from `proposal_scheduled`; proposal detail still rechecks live
-chain state before enabling submission (indexed data cannot establish eligibility). Ordered execution
-receipts read `treasury.calls` through a parameterized query
+chain state before enabling submission (indexed data cannot establish eligibility).
+Ordered execution receipts read `treasury.calls` through a parameterised query
 binding deployment, DAO, Treasury, Governor, and proposal ID. Complete matching
-actions must share one transaction/ledger. Receipt absence is separate from failed
+actions must share one transaction and ledger. A missing receipt is not a failed
 execution. See [web reference](../apps/web/README.md).
 
 Browser-local drafts and private labels do not add writable application
 tables. [Migrations](../db/migrations) define the full schema; Prisma is the app's
 view subset, not a schema-migration owner.
 
-Treasury history paginates execution calls (12/page) with deployment, DAO, Treasury
-and Governor filters; it is not a funding/deposit ledger. Member/owner inventory
-pages include total/hasMore and preserve counts/amounts as decimal strings where
-specified. Auction history joins terminal auctions to scoped settlements and
-distinguishes sold/unsold/canceled. Claim history does not establish current-round
-eligibility; RPC allocation state and simulation do. New preparation endpoints
-return unsigned transactions and do not mutate these views.
+Treasury history paginates execution calls (12 per page) with deployment, DAO,
+Treasury and Governor filters; it is not a funding or deposit ledger. Member and owner
+inventory pages include `total` and `hasMore`, and keep counts and amounts as decimal
+strings where specified. Auction history joins terminal auctions to scoped settlements
+and distinguishes `sold`, `unsold` and `cancelled`. Claim history does not establish
+current-round eligibility; RPC allocation state and simulation do. New preparation
+endpoints return unsigned transactions and do not change these views.

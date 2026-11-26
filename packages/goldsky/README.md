@@ -1,15 +1,15 @@
-# Goldsky Indexer for Stellar DAO
+# Goldsky indexer for Stellar DAOs
 
-PostgreSQL-backed event indexer for Stellar DAO using Goldsky Turbo Pipelines.
+The event indexer for Tribe Builder DAOs on Stellar: a Goldsky Turbo pipeline that writes to PostgreSQL.
 
 This package owns the Goldsky pipeline source, generator, tests, and deployment scripts. The
 deployed pipeline is a Goldsky **Turbo** pipeline named `builder-stellar-<network>`
 (`builder-stellar-testnet` today); `pnpm generate` writes that name into the YAML, so the file is
 applied as is (`goldsky turbo apply`). The legacy `goldsky pipeline ...` commands do not see it.
 
-## Quick Start
+## Quick start
 
-### 1. Setup Environment
+### 1. Set up the environment
 
 ```bash
 cp .env.example .env
@@ -17,7 +17,7 @@ cp .env.example .env
 # curl https://goldsky.com | sh && goldsky login
 ```
 
-### 2. Run Database Migrations
+### 2. Run the database migrations
 
 ```bash
 # From project root (see db/README.md)
@@ -25,7 +25,7 @@ cp .env.example .env
 ./db/grant-permissions.sh
 ```
 
-### 3. Generate Pipeline Configuration
+### 3. Generate the pipeline configuration
 
 ```bash
 pnpm generate
@@ -45,22 +45,30 @@ pnpm generate
 ./scripts/deploy.sh logs
 ```
 
-## Environment Variables
+## Environment variables
 
-Read by `pnpm generate` and `scripts/deploy.sh` from `.env` / `.env.local` (or the shell):
+Read by `pnpm generate` and `scripts/deploy.sh` from `packages/goldsky/.env` and then `.env.local`, when
+present, or from the shell (for `pnpm generate`, a value set in the shell wins):
 
-- `MANAGER_DEPLOYMENT_FILE` (required) - the Manager deployment artifact, relative to the repo root
-- `GOLDSKY_POSTGRES_SECRET` - name of the Goldsky secret holding the `goldsky_writer` Postgres
+- `MANAGER_DEPLOYMENT_FILE` (required): the Manager deployment artifact, relative to the repository root
+- `GOLDSKY_POSTGRES_SECRET`: name of the Goldsky secret holding the `goldsky_writer` Postgres
   credentials (default `DAO_POSTGRES`). The secret is created once in Goldsky
   (`goldsky secret create`); no database credential is written into the YAML or read here.
-- `GOLDSKY_START_AT` - start ledger, only when the artifact has no `deploymentLedger`
-  (it overrides the artifact when set)
-- `GOLDSKY_PIPELINE_NAME` - pipeline name override (default `builder-stellar-<network>`)
+- `GOLDSKY_START_AT`: start ledger. When set, it overrides the artifact's `deploymentLedger` (or its
+  earliest transaction ledger); it is needed only when the artifact has neither
+- `GOLDSKY_PIPELINE_NAME`: pipeline name override (default `builder-stellar-<network>`)
+- `GOLDSKY_PIPELINE_FILE`: where the YAML is written and applied, relative to this package (default
+  `pipelines/builder-stellar-events.yaml`)
+- `GOLDSKY_ENV_FILE`: an env file in this package to read instead of `.env` and `.env.local`.
+  `dev.env` selects the dev.tribes.build pipeline (`builder-stellar-testnet-dev`, written to
+  `pipelines/builder-stellar-dev-events.yaml`) and `prod.env` the tribes.build one
+  (`builder-stellar-testnet`); see [dev deployment](../../docs/DEV_DEPLOYMENT.md). Neither file holds a
+  credential, only the name of a Goldsky secret.
 
 The Goldsky CLI authenticates with `goldsky login`; no API key variable is used. Database
 migrations use `DATABASE_URL` from `db/README.md`, not this package.
 
-### Manager Deployment
+### Manager deployment
 
 Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
 
@@ -70,11 +78,9 @@ MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 
 The artifact supplies the Manager address, the network and the starting ledger; if it has no starting ledger, set `GOLDSKY_START_AT` explicitly. The Manager is the only configured contract: every DAO contract enters the `streamling.dao_*` allowlists from events (see [Allowlists](#allowlists)), so a new DAO or module never needs a regenerate.
 
-The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
-
 ## Commands
 
-### Pipeline Management
+### Pipeline management
 
 ```bash
 # Generate pipeline from .env
@@ -85,6 +91,12 @@ pnpm test
 
 # Validate event coverage
 pnpm validate
+
+# Read-model integration tests against a scratch database
+TEST_DATABASE_URL=postgres://... pnpm test:db
+
+# Validate the generated YAML with the Goldsky CLI
+pnpm turbo:validate
 ```
 
 ### Deployment
@@ -109,6 +121,11 @@ pnpm validate
 ./scripts/deploy.sh redeploy
 ```
 
+`redeploy` refuses while `chain.raw_events` still holds events, because a replay cannot overwrite the
+immutable landing tables. With `DATABASE_URL` set (an admin role) it checks; without it, it cannot tell and
+refuses too. `--force` skips the check. Every command reads the same env files as `pnpm generate`, so
+`GOLDSKY_ENV_FILE=dev.env ./scripts/deploy.sh deploy` applies the dev pipeline.
+
 ### Redeploy checklist
 
 The landing tables are immutable and the `streamling.dao_*` allowlists persist across pipelines, so
@@ -117,7 +134,7 @@ replay (details in [`db/README.md`](../../db/README.md)):
 
 1. `./scripts/deploy.sh delete` (the pipeline must be stopped before the schema drop)
 2. `DROP SCHEMA streamling CASCADE;` then `db/reset-database.sh && db/migrate.sh && db/grant-permissions.sh`
-   (the reset asks for the database name, typed in full)
+   (the reset asks for `<database>@<host>`, typed in full)
 3. `pnpm generate && ./scripts/deploy.sh deploy`
 4. Verify as an admin role once the replay has caught up:
    - `SELECT count(*) FROM chain.decoded_events WHERE contract_role = 'unknown'` → 0
@@ -132,7 +149,7 @@ replay (details in [`db/README.md`](../../db/README.md)):
      events from those addresses decode with that role (`SELECT contract_role, count(*) FROM
      chain.decoded_events GROUP BY 1`)
 
-## Pipeline Architecture
+## Pipeline architecture
 
 The generator reads deployment configuration and transform scripts, then writes
 `pipelines/builder-stellar-events.yaml`:
@@ -159,8 +176,8 @@ PostgreSQL (Neon) destination
 ### Allowlists
 
 A Goldsky SQL transform can look outside the stream only through `dynamic_table_check(table, value)`, a
-membership test on one key column. So a contract's role is the table that holds its address, filled in two
-stages (docs/designs/membership-models.md § 7):
+membership test on one key column. So a contract's role is the table that holds its address, filled in three
+ways ([membership-models](../../docs/designs/membership-models.md) § 7):
 
 1. **The core four** come from the Manager's `DaoCreated`: `dao_tokens`, `dao_metadata`, `dao_governors`,
    `dao_treasuries`, one table each.
@@ -182,19 +199,19 @@ so every table reads `stellar_events` directly.
 Tables are append-only: an unregistered module stays allowlisted, and the read model drops its later events by
 registration window (`manager.module_events`). Allowlisting is per registration, so any contract a DAO
 registers by vote gets its events indexed under that DAO as admin rows (an accepted risk; the remedy is
-unregistering it by vote, or deleting its row from `streamling.dao_modules` and re-applying the pipeline,
-SECURITY_MODEL). A shared or dual-kind module (one address
+unregistering it by vote, or deleting its row from `streamling.dao_modules` and re-applying the pipeline; see
+the [security model](../../docs/SECURITY_MODEL.md)). A shared or dual-kind module (one address
 registered by two DAOs, or under two kinds) is indexed once; its role is the first matching table in the
 `dao_events` CASE, and the windowed views attribute its events to each DAO for the time it was registered there.
 
-### Pipeline Outputs
+### Pipeline outputs
 
-- `chain.raw_events` - Raw Goldsky events with XDR-JSON
-- `chain.decoded_events` - Decoded events with structured fields
-- `app.activity_feed_events` - User-friendly activity feed rows
-- everything else (`app.activity_feed`, `manager.daos`, `governance.proposals`, `token.members`, ...) is a PostgreSQL view over these tables; see `docs/DATABASE_SCHEMA.md`
+- `chain.raw_events`: raw Goldsky events with XDR-JSON
+- `chain.decoded_events`: decoded events with structured fields
+- `app.activity_feed_events`: activity feed rows with a title and summary
+- everything else (`app.activity_feed`, `manager.daos`, `governance.proposals`, `token.members`, ...) is a PostgreSQL view over these tables; see [`docs/DATABASE_SCHEMA.md`](../../docs/DATABASE_SCHEMA.md)
 
-## Event Coverage
+## Event coverage
 
 The decoder names the topics of every event the contracts emit (Manager, Token,
 Governor, Treasury, Auction, Metadata, Marketplace, ClaimMinter) plus the OpenZeppelin
@@ -217,7 +234,7 @@ sources are the only inventory of live events (there is no hand-kept list to upd
 topic name) and `args` (JSON object of the data fields). Token identifiers can live in
 `topics` while `args` is `{}`, so consumers (and `activity-feed.script.js`) must search
 topics and args independently. `event_name` is the on-chain topic-0 symbol, the snake_case
-struct name `#[contractevent]` emits (`token_launched`); the decoder normalizes it only for the
+struct name `#[contractevent]` emits (`token_launched`); the decoder normalises it only for the
 topic lookup, and the views match it exactly.
 
 ### Same-named events: `AdminChanged`
@@ -230,7 +247,7 @@ emitting module is identified by `contract_id` / `contract_role`, so the unique 
 (`token:AdminChanged`, `manager:AdminChanged`, ...) expose this, and same-named events must
 share topics (enforced by `contractEvents()`). Each module's launch event has its own name
 (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`,
-`MarketplaceLaunched`, `MetadataLaunched`).
+`MarketplaceLaunched`, `ClaimMinterLaunched`, `MetadataLaunched`).
 
 ### Event changes from the hardened contracts
 
@@ -308,43 +325,39 @@ name only: the emitting contract is `contract_id` / `contract_role`.
 
 ### Activity feed labels
 
-User-visible (`public`) items include `marketplace.pool_purchased` ("Token N bought from pool P
-for X"), `claims.claimed` and the membership switches, beside the existing `manager.dao_launched`; refunds (`auction.refund_*`) and `manager.slug_claimed` are `admin`.
-`Execute` rows are `admin` and read "Executed fn on target (call i of proposal id)".
-Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminChanged` rows are
-`<role>.admin_changed` ("Token admin handed to the Treasury"), `Migrated` rows
-`<role>.migrated`, `ProposalScheduled` `governance.proposal_scheduled` (admin, it accompanies
-`ProposalCreated`); OpenZeppelin `QuorumChanged` is `governance.quorum_changed` (admin; it
-duplicates the constructor quorum and every `QuorumBpsChanged`); OpenZeppelin `Paused` / `Unpaused`
-from the Auction are `auction.paused` / `auction.unpaused`; a batch mint is one admin `token.batch_mint` row ("Minted 5 tokens (30-34) by
-minter") plus one admin `metadata.seeds_generated` row, not one row per token, and the module's own
-row in the same call (`claims.claimed`, `marketplace.pool_restocked`) tells the story; Manager admin changes
-(`manager.admin_proposed`, `manager.admin_changed`) and `marketplace.paused` are `admin`; listing cancellations
-and expiries (`marketplace.listing_cancelled`, `marketplace.listing_expired`) and `marketplace.pool_closed` are
-`public`, like the listing itself. A module's `Upgraded` / `Migrated` are `<role>.upgraded` /
-`<role>.migrated`. Visibility also follows the module: every event from a module under the catch-all `module`
-role or the reserved `circle` role is `admin`, since the platform didn't write its code, and an event name no
-known contract owns there is shown under the module's own kind rather than another contract's (`unvouched`,
-`foreignModule` in `src/activity-feed.script.js`). The governor's
-role-based kinds use the `governance.` prefix like its other kinds. `activity_feed_events`
-columns are unchanged; `listing_id` and `index` are only in `topics`/`args`. `addresses` holds every
-address field the event carries (accounts, then module, token and payment-asset contracts, the
-emitting contract last). `actor` is the account that acted: the caller (`changed_by`, `admin`)
-before the subject (`authority`) or a module contract, and empty for `DaoLaunched`.
+- **Public.** `marketplace.pool_purchased` ("Token N bought from pool P for X"), `claims.claimed` and the
+  membership switches, beside the existing `manager.dao_launched`. Listing cancellations and expiries
+  (`marketplace.listing_cancelled`, `marketplace.listing_expired`) and `marketplace.pool_closed` are `public`,
+  like the listing itself.
+- **Admin.** Refunds (`auction.refund_*`) and `manager.slug_claimed`. `Execute` rows, which read "Executed fn
+  on target (call i of proposal id)". Per-module launch rows, with kind `<role>.launched`.
+  `governance.proposal_scheduled` (`ProposalScheduled` accompanies `ProposalCreated`). OpenZeppelin
+  `QuorumChanged` as `governance.quorum_changed` (it duplicates the constructor quorum and every
+  `QuorumBpsChanged`). Manager admin changes (`manager.admin_proposed`, `manager.admin_changed`) and
+  `marketplace.paused`. A batch mint is one admin `token.batch_mint` row ("Minted 5 tokens (30-34) by
+  minter") plus one admin `metadata.seeds_generated` row, not one row per token; the module's own row in the
+  same call (`claims.claimed`, `marketplace.pool_restocked`) says what the mint was for.
+- **Kinds.** Module `AdminChanged` rows are `<role>.admin_changed` ("Token admin handed to the Treasury"),
+  and a module's `Upgraded` and `Migrated` are `<role>.upgraded` and `<role>.migrated`. OpenZeppelin
+  `Paused` / `Unpaused` from the Auction are `auction.paused` / `auction.unpaused`. The governor's role-based
+  kinds use the `governance.` prefix like its other kinds.
+- **Outside modules.** Visibility also follows the module: every event from a module under the catch-all
+  `module` role or the reserved `circle` role is `admin`, since the platform didn't write its code, and an
+  event name no known contract owns there is shown under the module's own kind rather than another
+  contract's (`unvouched`, `foreignModule` in `src/activity-feed.script.js`).
+- **Columns.** `activity_feed_events` columns are unchanged; `listing_id` and `index` are only in
+  `topics`/`args`. `addresses` holds every address field the event carries (accounts, then module, token and
+  payment-asset contracts, the emitting contract last). `actor` is the account that acted: the caller
+  (`changed_by`, `admin`) before the subject (`authority`) or a module contract, and empty for `DaoLaunched`.
 
-**Public feed curation.** Only story events are `public`/`governance`: launches,
-proposals and votes, real delegation, auctions (started, bid, settled, cancelled),
-marketplace listings, pools and sales, claim lists and claims, membership switches and DAO transfers, and
-upgrades. Per-token
-`Mint`/`MintWithMinter`/`MintBatchWithMinter`, transfers, vote-weight changes, seeds, slug claims,
-setup/launch internals, refunds and the automatic
-self-delegation on a first token (`from_delegate` empty, `to_delegate` =
-delegator) are `admin`/`system`. See `userFacing` in `src/activity-feed.script.js`.
+**Public feed curation.** Only the events a member acts on are `public` or `governance`; their side effects
+are `admin` or `system`. The full list is in [Activity kinds](../../docs/DATABASE_SCHEMA.md#activity-kinds),
+and `userFacing` in `src/activity-feed.script.js` is the source.
 
-## Data Access Layer
+## Data access layer
 
-The app reads the views through `apps/web/src/lib/goldsky.ts`. Every query is scoped to one DAO
-(`daoId` first), for example:
+The app reads the views through `apps/web/src/lib/goldsky.ts`. Each per-DAO query takes `daoId` first;
+the dashboard reads by account address and the health check takes no argument. For example:
 
 ```typescript
 await getGoldskyActivityFeed(daoId, { limit: 25 })
@@ -361,7 +374,7 @@ await getGoldskyHealth()
 
 ## Development
 
-### Project Structure
+### Project structure
 
 ```
 packages/goldsky/
@@ -372,17 +385,20 @@ packages/goldsky/
 │   ├── contract-events.mjs         # event ground truth parsed from contracts/*/src/events.rs (keyed by contract + name)
 │   └── pipeline-generator.mjs      # renders the pipeline YAML
 ├── templates/builder-stellar-events.yaml.mustache
-├── pipelines/builder-stellar-events.yaml   # generated: pnpm generate
+├── pipelines/builder-stellar-events.yaml       # generated: pnpm generate
+├── pipelines/builder-stellar-dev-events.yaml   # generated: GOLDSKY_ENV_FILE=dev.env pnpm generate
 ├── scripts/
 │   ├── generate-pipeline.mjs
 │   ├── validate-events.mjs         # decoder vs contract events
 │   └── deploy.sh                   # goldsky turbo validate/apply/list/logs/delete
 ├── test/                           # unit, contract-alignment and DB integration tests
+├── .env.example                    # template for .env
+├── dev.env, prod.env               # the dev.tribes.build and tribes.build pipelines (GOLDSKY_ENV_FILE)
 ├── .env / .env.local               # your configuration (gitignored)
 └── package.json
 ```
 
-### Adding New Events
+### Adding new events
 
 1. Add the event's topics to `topicNames` in `src/decoded-events.script.js` (checked against the contracts) and update the role fallback if needed
 2. Update `src/activity-feed.script.js` with kind/title/summary/visibility
@@ -391,9 +407,9 @@ packages/goldsky/
 5. Run `pnpm test && pnpm validate`
 6. Regenerate (`GOLDSKY_START_AT=<ledger> pnpm generate` when the artifact has no ledger) and replay (Redeploy checklist above). The checked-in pipeline test fails if it is stale.
 
-## Database Setup
+## Database setup
 
-Roles, migrations, grants and the reset runbook live in [`db/README.md`](../../db/README.md):
+Roles, migrations, grants, and the reset runbook live in [`db/README.md`](../../db/README.md):
 
 ```bash
 ./db/setup-roles.sh && ./db/migrate.sh && ./db/grant-permissions.sh

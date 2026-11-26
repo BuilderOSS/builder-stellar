@@ -1,6 +1,6 @@
-# Design: membership models with capped minting, custody and plug-in modules
+# Design: membership models with capped minting, custody, and plug-in modules
 
-The 0.4.0 design: mint allowances, the Token's module registry, the per-DAO ClaimMinter, the assurance launch and
+The 0.4.0 design: mint allowances, the Token's module registry, the per-DAO ClaimMinter, the assurance launch, and
 quick-buy pools. It shipped in PR #45 (contracts) and PR #46 (web). It was written before the build, so "today"
 means the 0.3.0 contracts it replaced; the "As built" notes in §7 and the implementation notes at the end record
 where the build differed. Code cites it by section (§1 to §7) and by decision (R1 to R9).
@@ -32,7 +32,7 @@ future proof without simply going on increasing number of modules".
   proposal mints at most about 43 tokens**.
 - Today, before launch, only the launch admin can mint (`ensure_mint_authority`,
   `contracts/token/src/contract.rs:550`). This design changes that rule (section 1, "Minting before launch").
-- Today exactly three addresses hold NFTs without voting: Treasury, Auction and Marketplace (`voting_holder`,
+- Today exactly three addresses hold NFTs without voting: Treasury, Auction, and Marketplace (`voting_holder`,
   `contract.rs:492`). They are fixed at construction, so "balances and voting units can never drift apart".
 - The Treasury acts only through executed proposals.
 - Chain-only rule: a client with public RPC must be able to operate and renew a DAO. Every key is in the renewal
@@ -46,7 +46,7 @@ future proof without simply going on increasing number of modules".
 2. Self-claims before launch are for large communities. Their value is that only members who show up get votes
    (quorum is a share of voting supply), plus fees and a demand signal. Small groups are minted directly by the
    creator. (Agreed.)
-3. Joining is the DAO's decision. Auction, quick-buy, claim lists and the Circle are membership models, and a module
+3. Joining is the DAO's decision. Auction, quick-buy, claim lists, and the Circle are membership models, and a module
    the DAO controls may mint, **but only within an allowance the DAO sets**. (Revised twice: first by the owner,
    then after the second opinion.)
 4. Keep concerns separate without the module count growing. A DAO deploys only the modules it uses. Custom
@@ -65,7 +65,7 @@ future proof without simply going on increasing number of modules".
   - Any Treasury proposal can move the token out from under a running sale.
   - It would mean rewriting the Auction and Marketplace.
 - **A shared, non-upgradable ClaimList policy** (the Nouns `MerkleReserveMinter` shape). Rejected: it adds a second
-  kind of plug-in across the Manager, Token, indexer and web, and pools many DAOs' escrow in one contract that
+  kind of plug-in across the Manager, Token, indexer, and web, and pools many DAOs' escrow in one contract that
   can't be patched.
 - **Boolean mint authority, as today.** Rejected: an open sale or a buggy module can mint without limit.
 - **Fees before launch locked in the Treasury.** Rejected in favour of the assurance launch: members would lose
@@ -74,8 +74,8 @@ future proof without simply going on increasing number of modules".
 ## Recommended Approach
 
 **New tokens come from capped allowances. Existing tokens are held in custody. Modules plug in through a
-registry.** There is one kind of plug-in, the per-DAO module. Claim lists, sales, the Circle and custom code
-all use the same registration, allowance and upgrade path.
+registry.** There is one kind of plug-in, the per-DAO module. Claim lists, sales, the Circle, and custom code
+all use the same registration, allowance, and upgrade path.
 
 ### Terms
 
@@ -154,7 +154,7 @@ all use the same registration, allowance and upgrade path.
   `DaoModule::renewal_keys(cursor, limit) -> (keys, assets, next_cursor)`. It returns its own storage keys with
   their durability (holder-class entries excluded, as the sweep rule already says) and the assets whose balances
   it holds. The renewal sweep reads the Token's registry and pages through each module by simulation, so a
-  custom module added by vote is renewed in the same click. The core Token, Metadata, Governor and Treasury keep
+  custom module added by vote is renewed in the same click. The core Token, Metadata, Governor, and Treasury keep
   today's client-side enumeration (`renewal.ts`).
   - The keys are **the exact `Val`s as stored, already namespaced** (`common::ns(e, key)`), each with its
     durability. The sweep builds `LedgerKey::ContractData { contract, key, durability }` from them directly, so
@@ -173,12 +173,12 @@ all use the same registration, allowance and upgrade path.
   launch includes ClaimMinter here, or adds it in Setup with `create_module`.
   - Today's `InitialDaoConfigValues` has fixed `auction: AuctionConfig` and `marketplace: MarketplaceConfig`
     fields (`contracts/manager/src/storage.rs:60`). They become `modules: Vec<ModuleSpec>`, where
-    `ModuleSpec` is `Auction(AuctionConfig)`, `Marketplace(MarketplaceConfig)` or `Claims(ClaimsConfig {
+    `ModuleSpec` is `Auction(AuctionConfig)`, `Marketplace(MarketplaceConfig)`, or `Claims(ClaimsConfig {
     payment_asset })`.
-  - `PendingDao`'s `auction_payment_asset`, `marketplace_payment_asset` and `claims_payment_asset` are copied
+  - `PendingDao`'s `auction_payment_asset`, `marketplace_payment_asset`, and `claims_payment_asset` are copied
     from these specs. A ClaimMinter added in Setup with `create_module(token, claims, config, n)` sets
     `claims_payment_asset` from its `ClaimsConfig`.
-- **`create_module(token, kind, config, expected_n) -> Address`** needs `token.admin()`'s authorization.
+- **`create_module(token, kind, config, expected_n) -> Address`** needs `token.admin()`'s authorisation.
   - It deploys a registered implementation at `salt = sha256(token, kind, n)`, where `n = module_count(token, kind)`
     is a Manager counter that `create_module` increments.
   - It refuses with `StaleModuleIndex` unless `expected_n == module_count(token, kind)`.
@@ -199,13 +199,13 @@ all use the same registration, allowance and upgrade path.
 - **`launch_dao`** calls `launch(treasury, ...)` on every registered module (a common `DaoModule` trait) and checks
   each module's `wasm_hash()` is registered and not revoked, as today.
   - Registered modules implement the `DaoModule` trait's two **Manager-only** entry points, which need the
-    Manager's authorization, not the module admin's (R5):
+    Manager's authorisation, not the module admin's (R5):
     - `launch(treasury, open)`, which goes Live and hands the admin to the Treasury unless it already is. Each
       module fixes its payment asset in its creation config and checks it here. For modules created in Setup, the
       Manager compares that config with `PendingDao` before calling; modules created after launch use their
       config alone (see `create_module`).
     - `handoff(treasury)`, which hands the admin over early and stays in Setup.
-  - The core Token, Metadata, Governor and Treasury keep their existing typed launch calls, and each gains a
+  - The core Token, Metadata, Governor, and Treasury keep their existing typed launch calls, and each gains a
     Manager-only `handoff(treasury)`. `open_assurance` and every launch path call both the core contracts and the
     registered modules. ARCHITECTURE documents both shapes.
   - Today's `token.launch` and module `launch` are already Manager-only. Their launch settings
@@ -216,10 +216,10 @@ all use the same registration, allowance and upgrade path.
   - `PendingDao`'s payment assets (`auction_payment_asset`, `marketplace_payment_asset`) become `Option`s for
     optional modules, and it gains `claims_payment_asset`. All three come from the `ModuleSpec` configs (see
     `create_dao` above).
-- **No platform minter.** `PlatformMinter`, `set/get_platform_minter`, `LaunchConfig.minter` and errors 7108 and
+- **No platform minter.** `PlatformMinter`, `set/get_platform_minter`, `LaunchConfig.minter`, and errors 7108 and
   7110 are removed. The Manager's own upgrade notice stays (D39/D42).
 - **`open_assurance(token, list_params, launch_config)`** is how a paid list opens before launch. It needs the
-  launch admin's authorization and, in one call:
+  launch admin's authorisation and, in one call:
   1. looks up the DAO's registered ClaimMinter (`token` registry, kind `claims`; `NoClaimMinter` if there isn't
      one), checks that no assurance is already recorded for this token (**at most one assurance per token**), and
      checks that the list's payment asset equals `PendingDao.claims_payment_asset`. It also checks
@@ -228,7 +228,7 @@ all use the same registration, allowance and upgrade path.
      on names;
   2. calls `claim_minter.open_list(...)` with the assurance terms;
   3. calls `token.increase_mint_allowance(claim_minter, total)`;
-  4. stores `launch_config`, `list_id` and the list's `deadline` in `PendingDao`, and **claims the DAO's slug** (`SlugToDao` / `DaoSlug`,
+  4. stores `launch_config`, `list_id`, and the list's `deadline` in `PendingDao`, and **claims the DAO's slug** (`SlugToDao` / `DaoSlug`,
      `SlugClaimed`) so no other DAO can launch with it during the drive (R2). Once the list is
      `Failed`, anyone can call `release_slug(token)` to free it. `launch_dao` skips the slug claim for a DAO that
      already holds its slug. `update_pending_slug` refuses while an assurance is recorded (`AssuranceOpen`), so
@@ -237,12 +237,12 @@ all use the same registration, allowance and upgrade path.
      going Live.
 
   From then on the launch admin can change nothing, and the Treasury can't act before launch. So settings,
-  artwork, other allowances, module registrations, founder mints and module upgrades are frozen by construction.
+  artwork, other allowances, module registrations, founder mints, and module upgrades are frozen by construction.
   Founders must be minted and artwork added before the list opens.
 - **Launching:**
-  - `launch_when_ready(token)` can be called by anyone, without authorization. The Manager reads `PendingDao`,
+  - `launch_when_ready(token)` can be called by anyone, without authorisation. The Manager reads `PendingDao`,
     requires `claim_minter.assurance_state(list_id) == Met`, and launches with the stored `launch_config`. The
-    Manager authorizes its own calls into the modules, as it does today.
+    Manager authorises its own calls into the modules, as it does today.
   - While an assurance is recorded, **every launch path, including the launch admin's `launch_dao`, requires
     `assurance_state == Met`** and uses the stored `launch_config`. The two escrow exits therefore exclude each other:
     `release` refuses unless the Token is Live (only possible after `Met`), and `refund` refuses unless the state is
@@ -252,7 +252,7 @@ all use the same registration, allowance and upgrade path.
     DAO never launches, and the tokens minted to members carry no power because nothing ever goes Live.
   - **One definition of failure, owned by the Manager.** Because R1 defines `Failed` as "the
     deadline passed and the DAO isn't Live", the Manager can compute it alone:
-    `ledger_timestamp > PendingDao.deadline && !token.is_live()`. Launch refusal, `release_slug` and
+    `ledger_timestamp > PendingDao.deadline && !token.is_live()`. Launch refusal, `release_slug`, and
     `recover_claims` all use this Manager-side rule and never ask ClaimMinter. ClaimMinter's `refund` applies
     the same rule from its own stored deadline plus `token.is_live()`, so `assurance_state` is a derived view,
     not a source of truth. Only `Met` (the threshold count) is read from ClaimMinter.
@@ -264,13 +264,13 @@ all use the same registration, allowance and upgrade path.
 ### 3. ClaimMinter: a per-DAO module (replaces `contracts/minter`)
 
 - **A module like any other.** Registry kind `claims`, voting (it never holds NFTs). Its constructor wires the
-  Token, the Treasury and the Manager. It uses `common::upgrade` with the DAO admin, as the other modules do, and
-  stays in Setup until the Manager launches it. It keeps error block 7800 and the existing merkle leaf, proof and
+  Token, the Treasury, and the Manager. It uses `common::upgrade` with the DAO admin, as the other modules do, and
+  stays in Setup until the Manager launches it. It keeps error block 7800 and the existing merkle leaf, proof, and
   `tree_uri` format (the 2026-10-12 decision).
 - **`open_list(root, tree_uri, asset, price, expires_at, total, assurance: Option<{threshold_claimers, deadline}>)
   -> list_id`.**
-  - It needs the token admin's authorization, plus one more check before launch:
-    - **Setup with `price > 0` or an `assurance`:** the call must also carry the Manager's authorization (ClaimMinter
+  - It needs the token admin's authorisation, plus one more check before launch:
+    - **Setup with `price > 0` or an `assurance`:** the call must also carry the Manager's authorisation (ClaimMinter
       stores the Manager address from its constructor). So only `manager.open_assurance` can open it, and
       `PendingDao` always records it. A launch admin calling `open_list` directly fails with `ManagerRequired`.
     - **Setup with `price == 0` and no assurance:** the launch admin may open the list directly.
@@ -297,8 +297,7 @@ all use the same registration, allowance and upgrade path.
 
   `claim` refuses on a `Failed` list (`AssuranceFailed`). After launch, the list keeps accepting claims until its
   `expires_at`; those pay the Treasury directly (the Setup escrow rule no longer applies), so `release` is called
-  once, inside the launch transaction. Before launch, the deadline decides: `Met` and launched, or `Failed`
- .
+  once, inside the launch transaction. Before launch, the deadline decides: `Met` and launched, or `Failed`.
 
   The unit is distinct claimers, because the goal is "people who show up". The tree fixes the addresses, so
   nobody can add sybil leaves, and partial claims count once per address.
@@ -321,11 +320,11 @@ all use the same registration, allowance and upgrade path.
     `claims` hash**. The gate is the Manager-side failure rule (`ledger_timestamp > PendingDao.deadline &&
     !token.is_live()`), never ClaimMinter's own `assurance_state`, because the state machine may be the broken
     code. It calls ClaimMinter's Manager-only `recovery_upgrade(from, to)`, which checks only the
-    Manager's authorization and that it is still in Setup (it must never run on a Live module); it doesn't consult
+    Manager's authorisation and that it is still in Setup (it must never run on a Live module); it doesn't consult
     its own state machine. The window opens only once nothing can be launched any more, so the upgrade can't
     change the drive's outcome. It can change who receives the escrow, since the new code holds it, so the
     target must also be the hash announced as latest for `ClaimMinter`, and the Manager's upgrade notice must
-    have passed since the approval, the announcement and the deadline (never less than seven days after the
+    have passed since the approval, the announcement, and the deadline (never less than seven days after the
     deadline): members have that time to take their refunds with the code they paid into (SECURITY_MODEL,
     Assurance launch).
   - `refund` and `release` never need an allowance, so cutting a buggy module's allowance to zero never strands
@@ -343,7 +342,7 @@ all use the same registration, allowance and upgrade path.
        `token.mint_allowance(marketplace) − Σ reserved_open_pools ≥ n` (`AllowanceNotReserved`). `restock`
        draws only from its own pool's reservation, so closing one pool can never starve another.
   2. Anyone calls `marketplace.restock(pool_id)`. That mints the next chunk straight into the Marketplace's custody
-     and appends the ids to the pool's stock pages. `Pool(pool_id)` holds price, asset, expiry, limits and
+     and appends the ids to the pool's stock pages. `Pool(pool_id)` holds price, asset, expiry, limits, and
      counters; `PoolStock(pool_id, page)` holds up to 64 ids, so a 100-token pool adds about 3 entries to one-click
      renewal instead of 100 (R8).
      - The chunk is sized to the event budget for a mint plus a page append (`common::restock_fits`, measured in
@@ -360,7 +359,7 @@ all use the same registration, allowance and upgrade path.
     in budget-sized chunks and empties their stock pages. Both holders are non-voting, so no votes move.
   - `close_pool` returns the pool's unstocked remainder, `n − stocked` for that pool only, through
     `token.release_mint_allowance(n − stocked)`, and drops the pool's reservation. `release_mint_allowance`
-    saturates at the current allowance, because the Treasury may have lowered it by proposal in between. The Marketplace authorizes that Token call itself, and it can only
+    saturates at the current allowance, because the Treasury may have lowered it by proposal in between. The Marketplace authorises that Token call itself, and it can only
     lower the caller's own allowance. Unsold supply always ends up in the Treasury, and no allowance is left behind.
 - **Buyers pick a specific NFT** with `buy_from_pool(pool_id, page, token_id, buyer, max_price)`, which removes the
   id from its page and pays the Treasury. Member resales keep the existing `Listing` / `buy(token_id)` path. `buy_from_pool` refuses on a
@@ -389,7 +388,7 @@ all use the same registration, allowance and upgrade path.
 
 | Actor | Before launch | After launch |
 |---|---|---|
-| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. With the launch admin of a failed drive, it can replace that drive's ClaimMinter code (`recover_claims`), which then holds the escrow; only to the announced latest, after the notice and at least seven days after the deadline. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
+| Platform admin, through Manager upgrades (with the D39/D42 notice) | Deploys and registers modules for DAOs still in Setup (registered hashes only). A hostile Manager could launch or alter a DAO that is still in Setup, the same factory trust DAOs accept today. It can also end an assurance drive in refunds, by pausing the factory or revoking a hash before the drive's deadline: the same factory trust, but a new lever. With the launch admin of a failed drive, it can replace that drive's ClaimMinter code (`recover_claims`), which then holds the escrow; only to the announced latest, after the notice, and at least seven days after the deadline. | **No Token authority.** It can approve hashes in the registry, but a module upgrade still needs the DAO's own proposal. It can't reach any DAO's escrow: ClaimMinter pays only the Treasury wired at its construction. |
 | Modules (Auction, Marketplace, ClaimMinter, Circle, custom) | Mint within their allowances; ClaimMinter holds assurance escrow. Upgrades by the launch admin until `open_assurance` freezes them; after that, only the recorded launch admin's `recover_claims` on a `Failed` list, to an approved `claims` hash announced as latest, after the upgrade notice. | Mint within their allowances. **Upgraded only by the DAO's own proposal** to Manager-approved hashes. |
 | Treasury | Can't act | Mints without a limit; manages allowances and registrations |
 
@@ -401,11 +400,11 @@ and the web shows any delegated votes next to a module.
 **Trust limitations SECURITY_MODEL states:**
 - **An assurance proves a launch, not a community.** The creator writes the tree, so a creator can meet
   `threshold_claimers` with their own wallets and launch a DAO they control, with outsiders' fees in a Treasury
-  they govern. Refunds, the deadline bound and the frozen settings don't cover this, and nothing on chain can.
+  they govern. Refunds, the deadline bound, and the frozen settings don't cover this, and nothing on chain can.
   Members must read the published tree before paying. The claim page shows the tree's address count against
   the threshold and the share of the tree the largest leaves hold.
 - **Payment assets with issuer controls.** A list's or pool's payment asset is the creator's or the DAO's choice.
-  An asset with clawback or authorization-required flags can be clawed back from escrow, or frozen in the
+  An asset with clawback or authorisation-required flags can be clawed back from escrow, or frozen in the
   Treasury, by its issuer. This extends SECURITY_MODEL's existing payment-asset limitation to escrow and pools,
   and the web shows the asset's flags next to the price.
 
@@ -448,7 +447,7 @@ would still pass with its old role; and external modules emit event names the de
     append-only stream still passes them.
 - **Optional modules in the Manager views.** `DaoCreated.modules` and `DaoAddresses` become optional per module.
   `manager.dao_registry`, `manager.daos` (`auction_contract`, `marketplace_contract`, `auction_enabled`,
-  `marketplace_enabled`) and the Prisma `ManagerDao` view become nullable.
+  `marketplace_enabled`), and the Prisma `ManagerDao` view become nullable.
 - **`DaoLaunched` changes shape.** Its `minter` field disappears, the open flags come from the
   stored launch config, and it gains the launch-time module list `Vec<(kind, address)>`. That way the indexer
   knows a DAO's launch set without the Token's `ModuleRegistered` events. `manager.dao_launches`
@@ -456,7 +455,7 @@ would still pass with its old role; and external modules emit event names the de
   `launch_marketplace` are kept as reported, and `manager.daos.minter_contract` and `auction_enabled` are
   rewired.
 - **Common events from new roles.** `COMMON_EVENT_EMITTERS` in
-  `packages/goldsky/src/contract-events.mjs` replaces `minter` with `claims`, `circle` and `module`, so a
+  `packages/goldsky/src/contract-events.mjs` replaces `minter` with `claims`, `circle`, and `module`, so a
   ClaimMinter upgrade becomes `claims.upgraded`, not `contract.upgraded`.
 - **Unknown events.** An event from a `module`-role contract with an unknown name decodes as follows:
   - `event_name` as emitted;
@@ -479,7 +478,7 @@ would still pass with its old role; and external modules emit event names the de
 
 ## Open Questions
 
-1. **Vote delay.** Should tokens bought from a pool vote only after T days? That is the strongest takeover defense,
+1. **Vote delay.** Should tokens bought from a pool vote only after T days? That is the strongest takeover defence,
    but done in the Token it changes checkpoints and delegation. The Marketplace could instead hold a bought
    token for T days before the buyer claims it, leaving the Token unchanged (both options in `TODOS.md`). It's
    deferred until per-buyer caps and the sales rate prove insufficient.
@@ -491,7 +490,7 @@ would still pass with its old role; and external modules emit event names the de
 - **No platform minting.** Every allowance holder is a module the DAO upgrades by its own proposal; nothing the
   platform can upgrade holds an allowance. After launch the Manager has no Token authority, and per-DAO modules change code only
   through the DAO's own proposal.
-- **Vote counts stay exact.** A property test across random mint, transfer, list, restock, `delegate`, register and
+- **Vote counts stay exact.** A property test across random mint, transfer, list, restock, `delegate`, register, and
   unregister sequences, including registering and unregistering modules that hold tokens. Three clauses after
   every operation:
   1. for every address, voting units equal balance, or zero for a non-voting holder;
@@ -542,7 +541,7 @@ would still pass with its old role; and external modules emit event names the de
   module's unknown event decodes as `module.<event_name>`; `allowlist-regex.test.mjs` checks the per-kind tables.
 - **Optional modules:** a DAO created without Auction or Marketplace gets a Circle attached by one proposal, and a
   custom module that holds NFTs is registered by vote.
-- **Renewal:** the renewal quote covers every registered module, including ClaimMinter lists, claim records and
+- **Renewal:** the renewal quote covers every registered module, including ClaimMinter lists, claim records, and
   escrow balances.
 - **Vote tally lifetime:** after a proposal's first and only vote, `ProposalVote(id)` has at least
   `PROPOSAL_TTL_EXTEND_TO − 1` ledgers left (today it has the 7-day network minimum). The test follows
@@ -561,7 +560,7 @@ Made with the owner on 2026-10-13 and built as written.
 | R4 | The assurance escrow moves to the Treasury inside the launch transaction. |
 | R5 | Manager-built modules share the `DaoModule` trait: Manager-only `launch(treasury, open)` and `handoff(treasury)`, with each module checking its payment asset at launch. The core four keep their typed launch calls and gain a Manager-only `handoff`. |
 | R6 | Modules deployed outside the Manager are first-class with labels: registered only after launch, by proposal; allowlisted by the indexer from `ModuleRegistered`; badged in the web; renewed by instance and code, with a warning, when they don't list their keys. |
-| R7 | The existing Token, Manager and Marketplace suites plus the voting-units invariant are the regression contract. The intentional changes: allowances replace mint authority, the Minter pin and primary listings go, and the non-voting set comes from the registry. |
+| R7 | The existing Token, Manager, and Marketplace suites plus the voting-units invariant are the regression contract. The intentional changes: allowances replace mint authority, the Minter pin and primary listings go, and the non-voting set comes from the registry. |
 | R8 | Pool stock is paged: `Pool(pool_id)` plus `PoolStock(pool_id, page)` with up to 64 ids per page, so a pool adds pages + 1 entries to the sweep. |
 | R9 | A vote delay for pool purchases is a TODO (TODOS.md), not built. |
 
@@ -573,9 +572,9 @@ Choices made while building. Each refines the design without changing what it gu
 - **A module created after launch is launched with `open = false`.** The proposal grants its allowance after creating it, so an Auction that opened at creation would try to mint without one. The proposal opens the module once it is funded.
 - **The payment-asset check lives in the Manager (R5).** `DaoModule` has `payment_asset()`. Before any launch call, `launch_dao` compares each registered module's current asset with the one `PendingDao` recorded at creation (`PaymentAssetMismatch`, 7132). The module-side errors (Auction 7415) are retired.
 - **ClaimMinter releases its own escrow in `launch` (R4).** The Manager launches the Token first and then every module, so the ClaimMinter's `launch` sees a Live Token and moves the assurance escrow to the Treasury in the same transaction. `release` stays public.
-- **No `ManagerRequired` error.** Soroban can't tell a contract who invoked it, so a launch admin's direct `open_list` with a price or assurance terms fails the Manager's `require_auth` (an authorization error) instead of a named code.
+- **No `ManagerRequired` error.** Soroban can't tell a contract who invoked it, so a launch admin's direct `open_list` with a price or assurance terms fails the Manager's `require_auth` (an authorisation error) instead of a named code.
 - **Claim records are holder class.** `Claim(list, claimer)` belongs to the claimer; their next claim or refund restores it (automatic since protocol 23). `renewal_keys` lists the DAO-owned `List(id)` entries and the escrow balance. Read the renewal Success Criterion as "lists and escrow balances".
-- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash (and, on the Manager's side, the latest-only rule and the notice).
+- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorisation, Setup only, an approved hash (and, on the Manager's side, the latest-only rule and the notice).
 - **Storage shapes.** A `#[contracttype]` field can't hold `Option<struct>`, so a `ClaimList` stores its assurance terms flattened (a threshold of 0 means none). The Manager keeps a drive under its own `Assurance(token)` key rather than inside `PendingDao`, and drops it at launch.
 - **`open_assurance` takes `AssuranceListParams`** without an asset: the list is priced in the `claims_payment_asset` recorded at creation.
 - **`DaoLaunched.registry`** is the launch-time module list (`Vec<ModuleEntry>`). `modules` keeps the `DaoAddresses`, whose module fields are now optional, so optional modules changed no shape.

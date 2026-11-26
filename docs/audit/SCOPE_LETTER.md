@@ -48,20 +48,16 @@ Code lines leave out blank lines, comments, and test-only code; SCOPE.md explain
 | | |
 | --- | --- |
 | soroban-sdk | [version] |
-| OpenZeppelin `stellar-contracts` | [revision or tag], commit [hash] |
+| OpenZeppelin `stellar-contracts` | `fbfde38` (a git revision on `main`, not a tagged release), commit `fbfde388e1b72afa93d6b1c922067879b20e81db` |
 | OpenZeppelin modules used | `stellar_governance::governor`, `stellar_governance::votes`, `stellar_tokens::non_fungible`, `stellar_contract_utils::pausable`, `stellar_macros` (`when_paused`, `when_not_paused`); confirm against SCOPE.md at the freeze |
 
-[Choose one, and delete the others. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records which OpenZeppelin audits cover the pinned revision; it finds that no published report covers the changes from `239a2a7` to `fbfde38`, and recommends the third option unless OpenZeppelin confirms that a published review covers them.]
-
-- [The OpenZeppelin modules used are covered by OpenZeppelin's published audit of [release], and the revision we use is that release. They are out of scope.]
-- [The revision we use differs from the audited release [release]. The difference is recorded in [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md); please review that difference as part of the scope.]
-- [Please include the OpenZeppelin modules used in the scope.]
+The OpenZeppelin modules used are out of scope. The pin is frozen at `fbfde38`, and we rely on OpenZeppelin's published audits for the modules' own code. [`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records which reports cover the pinned revision and lists the later changes in the modules used that those reports do not name. Our contracts' use of these modules is in scope, because that is our code.
 
 ## 3. Out of scope
 
 - `contracts/e2e/` (integration tests) and `contracts/vote-adapter-mock/` (a test and testnet mock that must never be approved on mainnet).
 - `soroban-sdk` and the Soroban host.
-- [The OpenZeppelin modules, if section 2 says so.]
+- The OpenZeppelin `stellar-contracts` modules at `fbfde38` (see section 2). Our contracts' use of them is in scope.
 - The web app (`apps/web`), docs site (`apps/docs`), indexer (`packages/goldsky`), SQL read model (`db/`), generated bindings (`packages/*-bindings`), and deployment scripts. [Delete this item if the app and indexer tier is a second engagement, and describe that engagement in section 6.]
 - UI styling, the documentation, and legal pages.
 
@@ -82,7 +78,7 @@ Please don't report the items in KNOWN_ISSUES.md as new findings, unless you fin
 2. **Funds without a proposal.** Can any path move a DAO's funds or tokens without a passed proposal, other than the permissionless paths `SECURITY_MODEL.md` lists? Do the Treasury's `authorize` trees authorize only what voters see?
 3. **Escrow.** Is every escrowed amount (auction bids, listings, pool stock, ClaimMinter escrow) always either paid out once or returned once? Can anyone block refunds or settlement?
 4. **Votes and quorum.** Do voting units, the voting supply, and the quorum stay correct on every transfer, mint, custody, and delegation path? Can a vote count twice, or a quorum be lowered after a proposal is created?
-5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the Governor's and Treasury's storage-layout gate and recovery proposals, the Manager's notice period, and recovery upgrades of a failed drive sound?
+5. **Upgrades.** Are registry approvals, per-path upgrades, storage-version migrations, the storage-layout gate, the Governor's and Treasury's recovery proposals, the Manager's notice period, and recovery upgrades of a failed drive sound?
 6. **Isolation between DAOs.** Can one DAO affect another DAO's state, mints, or escrow through the Manager or shared code?
 7. **Resource limits and archival.** Can a passed proposal, a claim, or a settlement become impossible to complete because of event, footprint, or CPU limits, or because an entry archives?
 8. **Claims.** Are the Merkle proofs and claim checks sound?

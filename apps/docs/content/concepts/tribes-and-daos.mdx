@@ -1,8 +1,8 @@
 ## In plain words
 
-A tribe is a group of people who hold funds together and make decisions together. Members hold tokens, and each token is one vote. The group's money sits in a shared treasury. It moves only when members pass a proposal to move it.
+A tribe is a group of people who hold funds together and make decisions together. Members hold tokens, and each token is one vote. The group's money is held in a shared treasury. It moves only when members pass a proposal to move it.
 
-No single person runs a tribe. The person who builds it sets it up, then hands control to the tribe at launch. From then on, members decide every change by vote.
+No single person runs a tribe. The person who builds it sets it up, then passes control to the tribe at launch. From then on, members decide every change by vote.
 
 ## The DAO term
 
@@ -39,19 +39,19 @@ A platform contract called the **Manager** creates these contracts. Each contrac
 
 A tribe goes through two stages.
 
-**Setup.** The tribe has been created, but nobody can join yet. One wallet, the [launch admin](/reference/glossary#launch-admin), adds the artwork, mints tokens for the founders, and can adjust settings directly.
+**Setup.** The tribe has been created, but nobody can bid, trade, propose, or vote yet. One wallet, the [launch admin](/reference/glossary#launch-admin), adds the artwork, mints tokens for the founders, and can adjust settings directly.
 
 **Live.** At launch, the admin role of every contract passes to the tribe's treasury. The treasury acts only when a proposal passes, so from launch onwards every change requires DAO governance: a proposal that members vote on.
 
-This hand-over happens once, and it can't be reversed. See [Setup versus launched](/concepts/setup-and-launch).
+This change happens once, and it can't be reversed. See [Setup versus launched](/concepts/setup-and-launch).
 
 ## What is public
 
-Everything a tribe does on chain is public. Anyone can see its members, its treasury balance, every payment, every proposal, and every vote with its reason. Tribe Builder also keeps an index of this activity so that pages load quickly. The network is the source of truth. When the index is behind, the app reads the network directly where it can.
+Everything a tribe does on chain is public. Anyone can see its members, its treasury balance, every payment, every proposal, and every vote with its reason. Tribe Builder also keeps an index of this activity so that pages load quickly. The network's record is the authority. When the index is behind, the app reads the network directly where it can.
 
 ## What a tribe is not
 
-- **Not a legal entity.** A tribe is a set of contracts. A tribe that needs a legal wrapper can prepare a [legal entity export](/guides/legal/export).
+- **Not a legal entity.** A tribe is a set of contracts. A tribe that wants to form one can prepare a [legal entity export](/guides/legal/export).
 - **Not run by Tribe Builder.** After launch, Tribe Builder has no special power over a tribe's settings or funds. The Manager still lists which contract versions exist, as [Upgrades](/concepts/upgrades) explains, but it cannot upgrade a tribe's contracts on its behalf.
 - **Not a financial product.** A membership token is a vote and a record of membership. It carries no promise of value or return.
 

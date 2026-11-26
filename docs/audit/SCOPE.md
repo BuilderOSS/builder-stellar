@@ -8,8 +8,8 @@ This is the list of contract files and folders in the audit scope, with their si
 
 | | |
 | --- | --- |
-| Commit | `f51d301eb8b3de49b01463488e90eb2c8928d31f` (2026-11-25), the latest commit that changed a file in scope |
-| `contracts/` tree | `fa2fb4863c926215303c0caa7b29d9510b1deb34` |
+| Commit | `5702ef45a22a72d25e07326d3d33160a88c44b09` (2026-11-25), the latest commit that changed a file in scope |
+| `contracts/` tree | `80bbfc0e14ee4f67204179ff33452003c7d56199` |
 | Crates in scope | 9 |
 | Code lines in scope | 9,073 |
 | Unit tests in those crates | 524 |
@@ -58,7 +58,7 @@ targets = ["wasm32v1-none"]
 profile = "minimal"
 ```
 
-[`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records what the contracts use from this OpenZeppelin revision, how it differs from the nearby tags, why the project keeps it, and which OpenZeppelin audits cover it.
+[`docs/OPENZEPPELIN_PIN.md`](../OPENZEPPELIN_PIN.md) records what the contracts use from this OpenZeppelin revision, how it differs from the nearest tags, why the project keeps it, and which OpenZeppelin audits cover it.
 
 ### OpenZeppelin packages and the modules used
 
@@ -289,9 +289,9 @@ Other files in the crate folders:
 
 | Path | Why it is out of scope | Size |
 | --- | --- | --- |
-| [`contracts/e2e/`](../../contracts/e2e) | Integration tests (`dao-e2e`). They run the real contracts together in the in-memory host and are evidence for the audit, not deployed code. | 11 Rust files, 7,474 code lines, 118 tests |
+| [`contracts/e2e/`](../../contracts/e2e) | Integration tests (`dao-e2e`). They run the real contracts together in the in-memory host and are evidence for the audit, not deployed code. | 13 Rust files, 9,480 code lines, 133 tests |
 | [`contracts/vote-adapter-mock/`](../../contracts/vote-adapter-mock) | A vote source whose admin sets any weight. It exists for tests and testnet and must never be approved on mainnet (see its README). | 3 Rust files, 222 code lines, 5 tests |
-| The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. Whether the modules used are in scope is agreed in the scope letter. | |
+| The OpenZeppelin packages | Third-party code, listed above with the paths the contracts use. They are pinned at the revision above, and the project relies on OpenZeppelin's published audits for them ([pin record](../OPENZEPPELIN_PIN.md)). The contracts' use of them is in scope. | |
 | `soroban-sdk` and the Soroban host | Platform code, trusted as released. | |
 | `apps/`, `packages/`, `db/` | The web app, the indexer, the generated bindings, and the SQL read model. They are not contract code; the app and indexer tier has its own [threat model](THREAT_MODEL.md). | |
 | `scripts/`, `configs/`, `deploys/`, `releases/` | Deployment and operations tooling and records. | |

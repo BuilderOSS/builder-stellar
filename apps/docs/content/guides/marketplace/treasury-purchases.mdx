@@ -19,7 +19,7 @@ Members can decide by vote that the tribe's [Treasury](/reference/glossary#treas
 
    <Shot id="marketplace/treasury-purchases/02" alt="The Listed token ID field with a token number entered" />
 
-3. **Add the purchase to your proposal.** Choose **Add the purchase to proposal**. The app reads the live listing and checks that it is open and hasn't ended. It then prepares the Treasury's permission for exactly the listing's payments, and asks the Treasury contract to check it. The purchase joins your draft as one item, "Treasury buys listed token #12", with two steps: the authorization, then the purchase at no more than the current price.
+3. **Add the purchase to your proposal.** Choose **Add the purchase to proposal**. The app reads the live listing and checks that it is open and hasn't ended. It then prepares the Treasury's permission for exactly the listing's payments, and asks the Treasury contract to check it. The purchase joins your draft as one item, "Treasury buys listed token #12", with two steps: the authorisation, then the purchase at no more than the current price.
 
    <Shot id="marketplace/treasury-purchases/03" alt="The proposal draft with the Treasury buys listed token item and its two steps" />
 
@@ -27,7 +27,7 @@ Members can decide by vote that the tribe's [Treasury](/reference/glossary#treas
 
    <Shot id="marketplace/treasury-purchases/04" alt="The proposal review with the Treasury purchase listed under its actions" />
 
-5. **Vote, queue and execute.** Members vote on the proposal. If it passes, it is queued, and after the safety delay anyone can execute it. See [Vote](/guides/proposals/vote/) and [Queue and execute](/guides/proposals/queue-and-execute/).
+5. **Vote, queue, and execute.** Members vote on the proposal. If it passes, it is queued, and after the safety delay anyone can execute it. See [Vote](/guides/proposals/vote/) and [Queue and execute](/guides/proposals/queue-and-execute/).
 
    <Shot id="marketplace/treasury-purchases/05" alt="The proposal page for an executed Treasury purchase" />
 
@@ -37,7 +37,7 @@ After execution, the token is held by the Treasury. Tokens the Treasury holds ca
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   The proposal makes two calls, in order, when it is executed.
 
   First, the Treasury calls its own `authorize` with a list of the exact payments it allows: a transfer of the resale fee to the Treasury, and a transfer of the price minus the fee to the seller, both in the listing's payment asset. A listing with no fee has one transfer. The Treasury allows nothing else.
@@ -46,7 +46,7 @@ After execution, the token is held by the Treasury. Tokens the Treasury holds ca
 
   If any call fails, for example because the listing was cancelled, has ended, or now has a different price or seller, the whole proposal reverts and nothing moves. The proposal stays queued and can be executed again until it expires. If you add the purchase to a proposal with other actions, a failed purchase stops those actions too, so consider proposing it on its own.
 
-  The wallet that executes the proposal pays the Stellar network fee in XLM. Tribe Builder takes no fee. The proposal, its actions and the purchase are public on chain.
+  The wallet that executes the proposal pays the Stellar network fee in XLM. Tribe Builder takes no fee. The proposal, its actions, and the purchase are public on chain.
 </Disclosure>
 
 ## If something goes wrong
@@ -56,7 +56,7 @@ After execution, the token is held by the Treasury. Tokens the Treasury holds ca
 - **"Token #12 has no open secondary listing."** The token isn't listed now. Check the number on the Market page.
 - **"This listing has expired and cannot be bought."** The listing has ended. The seller can list the token again.
 - **"The Treasury cannot buy its own listing."** The Treasury is the seller of this listing.
-- **"The Treasury rejected this authorization tree."** The Treasury's check of the payments failed. Nothing was added. Reload the page and try again.
+- **"The Treasury rejected this authorisation tree."** The Treasury's check of the payments failed. Nothing was added. Reload the page and try again.
 - **The executed proposal failed.** Check that the listing is still open at the same price, and that the Treasury holds enough of the payment asset. The proposal stays queued until it expires, so it can be executed again once the problem is fixed. If the listing changed, propose a new purchase.
 
 For an error code, see [Error messages](/reference/error-messages/).

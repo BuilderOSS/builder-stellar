@@ -16,7 +16,7 @@ You can let someone else vote with your tokens. They become your [delegate](/ref
 
    <Shot id="members/delegate/01" alt="Your member profile with the Delegate votes button under the vote count" />
 
-2. **Choose Delegate votes.** In the **Your token** card, under **What do you want to do?**, choose **Delegate votes**.
+2. **Check that Delegate votes is chosen.** In the **Your token** card, under **What do you want to do?**, **Delegate votes** is already chosen when you come from your profile. If you opened the token another way, choose it.
 
    <Shot id="members/delegate/02" alt="The Your token card with Delegate votes selected" />
 
@@ -24,7 +24,7 @@ You can let someone else vote with your tokens. They become your [delegate](/ref
 
    <Shot id="members/delegate/03" alt="A delegate address entered, with the note that it applies to every token you hold here" />
 
-4. **Review.** Choose **Review**. The app checks that you still hold the token and prepares the transaction. The summary names how many tokens' votes move, your current delegate and your current voting power. "Checks passed. Review the details below. Nothing is signed yet." means it is ready.
+4. **Review.** Choose **Review**. The app checks that you still hold the token and prepares the transaction. The summary names how many tokens' votes move, your current delegate, and your current voting power. "Checks passed. Review the details below. Nothing is signed yet." means it is ready.
 
    <Shot id="members/delegate/04" alt="The delegation review with the summary and the network fee" />
 
@@ -38,7 +38,7 @@ Each proposal counts votes at a fixed point in time, called its snapshot: the le
 
 ## What happens on chain
 
-<Disclosure title="Contracts, fees and waits">
+<Disclosure title="Contracts, fees, and waits">
   The app calls `delegate` on the tribe's Token contract, with your account and the delegate's. Your tokens' voting units move from your current delegate to the new one. Your tokens stay in your wallet. Votes other members delegated to you stay with you.
 
   New holders are delegated to themselves automatically, so you don't need to delegate to vote for yourself. **Vote for myself again** delegates back to your own address.
