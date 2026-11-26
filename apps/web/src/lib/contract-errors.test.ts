@@ -36,10 +36,22 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('governor', 7518)).toContain('StorageVersionMismatch');
     expect(getContractErrorMessage('treasury', 7607)).toContain('StorageVersionMismatch');
     expect(getContractErrorMessage('token', 7222)).toContain('ModuleHoldsTokens');
+    expect(getContractErrorMessage('token', 7224)).toContain('ModuleCustodyClosed');
     expect(getContractErrorMessage('auction', 7419)).toContain('NotStellarAsset');
     expect(getContractErrorMessage('auction', 7420)).toContain('TokenInAuction');
     expect(getContractErrorMessage('marketplace', 7728)).toContain('NotStellarAsset');
     expect(getContractErrorMessage('marketplace', 7729)).toContain('NotPaused');
+    for (const [contract, code] of [
+      ['manager', 7147],
+      ['token', 7223],
+      ['metadata', 7320],
+      ['auction', 7421],
+      ['marketplace', 7730],
+      ['minter', 7831]
+    ] as const) {
+      expect(getContractErrorMessage(contract, code)).toContain('StorageVersionMismatch');
+    }
+    expect(getContractErrorMessage('manager', 7148)).toContain('DriveCodeNotAllowed');
   });
 
   it('drops retired codes and words the governor lifecycle codes accurately', () => {

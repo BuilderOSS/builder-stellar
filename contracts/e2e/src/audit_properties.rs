@@ -4,7 +4,10 @@
 //! - INV-01: voting units equal non-custody balances, over mints, batch
 //!   mints, transfers (custody moves into and out of the Treasury, Auction,
 //!   Marketplace, and a vault module among them), delegations, and
-//!   registering a holder as a non-voting module. The Token has no burn: a
+//!   registering a holder as a non-voting module. A send or another
+//!   minter's mint into a non-voting module is refused and changes nothing
+//!   (INV-38); the module then pulls the token in, or the Auction and
+//!   Marketplace mint to themselves. The Token has no burn: a
 //!   token's voting unit is burned only when it moves into custody or its
 //!   holder becomes a non-voting module, and every minted token stays held.
 //! - INV-05: mint-allowance accounting, over module mints, admin mints,
@@ -247,7 +250,11 @@ impl VoteWorld {
         let marketplace = e.register(PropertyStub, ());
         token.register_module(&Symbol::new(&e, "auction"), &auction, &true);
         token.register_module(&Symbol::new(&e, "marketplace"), &marketplace, &true);
-        token.launch(&treasury, &grant(&e, &minter));
+        // The Auction and Marketplace mint to themselves against their own grants.
+        let mut grants = grant(&e, &minter);
+        grants.append(&grant(&e, &auction));
+        grants.append(&grant(&e, &marketplace));
+        token.launch(&treasury, &grants);
         let mut holders: StdVec<Address> = (0..WALLETS).map(|_| Address::generate(&e)).collect();
         holders.extend([treasury, auction, marketplace, e.register(PropertyStub, ())]);
         let outsider = Address::generate(&e);
@@ -263,6 +270,12 @@ impl VoteWorld {
 
     fn non_voting(&self, holder: usize) -> bool {
         (TREASURY..VAULT).contains(&holder) || (holder == VAULT && self.vault_registered)
+    }
+
+    /// A registered non-voting module (not the Treasury): a token reaches it
+    /// only when it makes the call itself (`ModuleCustodyClosed`).
+    fn custody_module(&self, holder: usize) -> bool {
+        holder != TREASURY && self.non_voting(holder)
     }
 
     fn voting_units(&self, account: &Address) -> u128 {
@@ -326,7 +339,20 @@ impl VoteWorld {
         let e = &self.e;
         match step {
             VoteStep::Mint { to } => {
-                self.token.mint(&self.minter, &self.holders[*to]);
+                let recipient = &self.holders[*to];
+                if self.custody_module(*to) {
+                    let before = self.books();
+                    let error = refused(self.token.try_mint(&self.minter, recipient));
+                    assert_eq!(error, TokenError::ModuleCustodyClosed.into());
+                    assert_eq!(self.books(), before, "a refused mint moved votes");
+                    if *to == VAULT {
+                        return "mint into a module refused";
+                    }
+                    // The Auction or the Marketplace mints to itself.
+                    self.token.mint(recipient, recipient);
+                    return "mint into custody";
+                }
+                self.token.mint(&self.minter, recipient);
                 if self.non_voting(*to) {
                     "mint into custody"
                 } else {
@@ -334,12 +360,37 @@ impl VoteWorld {
                 }
             }
             VoteStep::BatchMint { to } => {
-                let mut recipients = Vec::new(e);
-                let mut amounts = Vec::new(e);
-                for (holder, amount) in to {
-                    recipients.push_back(self.holders[*holder].clone());
-                    amounts.push_back(u128::from(*amount));
+                // `skip_modules` leaves out the recipients that are modules.
+                let batch = |skip_modules: bool| {
+                    let mut recipients = Vec::new(e);
+                    let mut amounts = Vec::new(e);
+                    for (holder, amount) in to {
+                        if skip_modules && self.custody_module(*holder) {
+                            continue;
+                        }
+                        recipients.push_back(self.holders[*holder].clone());
+                        amounts.push_back(u128::from(*amount));
+                    }
+                    (recipients, amounts)
+                };
+                if to.iter().any(|(holder, _)| self.custody_module(*holder)) {
+                    let (recipients, amounts) = batch(false);
+                    let before = self.books();
+                    let error = refused(self.token.try_batch_mint(
+                        &self.minter,
+                        &recipients,
+                        &amounts,
+                    ));
+                    assert_eq!(error, TokenError::ModuleCustodyClosed.into());
+                    assert_eq!(self.books(), before, "a refused batch mint moved votes");
+                    let (recipients, amounts) = batch(true);
+                    if recipients.is_empty() {
+                        return "batch mint into a module refused";
+                    }
+                    self.token.batch_mint(&self.minter, &recipients, &amounts);
+                    return "batch mint refused, then minted without its modules";
                 }
+                let (recipients, amounts) = batch(false);
                 self.token.batch_mint(&self.minter, &recipients, &amounts);
                 "batch mint"
             }
@@ -357,7 +408,20 @@ impl VoteWorld {
                     return "self-transfer skipped";
                 }
                 let from_index = self.holders.iter().position(|h| *h == from).unwrap();
-                self.token.transfer(&from, to_address, &id);
+                if self.custody_module(*to) {
+                    // A direct send into a module is refused and changes
+                    // nothing; the module pulls the token in, as the
+                    // Marketplace does when it lists one.
+                    let before = self.books();
+                    let error = refused(self.token.try_transfer(&from, to_address, &id));
+                    assert_eq!(error, TokenError::ModuleCustodyClosed.into());
+                    assert_eq!(self.books(), before, "a refused send moved votes");
+                    let expiry = e.ledger().sequence() + 100;
+                    self.token.approve(&from, to_address, &id, &expiry);
+                    self.token.transfer_from(to_address, &from, to_address, &id);
+                } else {
+                    self.token.transfer(&from, to_address, &id);
+                }
                 match (self.non_voting(from_index), self.non_voting(*to)) {
                     (false, true) => "custody move in",
                     (true, false) => "custody move out",
@@ -462,7 +526,10 @@ fn voting_units_equal_non_custody_balances_over_generated_sequences() {
         &[
             ("mint", 50),
             ("mint into custody", 20),
+            ("mint into a module refused", 3),
             ("batch mint", 50),
+            ("batch mint refused, then minted without its modules", 30),
+            ("batch mint into a module refused", 12),
             ("transfer", 50),
             ("custody move in", 50),
             ("custody move out", 30),

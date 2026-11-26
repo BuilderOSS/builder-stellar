@@ -780,6 +780,34 @@ fn wired(e: &Env, client: &DaoTokenContractClient, key: crate::storage::TokenKey
     })
 }
 
+/// `module` pulls `id` from `from` into its own custody with `transfer_from`,
+/// as the Marketplace's `list` does: the one way, besides minting to itself,
+/// that a non-voting module gains a token (`ModuleCustodyClosed`).
+fn pull_into_custody(
+    e: &Env,
+    client: &DaoTokenContractClient,
+    module: &Address,
+    from: &Address,
+    id: u32,
+) {
+    client.approve(from, module, &id, &(e.ledger().sequence() + 100));
+    client.transfer_from(module, from, module, &id);
+}
+
+/// A new token in a non-voting module's custody: the admin mints it to the
+/// Treasury and the module pulls it in. No votes move on the way.
+fn mint_into_custody(
+    e: &Env,
+    client: &DaoTokenContractClient,
+    admin: &Address,
+    module: &Address,
+) -> u32 {
+    let treasury = client.treasury();
+    let id = client.mint(admin, &treasury);
+    pull_into_custody(e, client, module, &treasury, id);
+    id
+}
+
 /// Sum of balances that should carry votes: everyone except the three
 /// system holders. Checked against `get_total_supply` after every step.
 fn assert_voting_supply(client: &DaoTokenContractClient, holders: &[&Address], expected: u128) {
@@ -814,8 +842,8 @@ mod voting_supply {
         assert_eq!(client.get_votes(&treasury), 0);
         assert_eq!(client.get_delegate(&treasury), None);
 
-        // Auction mint (single mint to a system holder): still no votes.
-        let auctioned = client.mint(&owner, &auction);
+        // A lot in the Auction's custody: still no votes.
+        let auctioned = mint_into_custody(&e, &client, &owner, &auction);
         assert_voting_supply(&client, &voters, 3);
 
         // Settlement to a bidder mints the voting unit.
@@ -835,7 +863,7 @@ mod voting_supply {
         assert_eq!(client.get_votes(&bob), 2);
 
         // A no-bid settlement moves auction -> treasury: no checkpoint churn.
-        let unsold = client.mint(&owner, &auction);
+        let unsold = mint_into_custody(&e, &client, &owner, &auction);
         let before = client.get_total_supply();
         client.transfer(&auction, &treasury, &unsold);
         assert_eq!(client.get_total_supply(), before);
@@ -857,7 +885,7 @@ mod voting_supply {
         client.delegate(&alice, &carol);
         assert_eq!(client.get_votes(&carol), 1);
 
-        client.transfer(&alice, &marketplace, &id);
+        pull_into_custody(&e, &client, &marketplace, &alice, id);
         assert_eq!(client.get_votes(&carol), 0);
         assert_eq!(client.get_total_supply(), 0);
 
@@ -992,6 +1020,93 @@ fn migrate_is_admin_gated_and_needs_a_newer_layout() {
     );
 }
 
+use common::assert_fails_with;
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Token's own error; the views keep
+/// answering, so the Governor can still count votes on the proposal that
+/// migrates, and `migrate` brings everything back.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    let (e, client, owner, _manager) = setup_with_manager();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let token_id = client.mint(&owner, &alice);
+    let custom = module(&e, &client, "custom_shop", false);
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&e, &client.address, stored);
+    let mismatch: soroban_sdk::Error = TokenError::StorageVersionMismatch.into();
+    let x = Address::generate(&e);
+    let name = String::from_str(&e, "Name");
+    let symbol = String::from_str(&e, "SYM");
+    let kind = Symbol::new(&e, "custom_more");
+
+    assert_fails_with!(mismatch, client.try_set_transfers_locked(&true));
+    assert_fails_with!(mismatch, client.try_set_members_only_delegation(&true));
+    assert_fails_with!(mismatch, client.try_set_dao_recovery(&true));
+    assert_fails_with!(mismatch, client.try_dao_transfer(&token_id, &bob));
+    assert_fails_with!(mismatch, client.try_set_transfer_agent(&custom, &true));
+    assert_fails_with!(
+        mismatch,
+        client.try_agent_transfer(&custom, &alice, &bob, &token_id)
+    );
+    assert_fails_with!(mismatch, client.try_set_metadata(&name, &symbol));
+    assert_fails_with!(mismatch, client.try_increase_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_decrease_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_release_mint_allowance(&custom, &1));
+    assert_fails_with!(mismatch, client.try_register_module(&kind, &x, &false));
+    assert_fails_with!(mismatch, client.try_unregister_module(&custom));
+    assert_fails_with!(mismatch, client.try_handoff(&x));
+    assert_fails_with!(mismatch, client.try_launch(&x, &grants(&e, &[])));
+    assert_fails_with!(mismatch, client.try_mint(&owner, &bob));
+    assert_fails_with!(
+        mismatch,
+        client.try_batch_mint(&owner, &vec![&e, bob.clone()], &vec![&e, 1u128])
+    );
+    assert_fails_with!(mismatch, client.try_transfer(&alice, &bob, &token_id));
+    assert_fails_with!(
+        mismatch,
+        client.try_transfer_from(&bob, &alice, &bob, &token_id)
+    );
+    assert_fails_with!(mismatch, client.try_approve(&alice, &bob, &token_id, &1000));
+    assert_fails_with!(mismatch, client.try_approve_for_all(&alice, &bob, &1000));
+    assert_fails_with!(mismatch, client.try_delegate(&alice, &bob));
+
+    // The views stay open: balances, ownership, votes and the layout itself.
+    assert_eq!(client.balance(&alice), 1);
+    assert_eq!(client.owner_of(&token_id), alice);
+    assert_eq!(client.get_votes(&alice), 1);
+    assert_eq!(client.storage_version(), stored);
+    assert_eq!(client.mint_allowance(&custom), 0);
+
+    // `migrate` is the way back; afterwards the Token works as before.
+    client.migrate();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    client.transfer(&alice, &bob, &token_id);
+    assert_eq!(client.owner_of(&token_id), bob);
+}
+
+/// Code older than its data (an upgrade to a lower `STORAGE_VERSION`) has
+/// nothing to migrate: it stays halted, and only `upgrade` is left open.
+#[test]
+fn code_older_than_its_data_stays_halted_with_upgrade_open() {
+    let (e, client, owner, _manager) = setup_with_manager();
+    let alice = Address::generate(&e);
+    common::testutils::set_stored_layout(&e, &client.address, crate::storage::STORAGE_VERSION + 1);
+    let mismatch: soroban_sdk::Error = TokenError::StorageVersionMismatch.into();
+    assert_fails_with!(mismatch, client.try_mint(&owner, &alice));
+    assert_fails_with!(
+        soroban_sdk::Error::from(CommonError::NothingToMigrate),
+        client.try_migrate()
+    );
+    // `upgrade` passes the gate and fails only on its own checks (here the
+    // stand-in hash is not the running one).
+    let other = BytesN::from_array(&e, &[7u8; 32]);
+    let error = client.try_upgrade(&other, &other).err().unwrap().unwrap();
+    assert_ne!(error, mismatch);
+    assert_eq!(error, CommonError::HashMismatch.into());
+}
+
 /// Voting power and delegation around the three non-voting system holders
 /// (Treasury, Auction, Marketplace). Each test checks votes, delegates and the
 /// voting supply after every step, because a mistake here either inflates
@@ -1028,6 +1143,10 @@ mod delegation_security {
         fn mint_to(&self, to: &Address) -> u32 {
             self.token.mint(&self.admin, to)
         }
+        /// A new token in `module`'s custody, brought in by the module.
+        fn mint_into(&self, module: &Address) -> u32 {
+            mint_into_custody(&self.e, &self.token, &self.admin, module)
+        }
         /// Escrow `id` from `seller` into the marketplace the way `list` does.
         fn list(&self, seller: &Address, id: u32) {
             self.token.approve(
@@ -1055,13 +1174,15 @@ mod delegation_security {
     fn system_holders_are_never_auto_delegated_on_any_receive_path() {
         let w = world();
         let alice = Address::generate(&w.e);
-        // mint, batch_mint, transfer and transfer_from into each system holder.
-        let a = w.mint_to(&w.auction);
+        // mint, batch_mint and transfer into the Treasury, and each module
+        // pulling a token into its own custody (the only way into one).
+        let a = w.mint_into(&w.auction);
         w.token.batch_mint(
             &w.admin,
-            &vec![&w.e, w.treasury.clone(), w.marketplace.clone()],
-            &vec![&w.e, 2u128, 1u128],
+            &vec![&w.e, w.treasury.clone()],
+            &vec![&w.e, 2u128],
         );
+        w.mint_into(&w.marketplace);
         let b = w.mint_to(&alice);
         w.token.transfer(&alice, &w.treasury, &b);
         let c = w.mint_to(&alice);
@@ -1174,7 +1295,7 @@ mod delegation_security {
         // The same holds for the auction and marketplace.
         w.token.delegate(&w.auction, &mallory);
         w.token.delegate(&w.marketplace, &mallory);
-        w.mint_to(&w.auction);
+        w.mint_into(&w.auction);
         w.list(&alice, id);
         assert_eq!(w.token.get_votes(&mallory), 0);
         assert_eq!(w.token.get_total_supply(), 0);
@@ -1203,7 +1324,7 @@ mod delegation_security {
         let w = world();
         let alice = Address::generate(&w.e);
         w.mint_to(&alice); // one voting token, so the supply has a checkpoint
-        let id = w.mint_to(&w.auction);
+        let id = w.mint_into(&w.auction);
         let supply_at = |w: &World| {
             w.e.as_contract(&w.token.address, || {
                 w.e.storage().persistent().get::<_, u32>(
@@ -1213,7 +1334,8 @@ mod delegation_security {
         };
         let before = supply_at(&w);
         w.token.transfer(&w.auction, &w.treasury, &id);
-        w.token.transfer(&w.treasury, &w.marketplace, &id);
+        // The Marketplace pulls it, as when the Treasury lists a token.
+        w.list(&w.treasury, id);
         assert_eq!(supply_at(&w), before);
         assert_eq!(w.token.get_total_supply(), 1);
     }
@@ -1534,11 +1656,11 @@ mod registry {
         let (e, client, owner, _m) = setup_with_manager();
         let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
-        client.batch_mint(
-            &owner,
-            &vec![&e, marketplace.clone(), alice.clone()],
-            &vec![&e, 2u128, 1u128],
-        );
+        client.mint(&owner, &alice);
+        let held = [
+            mint_into_custody(&e, &client, &owner, &marketplace),
+            mint_into_custody(&e, &client, &owner, &marketplace),
+        ];
         assert_books(&client, &[&marketplace, &alice], 1);
 
         let r = client.try_unregister_module(&marketplace);
@@ -1549,9 +1671,10 @@ mod registry {
         assert_eq!(client.marketplace(), Some(marketplace.clone()));
         assert_books(&client, &[&marketplace, &alice], 1);
 
-        // Emptied (the token ids are 0 and 1), it leaves with no votes to return.
-        client.transfer(&marketplace, &alice, &0);
-        client.transfer(&marketplace, &alice, &1);
+        // Emptied, it leaves with no votes to return.
+        for id in held {
+            client.transfer(&marketplace, &alice, &id);
+        }
         client.unregister_module(&marketplace);
         assert_eq!(client.marketplace(), None);
         assert_eq!(client.get_votes(&marketplace), 0);
@@ -1960,6 +2083,12 @@ mod locked {
             self.token.mint(&self.token.admin(), to)
         }
 
+        /// A new token in the Marketplace's custody, which it pulls in from
+        /// the Treasury (custody may approve anyone, even under the lock).
+        fn mint_into_market(&self) -> u32 {
+            mint_into_custody(&self.e, &self.token, &self.token.admin(), &self.market)
+        }
+
         fn locked_err(&self) -> soroban_sdk::Error {
             TokenError::TransfersLocked.into()
         }
@@ -2012,7 +2141,7 @@ mod locked {
             Address::generate(&d.e),
         );
         let a = d.mint(&alice);
-        let in_custody = d.mint(&d.market);
+        let in_custody = d.mint_into_market();
         d.launch();
         let t = &d.treasury;
 
@@ -2050,7 +2179,7 @@ mod locked {
         let d = Dao::new(LOCKED);
         let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
         let a = d.mint(&alice);
-        let held = d.mint(&d.market);
+        let held = d.mint_into_market();
         d.launch();
         let t = &d.treasury;
         // A holder may approve only the Treasury.
@@ -2206,7 +2335,7 @@ mod locked {
             });
             let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
             let a = d.mint(&alice);
-            let held = d.mint(&d.market);
+            let held = d.mint_into_market();
             // Before launch it does not exist.
             assert_eq!(
                 d.token.try_dao_transfer(&a, &bob).err().unwrap().unwrap(),
@@ -2388,7 +2517,7 @@ mod locked {
         );
         d.mint(&alice);
         d.mint(&bob);
-        d.mint(&d.market);
+        d.mint_into_market();
         d.launch();
         // New holders are still self-delegated automatically.
         assert_eq!(d.token.get_delegate(&alice), Some(alice.clone()));
@@ -2433,7 +2562,7 @@ mod locked {
         let listed = d.mint(&seller);
         d.launch();
         // Listed while unlocked, then the DAO locks transfers.
-        d.token.transfer(&seller, &d.market, &listed);
+        pull_into_custody(&d.e, &d.token, &d.market, &seller, listed);
         d.token.set_transfers_locked(&true);
 
         assert_eq!(
@@ -2492,5 +2621,183 @@ mod locked {
         // The owner as `from` works.
         d.token.agent_transfer(&agent, &alice, &carol, &a);
         assert_eq!(d.token.owner_of(&a), carol);
+    }
+}
+
+/// Only a non-voting module brings tokens into its own custody
+/// (`ModuleCustodyClosed`), so a removal proposal that empties it cannot be
+/// undone by a token sent meanwhile (docs/audit/KNOWN_ISSUES.md KI-19).
+mod module_custody {
+    use super::*;
+
+    struct Live {
+        e: Env,
+        token: DaoTokenContractClient<'static>,
+        treasury: Address,
+        auction: Address,
+        market: Address,
+    }
+
+    /// A live, unlocked token: the Treasury is the admin, and the stub
+    /// Auction and Marketplace are registered non-voting.
+    fn live() -> Live {
+        let (e, token, _launch_admin) = setup();
+        let treasury = token.treasury();
+        token.launch(&treasury, &soroban_sdk::Vec::new(&e));
+        let auction = token.auction().unwrap();
+        let market = token.marketplace().unwrap();
+        Live {
+            e,
+            token,
+            treasury,
+            auction,
+            market,
+        }
+    }
+
+    fn closed() -> soroban_sdk::Error {
+        TokenError::ModuleCustodyClosed.into()
+    }
+
+    #[test]
+    fn nobody_else_can_put_a_token_in_a_modules_custody() {
+        let d = live();
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.token.mint(&d.treasury, &alice);
+        let t = d.token.mint(&d.treasury, &d.treasury);
+        let before = (
+            d.token.get_votes(&alice),
+            d.token.get_total_supply(),
+            d.token.minted(),
+        );
+        let expiry = d.e.ledger().sequence() + 100;
+        for module in [&d.auction, &d.market] {
+            // A holder's direct send.
+            assert_fails_with!(closed(), d.token.try_transfer(&alice, module, &a));
+            // An approved spender's send to the module.
+            d.token.approve(&alice, &bob, &a, &expiry);
+            assert_fails_with!(
+                closed(),
+                d.token.try_transfer_from(&bob, &alice, module, &a)
+            );
+            // The Treasury's own send, by proposal.
+            assert_fails_with!(closed(), d.token.try_transfer(&d.treasury, module, &t));
+            // The admin's mint to it, alone or in a batch.
+            assert_fails_with!(closed(), d.token.try_mint(&d.treasury, module));
+            assert_fails_with!(
+                closed(),
+                d.token.try_batch_mint(
+                    &d.treasury,
+                    &vec![&d.e, alice.clone(), module.clone()],
+                    &vec![&d.e, 1u128, 1u128],
+                )
+            );
+            assert_eq!(d.token.balance(module), 0);
+        }
+        assert_eq!(d.token.owner_of(&a), alice);
+        assert_eq!(d.token.owner_of(&t), d.treasury);
+        assert_eq!(
+            (
+                d.token.get_votes(&alice),
+                d.token.get_total_supply(),
+                d.token.minted()
+            ),
+            before
+        );
+    }
+
+    #[test]
+    fn each_module_still_brings_its_own_tokens_in() {
+        let d = live();
+        let seller = Address::generate(&d.e);
+        let listed = d.token.mint(&d.treasury, &seller);
+        // A listing: the Marketplace pulls the token with `transfer_from`.
+        pull_into_custody(&d.e, &d.token, &d.market, &seller, listed);
+        assert_eq!(d.token.owner_of(&listed), d.market);
+        // A lot and pool stock: each mints to itself against its allowance.
+        d.token.increase_mint_allowance(&d.auction, &1);
+        d.token.increase_mint_allowance(&d.market, &2);
+        let lot = d.token.mint(&d.auction, &d.auction);
+        d.token
+            .batch_mint(&d.market, &vec![&d.e, d.market.clone()], &vec![&d.e, 2u128]);
+        assert_eq!(d.token.owner_of(&lot), d.auction);
+        assert_eq!(d.token.balance(&d.market), 3);
+        assert_eq!(d.token.get_total_supply(), 0);
+        // Out of custody works as before, and the Treasury, which is not a
+        // module, takes tokens from anyone.
+        d.token.transfer(&d.market, &seller, &listed);
+        assert_eq!(d.token.get_votes(&seller), 1);
+        d.token.transfer(&seller, &d.treasury, &listed);
+        assert_eq!(d.token.owner_of(&listed), d.treasury);
+        assert_eq!(d.token.get_total_supply(), 0);
+    }
+
+    #[test]
+    fn a_transfer_agent_reaches_a_modules_custody_only_as_that_module() {
+        let d = live();
+        let circle = module(&d.e, &d.token, "custom_circle", false);
+        d.token.set_transfer_agent(&circle, &true);
+        d.token.set_transfer_agent(&d.market, &true);
+        let alice = Address::generate(&d.e);
+        let a = d.token.mint(&d.treasury, &alice);
+        assert_fails_with!(
+            closed(),
+            d.token.try_agent_transfer(&circle, &alice, &d.market, &a)
+        );
+        d.token.agent_transfer(&d.market, &alice, &d.market, &a);
+        assert_eq!(d.token.owner_of(&a), d.market);
+    }
+
+    #[test]
+    fn a_voting_module_takes_tokens_from_anyone() {
+        let d = live();
+        let vault = module(&d.e, &d.token, "custom_vault", false);
+        let alice = Address::generate(&d.e);
+        let a = d.token.mint(&d.treasury, &alice);
+        d.token.transfer(&alice, &vault, &a);
+        d.token.mint(&d.treasury, &vault);
+        assert_eq!(d.token.get_votes(&vault), 2);
+    }
+
+    #[test]
+    fn under_the_lock_the_treasury_reaches_a_module_only_through_it() {
+        let d = live();
+        d.token.set_transfers_locked(&true);
+        let alice = Address::generate(&d.e);
+        let a = d.token.mint(&d.treasury, &alice);
+        let t = d.token.mint(&d.treasury, &d.treasury);
+        // The lock refuses a holder first, as before.
+        assert_fails_with!(
+            soroban_sdk::Error::from(TokenError::TransfersLocked),
+            d.token.try_transfer(&alice, &d.market, &a)
+        );
+        // Out of custody passes the lock, but not the custody rule.
+        assert_fails_with!(closed(), d.token.try_transfer(&d.treasury, &d.market, &t));
+        // The Marketplace pulls it, as when the Treasury lists a token.
+        pull_into_custody(&d.e, &d.token, &d.market, &d.treasury, t);
+        assert_eq!(d.token.owner_of(&t), d.market);
+    }
+
+    /// The KI-19 sequence: a proposal returns what the Marketplace holds and
+    /// unregisters it. A token sent to it before execution is refused, so the
+    /// removal goes through.
+    #[test]
+    fn a_token_sent_while_a_removal_is_pending_cannot_block_it() {
+        let d = live();
+        let alice = Address::generate(&d.e);
+        let listed = d.token.mint(&d.treasury, &alice);
+        let spare = d.token.mint(&d.treasury, &alice);
+        pull_into_custody(&d.e, &d.token, &d.market, &alice, listed);
+        // Drafted: return `listed`, then unregister. Alice sends `spare` meanwhile.
+        assert_fails_with!(closed(), d.token.try_transfer(&alice, &d.market, &spare));
+        // Executed.
+        d.token.transfer(&d.market, &alice, &listed);
+        d.token.unregister_module(&d.market);
+        assert_eq!(d.token.marketplace(), None);
+        assert_eq!(d.token.get_votes(&alice), 2);
+        // Unregistered, it is an ordinary address again: the rule covers
+        // registered non-voting modules only.
+        d.token.transfer(&alice, &d.market, &spare);
+        assert_eq!(d.token.get_votes(&d.market), 1);
     }
 }

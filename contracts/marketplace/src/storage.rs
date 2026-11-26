@@ -125,6 +125,8 @@ pub enum DataKey {
     PoolBuyer(u32, Address),
 }
 
+/// The stored configuration. Panics `NotInitialized` before the constructor
+/// has run.
 pub fn get_config(e: &Env) -> MarketplaceConfig {
     e.storage()
         .instance()
@@ -132,12 +134,16 @@ pub fn get_config(e: &Env) -> MarketplaceConfig {
         .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::NotInitialized))
 }
 
+/// Writes the configuration (constructor, `launch`, the pause and the
+/// setters).
 pub fn set_config(e: &Env, config: &MarketplaceConfig) {
     e.storage()
         .instance()
         .set(&common::ns(e, DataKey::Config), config);
 }
 
+/// The listing for `token_id`, if any; renews its TTL (30 days when fewer
+/// than 7 remain) when it exists.
 pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
     let key = common::ns(e, DataKey::Listing(token_id));
     let listing = e.storage().persistent().get(&key);
@@ -147,12 +153,14 @@ pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
     listing
 }
 
+/// Writes a listing and gives it the listing TTL.
 pub fn set_listing(e: &Env, token_id: u32, listing: &Listing) {
     let key = common::ns(e, DataKey::Listing(token_id));
     e.storage().persistent().set(&key, listing);
     extend_listing(e, &key);
 }
 
+/// Deletes a listing once it is bought, cancelled, expired or returned.
 pub fn remove_listing(e: &Env, token_id: u32) {
     e.storage()
         .persistent()
@@ -181,36 +189,45 @@ fn set_persistent<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(
     common::ttl::extend_persistent(e, &key);
 }
 
+/// The pool with `pool_id`, if any; renews its TTL when it exists.
 pub fn get_pool(e: &Env, pool_id: u32) -> Option<Pool> {
     get_persistent(e, DataKey::Pool(pool_id))
 }
 
+/// Writes a pool and renews its TTL.
 pub fn set_pool(e: &Env, pool_id: u32, pool: &Pool) {
     set_persistent(e, DataKey::Pool(pool_id), pool);
 }
 
+/// Page `page` of a pool's stocked token ids, if written; renews its TTL.
 pub fn get_stock(e: &Env, pool_id: u32, page: u32) -> Option<Vec<u32>> {
     get_persistent(e, DataKey::PoolStock(pool_id, page))
 }
 
+/// Writes a page of a pool's stocked token ids and renews its TTL.
 pub fn set_stock(e: &Env, pool_id: u32, page: u32, ids: &Vec<u32>) {
     set_persistent(e, DataKey::PoolStock(pool_id, page), ids);
 }
 
+/// Deletes a stock page, once `sweep_pool` has emptied it.
 pub fn remove_stock(e: &Env, pool_id: u32, page: u32) {
     e.storage()
         .persistent()
         .remove(&common::ns(e, DataKey::PoolStock(pool_id, page)));
 }
 
+/// How many tokens `buyer` has bought from the pool, 0 when none.
 pub fn get_bought(e: &Env, pool_id: u32, buyer: &Address) -> u32 {
     get_persistent(e, DataKey::PoolBuyer(pool_id, buyer.clone())).unwrap_or(0)
 }
 
+/// Records how many tokens `buyer` has bought from the pool, for its
+/// per-buyer cap.
 pub fn set_bought(e: &Env, pool_id: u32, buyer: &Address, count: u32) {
     set_persistent(e, DataKey::PoolBuyer(pool_id, buyer.clone()), &count);
 }
 
+/// The id the next pool will receive (0 before the first).
 pub fn next_pool_id(e: &Env) -> u32 {
     e.storage()
         .instance()
@@ -227,6 +244,8 @@ pub fn take_pool_id(e: &Env) -> u32 {
     id
 }
 
+/// The open pools' bookkeeping slots (opened, not yet swept empty), at
+/// most `MAX_OPEN_POOLS`.
 pub fn open_pools(e: &Env) -> Vec<PoolSlot> {
     e.storage()
         .instance()
@@ -234,6 +253,7 @@ pub fn open_pools(e: &Env) -> Vec<PoolSlot> {
         .unwrap_or(Vec::new(e))
 }
 
+/// Writes the open pools' bookkeeping slots.
 pub fn set_open_pools(e: &Env, slots: &Vec<PoolSlot>) {
     e.storage()
         .instance()

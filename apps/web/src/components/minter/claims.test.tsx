@@ -14,13 +14,15 @@ const state = vi.hoisted(() => ({
   address: 'GALICE',
   canClose: undefined as boolean | undefined,
   openLists: undefined as unknown,
+  driveCode: { data: undefined, error: undefined, isLoading: true } as Record<string, unknown>,
   propose: vi.fn()
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('swr', () => ({ useSWRConfig: () => ({ mutate: vi.fn() }), default: vi.fn() }));
 vi.mock('@/contexts/dao-context', () => ({
-  useDaoContext: () => ({ daoId: 'CTOKEN', routeId: 'lantern-club', daoConfig: state.config })
+  useDaoContext: () => ({ daoId: 'CTOKEN', routeId: 'lantern-club', daoConfig: state.config }),
+  useOptionalDaoContext: () => ({ daoId: 'CTOKEN', routeId: 'lantern-club', daoConfig: state.config })
 }));
 vi.mock('@/stores/auth-session-store', () => ({
   useAuthSessionStore: Object.assign(
@@ -39,6 +41,10 @@ vi.mock('@/lib/minter/hooks', () => ({
   useClaimHistory: () => ({ data: state.history, isLoading: false, error: undefined, mutate: vi.fn() }),
   useClaimMinterCanCloseLists: () => ({ data: state.canClose }),
   useOpenClaimLists: () => ({ data: state.openLists, error: undefined })
+}));
+vi.mock('@/lib/minter/drive-code', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/minter/drive-code')>()),
+  useDriveCode: () => state.driveCode
 }));
 vi.mock('@/lib/proposal-actions/use-propose-action', () => ({ useProposeAction: () => ({ propose: state.propose }) }));
 vi.mock('@/lib/transaction-feedback', () => ({
@@ -273,5 +279,41 @@ describe('A claim list open until u64::MAX', () => {
     const html = render();
     expect(html).toContain('2 of 5 people needed, with no deadline. Payments are held until launch.');
     expect(html).not.toContain('Invalid Date');
+  });
+});
+
+describe('The code holding a launch drive\u2019s payments', () => {
+  const later = Math.floor(Date.now() / 1000) + 86_400;
+  const openDrive = { ...baseList, assurance: { thresholdClaimers: 5, deadline: later, state: 'open' as const } };
+  const hash = 'ab'.repeat(32);
+  beforeEach(() => {
+    state.claims = claimsState([openDrive]);
+    state.config = { name: 'testnet', passphrase: PASSPHRASE, tokenContractId: TOKEN, rpcUrl: 'https://rpc.test' };
+  });
+  afterAll(() => {
+    state.driveCode = { data: undefined, error: undefined, isLoading: true };
+  });
+
+  it('names the release and shows the hash on an open drive, before anyone pays', () => {
+    state.driveCode = { data: { hash, version: '0.6.0', standing: 'current' }, error: undefined, isLoading: false };
+    const html = render();
+    expect(html).toContain('Payments are held by ClaimMinter 0.6.0, the claims code the platform deploys now.');
+    expect(html).toContain('Claims code hash');
+    expect(html).toContain('abababab');
+  });
+
+  it('says when the code is not the one the platform deploys, or could not be read', () => {
+    state.driveCode = { data: { hash, version: '0.4.0', standing: 'other' }, error: undefined, isLoading: false };
+    expect(render()).toContain('ClaimMinter 0.4.0, which is not the claims code the platform deploys now.');
+    state.driveCode = { data: undefined, error: new Error('rpc down'), isLoading: false };
+    expect(render()).toContain('read which code holds the payments. Check the claims module');
+  });
+
+  it('is not shown once the drive has failed or the tribe is live', () => {
+    state.driveCode = { data: { hash, version: '0.6.0', standing: 'current' }, error: undefined, isLoading: false };
+    state.claims = claimsState([failedDrive()]);
+    expect(render()).not.toContain('Claims code hash');
+    state.claims = { ...claimsState([openDrive]), live: true };
+    expect(render()).not.toContain('Claims code hash');
   });
 });

@@ -28,7 +28,7 @@ Some actions are prepared on their own page, such as Manage → Tribe profile or
 | Action | What it does | Notes |
 |---|---|---|
 | Send treasury funds ("Pay someone") | Sends XLM or another asset from the Treasury to an address. | The Treasury must hold enough of the asset when the proposal runs. |
-| Give a treasury token | Sends a membership token the Treasury holds to an address. | The Treasury must still hold the token. |
+| Give a treasury token | Sends a membership token the Treasury holds to an address. | The Treasury must still hold the token. The address can't be the auction or the market, which take memberships only through their own actions. |
 | Buy a listing for the treasury | The Treasury buys a membership listed in the market, at no more than a set price. | Prepared in Manage → Market. The app adds "Authorise the next action (Treasury)" directly before it. See [Treasury purchases](/guides/marketplace/treasury-purchases). |
 | Authorise the next action (Treasury) | Lets the Treasury approve the payment that the next action makes. | Added by the app only. It must come directly before the action it approves. |
 

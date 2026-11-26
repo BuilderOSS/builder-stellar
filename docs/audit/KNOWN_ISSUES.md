@@ -24,7 +24,7 @@ This page was checked against `dev` at `f51d301`, which includes pull requests 1
 | [KI-16](#ki-16-indexer-allowlisting) | Indexer allowlisting | Indexer, read model |
 | [KI-17](#ki-17-archival-assumptions) | Archival assumptions | All contracts |
 | [KI-18](#ki-18-a-non-voting-module-that-will-not-release-its-tokens-stays-registered) | A non-voting module that will not release its tokens stays registered | Token |
-| [KI-19](#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao) | Removing the Auction or Marketplace can be delayed in an unlocked DAO | Auction, Marketplace, Token |
+| [KI-19](#ki-19-a-listing-made-during-the-vote-can-delay-removing-the-marketplace) | A listing made during the vote can delay removing the Marketplace | Marketplace, Token |
 | [KI-20](#ki-20-a-drive-holds-its-slug-until-its-deadline) | A drive holds its slug until its deadline | Manager |
 | [KI-21](#ki-21-claim-list-hashing) | Claim list hashing | ClaimMinter |
 
@@ -116,9 +116,9 @@ The admin is a single address with a two-step handover and no timelock. `Pending
 
 **Behaviour.** A drive shows that enough listed addresses claimed before the deadline. The launch admin wrote the list, so the addresses may all be theirs. The threshold counts addresses, not people.
 
-**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). The ClaimMinter a drive opens on runs the code its launch admin chose in Setup: any registered, non-revoked hash that approved upgrades reach from the one it was created with. `open_assurance` checks only that the code is registered and not revoked.
+**Also documented** ([Assurance launch](../SECURITY_MODEL.md#assurance-launch)). A drive opens only on the current ClaimMinter implementation or the hash announced as the latest ClaimMinter at least the upgrade notice ago ([INV-37](INVARIANTS.md#inv-37-a-drive-opens-only-on-current-or-announced-claimminter-code)). The current implementation itself has no notice: the Manager admin can change it at once.
 
-**Guidance.** Members should check the ClaimMinter's hash against the published releases before paying in.
+**Guidance.** The claims page shows the hash the network reports for the drive's ClaimMinter, with its registry release, before anyone pays. Members can check it against the published releases (`node scripts/verify-wasm.mjs <tag>`).
 
 **Code.** [`minter/src/contract.rs`](../../contracts/minter/src/contract.rs) `claim` and `assurance_state`; [`manager/src/contract.rs`](../../contracts/manager/src/contract.rs) `open_assurance`.
 
@@ -162,11 +162,11 @@ The views ignore malformed values from outside modules: a view that casts an eve
 
 **Code.** [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `dao_transfer`.
 
-## KI-19: Removing the Auction or Marketplace can be delayed in an unlocked DAO
+## KI-19: A listing made during the vote can delay removing the Marketplace
 
-**Behaviour.** The DAO can empty both modules by proposal, but `return_listing` and `recover_token` name the token ids known when the proposal is drafted. While transfers are unlocked, anyone can send a token straight to the module, or list one before the market is paused, between drafting and execution. The removal then fails and the proposal reverts. Each attempt costs the sender that token, which the next proposal recovers to the Treasury. A locked DAO is not exposed: under the lock a holder can neither send a token to a module nor list one.
+**Behaviour.** The Token refuses a token sent to the Auction or the Marketplace by anyone but the module itself (`ModuleCustodyClosed`, 7224), and `return_listing` skips a listing that is gone, so neither a direct send nor a seller who cancels a listing can make a removal fail. The Auction gains tokens only by minting its own lot, which `cancel_auction` in the removal proposal handles whichever lot is running. The Marketplace still takes tokens through `list` until it is paused. In a DAO whose transfers are unlocked, a member can list a token while a removal proposal that pauses the market itself is open; the proposal does not return that listing, so the removal reverts. Pausing the market in an earlier proposal closes this: once it is paused no listing can be made, so a removal drafted after the pause names every listing there will be. A locked DAO is not exposed, because a holder cannot list under the lock.
 
-**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `return_listing` and `recover_token`; [`auction/src/contract.rs`](../../contracts/auction/src/contract.rs) `recover_token`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
+**Code.** [`marketplace/src/contract.rs`](../../contracts/marketplace/src/contract.rs) `list` and `return_listing`; [`token/src/contract.rs`](../../contracts/token/src/contract.rs) `unregister_module` and `require_custody_entry`. See [Mint allowances and modules](../SECURITY_MODEL.md#mint-allowances-and-modules).
 
 ## KI-20: A drive holds its slug until its deadline
 

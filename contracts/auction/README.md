@@ -17,13 +17,13 @@ The module starts paused in Setup. It implements the Manager's `DaoModule` inter
 
 - `create_bid(bidder, token_id: u128, amount: i128)` requires bidder auth; the amount must meet the reserve (first bid) or the previous bid plus the increment, validated before any payment moves.
 - `settle_and_create_new()` settles and starts the next auction; `settle_auction()` settles while paused without a next auction. **Both require `now >= end_time`** (`AuctionActive`), so a pause cannot end a running auction early. No-bid auctions send the token to the Treasury (where it carries no votes). If the Token will not let the Auction mint the next token (its allowance is 0, for example after a proposal cut it), `settle_and_create_new` still settles and then pauses the Auction instead of starting another; `unpause` resumes once an allowance is granted.
-- `recover_token(token_id)` is admin-only while paused: it sends a token someone transferred to the Auction directly to the Treasury. The token of an auction that has not settled is refused (`TokenInAuction`, 7420). The Token refuses to unregister the Auction while it holds tokens, so this keeps anyone from blocking a removal by sending it one.
+- `recover_token(token_id)` is admin-only while paused: it sends a token no auction records to the Treasury. The token of an auction that has not settled is refused (`TokenInAuction`, 7420). The Token refuses to unregister the Auction while it holds tokens, and refuses a token sent to it by anyone but the Auction itself (`ModuleCustodyClosed`, 7224), so such a token is one sent before that rule. The Auction gains tokens only by minting its own lots.
 - `cancel_auction()` is admin-only while paused: the only way to end a running auction. It refunds the leader and sends the token to the Treasury.
 - `pause(caller)` / `unpause(caller)` require the caller to be the admin; unpause requires Live state and starts an auction if none is running.
 - `get_auction()` (fails `NotLaunched` before the first auction) / `get_config()`.
 - `pending_refund(bidder)`; `withdraw_refund(bidder)` requires bidder auth.
 - Paused admin setters: `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`.
-- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()`, `version()`, `wasm_hash()`, `storage_version()`.
+- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()` (admin), `version()`, `wasm_hash()`, `storage_version()`. While the stored layout differs from the code's `STORAGE_VERSION`, every entry point that changes state fails `StorageVersionMismatch` (7421); `upgrade`, `migrate` and the views stay open ([upgrade path](../../docs/SECURITY_MODEL.md#upgrade-path-and-migrations)).
 
 Duration is 300–2,592,000 seconds, reserve at least 1,000 base units, increment 1–100%, and time buffer 1–86,400 seconds. Late bids extend the deadline subject to an extension-count cap. The payment token locks after the first bid.
 

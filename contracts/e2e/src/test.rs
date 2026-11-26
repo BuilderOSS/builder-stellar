@@ -4221,7 +4221,17 @@ fn a_dao_without_optional_modules_launches_and_registers_external_code() {
     token.register_module(&kind, &vault, &true);
     token.increase_mint_allowance(&vault, &1);
     assert_eq!(token.get_votes(&founder), 2);
-    token.transfer(&founder, &vault, &first);
+    // A founder's direct send is refused: the vault pulls the token in.
+    assert_eq!(
+        token
+            .try_transfer(&founder, &vault, &first)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleCustodyClosed)
+    );
+    token.approve(&founder, &vault, &first, &(e.ledger().sequence() + 100));
+    token.transfer_from(&vault, &founder, &vault, &first);
     assert_eq!(token.total_supply(), 1);
     assert_eq!(token.get_votes(&founder), 1);
     token.mint(&vault, &founder);
@@ -5393,13 +5403,14 @@ fn escrow_in_the_proposing_ledger_does_not_lower_the_quorum() {
     governor.set_quorum_bps(&5_000);
     assert_eq!(token.total_supply(), 20);
 
-    // Ledger 200: escrow all eight (the Marketplace address is a non-voting
-    // holder; moving a token there burns its voting unit) and propose.
+    // Ledger 200: escrow all eight (the Marketplace is a non-voting holder;
+    // pulling a token in, as `list` does, burns its voting unit) and propose.
     e.ledger().set_sequence_number(200);
     e.ledger().set_timestamp(2_000);
     let market = token.marketplace().unwrap();
     for t in &mine {
-        token.transfer(&attacker, &market, t);
+        token.approve(&attacker, &market, t, &300);
+        token.transfer_from(&market, &attacker, &market, t);
     }
     assert_eq!(token.total_supply(), 12);
     assert_eq!(token.voting_supply_at_previous_ledger(), 20);

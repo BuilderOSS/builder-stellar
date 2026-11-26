@@ -1552,14 +1552,54 @@ mod return_listing {
         );
         assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
         assert_eq!(mp.get_listing(&token_id), None);
-        assert_eq!(
-            mp.try_return_listing(&token_id).err().unwrap().unwrap(),
-            MarketplaceError::ListingNotFound.into()
-        );
+        // Returned already, it is skipped: nothing moves, no event.
+        mp.return_listing(&token_id);
+        assert!(fixture.env.events().all().events().is_empty());
+        assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
     }
 
-    /// A token sent here directly, which no listing or pool records, can go
-    /// to the Treasury once the marketplace is paused and every pool swept.
+    /// A removal proposal names the listings open when it was drafted. A
+    /// seller who cancels one, or anyone who expires one, before it executes
+    /// cannot make it fail: the missing listing is skipped and the rest go
+    /// back.
+    #[test]
+    fn a_listing_cancelled_or_expired_before_execution_is_skipped() {
+        let fixture = fixture();
+        let env = &fixture.env;
+        let mp = &fixture.marketplace;
+        let kept = listed(&fixture, u64::MAX);
+        let cancelled = listed(&fixture, u64::MAX);
+        let expired = listed(&fixture, 2_000);
+        // Proposal 1 paused the market; the removal is drafted now.
+        mp.pause();
+        // During its vote the seller cancels one listing and another expires.
+        mp.cancel(&cancelled, &fixture.seller);
+        env.ledger().set_timestamp(2_000);
+        mp.expire(&expired);
+        // Executed: the listing still open goes back to its seller...
+        mp.return_listing(&kept);
+        assert_eq!(
+            env.events().all().events().last().unwrap(),
+            &ListingCancelled {
+                token_id: kept,
+                seller: fixture.seller.clone(),
+            }
+            .to_xdr(env, &mp.address)
+        );
+        // ...and the two that are gone are skipped, with no event.
+        for token_id in [cancelled, expired] {
+            mp.return_listing(&token_id);
+            assert!(env.events().all().events().is_empty());
+        }
+        for token_id in [kept, cancelled, expired] {
+            assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+            assert_eq!(mp.get_listing(&token_id), None);
+        }
+    }
+
+    /// A token no listing or pool records (sent before the Token refused
+    /// direct sends) can go to the Treasury once the marketplace is paused
+    /// and every pool swept.
     #[test]
     fn recover_token_moves_only_unrecorded_tokens_to_the_treasury() {
         let fixture = fixture();
@@ -1632,4 +1672,58 @@ mod return_listing {
         assert_eq!(fixture.token.owner_of(&token_id), mp.address);
         assert_eq!(mp.admin(), fixture.treasury);
     }
+}
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Marketplace's own error; the views keep
+/// answering, and `migrate` brings everything back.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    use common::assert_fails_with;
+
+    let f = fixture();
+    let e = &f.env;
+    let m = &f.marketplace;
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(e, &m.address, stored);
+    let mismatch: soroban_sdk::Error = MarketplaceError::StorageVersionMismatch.into();
+    let asset = f.payment.address.clone();
+    let body = String::from_str(e, "hello");
+
+    assert_fails_with!(mismatch, m.try_launch(&f.treasury, &true));
+    assert_fails_with!(mismatch, m.try_handoff(&f.treasury));
+    assert_fails_with!(
+        mismatch,
+        m.try_open_pool(&100, &asset, &10_000, &5, &1, &5, &3600)
+    );
+    assert_fails_with!(mismatch, m.try_restock(&0));
+    assert_fails_with!(mismatch, m.try_buy_from_pool(&0, &0, &1, &f.buyer, &100));
+    assert_fails_with!(mismatch, m.try_close_pool(&0));
+    assert_fails_with!(mismatch, m.try_sweep_pool(&0));
+    assert_fails_with!(
+        mismatch,
+        m.try_list(&1, &f.seller, &100, &10_000, &250, &asset)
+    );
+    assert_fails_with!(mismatch, m.try_buy(&1, &f.buyer, &100));
+    assert_fails_with!(mismatch, m.try_cancel(&1, &f.seller));
+    assert_fails_with!(mismatch, m.try_expire(&1));
+    assert_fails_with!(mismatch, m.try_return_listing(&1));
+    assert_fails_with!(mismatch, m.try_recover_token(&1));
+    assert_fails_with!(mismatch, m.try_comment_listing(&1, &body, &f.buyer));
+    assert_fails_with!(mismatch, m.try_pause());
+    assert_fails_with!(mismatch, m.try_unpause());
+    assert_fails_with!(mismatch, m.try_set_secondary_fee_bps(&100));
+    assert_fails_with!(mismatch, m.try_set_payment_asset(&asset));
+
+    // The views stay open.
+    assert_eq!(m.storage_version(), stored);
+    assert_eq!(m.admin(), f.treasury);
+    assert_eq!(m.next_pool_id(), 0);
+    assert!(m.get_listing(&1).is_none());
+
+    // `migrate` is the way back.
+    m.migrate();
+    assert_eq!(m.storage_version(), crate::storage::STORAGE_VERSION);
+    m.pause();
+    assert!(m.get_config().paused);
 }

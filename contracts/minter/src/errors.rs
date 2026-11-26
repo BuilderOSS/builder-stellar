@@ -62,4 +62,10 @@ pub enum ClaimMinterError {
     InvalidExpiry = 7829,
     /// `launch` / `handoff` treasury differs from the one wired at construction
     TreasuryMismatch = 7830,
+    /// The stored data layout is not the one this code expects: an upgrade
+    /// (or a recovery upgrade) whose `migrate` has not run yet, or an upgrade
+    /// to code with an older layout. Every entry point that changes state,
+    /// `refund` included, refuses until `migrate` (anyone may call it) or,
+    /// for an older layout, another upgrade brings the two back in step
+    StorageVersionMismatch = 7831,
 }

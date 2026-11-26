@@ -118,10 +118,11 @@ fn a_payment_asset_that_is_not_a_stellar_asset_is_refused_everywhere() {
 }
 
 /// A listing made before the DAO locked transfers, pool stock, and a token
-/// a member sent straight to the Marketplace sit in its custody. The Token
-/// refuses to unregister it until the DAO has emptied it, so no seller's
-/// token is stranded behind the lock, and the stray token cannot keep it
-/// registered.
+/// no listing records sit in the Marketplace's custody. The Token refuses to
+/// unregister it until the DAO has emptied it, so no seller's token is
+/// stranded behind the lock, and the stray token cannot keep it registered.
+/// A member's direct send is refused (`ModuleCustodyClosed`), so a stray
+/// token is one sent before the Token refused them.
 #[test]
 fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused() {
     let f = factory();
@@ -160,8 +161,24 @@ fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused()
         &3_600,
     );
     market.restock(&pool);
-    // Sent directly, not listed: no listing records it.
-    token.transfer(&seller, &market.address, &stray);
+    // A member cannot send it straight to the Marketplace.
+    assert_eq!(
+        token
+            .try_transfer(&seller, &market.address, &stray)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleCustodyClosed)
+    );
+    // A token in custody that no listing records, as one sent before that
+    // rule would be: the Marketplace's own pull, outside `list`.
+    token.approve(
+        &seller,
+        &market.address,
+        &stray,
+        &(e.ledger().sequence() + 10_000),
+    );
+    token.transfer_from(&market.address, &seller, &market.address, &stray);
     assert_eq!(token.balance(&market.address), 4);
 
     // The DAO locks transfers, then tries to remove the Marketplace.
@@ -193,11 +210,76 @@ fn unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused()
     assert_eq!(token.mint_allowance(&market.address), 0);
 }
 
+/// The removal sequence on the real contracts, by real proposals. One
+/// proposal pauses the market, so no listing can be made. The next returns
+/// the listings open when it was drafted and unregisters the Marketplace.
+/// A seller cancels one of those listings during the vote; the proposal
+/// skips it and the removal goes through.
+#[test]
+fn a_listing_cancelled_during_the_removal_vote_does_not_block_it() {
+    let f = factory();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let market = MarketplaceContractClient::new(e, &f.marketplace());
+    let (kept_seller, cancelling_seller) = (Address::generate(e), Address::generate(e));
+    let kept = token.mint(&f.deployer, &kept_seller);
+    let cancelled = token.mint(&f.deployer, &cancelling_seller);
+    launch_all(&f);
+    for (seller, id) in [(&kept_seller, kept), (&cancelling_seller, cancelled)] {
+        token.approve(
+            seller,
+            &market.address,
+            &id,
+            &(e.ledger().sequence() + 10_000),
+        );
+        market.list(
+            &id,
+            seller,
+            &50_000_000,
+            &u64::MAX,
+            &250,
+            &f.payment.address(),
+        );
+    }
+    assert_eq!(token.balance(&market.address), 2);
+
+    super::locked::pass_proposal_with(
+        &f,
+        &[(&market.address, "pause", vec![e])],
+        "pause the market",
+        || {},
+    );
+    assert!(market.get_config().paused);
+
+    let id_arg = |id: u32| vec![e, id.into_val(e)];
+    super::locked::pass_proposal_with(
+        &f,
+        &[
+            (&market.address, "return_listing", id_arg(kept)),
+            (&market.address, "return_listing", id_arg(cancelled)),
+            (
+                &token.address,
+                "unregister_module",
+                vec![e, market.address.into_val(e)],
+            ),
+        ],
+        "remove the market",
+        || market.cancel(&cancelled, &cancelling_seller),
+    );
+    assert_eq!(token.owner_of(&kept), kept_seller);
+    assert_eq!(token.owner_of(&cancelled), cancelling_seller);
+    assert_eq!(token.balance(&market.address), 0);
+    assert_eq!(token.marketplace(), None);
+    assert_eq!(token.get_votes(&kept_seller), 1);
+    assert_eq!(token.get_votes(&cancelling_seller), 1);
+}
+
 /// A proposal cuts the Auction's allowance while an auction runs. The
 /// auction still settles to its winner and the Auction pauses instead of
 /// minting the next token. The same happens when a finite allowance runs out
-/// by use. A token sent to the Auction directly is recovered to the Treasury,
-/// and then, holding nothing, the Auction can be unregistered.
+/// by use. A direct send to the Auction is refused; a token in its custody
+/// that no auction records is recovered to the Treasury, and then, holding
+/// nothing, the Auction can be unregistered.
 #[test]
 fn cutting_the_auction_allowance_mid_auction_still_settles_it() {
     let f = factory();
@@ -255,9 +337,24 @@ fn cutting_the_auction_allowance_mid_auction_still_settles_it() {
     assert!(!next.settled);
     assert_eq!(token.mint_allowance(&auction.address), 0);
 
-    // The bidder sends their token straight to the Auction. The running
-    // lot cannot be recovered, only a token no auction records.
-    token.transfer(&bidder, &auction.address, &lot_id);
+    // The bidder cannot send their token straight to the Auction.
+    assert_eq!(
+        token
+            .try_transfer(&bidder, &auction.address, &lot_id)
+            .err()
+            .unwrap()
+            .unwrap(),
+        soroban_sdk::Error::from(token::TokenError::ModuleCustodyClosed)
+    );
+    // A token no auction records, as one sent before that rule would be,
+    // can be recovered; the running lot cannot.
+    token.approve(
+        &bidder,
+        &auction.address,
+        &lot_id,
+        &(e.ledger().sequence() + 100),
+    );
+    token.transfer_from(&auction.address, &bidder, &auction.address, &lot_id);
     auction.pause(&f.dao.treasury);
     assert_eq!(
         auction.try_recover_token(&next_id).err().unwrap().unwrap(),

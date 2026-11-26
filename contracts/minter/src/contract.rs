@@ -49,6 +49,16 @@
 //! are in no escrow, and no function moves them. An upgrade (the DAO's
 //! `upgrade`, or the Manager's `recovery_upgrade` after a failed drive)
 //! replaces this code and could change any of this.
+//!
+//! # Storage layout
+//!
+//! While the stored data layout differs from the code's
+//! (`common::upgrade::is_current_layout`), every entry point that changes
+//! state fails `StorageVersionMismatch`, `refund` included. `upgrade`,
+//! `recovery_upgrade`, `migrate` and the reads stay open, and anyone may
+//! call `migrate`: during a drive the admin is the Treasury, which cannot act
+//! before launch, so a recovery upgrade to code with a newer layout must not
+//! wait for it before members can refund.
 
 use soroban_sdk::{
     contract, contractimpl, token::TokenClient, vec, xdr::ToXdr, Address, Bytes, BytesN, Env,
@@ -109,6 +119,7 @@ impl ClaimMinter {
     /// escrow to the Treasury, so the fees arrive with the launch (eng review
     /// R4). `open` is ignored: lists have no pause. Fails if already Live.
     pub fn launch(e: &Env, treasury: Address, _open: bool) -> Result<(), Error> {
+        require_current_layout(e)?;
         let config = get_config(e);
         // Launch releases escrow and moves the admin: only the Manager's
         // launch, which has checked the drive and the DAO, may start it.
@@ -131,6 +142,7 @@ impl ClaimMinter {
     /// be opened or closed and no upgrade applied until launch, because the
     /// Treasury can't act before the DAO is Live.
     pub fn handoff(e: &Env, treasury: Address) -> Result<(), Error> {
+        require_current_layout(e)?;
         let config = get_config(e);
         // Moving the admin freezes the module: only the Manager may do it.
         config.manager.require_auth();
@@ -203,6 +215,7 @@ impl ClaimMinter {
         total: u32,
         assurance: Option<AssuranceTerms>,
     ) -> Result<u32, Error> {
+        require_current_layout(e)?;
         common::ttl::extend_instance(e);
         // A list mints the DAO's tokens: only its admin opens one (the
         // Treasury, by proposal, once Live).
@@ -310,6 +323,7 @@ impl ClaimMinter {
     /// `ListExpired`. The list keeps its record; only `expires_at` moves to
     /// now.
     pub fn close_list(e: &Env, list_id: u32) -> Result<(), Error> {
+        require_current_layout(e)?;
         common::ttl::extend_instance(e);
         // Ending a list cuts off its claimers: only the admin may, the
         // Treasury by proposal once Live.
@@ -358,6 +372,7 @@ impl ClaimMinter {
         proof: Vec<BytesN<32>>,
         max_price: i128,
     ) -> Result<Vec<u32>, Error> {
+        require_current_layout(e)?;
         // The claimer pays and receives; nobody else may spend their leaf.
         claimer.require_auth();
         common::ttl::extend_instance(e);
@@ -470,6 +485,7 @@ impl ClaimMinter {
     /// when it runs. It moves only what `claim` recorded as escrow, never
     /// other balances this contract holds.
     pub fn release(e: &Env, list_id: u32) -> Result<i128, Error> {
+        require_current_layout(e)?;
         common::ttl::extend_instance(e);
         let config = get_config(e);
         // Before launch the escrow must stay refundable.
@@ -506,6 +522,7 @@ impl ClaimMinter {
     /// here until a later call succeeds. The claimer keeps the tokens, which
     /// carry no power because the DAO never goes Live.
     pub fn refund(e: &Env, list_id: u32, claimer: Address) -> Result<i128, Error> {
+        require_current_layout(e)?;
         common::ttl::extend_instance(e);
         let mut list = get_list(e, list_id).ok_or(Error::ListNotFound)?;
         let terms = list.assurance().ok_or(Error::NotAssurance)?;
@@ -600,11 +617,17 @@ impl ClaimMinter {
         common::upgrade::apply_checked_by_manager(e, &from_hash, &to_hash, version);
     }
 
-    /// Advance the storage layout after an upgrade. Only the admin may call
-    /// it; it fails with `NothingToMigrate` when the layout is current.
+    /// Advance the storage layout after an upgrade; it fails with
+    /// `NothingToMigrate` when the layout is current. Until it runs, every
+    /// entry point that changes state fails `StorageVersionMismatch`.
+    ///
+    /// Anyone may call it. It runs only the migration that the installed
+    /// code defines, which the Manager approved and the admin (or, after a
+    /// failed drive, the Manager's `recover_claims`) installed, and only once
+    /// per layout. It stays open because during a drive the admin is the
+    /// Treasury, which cannot act before launch: after a recovery upgrade,
+    /// refunds must not wait for a proposal that can never pass.
     pub fn migrate(e: &Env) {
-        // Rewriting stored data is the admin's, like the upgrade before it.
-        common::admin::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
@@ -614,7 +637,8 @@ impl ClaimMinter {
     }
 
     /// Storage-layout version of the data held by this contract. Anyone may
-    /// read it.
+    /// read it. While it differs from the code's `STORAGE_VERSION`, every
+    /// entry point that changes state fails `StorageVersionMismatch`.
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -630,6 +654,19 @@ impl ClaimMinter {
         }
         common::admin::handoff_once(e, treasury);
         Ok(())
+    }
+}
+
+/// `StorageVersionMismatch` unless the stored data layout is the one this
+/// code expects, so this code never reads or writes lists, records or escrow
+/// in a layout it does not know. The first check of every entry point that
+/// changes state; `upgrade`, `recovery_upgrade`, `migrate` and the reads stay
+/// outside it.
+fn require_current_layout(e: &Env) -> Result<(), Error> {
+    if common::upgrade::is_current_layout(e, STORAGE_VERSION) {
+        Ok(())
+    } else {
+        Err(Error::StorageVersionMismatch)
     }
 }
 

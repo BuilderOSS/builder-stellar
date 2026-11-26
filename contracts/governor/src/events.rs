@@ -125,6 +125,8 @@ pub struct GovernorLaunched {
     pub treasury: Address,
 }
 
+/// Publishes `GovernorInitialized` from the constructor, with the starting
+/// settings.
 pub fn emit_governor_initialized(
     e: &Env,
     admin: &Address,
@@ -149,6 +151,8 @@ pub fn emit_governor_initialized(
     .publish(e);
 }
 
+/// Publishes `ProposalScheduled` from `propose`: when voting opens and
+/// closes, the snapshot ledger, and the quorum fixed for the proposal.
 pub fn emit_proposal_scheduled(
     e: &Env,
     proposal_id: &BytesN<32>,
@@ -167,6 +171,7 @@ pub fn emit_proposal_scheduled(
     .publish(e);
 }
 
+/// Publishes `ProposalCommented` from `comment`. The body is event-only.
 pub fn emit_proposal_commented(e: &Env, proposal_id: &BytesN<32>, author: &Address, body: &String) {
     ProposalCommented {
         proposal_id: proposal_id.clone(),
@@ -176,6 +181,7 @@ pub fn emit_proposal_commented(e: &Env, proposal_id: &BytesN<32>, author: &Addre
     .publish(e);
 }
 
+/// Publishes `QueueDelayChanged` from `set_queue_delay`.
 pub fn emit_queue_delay_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     QueueDelayChanged {
         changed_by: changed_by.clone(),
@@ -185,6 +191,7 @@ pub fn emit_queue_delay_changed(e: &Env, changed_by: &Address, old_value: u32, n
     .publish(e);
 }
 
+/// Publishes `VotingDelayChanged` from `set_voting_delay`.
 pub fn emit_voting_delay_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     VotingDelayChanged {
         changed_by: changed_by.clone(),
@@ -194,6 +201,7 @@ pub fn emit_voting_delay_changed(e: &Env, changed_by: &Address, old_value: u32, 
     .publish(e);
 }
 
+/// Publishes `VotingPeriodChanged` from `set_voting_period`.
 pub fn emit_voting_period_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     VotingPeriodChanged {
         changed_by: changed_by.clone(),
@@ -203,6 +211,7 @@ pub fn emit_voting_period_changed(e: &Env, changed_by: &Address, old_value: u32,
     .publish(e);
 }
 
+/// Publishes `ProposalThresholdChanged` from `set_proposal_threshold`.
 pub fn emit_proposal_threshold_changed(
     e: &Env,
     changed_by: &Address,
@@ -217,6 +226,7 @@ pub fn emit_proposal_threshold_changed(
     .publish(e);
 }
 
+/// Publishes `QuorumBpsChanged` from `set_quorum_bps`.
 pub fn emit_quorum_bps_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     QuorumBpsChanged {
         changed_by: changed_by.clone(),
@@ -226,6 +236,8 @@ pub fn emit_quorum_bps_changed(e: &Env, changed_by: &Address, old_value: u32, ne
     .publish(e);
 }
 
+/// Publishes `ProposalQueued` from `queue`, with the earliest time the
+/// Treasury may execute the proposal.
 pub fn emit_proposal_queued(e: &Env, proposal_id: &BytesN<32>, eta: u64) {
     ProposalQueued {
         proposal_id: proposal_id.clone(),
@@ -234,6 +246,7 @@ pub fn emit_proposal_queued(e: &Env, proposal_id: &BytesN<32>, eta: u64) {
     .publish(e);
 }
 
+/// Publishes `GovernorLaunched` once, from the Manager's `launch`.
 pub fn emit_launched(e: &Env, treasury: &Address) {
     GovernorLaunched {
         treasury: treasury.clone(),

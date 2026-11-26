@@ -93,6 +93,10 @@ impl ManagerContract {
     ) {
         write_admin(&env, &admin);
         common::upgrade::init_delay(&env, upgrade_delay);
+        env.storage().instance().set(
+            &common::ns(&env, common::upgrade::UpgradeKey::StorageVersion),
+            &STORAGE_VERSION,
+        );
         extend_instance_ttl(&env);
         set_factory_paused(&env, false);
         env.storage().instance().set(
@@ -140,6 +144,7 @@ impl ManagerContract {
         version: String,
         wasm_hash: BytesN<32>,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout_or_recovery(&env, &name)?;
         // Check authorization
         Self::require_admin(&env)?;
 
@@ -199,6 +204,7 @@ impl ManagerContract {
         name: String,
         wasm_hash: BytesN<32>,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout_or_recovery(&env, &name)?;
         Self::require_admin(&env)?;
         let implementation = Self::active_implementation(&env, &wasm_hash)?;
         if implementation.name != name {
@@ -246,6 +252,7 @@ impl ManagerContract {
         from_hash: BytesN<32>,
         to_hash: BytesN<32>,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout_or_recovery_target(&env, &to_hash)?;
         // Check authorization
         Self::require_admin(&env)?;
 
@@ -323,6 +330,7 @@ impl ManagerContract {
     /// * `ImplementationNotFound` - Implementation doesn't exist
     /// * `ImplementationAlreadyRevoked` - Implementation already revoked
     pub fn revoke_implementation(env: Env, wasm_hash: BytesN<32>) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         // Check authorization
         Self::require_admin(&env)?;
 
@@ -376,6 +384,7 @@ impl ManagerContract {
         approved: bool,
         name: String,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         Self::validate_string(&name)?;
         let key = ManagerKey::ApprovedVoteSource(source.clone());
@@ -470,6 +479,54 @@ impl ManagerContract {
         )
     }
 
+    /// Storage-layout version of the data held by this contract (1 for a
+    /// Manager deployed before versions were recorded). Read-only. While it
+    /// differs from the code's `STORAGE_VERSION`, every entry point that
+    /// changes state fails `StorageVersionMismatch`, apart from the recovery
+    /// path described at `migrate`.
+    pub fn storage_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&common::ns(
+                &env,
+                common::upgrade::UpgradeKey::StorageVersion,
+            ))
+            .unwrap_or(1)
+    }
+
+    /// Moves the stored data to the layout this code expects
+    /// (`STORAGE_VERSION`) and emits `Migrated`. Panics `NothingToMigrate`
+    /// (a common error, 7012) unless the stored layout is older than the
+    /// code's.
+    ///
+    /// `upgrade_manager` swaps the code at the end of its own call, so a
+    /// release that changes the layout is migrated in a second transaction.
+    /// Anyone may call it: it runs only the migration that the installed code
+    /// defines, which the admin registered, announced and installed after the
+    /// notice, and only once per layout.
+    ///
+    /// Until it runs, every entry point that changes state fails
+    /// `StorageVersionMismatch`, except the path that upgrades the Manager
+    /// again: `register_implementation` and `set_latest_implementation` for
+    /// the name `Manager`, `approve_upgrade` to a hash registered as
+    /// `Manager`, and `upgrade_manager`. If a migration fails, the admin
+    /// installs fixed code through that path, after the usual notice. The
+    /// path reads and writes only the keys a release must keep readable by
+    /// both its code and the code before it: the admin, the upgrade notice,
+    /// `CurrentManagerWasm`, `CurrentManagerVersion`, and the registry's
+    /// `Implementation`, `LatestImplementation` and `UpgradeApproval` records.
+    /// The views stay open throughout, so every DAO's own upgrades still read
+    /// the registry.
+    pub fn migrate(env: Env) {
+        extend_instance_ttl(&env);
+        let key = common::ns(&env, common::upgrade::UpgradeKey::StorageVersion);
+        if !env.storage().instance().has(&key) {
+            // A Manager from before versions were recorded holds layout 1.
+            env.storage().instance().set(&key, &1u32);
+        }
+        common::upgrade::migrate(&env, STORAGE_VERSION);
+    }
+
     /// Returns the active Manager WASM hash.
     pub fn wasm_hash(env: Env) -> BytesN<32> {
         extend_instance_ttl(&env);
@@ -529,6 +586,7 @@ impl ManagerContract {
         env: Env,
         current: CurrentImplementations,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         let slots = [
             (&current.token, "Token", ManagerKey::CurrentTokenWasm),
@@ -586,6 +644,7 @@ impl ManagerContract {
     ///
     /// Only callable by admin.
     pub fn pause_factory(env: Env) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         set_factory_paused(&env, true);
         emit_factory_paused(&env);
@@ -598,6 +657,7 @@ impl ManagerContract {
     ///
     /// Only callable by admin.
     pub fn unpause_factory(env: Env) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         set_factory_paused(&env, false);
         emit_factory_unpaused(&env);
@@ -644,6 +704,7 @@ impl ManagerContract {
     ///   `InvalidQuorumBps`, `InvalidProposalThreshold`, `InvalidDuration`,
     ///   `InvalidParamBounds`, `InvalidTimeBuffer`, `InvalidFee`
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
+        Self::require_current_layout(&env)?;
         // The deployer owns the newly-created modules and must authorize the
         // factory operation and subsequent admin-gated setup calls.
         extend_instance_ttl(&env);
@@ -888,6 +949,7 @@ impl ManagerContract {
         spec: ModuleSpec,
         expected_n: u32,
     ) -> Result<Address, ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
@@ -966,6 +1028,7 @@ impl ManagerContract {
         token_address: Address,
         slug: String,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let key = ManagerKey::PendingDao(token_address.clone());
         let mut pending: PendingDao =
@@ -1023,6 +1086,7 @@ impl ManagerContract {
         token_address: Address,
         launch_config: LaunchConfig,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
@@ -1060,6 +1124,15 @@ impl ManagerContract {
     ///    and upgrades until launch. Founders and artwork must be in place
     ///    before.
     ///
+    /// The ClaimMinter holds members' payments, and the launch admin may have
+    /// upgraded it in Setup to any approved, registered code. So the drive
+    /// opens only on the code the platform deploys now (the current `claims`
+    /// implementation) or on the hash announced as the latest `ClaimMinter`
+    /// at least `upgrade_delay()` ledgers ago (`DriveCodeNotAllowed`). The
+    /// code the host runs is checked (`executable()`), not the hash the
+    /// contract reports. The freeze keeps that code in place until launch,
+    /// apart from `recover_claims` after a failed drive.
+    ///
     /// Returns the list id.
     ///
     /// # Errors
@@ -1069,6 +1142,8 @@ impl ManagerContract {
     /// * `PendingDaoUsesRevokedImplementation` - a contract runs revoked or
     ///   unregistered code
     /// * `NoClaimMinter` - the DAO has no registered ClaimMinter
+    /// * `DriveCodeNotAllowed` - the ClaimMinter runs code other than the
+    ///   current ClaimMinter or the latest one announced a notice ago
     /// * `InvalidPaymentAsset` - the recorded claims asset is not a Stellar
     ///   Asset Contract (possible only for a DAO created before the creation
     ///   check)
@@ -1081,6 +1156,7 @@ impl ManagerContract {
         list: AssuranceListParams,
         launch_config: LaunchConfig,
     ) -> Result<u32, ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
@@ -1107,6 +1183,7 @@ impl ManagerContract {
         let claim_minter = nft
             .module(&Symbol::new(&env, KIND_CLAIMS))
             .ok_or(ManagerError::NoClaimMinter)?;
+        Self::require_drive_code(&env, &claim_minter)?;
         let asset = pending
             .claims_payment_asset
             .clone()
@@ -1188,6 +1265,7 @@ impl ManagerContract {
     /// * `AssuranceNotMet` - fewer distinct claimers than the threshold
     /// * every `launch_dao` check
     pub fn launch_when_ready(env: Env, token_address: Address) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
@@ -1207,6 +1285,7 @@ impl ManagerContract {
     /// * `AssuranceNotFailed` - the drive may still launch
     /// * `SlugNotFound` - already released
     pub fn release_slug(env: Env, token_address: Address) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
@@ -1269,6 +1348,7 @@ impl ManagerContract {
         from_hash: BytesN<32>,
         to_hash: BytesN<32>,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: PendingDao =
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
@@ -1362,6 +1442,7 @@ impl ManagerContract {
         token_address: Address,
         new_slug: String,
     ) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
@@ -1558,6 +1639,7 @@ impl ManagerContract {
     ///
     /// Only callable by the current admin. Overwrites any earlier proposal.
     pub fn propose_admin(env: Env, new_admin: Address) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         let current = get_admin(&env).ok_or(ManagerError::AdminNotSet)?;
         set_persistent(&env, &ManagerKey::PendingAdmin, &new_admin);
@@ -1567,6 +1649,7 @@ impl ManagerContract {
 
     /// Cancel a pending admin handover (admin only).
     pub fn cancel_pending_admin(env: Env) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         let current = get_admin(&env).ok_or(ManagerError::AdminNotSet)?;
         let pending: Address =
@@ -1578,6 +1661,7 @@ impl ManagerContract {
 
     /// Accept a pending admin handover. Requires the proposed admin's authorization.
     pub fn accept_admin(env: Env) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         extend_instance_ttl(&env);
         let pending: Address =
             get_persistent(&env, &ManagerKey::PendingAdmin).ok_or(ManagerError::NoPendingAdmin)?;
@@ -1781,6 +1865,36 @@ impl ManagerContract {
         }
     }
 
+    /// `DriveCodeNotAllowed` unless the drive's ClaimMinter runs the current
+    /// ClaimMinter implementation (`CurrentClaimsWasm`, what `create_dao`
+    /// deploys now) or the hash announced as the latest `ClaimMinter`
+    /// (`latest_pointer`) at least `upgrade_delay()` ledgers ago. The host
+    /// reports the code (`executable()`). Registration and revocation are
+    /// checked separately (`require_dao_code`).
+    fn require_drive_code(env: &Env, claim_minter: &Address) -> Result<(), ManagerError> {
+        let running = match claim_minter.executable() {
+            Some(Executable::Wasm(hash)) => hash,
+            _ => return Err(ManagerError::DriveCodeNotAllowed),
+        };
+        let current: Option<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&common::ns(env, ManagerKey::CurrentClaimsWasm));
+        if current.as_ref() == Some(&running) {
+            return Ok(());
+        }
+        let latest = Self::latest_pointer(env.clone(), String::from_str(env, "ClaimMinter"));
+        match latest {
+            Some(latest)
+                if latest.wasm_hash == running
+                    && common::upgrade::notice_passed(env, latest.set_ledger) =>
+            {
+                Ok(())
+            }
+            _ => Err(ManagerError::DriveCodeNotAllowed),
+        }
+    }
+
     /// The Manager's failure rule (review 2 A3): the deadline passed and the
     /// Token is not Live. ClaimMinter's `refund` applies the same rule.
     fn drive_failed(env: &Env, token: &Address, assurance: &Assurance) -> bool {
@@ -1847,6 +1961,7 @@ impl ManagerContract {
     /// applies at once; a shorter one only after the notice in force has
     /// passed, so the notice cannot be cut to rush an upgrade through.
     pub fn set_upgrade_delay(env: Env, ledgers: u32) -> Result<(), ManagerError> {
+        Self::require_current_layout(&env)?;
         Self::require_admin(&env)?;
         common::upgrade::set_delay(&env, ledgers);
         Ok(())
@@ -1881,6 +1996,42 @@ impl ManagerContract {
             return Err(ManagerError::ImplementationNotFound);
         }
         Ok(hash)
+    }
+
+    /// `StorageVersionMismatch` unless the stored data layout is the one this
+    /// code expects, so this code never reads or writes data in a layout it
+    /// does not know. The first check of every entry point that changes
+    /// state, except the recovery path (see `migrate`).
+    fn require_current_layout(env: &Env) -> Result<(), ManagerError> {
+        if Self::storage_version(env.clone()) == STORAGE_VERSION {
+            Ok(())
+        } else {
+            Err(ManagerError::StorageVersionMismatch)
+        }
+    }
+
+    /// The gate for `register_implementation` and `set_latest_implementation`:
+    /// while a migration is due, they still work for the name `Manager`, so
+    /// the admin can install code that fixes a failed migration.
+    fn require_current_layout_or_recovery(env: &Env, name: &String) -> Result<(), ManagerError> {
+        if *name == String::from_str(env, "Manager") {
+            return Ok(());
+        }
+        Self::require_current_layout(env)
+    }
+
+    /// The gate for `approve_upgrade`: while a migration is due, it still
+    /// approves a path to a hash registered as `Manager`.
+    fn require_current_layout_or_recovery_target(
+        env: &Env,
+        to_hash: &BytesN<32>,
+    ) -> Result<(), ManagerError> {
+        let target: Option<ImplementationVersion> =
+            get_persistent(env, &ManagerKey::Implementation(to_hash.clone()));
+        match target {
+            Some(record) if record.name == String::from_str(env, "Manager") => Ok(()),
+            _ => Self::require_current_layout(env),
+        }
     }
 
     /// Require caller to be admin.

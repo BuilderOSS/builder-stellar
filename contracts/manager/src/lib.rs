@@ -48,6 +48,14 @@
 //!   `release_slug`, and `recover_claims` stay open
 //! - Per-deployer deterministic salts (creator + nonce + module)
 //! - Input validation against the shared bounds in `common`
+//! - Storage-layout gate: while the stored layout differs from the code's
+//!   `STORAGE_VERSION` (after an `upgrade_manager` whose `migrate` has not
+//!   run), every entry point that changes state fails
+//!   `StorageVersionMismatch`, apart from `migrate` (anyone may call it),
+//!   `upgrade_manager`, and the registry steps for the Manager's own upgrade
+//!   (`register_implementation`, `set_latest_implementation` and
+//!   `approve_upgrade` for the `Manager` name only). The views stay open, so
+//!   every DAO can still read the registry
 //! - See `docs/SECURITY_MODEL.md` for the trust model
 
 #![no_std]

@@ -35,6 +35,7 @@ fn extend_persistent_ttl<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &E
 //
 // The artwork is laid out so a whole collection is a handful of entries
 // (renewable in one transaction) and minting reads only `ItemCounts`.
+/// Keys of the Metadata contract's storage, each wrapped with `common::ns`.
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
@@ -156,6 +157,7 @@ pub fn get_settings(env: &Env) -> Result<Settings, Error> {
     settings
 }
 
+/// Writes the settings and renews the instance.
 pub fn set_settings(env: &Env, settings: &Settings) {
     env.storage()
         .instance()
@@ -171,6 +173,7 @@ pub fn get_profile_state(env: &Env) -> Result<ProfileState, Error> {
         .ok_or(Error::NotInitialized)
 }
 
+/// Writes the profile fingerprint (hash and `seq`) and renews the instance.
 pub fn set_profile_state(env: &Env, state: &ProfileState) {
     env.storage()
         .instance()
@@ -187,6 +190,8 @@ pub fn get_item_counts(env: &Env) -> Vec<u32> {
         .unwrap_or(Vec::new(env))
 }
 
+/// Writes the item count of each property, which also sets the property
+/// count, and renews the instance.
 pub fn set_item_counts(env: &Env, counts: &Vec<u32>) {
     env.storage()
         .instance()
@@ -194,6 +199,7 @@ pub fn set_item_counts(env: &Env, counts: &Vec<u32>) {
     extend_instance_ttl(env);
 }
 
+/// Number of properties: the length of the item counts.
 pub fn get_property_count(env: &Env) -> u32 {
     get_item_counts(env).len()
 }
@@ -203,6 +209,7 @@ pub fn get_item_count(env: &Env, index: u32) -> Option<u32> {
     get_item_counts(env).get(index)
 }
 
+/// Number of IPFS groups in use (0 before any artwork).
 pub fn get_ipfs_group_count(env: &Env) -> u32 {
     env.storage()
         .instance()
@@ -210,6 +217,7 @@ pub fn get_ipfs_group_count(env: &Env) -> u32 {
         .unwrap_or(0)
 }
 
+/// Writes the number of IPFS groups in use and renews the instance.
 pub fn set_ipfs_group_count(env: &Env, count: u32) {
     env.storage()
         .instance()
@@ -239,6 +247,7 @@ pub fn get_property_name(env: &Env, index: u32) -> Option<String> {
     get_property_names(env).get(index)
 }
 
+/// Writes every property name in one entry and renews its TTL.
 pub fn set_property_names(env: &Env, names: &Vec<String>) {
     let key = common::ns(env, DataKey::PropertyNames);
     env.storage().persistent().set(&key, names);

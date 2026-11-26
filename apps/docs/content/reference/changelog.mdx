@@ -4,6 +4,10 @@ Changes that people using Tribe Builder can see, newest first. Changes reach [de
 
 These changes reach tribes.build with the next contract release.
 
+- **The claims code, before you pay.** During a launch drive, the drive card and the payment review show which release of the claims contract holds the payments, with its code hash. A drive can open only on the claims code the platform deploys now, or on a release it announced at least one upgrade notice earlier. See [Assurance drives](/guides/setup/assurance-drives).
+- **Memberships go to the auction and the market only through them.** A membership can't be sent directly to the auction or the market: the auction mints the membership it sells, and the market takes one when someone lists it. To give a membership back, send it to the treasury. A vote to remove the market also goes through when a seller cancels a listing it returns. See [Modules](/concepts/modules#removing-a-module).
+- **Updates that need a migration.** After a contract update whose storage migration hasn't run yet, each module refuses changes until it does, so it never writes data in a format it doesn't know. Voting keeps working, so the tribe can still finish the update by vote. See [Upgrades](/concepts/upgrades).
+
 - **Close a claim list early.** A proposal can close one of the tribe's open claim lists, so its unclaimed tokens can no longer be minted. Before launch, the launch admin can close a free list directly. Closing needs a claims module release with `close_list`, and existing tribes can upgrade theirs by vote from Manage → Contract upgrades. See [Close a list early](/guides/claims/create#close-a-list-early).
 - **Founder supply.** The claims page and Manage → Membership show the unclaimed tokens on claim lists opened during setup that can still be minted. They are not in the token supply until someone claims them.
 - **Dates with no end.** A listing, pool or claim list that ends too far ahead to show as a date now reads as having no end date, instead of "Invalid Date". This includes the summary of a proposal action that opens a claim list or a pool.

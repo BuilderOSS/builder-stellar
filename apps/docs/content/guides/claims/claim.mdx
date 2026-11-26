@@ -23,7 +23,7 @@ If a tribe has set aside tokens for your wallet on a claim list, you can claim t
 
    <Shot id="claims/claim/03" alt="The message Checks passed. Nothing is signed or sent yet. under the claim list" />
 
-4. **Review the claim.** The review says how many tokens you will receive, what you pay (or that the tokens are free), where the payment goes, and the network fee.
+4. **Review the claim.** The review says how many tokens you will receive, what you pay (or that the tokens are free), where the payment goes, and the network fee. On a launch drive before launch, it also says which claims release holds your payment and shows its **Claims code hash**. If it says the code is not the claims code the platform deploys now, or the app can't read it, check with the tribe before you pay.
 
    <Shot id="claims/claim/04" alt="The claim review with the token count, a note that the tokens are free, and the network fee" />
 
@@ -46,7 +46,7 @@ If a list shows **Claim list unavailable**, you can still claim with a proof fil
 
   Before you sign, the app checks the proof against the list in your browser, prepares the transaction on the server, and checks that the transaction matches your account, the list, the price and the count. Just before signing, it reads the list again. If anything changed, it stops and nothing is signed.
 
-  Payments go to the tribe's [Treasury](/reference/glossary#treasury). On a launch drive before launch, they are held by the claims module instead, and move to the Treasury when the tribe launches.
+  Payments go to the tribe's [Treasury](/reference/glossary#treasury). On a launch drive before launch, they are held by the claims module instead, and move to the Treasury when the tribe launches. The Manager opens a drive only on the claims release new tribes are created with, or on the one announced as the latest a notice ago, and the code can't change until launch, except for a fixed release after a failed drive ([Claim refunds](/guides/claims/refund/)). The hash the app shows is read from the network's record of the contract, not from the contract itself.
 
   A new token's vote goes to your own wallet, unless you have already delegated your votes. You pay the Stellar network fee in XLM. Claims are public on chain. **Past claims** reads from an index and can take a moment to update.
 </Disclosure>

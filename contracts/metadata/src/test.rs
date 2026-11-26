@@ -2072,3 +2072,78 @@ fn mints_before_artwork_write_empty_records_so_pages_always_exist() {
     assert!(client.try_get_attributes(&1).is_err());
     assert!(client.try_get_attributes(&3).is_err());
 }
+
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the Metadata contract's own error, the mint
+/// hooks included: a mint still succeeds (the Token ignores a failed hook)
+/// and leaves the token unseeded, and `regenerate` seeds it once `migrate`
+/// has run.
+#[test]
+fn a_skipped_migration_halts_every_state_change_until_migrate() {
+    use common::assert_fails_with;
+    use token::DaoTokenContractClient;
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let owner = Address::generate(&env);
+    let client = create_contract(&env);
+    // The Token calls this Metadata contract's hooks on every mint.
+    let token = env.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            Address::generate(&env),
+            String::from_str(&env, "Test Token"),
+            String::from_str(&env, "TEST"),
+            client.address.clone(),
+            Address::generate(&env),
+            BytesN::from_array(&env, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
+        ),
+    );
+    initialize_metadata(&env, &client, &token, &owner);
+    add_new_property(&env, &client, "Background", 2, "ipfs://QmA");
+    let nft = DaoTokenContractClient::new(&env, &token);
+
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&env, &client.address, stored);
+    // `launch` and `handoff` panic with the error; the rest return it.
+    let typed = crate::error::Error::StorageVersionMismatch;
+    let mismatch: soroban_sdk::Error = typed.into();
+    let names = Vec::<String>::new(&env);
+    let items = Vec::<ItemParam>::new(&env);
+    let text = String::from_str(&env, "https://renderer.example.com/v2");
+
+    assert_fails_with!(mismatch, client.try_launch(&owner));
+    assert_fails_with!(mismatch, client.try_handoff(&owner));
+    assert_fails_with!(
+        typed,
+        client.try_add_properties(&names, &items, &group(&env, "ipfs://QmB"))
+    );
+    assert_fails_with!(
+        typed,
+        client.try_delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://QmB"))
+    );
+    assert_fails_with!(typed, client.try_on_minted(&0));
+    assert_fails_with!(typed, client.try_on_minted_batch(&0, &1));
+    assert_fails_with!(typed, client.try_regenerate(&0));
+    assert_fails_with!(typed, client.try_update_renderer_base(&text));
+    assert_fails_with!(typed, client.try_update_profile(&0, &text));
+
+    // A mint goes through, with the token left unseeded.
+    let alice = Address::generate(&env);
+    let token_id = nft.mint(&owner, &alice);
+    assert_eq!(nft.owner_of(&token_id), alice);
+    assert!(client.try_get_attributes(&token_id).is_err());
+
+    // The views stay open.
+    assert_eq!(client.storage_version(), stored);
+    assert_eq!(client.properties_count(), 1);
+    assert_eq!(client.get_settings().token, token);
+
+    // `migrate`, then `regenerate`, seeds the token minted meanwhile.
+    client.migrate();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    client.regenerate(&token_id);
+    assert!(!client.get_attributes(&token_id).is_empty());
+}

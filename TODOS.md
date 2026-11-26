@@ -38,7 +38,7 @@
 - `apps/web/src/lib/modules/plans.ts` (`buildDetachPlan`), `readiness.ts` (`planEmptiesModule` decides whether the chosen steps empty the module), `use-module-reads.ts` (`checkDetach` skips simulating the removal alone when they do).
 - The listings to return come from the market index; stray tokens are tokens the module holds that no listing, pool page, or running auction records.
 - Both calls need the module paused first; `recover_token` on the market also needs every pool swept (`PoolOpen`).
-- In a tribe whose transfers aren't locked, a token sent to the module after drafting still makes the proposal fail; the sheet can only check what the module holds now.
+- The Token refuses a token sent to a module by anyone but the module (`ModuleCustodyClosed`, 7224), so a stray token is one sent before that rule. A listing made after drafting still makes the proposal fail (`return_listing` skips one cancelled meanwhile); the sheet can only check what the module holds now, so it could suggest pausing the market in an earlier proposal.
 
 **Effort:** M
 **Priority:** P2

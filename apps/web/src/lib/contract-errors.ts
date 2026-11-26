@@ -84,6 +84,8 @@ const ERRORS: Record<number, string> = {
   7144: 'That vote source is not one the platform has approved, or its approval was withdrawn (VoteSourceNotApproved).',
   7145: 'That contract does not answer as a vote source (InvalidVoteSource).',
   7146: 'A payment asset must be a Stellar asset contract (InvalidPaymentAsset).',
+  7147: 'The Manager code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
+  7148: 'The claims module runs code the platform does not deploy now, so the drive can’t open. Upgrade it to the current release first (DriveCodeNotAllowed).',
   7201: 'This module may not mint (MintAuthorityNotAllowed).',
   7202: 'Invalid token input.',
   7203: 'Treasury mismatch.',
@@ -105,6 +107,8 @@ const ERRORS: Record<number, string> = {
   7220: 'A DAO transfer cannot move tokens held by a module (ModuleCustody).',
   7221: 'Votes can only be delegated to members of this tribe (DelegateNotMember).',
   7222: 'This module still holds memberships, so it can’t be removed yet: empty it first (ModuleHoldsTokens).',
+  7223: 'The Token code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
+  7224: 'This module takes memberships only through its own actions, such as a listing on the market. List the membership or send it to the tribe instead (ModuleCustodyClosed).',
   // metadata
   7301: 'Metadata is not initialised.',
   7302: 'Treasury mismatch.',
@@ -125,6 +129,7 @@ const ERRORS: Record<number, string> = {
   7317: 'The profile changed since this was prepared: another update landed first. Review the current profile and propose again (ProfileSeqMismatch).',
   7318: "This token's description is too long to build onchain (TokenUriTooLong).",
   7319: 'This token has no artwork yet; the tribe can seed it with regenerate (NotSeeded).',
+  7320: 'The Metadata code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // auction
   7401: 'Invalid token id.',
   7402: 'The auction is over.',
@@ -146,6 +151,7 @@ const ERRORS: Record<number, string> = {
   7418: 'A bid comment can be at most 1,024 bytes (CommentTooLong).',
   7419: 'The auction’s payment asset must be a Stellar asset contract (NotStellarAsset).',
   7420: 'That token is in the running auction: settle or cancel the auction first (TokenInAuction).',
+  7421: 'The Auction code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // governor
   7501: 'Queue delay must be at least 300 seconds.',
   7502: 'Proposal threshold must be at least 1 vote and cannot exceed the voting supply.',
@@ -203,6 +209,7 @@ const ERRORS: Record<number, string> = {
   7727: 'This pool is fully stocked (PoolFullyStocked).',
   7728: 'The market’s payment asset must be a Stellar asset contract (NotStellarAsset).',
   7729: 'Pause the market first (NotPaused).',
+  7730: 'The Marketplace code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // minter
   7801: 'Claim at least one token, and lists hold at least one (InvalidAmount).',
   7803: 'One claim mints at most 43 tokens; claim the rest in another transaction (BatchTooLarge).',
@@ -227,6 +234,7 @@ const ERRORS: Record<number, string> = {
   7828: 'A price cannot be negative (InvalidPrice).',
   7829: 'A list must expire in the future (InvalidExpiry).',
   7830: 'Treasury mismatch (TreasuryMismatch).',
+  7831: 'The claims module code and its stored data are from different releases; a storage migration may be due (StorageVersionMismatch).',
   // OpenZeppelin (shared library codes)
   1000: 'This contract is paused.',
   1001: 'This contract is not paused.',

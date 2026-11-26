@@ -102,7 +102,9 @@ On `dev` it can trail the contracts: once a contract change is merged, the file 
 
 ## What the upload script checks
 
-Before any network call, [`scripts/upgrade-contract.mjs`](../scripts/upgrade-contract.mjs) refuses:
+Before any network call, [`scripts/upgrade-contract.mjs`](../scripts/upgrade-contract.mjs) and, on testnet
+and mainnet, [`scripts/deploy-manager.mjs`](../scripts/deploy-manager.mjs) (for each of the eight
+contracts) refuse:
 
 - uncommitted or untracked changes in the build inputs: `contracts/`, `Cargo.toml`, `Cargo.lock`,
   `rust-toolchain.toml`, `.cargo/`, `docker/wasm-build/`, and `releases/`;
@@ -111,9 +113,10 @@ Before any network call, [`scripts/upgrade-contract.mjs`](../scripts/upgrade-con
 - contract changes made after `releases/hashes.json` was last written;
 - a WASM whose sha256 is not the one `releases/hashes.json` publishes for that contract.
 
-It checks the file's hash again just before the upload, and the upgrade plan it writes for a live
-tribe records the source commit and the release tag. `scripts/deploy-manager.mjs` does not run these
-checks yet.
+Both check each file's hash again just before its upload. The upgrade plan written for a live tribe,
+and the Manager deployment artifact, record the source commit and the release tag. Only a throwaway
+testnet rehearsal Manager skips the checks, with `deploy-manager.mjs --allow-unpublished` (mainnet
+refuses the flag); a local network never runs them.
 
 ## Verify a release
 

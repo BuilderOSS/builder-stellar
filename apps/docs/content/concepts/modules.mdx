@@ -47,11 +47,11 @@ Only a vote can remove a module, so a module can be removed only after launch. B
 A module that holds memberships without votes, such as the auction or the market, can be removed only once it holds none. Otherwise the proposal fails when it runs. Removing it while it holds them would leave those memberships unable to move in a tribe with locked memberships. Before the removal, the same proposal can:
 
 - **Auction:** pause auctions and cancel the running one, which refunds the top bid and sends the token to the treasury.
-- **Market:** close and sweep each pool, which sends unsold memberships to the treasury. Before the proposal runs, each open resale listing must be cancelled by its seller, or must end and be cleared (anyone can clear an ended listing, which returns the token to its seller). The market contract can also return a listing to its seller, and send a membership that someone transferred to it directly to the treasury, by vote while the market is paused. The app doesn't offer these two steps.
+- **Market:** close and sweep each pool, which sends unsold memberships to the treasury. Before the proposal runs, each open resale listing must be cancelled by its seller, or must end and be cleared (anyone can clear an ended listing, which returns the token to its seller). The market contract can also return a listing to its seller, and send the treasury a membership that someone transferred to it directly before such transfers were refused, by vote while the market is paused. The app doesn't offer these two steps.
 
 If the clean-up you choose won't empty the module, the app says so and doesn't add the removal to your proposal.
 
-In a tribe whose memberships are not locked, anyone can send a membership directly to the auction or the market while the vote is open. The removal then fails, and a new proposal has to send that membership to the treasury first.
+Nobody can send a membership directly to the auction or the market. Each takes memberships only through its own actions: the auction mints the membership it sells, and the market takes a membership when someone lists it. In a tribe whose memberships are not locked, a member can still list a membership while the vote is open, because the proposal pauses the market only when it runs. The removal then fails. To remove a market that members may still list on, pause it in an earlier proposal. If the proposal returns listings, one that its seller cancels during the vote is skipped.
 
 Removal ends the module's allowance and any right it had to move memberships. A module that holds memberships with votes, such as a claims module, can be removed while holding them, and it keeps them.
 
@@ -59,7 +59,7 @@ Removal ends the module's allowance and any right it had to move memberships. A 
 
 After launch, the contracts let a tribe register another contract as a module by proposal. The "Add a module" sheet offers only the three built-in modules. A module that Tribe Builder did not deploy shows "Not deployed by Tribe Builder". Tribe Builder can't check its code, and its records are not covered by one-click [storage renewal](/concepts/storage-and-renewal). Its mint allowance still caps what it can mint.
 
-Any deployed contract can be registered this way, including a member's smart-contract wallet. A plain Stellar account (a G-address) can't. The wallet doesn't have to agree. If a vote registers a contract wallet as a module that holds memberships without votes, its memberships stop counting as votes at once, for the wallet and for anyone it delegated to. The tribe can't recover those memberships by vote, and the wallet can still move them out, even while memberships are locked. The member gets the votes back by moving the memberships to another wallet. Before voting for a "Register a module" proposal, check what the address is.
+Any deployed contract can be registered this way, including a member's smart-contract wallet. A plain Stellar account (a G-address) can't. The wallet doesn't have to agree. If a vote registers a contract wallet as a module that holds memberships without votes, its memberships stop counting as votes at once, for the wallet and for anyone it delegated to. The tribe can't recover those memberships by vote, and the wallet can still move them out, even while memberships are locked. The member gets the votes back by moving the memberships to another wallet. While the wallet is registered, nobody else can send it memberships. Before voting for a "Register a module" proposal, check what the address is.
 
 ## Related
 

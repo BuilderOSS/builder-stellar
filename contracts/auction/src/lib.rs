@@ -39,6 +39,11 @@
 //! - Reserve price prevents dust/spam auctions
 //! - Pausable for emergency response
 //! - Payment type locking prevents confusion/errors
+//! - Storage-layout gate: while the stored layout differs from the code's
+//!   (`common::upgrade::is_current_layout`), every entry point that changes
+//!   state fails `StorageVersionMismatch`; `upgrade`, `migrate` and the views
+//!   stay open, so the Treasury can still finish or undo an upgrade by
+//!   proposal
 
 #![no_std]
 

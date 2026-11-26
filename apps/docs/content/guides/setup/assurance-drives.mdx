@@ -6,6 +6,7 @@ An assurance drive, called a **launch drive** in the app, lets your tribe launch
 
 - Your tribe needs a claims module. It has one if you chose **Invite only**, or turned on claim lists, when you created it. Otherwise, add one during setup: open **Manage**, select **Membership**, and use **Add a module**.
 - Add the [artwork](/guides/setup/artwork) and mint the [founder tokens](/guides/setup/founders) first. Once the drive opens, they can't change.
+- The claims module holds members' payments, so it must run the claims release the platform deploys now, or one the platform announced as its latest release at least a notice ago. A tribe created recently already does. If you upgraded it during setup to another release, or created the tribe long ago, apply the current release in **Manage** → **Contract upgrades** first ([Upgrades](/concepts/upgrades)).
 - Connect the [launch admin](/reference/glossary#launch-admin) wallet, sign in, and use the tribe's network.
 - Prepare the list of people who can claim: a CSV file with each wallet address and how many tokens it can claim, up to 10,000 wallets. You can also paste the addresses.
 
@@ -37,7 +38,7 @@ An assurance drive, called a **launch drive** in the app, lets your tribe launch
 
    <Shot id="setup/assurance-drives/05" alt="The Open the launch drive? dialog with the terms and the Publish and open the drive button" />
 
-6. Follow the drive on your tribe's **Claims** page. The **Set up and launch** page also shows **Launch drive open** with **See the drive**. A progress bar shows how many people have claimed. Payments are held until launch.
+6. Follow the drive on your tribe's **Claims** page. The **Set up and launch** page also shows **Launch drive open** with **See the drive**. A progress bar shows how many people have claimed. Payments are held until launch. The card says which claims release holds the payments, for example "Payments are held by ClaimMinter 0.6.0, the claims code the platform deploys now", and shows its **Claims code hash**, so members can check it before they pay.
 
    <Shot id="setup/assurance-drives/06" alt="The Launch drive card on the Claims page with a progress bar of people who have claimed" />
 
@@ -50,7 +51,7 @@ If the drive ends first, the card says "The launch drive ended", and the tribe c
 ## What happens on chain
 
 <Disclosure title="Contracts, fees and waits">
-  Opening the drive is one transaction to the Tribe Builder factory contract (the Manager). In it, the Manager opens the claim list on your tribe's claims contract (ClaimMinter), priced in the asset chosen at creation. It allows the claims contract to mint the listed tokens, reserves your link, and makes the treasury the admin of every contract. The tribe does not go live yet.
+  Opening the drive is one transaction to the Tribe Builder factory contract (the Manager). First, the Manager checks the code your claims contract (ClaimMinter) runs, as the network reports it: it must be the ClaimMinter release that new tribes are created with now, or the release announced as the latest ClaimMinter at least the platform's upgrade notice ago. Any other code is refused, even a release the platform approved for upgrades. Then the Manager opens the claim list on your tribe's claims contract (ClaimMinter), priced in the asset chosen at creation. It allows the claims contract to mint the listed tokens, reserves your link, and makes the treasury the admin of every contract. The tribe does not go live yet.
 
   The full list of wallets is published to IPFS so anyone can check it. The contract stores only a fingerprint of the list (a Merkle root), so each claim proves the wallet is on the list.
 
@@ -64,6 +65,7 @@ If the drive ends first, the card says "The launch drive ended", and the tribe c
 - **You don't see Launch drive.** The tribe has no claims module, or it has already launched. Add a claims module during setup first.
 - **"Claims must stay open at least until the drive ends."** Make **Claims stay open for (days)** at least as long as **The drive ends after (days)**.
 - **"The launch drive is open, so no other list can open now."** Only one drive runs at a time, and no other list opens until launch.
+- **"The claims module runs code the platform does not deploy now, so the drive can't open."** Apply the current claims release in **Manage** → **Contract upgrades**, then open the drive again.
 - **The goal is met, but Launch the tribe is refused.** One of the launch checks failed, for example another tribe launched first with your link. Read the error message. See [Launch your tribe](/guides/setup/launch).
 - **"The drive has not ended yet"** when you free the link. The network's clock is still before the deadline. Try again in a minute.
 - **"The link is already free"**. Someone freed it first. Nothing else is needed.

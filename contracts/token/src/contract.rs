@@ -41,12 +41,34 @@ use crate::storage::*;
 /// so balances and voting units can never drift apart
 /// (docs/designs/membership-models.md §1).
 ///
+/// # Module custody
+///
+/// Only a non-voting module brings tokens into its own custody: a transfer
+/// or mint to one fails `ModuleCustodyClosed` unless the module itself is
+/// the minter, the spender or the transfer agent of the call. The Auction
+/// mints each lot to itself, and the Marketplace pulls a listed token with
+/// `transfer_from` and mints pool stock to itself, so both pass; a token
+/// sent to either by anyone else is refused. A non-voting module therefore
+/// gains tokens only through its own entry points, and a proposal that
+/// pauses it and empties it can unregister it. The Treasury is not a module
+/// and takes tokens from anyone.
+///
 /// # Minting
 ///
 /// The admin (the launch admin in Setup, the Treasury once live) mints without
 /// limit. A registered module mints against its `MintAllowance`; an allowance
 /// of `u32::MAX` is unlimited and never spent. Before launch only the `claims`
 /// module may use its allowance.
+///
+/// # Storage layout
+///
+/// Every entry point that changes state first checks that the stored data
+/// layout is the one this code expects (`common::upgrade::is_current_layout`)
+/// and fails `StorageVersionMismatch` otherwise: after an upgrade whose
+/// `migrate` has not run, or an upgrade to code with an older layout. The
+/// views (balances, votes and checkpoints the Governor reads, `token_uri`),
+/// `upgrade` and `migrate` stay outside the gate, so a proposal can still be
+/// voted on and can finish or undo the upgrade.
 #[contract]
 pub struct DaoTokenContract;
 
@@ -123,6 +145,7 @@ impl DaoTokenContract {
     /// Locking moves no token but removes every member's exit by sale, so the
     /// web flags it. Applies from the next call.
     pub fn set_transfers_locked(e: &Env, locked: bool) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         let mut settings = Self::settings(e);
@@ -137,6 +160,7 @@ impl DaoTokenContract {
     /// Turn members-only delegation on or off (same authority). Governs new
     /// `delegate` calls only: delegations already in place stay.
     pub fn set_members_only_delegation(e: &Env, enabled: bool) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         let mut settings = Self::settings(e);
@@ -156,6 +180,7 @@ impl DaoTokenContract {
     /// can move any member's token with `dao_transfer`; one proposal may turn
     /// it on and use it in the same execution.
     pub fn set_dao_recovery(e: &Env, enabled: bool) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         let mut settings = Self::settings(e);
@@ -179,6 +204,7 @@ impl DaoTokenContract {
     /// nor `to` may be a registered module (`ModuleCustody`): custody keeps
     /// its own records. Votes move as on any transfer.
     pub fn dao_transfer(e: &Env, token_id: u32, to: Address) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::lifecycle::require_live(e);
         common::ttl::extend_instance(e);
@@ -217,6 +243,7 @@ impl DaoTokenContract {
     /// kinds the creation config names), once Live only the admin (the
     /// Treasury, by proposal). The launch admin can never grant it.
     pub fn set_transfer_agent(e: &Env, module: Address, enabled: bool) {
+        Self::require_current_layout(e);
         let changed_by = Self::require_registrar(e);
         common::ttl::extend_instance(e);
         if Self::find_module(e, &module).is_none() {
@@ -243,9 +270,12 @@ impl DaoTokenContract {
     /// A transfer agent moves `token_id` from `from` to `to` (Live only;
     /// `agent` and `from` both authorize; `NotTransferAgent`). Works on locked
     /// and unlocked tokens alike, and does not check the recipient's consent:
-    /// an agent that needs it checks it itself. Emits OpenZeppelin `Transfer`
+    /// an agent that needs it checks it itself. The one exception is a
+    /// non-voting module, which receives a token only when it is the agent
+    /// or the owner (`ModuleCustodyClosed`). Emits OpenZeppelin `Transfer`
     /// and `AgentTransfer`.
     pub fn agent_transfer(e: &Env, agent: Address, from: Address, to: Address, token_id: u32) {
+        Self::require_current_layout(e);
         common::lifecycle::require_live(e);
         agent.require_auth();
         from.require_auth();
@@ -253,6 +283,7 @@ impl DaoTokenContract {
         if !Self::transfer_agents(e).contains(&agent) {
             panic_with_error!(e, TokenError::NotTransferAgent);
         }
+        Self::require_custody_entry(e, &to, &[&agent, &from]);
         Self::move_token(e, &from, &to, token_id);
         AgentTransfer {
             agent,
@@ -273,7 +304,14 @@ impl DaoTokenContract {
         common::upgrade::apply(e, &Self::manager(e), &from_hash, &to_hash);
     }
 
-    /// Advance the storage layout after an upgrade (admin only).
+    /// Advance the storage layout after an upgrade (admin only: the launch
+    /// admin in Setup, the Treasury by proposal once live). Fails
+    /// `NothingToMigrate` unless the stored layout is older than this code's.
+    /// Until it runs, every entry point that changes state fails
+    /// `StorageVersionMismatch`; a governance upgrade runs `upgrade` and
+    /// `migrate` in one proposal, so the two land together. It needs no
+    /// Token state to run, and the Governor reads votes through the ungated
+    /// views, so a skipped migration can always be completed by proposal.
     pub fn migrate(e: &Env) {
         common::admin::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
@@ -289,7 +327,9 @@ impl DaoTokenContract {
         common::upgrade::current_hash(e)
     }
 
-    /// Storage-layout version of the data held by this contract.
+    /// Storage-layout version of the data held by this contract. While it
+    /// differs from the code's `STORAGE_VERSION`, every entry point that
+    /// changes state fails `StorageVersionMismatch`.
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -303,6 +343,7 @@ impl DaoTokenContract {
     /// `MetadataUpdated`. Token metadata itself is built by the Metadata
     /// contract (`token_uri`).
     pub fn set_metadata(e: &Env, name: String, symbol: String) {
+        Self::require_current_layout(e);
         common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::set_name_and_symbol(e, &name, &symbol);
@@ -329,6 +370,7 @@ impl DaoTokenContract {
     /// unlimited, not capped at the sum. `decrease_mint_allowance` makes it
     /// finite again (by a non-zero amount).
     pub fn increase_mint_allowance(e: &Env, module: Address, amount: u32) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         if Self::find_module(e, &module).is_none() {
@@ -346,6 +388,7 @@ impl DaoTokenContract {
     /// itself instead of starting the next one. Emits `MintAllowanceChanged`
     /// when the value changes.
     pub fn decrease_mint_allowance(e: &Env, module: Address, amount: u32) {
+        Self::require_current_layout(e);
         let changed_by = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         let old = Self::mint_allowance(e, module.clone());
@@ -357,6 +400,7 @@ impl DaoTokenContract {
     /// Emits `MintAllowanceChanged`. An unlimited allowance (`u32::MAX`) stays
     /// unlimited: it was never spent, so there is nothing to give back.
     pub fn release_mint_allowance(e: &Env, module: Address, amount: u32) {
+        Self::require_current_layout(e);
         module.require_auth();
         common::ttl::extend_instance(e);
         let old = Self::mint_allowance(e, module.clone());
@@ -397,6 +441,7 @@ impl DaoTokenContract {
     /// unique (`KindTaken`). If the module is `non_voting` and already holds
     /// tokens, their votes leave the supply now. Emits `ModuleRegistered`.
     pub fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool) {
+        Self::require_current_layout(e);
         Self::require_registrar(e);
         common::ttl::extend_instance(e);
         if !modules::is_valid_kind(e, &kind) {
@@ -444,10 +489,12 @@ impl DaoTokenContract {
     ///
     /// A `non_voting` module must hold no tokens (`ModuleHoldsTokens`): settle
     /// or cancel the auction, return the Marketplace's listings, sweep its
-    /// pools, and recover tokens sent to either directly, first. A voting
+    /// pools, and recover any token sent to either directly before the
+    /// custody rule (`# Module custody`), first. A voting
     /// module's tokens already count as votes (for its delegate), and still
     /// do after it leaves, so it may be unregistered while holding them.
     pub fn unregister_module(e: &Env, address: Address) {
+        Self::require_current_layout(e);
         let changed_by = Self::require_registrar(e);
         common::ttl::extend_instance(e);
         let mut entries = Self::read_modules(e);
@@ -487,6 +534,7 @@ impl DaoTokenContract {
     /// settings and allowances are frozen until launch. Panics `AlreadyLive`
     /// once launched.
     pub fn handoff(e: &Env, treasury: Address) {
+        Self::require_current_layout(e);
         Self::manager(e).require_auth();
         common::lifecycle::require_setup(e);
         if treasury != Self::treasury(e) {
@@ -506,6 +554,7 @@ impl DaoTokenContract {
     /// panics with `AlreadyLive`, so after launch the Manager has no authority
     /// over the token.
     pub fn launch(e: &Env, treasury: Address, grants: Vec<MintGrant>) {
+        Self::require_current_layout(e);
         let manager = Self::manager(e);
         manager.require_auth();
         common::lifecycle::mark_live(e);
@@ -645,10 +694,14 @@ impl DaoTokenContract {
 
     /// Mints the next sequential token id to `to` (minter auth; the minter must
     /// be the admin or a registered module with allowance, see `# Minting`). A recipient without a
-    /// delegate is self-delegated so it can vote immediately. Emits
-    /// OpenZeppelin `Mint` plus `MintWithMinter`. Returns the token id.
+    /// delegate is self-delegated so it can vote immediately. A non-voting
+    /// module receives a mint only from itself (`ModuleCustodyClosed`, see
+    /// `# Module custody`). Emits OpenZeppelin `Mint` plus `MintWithMinter`.
+    /// Returns the token id.
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
+        Self::require_current_layout(e);
         minter.require_auth();
+        Self::require_custody_entry(e, to, &[minter]);
         Self::spend_mint_authority(e, minter, 1);
         common::ttl::extend_instance(e);
         let holder = Self::voting_holder(e, to);
@@ -674,14 +727,17 @@ impl DaoTokenContract {
     ///
     /// Delegation, balance and vote checkpoints are touched once per recipient
     /// entry rather than once per token, which keeps the footprint small.
-    /// Emits OpenZeppelin `Mint` per token and one `MintBatchWithMinter` for
-    /// the whole range. Returns every new token id in order.
+    /// As with `mint`, a non-voting module may be a recipient only when it is
+    /// the minter (`ModuleCustodyClosed`). Emits OpenZeppelin `Mint` per
+    /// token and one `MintBatchWithMinter` for the whole range. Returns every
+    /// new token id in order.
     pub fn batch_mint(
         e: &Env,
         minter: &Address,
         recipients: &Vec<Address>,
         amounts: &Vec<u128>,
     ) -> Vec<u32> {
+        Self::require_current_layout(e);
         minter.require_auth();
         common::ttl::extend_instance(e);
 
@@ -706,6 +762,9 @@ impl DaoTokenContract {
         }
         if !common::batch_mint_fits(total, recipients.len()) {
             panic_with_error!(e, TokenError::BatchTooLarge);
+        }
+        for recipient in recipients.iter() {
+            Self::require_custody_entry(e, &recipient, &[minter]);
         }
         Self::spend_mint_authority(e, minter, total);
 
@@ -757,26 +816,35 @@ impl DaoTokenContract {
     /// Transfers `token_id` from `from` (auth) to `to`, moving the voting unit
     /// between their delegates. A recipient without a delegate is
     /// self-delegated. On a locked token only a DAO-controlled path passes
-    /// (`TransfersLocked`, see `check_locked_path`). Emits OpenZeppelin
-    /// `Transfer`.
+    /// (`TransfersLocked`, see `check_locked_path`). Nobody but a non-voting
+    /// module puts a token in its custody, so `to` may not be one unless it
+    /// is `from` (`ModuleCustodyClosed`, see `# Module custody`). Emits
+    /// OpenZeppelin `Transfer`.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         from.require_auth();
         if Self::settings(e).transfers_locked {
             Self::check_locked_path(e, from, to, None);
         }
+        Self::require_custody_entry(e, to, &[from]);
         Self::move_token(e, from, to, token_id);
     }
 
     /// Like `transfer`, by an approved `spender` (auth; OpenZeppelin's
     /// approval check runs first, so an unapproved spender fails as before).
+    /// A non-voting module receives the token only when it is the spender
+    /// pulling it into its own custody, as the Marketplace does when it lists
+    /// one, or `from` (`ModuleCustodyClosed`).
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         spender.require_auth();
         Base::check_spender_approval(e, spender, from, token_id);
         if Self::settings(e).transfers_locked {
             Self::check_locked_path(e, from, to, Some(spender));
         }
+        Self::require_custody_entry(e, to, &[spender, from]);
         Self::move_token(e, from, to, token_id);
     }
 
@@ -793,6 +861,7 @@ impl DaoTokenContract {
         token_id: u32,
         expiration_ledger: u32,
     ) {
+        Self::require_current_layout(e);
         if expiration_ledger != 0 && Self::settings(e).transfers_locked {
             let token_owner = Base::owner_of(e, token_id);
             Self::check_locked_approval(e, &token_owner, spender);
@@ -807,6 +876,7 @@ impl DaoTokenContract {
     /// (`TransfersLocked`); revoking is always allowed. Emits OpenZeppelin
     /// `ApproveForAll`.
     pub fn approve_for_all(e: &Env, owner: &Address, operator: &Address, live_until_ledger: u32) {
+        Self::require_current_layout(e);
         if live_until_ledger != 0 && Self::settings(e).transfers_locked {
             Self::check_locked_approval(e, owner, operator);
         }
@@ -833,6 +903,16 @@ impl DaoTokenContract {
 }
 
 impl DaoTokenContract {
+    /// Panics `StorageVersionMismatch` unless the stored data layout is the
+    /// one this code expects, so this code never writes data in a layout it
+    /// does not know. The first check of every entry point that changes
+    /// state; `upgrade`, `migrate` and the views stay outside it.
+    fn require_current_layout(e: &Env) {
+        if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
+            panic_with_error!(e, TokenError::StorageVersionMismatch);
+        }
+    }
+
     /// The name is copied verbatim into the on-chain token JSON, so it may not
     /// contain `"`, `\` or control characters (`InvalidName`). OpenZeppelin
     /// enforces the 40- and 10-byte caps.
@@ -866,6 +946,24 @@ impl DaoTokenContract {
     /// DAO custody: the Treasury or a registered non-voting module.
     fn is_custody(e: &Env, account: &Address) -> bool {
         Self::voting_holder(e, account).is_none()
+    }
+
+    /// Fails `ModuleCustodyClosed` when `to` is a non-voting module that is
+    /// not among `by`: the call's minter, spender or agent, which authorized
+    /// it, and for a transfer the owner `from`, since a token the module
+    /// already holds is not entering its custody. Only the module itself
+    /// brings a token into its custody (`# Module custody`). The Treasury,
+    /// voting modules and members still take tokens from anyone.
+    fn require_custody_entry(e: &Env, to: &Address, by: &[&Address]) {
+        if by.contains(&to) {
+            return;
+        }
+        if Self::read_modules(e)
+            .iter()
+            .any(|m| m.non_voting && m.address == *to)
+        {
+            panic_with_error!(e, TokenError::ModuleCustodyClosed);
+        }
     }
 
     /// The paths a locked token may move along (docs/designs/locked-tokens.md
@@ -1058,6 +1156,7 @@ impl Votes for DaoTokenContract {
     /// members-only delegation is on and `delegatee` is neither the account
     /// itself nor a voting member (docs/designs/locked-tokens.md "Switch 2").
     fn delegate(e: &Env, account: Address, delegatee: Address) {
+        Self::require_current_layout(e);
         Self::check_delegate(e, &account, &delegatee);
         stellar_governance::votes::delegate(e, &account, &delegatee);
     }

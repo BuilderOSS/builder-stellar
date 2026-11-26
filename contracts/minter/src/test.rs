@@ -1019,6 +1019,76 @@ fn recovery_upgrade_is_the_managers_and_only_before_launch() {
     });
 }
 
+/// After an upgrade whose `migrate` has not run, every entry point that
+/// changes state refuses with the ClaimMinter's own error, `refund` included,
+/// while the reads keep answering.
+#[test]
+fn a_skipped_migration_halts_every_state_change() {
+    use common::assert_fails_with;
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    let (id, tree) = d.open(&[(&alice, 2)], 0, None);
+    let stored = crate::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&d.env, &d.cm.address, stored);
+    let mismatch = E::StorageVersionMismatch;
+
+    assert_fails_with!(mismatch, d.cm.try_launch(&d.treasury, &false));
+    assert_fails_with!(mismatch, d.cm.try_handoff(&d.treasury));
+    assert_fails_with!(
+        mismatch,
+        d.cm.try_open_list(
+            &tree.root,
+            &uri(&d.env),
+            &d.asset,
+            &0,
+            &(NOW + 30 * DAY),
+            &10,
+            &None
+        )
+    );
+    assert_fails_with!(mismatch, d.cm.try_close_list(&id));
+    assert_fails_with!(
+        mismatch,
+        d.cm.try_claim(&id, &alice, &2, &1, &tree.proofs[0], &0)
+    );
+    assert_fails_with!(mismatch, d.cm.try_release(&id));
+    assert_fails_with!(mismatch, d.cm.try_refund(&id, &alice));
+
+    // The reads stay open.
+    assert_eq!(d.cm.storage_version(), stored);
+    assert!(d.cm.get_list(&id).is_some());
+    assert_eq!(d.cm.next_list_id(), id + 1);
+    assert_eq!(d.cm.admin(), d.launch_admin);
+}
+
+/// During a drive the admin is the Treasury, which cannot act before launch.
+/// After a recovery upgrade to code with a newer layout, refunds wait only
+/// for `migrate`, which anyone may call without authorization.
+#[test]
+fn after_a_failed_drive_anyone_migrates_and_refunds_pay_out() {
+    let d = Dao::new();
+    let alice = Address::generate(&d.env);
+    d.fund(&alice, 100);
+    let (id, tree) = d.open(&[(&alice, 3)], 10, terms(1));
+    d.cm.claim(&id, &alice, &3, &3, &tree.proofs[0], &10);
+    d.cm.handoff(&d.treasury); // frozen, as `open_assurance` leaves it
+    d.env.ledger().set_timestamp(NOW + 10 * DAY + 1);
+    assert_eq!(d.cm.assurance_state(&id), AssuranceState::Failed);
+
+    // The installed code expects a newer layout than the stored data.
+    common::testutils::set_stored_layout(&d.env, &d.cm.address, crate::STORAGE_VERSION - 1);
+    assert_eq!(
+        d.cm.try_refund(&id, &alice).err().unwrap().unwrap(),
+        E::StorageVersionMismatch
+    );
+    // No authorization at all: not the Treasury's, not the launch admin's.
+    d.env.set_auths(&[]);
+    d.cm.migrate();
+    assert_eq!(d.cm.storage_version(), crate::STORAGE_VERSION);
+    assert_eq!(d.cm.refund(&id, &alice), 30);
+    assert_eq!(d.balance(&alice), 100);
+}
+
 #[test]
 fn migrate_needs_a_newer_layout() {
     let d = Dao::new();

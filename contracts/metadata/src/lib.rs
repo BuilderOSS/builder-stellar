@@ -31,6 +31,15 @@
 //! The admin can add properties/items and update settings (strings are capped
 //! at `common::MAX_STRING_LENGTH`).
 //! When tokens are minted, the Token contract calls `on_minted` to generate artwork seeds.
+//!
+//! ## Storage layout
+//!
+//! While the stored data layout differs from the code's
+//! (`common::upgrade::is_current_layout`), every entry point that changes
+//! state fails `StorageVersionMismatch`; `upgrade`, `migrate` and the views
+//! stay open. The mint hooks are among them: the Token ignores a failed hook,
+//! so a token minted meanwhile has no selections (`token_uri` fails
+//! `NotSeeded`) until the admin calls `regenerate` after the migration.
 
 #![no_std]
 

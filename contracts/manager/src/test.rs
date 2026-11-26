@@ -1300,6 +1300,12 @@ mod real_dao {
                 &ManagerKey::PendingDao(addresses.token.clone()),
                 &pending,
             );
+            // The ClaimMinter runs the code the platform deploys now, as
+            // `set_current_implementations` records it (`open_assurance`
+            // checks it).
+            env.storage()
+                .instance()
+                .set(&common::ns(&env, ManagerKey::CurrentClaimsWasm), &hash);
         });
 
         RealDao {
@@ -2276,6 +2282,106 @@ mod real_dao {
         let recorded = dao.client.get_assurance(token).unwrap();
         assert_eq!(recorded.claim_minter, dao.claims.address);
         assert_eq!(recorded.deadline, now + 10 * DAY);
+    }
+
+    fn drive_list(env: &Env) -> crate::storage::AssuranceListParams {
+        let now = env.ledger().timestamp();
+        crate::storage::AssuranceListParams {
+            root: BytesN::from_array(env, &[1; 32]),
+            tree_uri: String::from_str(env, "ipfs://bafytree"),
+            price: 10,
+            expires_at: now + 30 * DAY,
+            total: 2,
+            threshold_claimers: 2,
+            deadline: now + 10 * DAY,
+        }
+    }
+
+    /// The ClaimMinter holds members' payments, so a drive opens only on the
+    /// ClaimMinter code the platform deploys now. Code the launch admin
+    /// installed in Setup, registered and approved but neither current nor
+    /// announced, is refused, and nothing changes.
+    #[test]
+    fn open_assurance_refuses_claim_minter_code_that_is_not_current() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let other = empty_wasm(env);
+        dao.client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "0.0.9"),
+            &other,
+        );
+        dao.client.approve_upgrade(&native_hash(env), &other);
+        // The launch admin's own Setup upgrade, which the registry allows.
+        dao.claims.upgrade(&native_hash(env), &other);
+        assert_eq!(
+            dao.claims.address.executable(),
+            Some(soroban_sdk::Executable::Wasm(other.clone()))
+        );
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &drive_list(env), &cfg(env, true, true)),
+            Err(Ok(ManagerError::DriveCodeNotAllowed))
+        );
+        // Nothing changed: no drive, no slug, the launch admin still holds it.
+        assert!(dao.client.get_assurance(token).is_none());
+        assert_eq!(dao.token.admin(), dao.launch_admin);
+        // Announcing that code as the latest ClaimMinter starts its notice;
+        // until the notice has passed the drive still cannot open on it.
+        env.as_contract(&dao.client.address, || {
+            crate::storage::set_persistent(
+                env,
+                &ManagerKey::LatestImplementation(String::from_str(env, "ClaimMinter")),
+                &common::upgrade::LatestPointer {
+                    wasm_hash: other.clone(),
+                    set_ledger: env.ledger().sequence() as u64,
+                },
+            );
+        });
+        env.ledger()
+            .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY - 1);
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &drive_list(env), &cfg(env, true, true)),
+            Err(Ok(ManagerError::DriveCodeNotAllowed))
+        );
+    }
+
+    /// Code announced as the latest ClaimMinter at least a notice ago opens a
+    /// drive even when it is not yet what `create_dao` deploys.
+    #[test]
+    fn open_assurance_accepts_the_latest_claim_minter_once_its_notice_has_passed() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        env.as_contract(&dao.client.address, || {
+            env.storage().instance().set(
+                &common::ns(env, ManagerKey::CurrentClaimsWasm),
+                &BytesN::from_array(env, &[9; 32]),
+            );
+            crate::storage::set_persistent(
+                env,
+                &ManagerKey::LatestImplementation(String::from_str(env, "ClaimMinter")),
+                &common::upgrade::LatestPointer {
+                    wasm_hash: native_hash(env),
+                    set_ledger: env.ledger().sequence() as u64,
+                },
+            );
+        });
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &drive_list(env), &cfg(env, true, true)),
+            Err(Ok(ManagerError::DriveCodeNotAllowed))
+        );
+        env.ledger()
+            .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY);
+        drive(&dao, cfg(env, true, true));
+        assert_eq!(
+            dao.client.get_assurance(token).unwrap().claim_minter,
+            dao.claims.address
+        );
     }
 
     /// Register `to` under the running ClaimMinter's name, approve the path
@@ -4155,4 +4261,162 @@ fn open_assurance_refuses_a_recorded_asset_that_is_not_a_stellar_asset_contract(
     // Nothing changed: no drive, no slug, the launch admin still holds it.
     assert!(dao.client.get_assurance(token).is_none());
     assert_eq!(dao.token.admin(), dao.launch_admin);
+}
+
+/// After an `upgrade_manager` whose `migrate` has not run, every entry point
+/// that changes state refuses with the Manager's own error, apart from the
+/// path that upgrades the Manager again; the views stay open; anyone may run
+/// `migrate`, which brings everything back.
+#[test]
+fn a_skipped_migration_halts_the_manager_except_its_own_upgrade() {
+    use crate::error::ManagerError;
+    use common::assert_fails_with;
+    use soroban_sdk::testutils::Ledger as _;
+
+    let (env, client, admin) = setup();
+    let token_hash = BytesN::from_array(&env, &[1u8; 32]);
+    let token_name = String::from_str(&env, "Token");
+    let version = String::from_str(&env, "0.1.0");
+    client.register_implementation(&token_name, &version, &token_hash);
+    let stored = crate::storage::STORAGE_VERSION - 1;
+    common::testutils::set_stored_layout(&env, &client.address, stored);
+    let mismatch = ManagerError::StorageVersionMismatch;
+    let x = Address::generate(&env);
+    let other_hash = BytesN::from_array(&env, &[2u8; 32]);
+    let slug = String::from_str(&env, "a-slug");
+    let launch = LaunchConfig {
+        launch_auction: false,
+        launch_marketplace: false,
+    };
+    let list = crate::storage::AssuranceListParams {
+        root: BytesN::from_array(&env, &[1u8; 32]),
+        tree_uri: String::from_str(&env, "ipfs://bafytree"),
+        price: 10,
+        expires_at: 10_000,
+        total: 2,
+        threshold_claimers: 2,
+        deadline: 5_000,
+    };
+
+    // The registry, for any other name.
+    assert_fails_with!(
+        mismatch,
+        client.try_register_implementation(&token_name, &version, &other_hash)
+    );
+    assert_fails_with!(
+        mismatch,
+        client.try_set_latest_implementation(&token_name, &token_hash)
+    );
+    assert_fails_with!(
+        mismatch,
+        client.try_approve_upgrade(&token_hash, &other_hash)
+    );
+    assert_fails_with!(mismatch, client.try_revoke_implementation(&token_hash));
+    assert_fails_with!(
+        mismatch,
+        client.try_approve_vote_source(&x, &true, &token_name)
+    );
+    assert_fails_with!(
+        mismatch,
+        client.try_set_current_implementations(&placeholder_hashes(&env))
+    );
+    assert_fails_with!(mismatch, client.try_pause_factory());
+    assert_fails_with!(mismatch, client.try_unpause_factory());
+    // The factory, launch, drives and slugs.
+    assert_fails_with!(mismatch, client.try_create_dao(&dao_params(&env, &x, 1)));
+    assert_fails_with!(
+        mismatch,
+        client.try_create_module(
+            &x,
+            &crate::storage::ModuleSpec::Claims(crate::storage::ClaimsConfig {
+                payment_asset: x.clone()
+            }),
+            &0
+        )
+    );
+    assert_fails_with!(mismatch, client.try_update_pending_slug(&x, &slug));
+    assert_fails_with!(mismatch, client.try_launch_dao(&x, &launch));
+    assert_fails_with!(mismatch, client.try_open_assurance(&x, &list, &launch));
+    assert_fails_with!(mismatch, client.try_launch_when_ready(&x));
+    assert_fails_with!(mismatch, client.try_release_slug(&x));
+    assert_fails_with!(
+        mismatch,
+        client.try_recover_claims(&x, &token_hash, &other_hash)
+    );
+    assert_fails_with!(mismatch, client.try_change_slug(&x, &slug));
+    // Admin handover and the notice.
+    assert_fails_with!(mismatch, client.try_propose_admin(&x));
+    assert_fails_with!(mismatch, client.try_cancel_pending_admin());
+    assert_fails_with!(mismatch, client.try_accept_admin());
+    assert_fails_with!(mismatch, client.try_set_upgrade_delay(&1));
+
+    // The views stay open: every DAO's upgrade reads them.
+    assert_eq!(client.storage_version(), stored);
+    assert_eq!(
+        client.get_implementation_version(&token_hash),
+        Some(version.clone())
+    );
+    assert!(!client.is_upgrade_approved(&token_hash, &other_hash));
+    assert_eq!(client.get_admin(), Some(admin));
+    assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
+
+    // The recovery path: the admin can still register, announce, approve and
+    // install a fixed Manager, after the notice.
+    let manager = String::from_str(&env, "Manager");
+    let running = client.wasm_hash();
+    let fixed = common::testutils::empty_wasm(&env);
+    client.register_implementation(&manager, &version, &running);
+    client.register_implementation(&manager, &String::from_str(&env, "0.1.1"), &fixed);
+    client.set_latest_implementation(&manager, &fixed);
+    client.approve_upgrade(&running, &fixed);
+    env.ledger()
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY + 1);
+    client.upgrade_manager(&running, &fixed);
+    assert_eq!(
+        client.address.executable(),
+        Some(soroban_sdk::Executable::Wasm(fixed))
+    );
+}
+
+/// `migrate` needs no authorization, refuses a current layout, and reopens
+/// the Manager.
+#[test]
+fn anyone_runs_the_managers_migration() {
+    use crate::error::ManagerError;
+    let (env, client, _admin) = setup();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    assert_eq!(
+        client.try_migrate().err().unwrap().unwrap(),
+        soroban_sdk::Error::from(common::CommonError::NothingToMigrate)
+    );
+    common::testutils::set_stored_layout(
+        &env,
+        &client.address,
+        crate::storage::STORAGE_VERSION - 1,
+    );
+    assert_eq!(
+        client.try_pause_factory().err().unwrap().unwrap(),
+        ManagerError::StorageVersionMismatch
+    );
+    env.set_auths(&[]);
+    client.migrate();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    env.mock_all_auths();
+    client.pause_factory();
+}
+
+/// A Manager deployed before storage versions were recorded holds none: it
+/// reads as layout 1 and keeps working after an upgrade to this code.
+#[test]
+fn a_manager_without_a_recorded_layout_reads_as_version_one() {
+    let (env, client, _admin) = setup();
+    env.as_contract(&client.address, || {
+        env.storage().instance().remove(&common::ns(
+            &env,
+            common::upgrade::UpgradeKey::StorageVersion,
+        ));
+    });
+    assert_eq!(client.storage_version(), 1);
+    client.pause_factory();
+    client.unpause_factory();
 }

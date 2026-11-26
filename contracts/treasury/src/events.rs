@@ -39,6 +39,7 @@ pub struct Execute {
     pub index: u32,
 }
 
+/// Publishes `TreasuryInitialized` from the constructor.
 pub fn emit_treasury_initialized(e: &Env, admin: &Address, governor: &Address) {
     TreasuryInitialized {
         admin: admin.clone(),
@@ -47,6 +48,7 @@ pub fn emit_treasury_initialized(e: &Env, admin: &Address, governor: &Address) {
     .publish(e);
 }
 
+/// Publishes `TreasuryLaunched` once, from the Manager's `launch`.
 pub fn emit_launched(e: &Env, treasury: &Address) {
     TreasuryLaunched {
         treasury: treasury.clone(),
@@ -54,6 +56,8 @@ pub fn emit_launched(e: &Env, treasury: &Address) {
     .publish(e);
 }
 
+/// Publishes `Execute` after each action `execute` runs, `authorize` actions
+/// included, with its position in the proposal.
 pub fn emit_execute(
     e: &Env,
     governor: &Address,

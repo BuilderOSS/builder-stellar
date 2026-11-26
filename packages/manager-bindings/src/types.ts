@@ -194,7 +194,22 @@ export const ManagerError = {
    * A payment asset is not a Stellar Asset Contract (`create_dao`,
    * `create_module`, `open_assurance`)
    */
-  7146 : { message: "InvalidPaymentAsset" }
+  7146 : { message: "InvalidPaymentAsset" },
+  /**
+   * The stored data layout is not the one this code expects: an
+   * `upgrade_manager` whose `migrate` has not run yet, or an upgrade to
+   * code with an older layout. Every entry point that changes state
+   * refuses, apart from `migrate`, `upgrade_manager` and the registry
+   * steps for the Manager's own upgrade
+   */
+  7147 : { message: "StorageVersionMismatch" },
+  /**
+   * `open_assurance`: the DAO's ClaimMinter runs neither the current
+   * ClaimMinter implementation (what `create_dao` deploys now) nor the
+   * hash announced as the latest ClaimMinter at least `upgrade_delay()`
+   * ledgers ago
+   */
+  7148 : { message: "DriveCodeNotAllowed" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -855,7 +870,13 @@ export const CommonError = {
  * One registry entry.
  */
 export interface ModuleEntry {
+  /**
+   * The module contract.
+   */
   address: string;
+  /**
+   * A built-in kind or `custom_<name>` (see [`is_valid_kind`]).
+   */
   kind: string;
   /**
    * Tokens this module holds carry no votes (custody: Auction, Marketplace).
@@ -884,6 +905,24 @@ export interface TokenSettings {
 }
 
 /**
+ * Emitted by [`migrate`] when the stored layout moves forward. The emitting
+ * contract address is the event's contract id.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    /**
+     * The layout version before the migration.
+     */
+    from_storage_version?: number;
+    /**
+     * The layout version after it (the code's `STORAGE_VERSION`).
+     */
+    to_storage_version?: number;
+  };
+}
+
+/**
  * What the Manager's `LatestImplementation(name)` holds: the hash announced
  * as latest and the ledger it was announced at. A platform contract (the
  * Manager itself, the shared Minter) upgrades only to this hash, and its
@@ -892,7 +931,13 @@ export interface TokenSettings {
  * whole notice (D42).
  */
 export interface LatestPointer {
+  /**
+   * The ledger it was announced at; the notice counts from here or later.
+   */
   set_ledger: bigint;
+  /**
+   * The hash announced as latest.
+   */
   wasm_hash: Uint8Array;
 }
 
@@ -905,10 +950,19 @@ export interface LatestPointer {
 export interface UpgradeDelayChangedEvent {
   name: "UpgradeDelayChanged";
   data: {
+    /**
+     * The notice in force before the change, in ledgers.
+     */
     from_ledgers?: number;
+    /**
+     * The requested notice, in ledgers.
+     */
     to_ledgers?: number;
+    /**
+     * The ledger from which `to_ledgers` applies.
+     */
     effective_ledger?: number;
   };
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | SlugReleasedEvent | AdminProposedEvent | FactoryPausedEvent | ModuleCreatedEvent | AssuranceOpenedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | VoteSourceApprovedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | UpgradeDelayChangedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | SlugReleasedEvent | AdminProposedEvent | FactoryPausedEvent | ModuleCreatedEvent | AssuranceOpenedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | VoteSourceApprovedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | MigratedEvent | UpgradeDelayChangedEvent;
     

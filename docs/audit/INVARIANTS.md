@@ -43,6 +43,9 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 | [INV-33](#inv-33-storage-and-ttl) | Storage and TTL | Partial |
 | [INV-34](#inv-34-a-due-migration-admits-only-recovery-proposals) | A due migration admits only recovery proposals | Covered |
 | [INV-35](#inv-35-payment-assets-are-stellar-asset-contracts) | Payment assets are Stellar Asset Contracts | Covered |
+| [INV-36](#inv-36-every-module-halts-on-a-mismatched-layout) | Every module halts on a mismatched layout | Covered |
+| [INV-37](#inv-37-a-drive-opens-only-on-current-or-announced-claimminter-code) | A drive opens only on current or announced ClaimMinter code | Covered |
+| [INV-38](#inv-38-only-a-non-voting-module-brings-tokens-into-its-custody) | Only a non-voting module brings tokens into its custody | Covered |
 
 ## Votes and supply
 
@@ -50,8 +53,8 @@ The list was checked against `dev` at `f51d301`, which includes pull requests 11
 
 Each account's voting units equal its token balance, and are zero for the Treasury and the non-voting modules (Auction, Marketplace). The `TotalSupply` checkpoint equals the sum of all units, and the sum of `get_votes` equals `TotalSupply`.
 
-- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomized walk (eight fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
-- [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) `voting_units_equal_non_custody_balances_over_generated_sequences`: a property test (48 generated sequences of up to 40 steps, shrunk on failure) over mints, batch mints, transfers, custody moves into and out of the Treasury, Auction, Marketplace, and a vault module, delegations, and registering a holder as a non-voting module, asserting the three equalities and that every minted token is held after every step. The Token has no burn: a voting unit is burned only when its token moves into custody or its holder becomes a non-voting module.
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: a randomised walk (ten fixed seeds, 150 steps each) over mints, batch mints, transfers, custody moves, delegations, registering and unregistering a module, the membership switches, and the transfer paths, asserting all three equalities after every step. A refused unregister must move nothing.
+- [`contracts/e2e/src/audit_properties.rs`](../../contracts/e2e/src/audit_properties.rs) `voting_units_equal_non_custody_balances_over_generated_sequences`: a property test (48 generated sequences of up to 40 steps, shrunk on failure) over mints, batch mints, transfers, custody moves into and out of the Treasury, Auction, Marketplace, and a vault module (a send or another minter's mint into a module is refused and changes nothing; the module pulls the token in or mints to itself), delegations, and registering a holder as a non-voting module, asserting the three equalities and that every minted token is held after every step. The Token has no burn: a voting unit is burned only when its token moves into custody or its holder becomes a non-voting module.
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `system_holders_carry_no_votes_through_every_path`, `registering_a_holder_non_voting_removes_its_votes_from_its_delegate`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
 
 **Covered.**
@@ -98,12 +101,22 @@ The admin mints without an allowance. Every other minter must be a registered mo
 
 ### INV-06: The module registry
 
-One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The admin can empty the Auction and the Marketplace while they are paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`); in an unlocked DAO a removal can still be delayed ([KI-19](KNOWN_ISSUES.md#ki-19-removing-the-auction-or-marketplace-can-be-delayed-in-an-unlocked-dao)).
+One module per kind (`KindTaken`), at most `MAX_MODULES` (`TooManyModules`), the Treasury never a module. In Setup only the Manager registers; once Live only the admin, the Treasury. A non-voting module is unregistered only when it holds no tokens (`ModuleHoldsTokens`, 7222), so tokens it holds for others never lose their custody path; a voting module may leave while holding tokens. The admin can empty the Auction and the Marketplace while they are paused (`cancel_auction`, `return_listing`, `close_pool` and `sweep_pool`, and `recover_token`); nobody else can add a token meanwhile ([INV-38](#inv-38-only-a-non-voting-module-brings-tokens-into-its-custody)), and `return_listing` skips a listing that is gone, so a seller who cancels one cannot make the removal fail; only a listing made before the market is paused can still delay it ([KI-19](KNOWN_ISSUES.md#ki-19-a-listing-made-during-the-vote-can-delay-removing-the-marketplace)).
 
 - [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `kinds_are_built_in_or_custom_and_unique`, `the_registry_is_capped`, `registration_needs_the_manager_in_setup_and_the_admin_once_live`, `the_treasury_is_never_a_module_even_with_an_empty_registry`, `a_non_voting_module_holding_tokens_cannot_be_unregistered_until_empty`, `unregistering_a_custody_module_holding_escrow_under_the_lock_is_refused`, `a_voting_module_holding_tokens_can_be_unregistered_and_keeps_its_votes`.
-- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `the_admin_returns_a_listing_to_its_seller_while_paused`, `only_the_admin_returns_a_listing`, `recover_token_moves_only_unrecorded_tokens_to_the_treasury`, `only_the_admin_recovers_a_token`.
+- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `the_admin_returns_a_listing_to_its_seller_while_paused`, `a_listing_cancelled_or_expired_before_execution_is_skipped`, `only_the_admin_returns_a_listing`, `recover_token_moves_only_unrecorded_tokens_to_the_treasury`, `only_the_admin_recovers_a_token`.
 - [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) `recover_token_sends_a_stray_token_to_the_treasury_but_never_the_lot`.
-- [`contracts/e2e/src/membership_hardening.rs`](../../contracts/e2e/src/membership_hardening.rs) `unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused` (refused while it holds a listing, pool stock, and a stray token, then emptied and unregistered) and `cutting_the_auction_allowance_mid_auction_still_settles_it` (the Auction emptied and unregistered).
+- [`contracts/e2e/src/membership_hardening.rs`](../../contracts/e2e/src/membership_hardening.rs) `unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused` (refused while it holds a listing, pool stock, and a stray token, then emptied and unregistered) `cutting_the_auction_allowance_mid_auction_still_settles_it` (the Auction emptied and unregistered), and `a_listing_cancelled_during_the_removal_vote_does_not_block_it` (by real proposals: one pauses the market, the next returns the listings and unregisters it while a seller cancels one of them during the vote).
+
+**Covered.**
+
+### INV-38: Only a non-voting module brings tokens into its custody
+
+A `transfer`, `transfer_from`, `agent_transfer`, `mint` or `batch_mint` to a registered non-voting module fails `ModuleCustodyClosed` (7224) unless the module is the call's minter, spender or transfer agent, or already owns the token, and a refused call moves nothing. The Auction's own mint, the Marketplace's `list` pull and its `restock` mint pass. The Treasury, voting modules and members still take tokens from anyone, and an unregistered module is an ordinary address again.
+
+- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `nobody_else_can_put_a_token_in_a_modules_custody`, `each_module_still_brings_its_own_tokens_in`, `a_transfer_agent_reaches_a_modules_custody_only_as_that_module`, `a_voting_module_takes_tokens_from_anyone`, `under_the_lock_the_treasury_reaches_a_module_only_through_it`, `a_token_sent_while_a_removal_is_pending_cannot_block_it`.
+- [`contracts/e2e/src/membership_hardening.rs`](../../contracts/e2e/src/membership_hardening.rs) `unregistering_the_marketplace_while_it_holds_escrow_under_a_lock_is_refused` and `cutting_the_auction_allowance_mid_auction_still_settles_it` (a member's send to the real Marketplace and Auction refused); [`contracts/e2e/src/test.rs`](../../contracts/e2e/src/test.rs) `a_dao_without_optional_modules_launches_and_registers_external_code` (an outside vault pulls its token in).
+- [`contracts/e2e/src/voting_invariant.rs`](../../contracts/e2e/src/voting_invariant.rs) `voting_units_match_balances_and_checkpoints_add_up`: every random mint, batch mint, transfer and agent transfer into custody by anyone but the module is refused and moves nothing; the module's pull and self-mint then pass.
 
 **Covered.**
 
@@ -279,7 +292,26 @@ While the Governor's or the Treasury's stored storage version differs from its c
 - [`contracts/treasury/src/test.rs`](../../contracts/treasury/src/test.rs) `execute_refuses_while_the_layout_is_out_of_step`, `launch_and_handoff_refuse_while_the_layout_is_out_of_step`, `a_recovery_proposal_executes_while_a_migration_is_due`.
 - [`contracts/e2e/src/governance.rs`](../../contracts/e2e/src/governance.rs) `the_treasury_upgrades_then_migrates_in_two_steps`, `a_skipped_governor_migration_is_completed_by_anyone`, `a_governor_whose_migration_fails_recovers_by_proposal`, `a_treasury_whose_migration_fails_recovers_by_proposal`. The last two upgrade to a test-only release whose `migrate` always fails, then recover with a fixed release ([`contracts/e2e/fixtures/README.md`](../../contracts/e2e/fixtures/README.md)).
 
-**Covered.** The gate covers the Governor and the Treasury only; the other modules do not check their layout.
+**Covered.** The other modules have the same gate without a recovery proposal; see [INV-36](#inv-36-every-module-halts-on-a-mismatched-layout).
+
+### INV-36: Every module halts on a mismatched layout
+
+While the Token's, Metadata's, Auction's, Marketplace's, ClaimMinter's or Manager's stored storage version differs from its code's, every entry point on it that changes state fails with its own `StorageVersionMismatch` (Token 7223, Metadata 7320, Auction 7421, Marketplace 7730, ClaimMinter 7831, Manager 7147). `upgrade`, `migrate`, the ClaimMinter's `recovery_upgrade`, and the views stay outside the gate. The ClaimMinter's and the Manager's `migrate` need no authorisation; the others stay admin-only, which the Treasury reaches by proposal because the Governor and the Treasury never call a gated entry point to run one. While a Manager migration is due, only the steps of its own upgrade stay open: `register_implementation` and `set_latest_implementation` for the name `Manager`, `approve_upgrade` to a hash registered as `Manager`, and `upgrade_manager`. A Manager with no stored version reads as version 1.
+
+- [`contracts/token/src/test.rs`](../../contracts/token/src/test.rs) `a_skipped_migration_halts_every_state_change_until_migrate`, `code_older_than_its_data_stays_halted_with_upgrade_open`.
+- [`contracts/metadata/src/test.rs`](../../contracts/metadata/src/test.rs), [`contracts/auction/src/test.rs`](../../contracts/auction/src/test.rs) and [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `a_skipped_migration_halts_every_state_change_until_migrate`.
+- [`contracts/minter/src/test.rs`](../../contracts/minter/src/test.rs) `a_skipped_migration_halts_every_state_change`, `after_a_failed_drive_anyone_migrates_and_refunds_pay_out`.
+- [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `a_skipped_migration_halts_the_manager_except_its_own_upgrade`, `anyone_runs_the_managers_migration`, `a_manager_without_a_recorded_layout_reads_as_version_one`.
+
+**Covered.** Each test calls every gated entry point of its module.
+
+### INV-37: A drive opens only on current or announced ClaimMinter code
+
+`open_assurance` refuses, with `DriveCodeNotAllowed` (7148) and before anything changes, a ClaimMinter whose code (read with `address.executable()`) is neither the current `claims` implementation nor the hash announced as the latest `ClaimMinter` at least `upgrade_delay()` ledgers ago.
+
+- [`contracts/manager/src/test.rs`](../../contracts/manager/src/test.rs) `real_dao::open_assurance_refuses_claim_minter_code_that_is_not_current`, `real_dao::open_assurance_accepts_the_latest_claim_minter_once_its_notice_has_passed`.
+
+**Covered.**
 
 ## Escrow and payments
 
@@ -347,9 +379,9 @@ Settlement needs `now >= end_time` on both paths, paused or not. A settlement co
 
 ### INV-28: Listings
 
-The fee is at most 25% and recorded in the listing; a listing fails on a worse fee (`FeeAboveMax`) or another asset (`PaymentAssetMismatch`), and a purchase above `max_price` fails (`PriceAboveMax`). A purchase uses the recorded fee and asset. Only the seller cancels; anyone expires after expiry; the admin returns a listing only while the Marketplace is paused (`NotPaused`, 7729); all three return the token to the seller with no payment.
+The fee is at most 25% and recorded in the listing; a listing fails on a worse fee (`FeeAboveMax`) or another asset (`PaymentAssetMismatch`), and a purchase above `max_price` fails (`PriceAboveMax`). A purchase uses the recorded fee and asset. Only the seller cancels; anyone expires after expiry; the admin returns a listing only while the Marketplace is paused (`NotPaused`, 7729), and skips a token with no listing; all three return the token to the seller with no payment.
 
-- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `list_rejects_a_fee_above_the_sellers_bound`, `list_rejects_an_unexpected_payment_asset`, `buy_rejects_a_price_above_the_buyers_bound`, `secondary_buy_uses_captured_asset_and_fee_after_config_changes`, `the_admin_returns_a_listing_to_its_seller_while_paused`, `only_the_admin_returns_a_listing`, and the fee-cap, cancel, and expire cases.
+- [`contracts/marketplace/src/test.rs`](../../contracts/marketplace/src/test.rs) `list_rejects_a_fee_above_the_sellers_bound`, `list_rejects_an_unexpected_payment_asset`, `buy_rejects_a_price_above_the_buyers_bound`, `secondary_buy_uses_captured_asset_and_fee_after_config_changes`, `the_admin_returns_a_listing_to_its_seller_while_paused`, `a_listing_cancelled_or_expired_before_execution_is_skipped`, `only_the_admin_returns_a_listing`, and the fee-cap, cancel, and expire cases.
 
 - [`contracts/e2e/src/audit_invariants.rs`](../../contracts/e2e/src/audit_invariants.rs) `a_listing_is_cancelled_only_by_its_seller`, on the built WASM: another account naming itself fails `NotSeller` (7708), naming the seller without the seller's signature fails authorization, and the listing and the escrowed token stay; the seller then cancels and gets the token back.
 

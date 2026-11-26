@@ -445,7 +445,8 @@ export function artifactTxs(artifact) {
 
 async function deployManager(ctx) {
   const s = ctx.state;
-  runScript(ctx, 'deploy-manager.mjs', [s.networkConfigPath], 'MANAGER_ADMIN');
+  // A throwaway rehearsal Manager built from this checkout, not a published release (deploy-guards.mjs).
+  runScript(ctx, 'deploy-manager.mjs', [s.networkConfigPath, '--allow-unpublished'], 'MANAGER_ADMIN');
   const artifact = readJson(managerArtifactPath(ctx));
   s.manager = artifact.manager;
   s.implementations = artifact.implementations;

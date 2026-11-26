@@ -143,6 +143,8 @@ pub struct AuctionState {
 
 // Storage helpers. Instance TTL follows `common::ttl` and is extended on
 // every state-changing entry point.
+/// The stored configuration. Panics `NotInitialized` before the constructor
+/// has run.
 pub fn get_config(e: &Env) -> AuctionConfig {
     e.storage()
         .instance()
@@ -150,6 +152,8 @@ pub fn get_config(e: &Env) -> AuctionConfig {
         .unwrap_or_else(|| panic_with_error!(e, AuctionError::NotInitialized))
 }
 
+/// Whether the first bid has locked the payment token, so
+/// `set_payment_token` refuses to change it.
 pub fn is_payment_token_locked(e: &Env) -> bool {
     e.storage()
         .instance()
@@ -157,12 +161,14 @@ pub fn is_payment_token_locked(e: &Env) -> bool {
         .unwrap_or(false)
 }
 
+/// Locks the payment token, at the first bid. It never unlocks.
 pub fn set_payment_token_locked(e: &Env) {
     e.storage()
         .instance()
         .set(&common::ns(e, DataKey::PaymentTokenLocked), &true);
 }
 
+/// Writes the configuration (constructor and the paused setters).
 pub fn set_config(e: &Env, config: &AuctionConfig) {
     e.storage()
         .instance()
@@ -177,6 +183,7 @@ pub fn get_auction(e: &Env) -> AuctionState {
         .unwrap_or_else(|| panic_with_error!(e, AuctionError::NotLaunched))
 }
 
+/// Writes the current auction's state.
 pub fn set_auction(e: &Env, auction: &AuctionState) {
     e.storage()
         .instance()
@@ -190,6 +197,8 @@ pub fn has_auction(e: &Env) -> bool {
 
 // `PendingRefund` entries use the shared long-lived persistent policy.
 
+/// The bidder's deferred refund, 0 when there is none; renews the entry's
+/// TTL when it exists.
 pub fn get_pending_refund(e: &Env, bidder: &Address) -> i128 {
     let key = common::ns(e, DataKey::PendingRefund(bidder.clone()));
     let v: Option<i128> = e.storage().persistent().get(&key);
@@ -210,6 +219,7 @@ pub fn add_pending_refund(e: &Env, bidder: &Address, amount: i128) -> i128 {
     total
 }
 
+/// Deletes the bidder's deferred refund, once `withdraw_refund` has paid it.
 pub fn clear_pending_refund(e: &Env, bidder: &Address) {
     e.storage()
         .persistent()

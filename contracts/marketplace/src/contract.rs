@@ -95,6 +95,7 @@ impl MarketplaceContract {
     /// recorded at `create_dao` before calling. A second call panics with
     /// `AlreadyLive`.
     pub fn launch(e: &Env, treasury: Address, open: bool) {
+        Self::require_current_layout(e);
         let mut config = Self::get_config(e);
         config.manager.require_auth();
         common::lifecycle::mark_live(e);
@@ -125,6 +126,7 @@ impl MarketplaceContract {
     /// module stays in Setup, so its setters and upgrades are frozen until
     /// launch. Panics `AlreadyLive` once launched.
     pub fn handoff(e: &Env, treasury: Address) {
+        Self::require_current_layout(e);
         let config = Self::get_config(e);
         config.manager.require_auth();
         common::lifecycle::require_setup(e);
@@ -232,6 +234,7 @@ impl MarketplaceContract {
         max_sold_per_period: u32,
         period_secs: u64,
     ) -> u32 {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let (config, _) = Self::require_admin(e);
@@ -303,6 +306,7 @@ impl MarketplaceContract {
     /// its size (`PoolFullyStocked`); it spends this contract's allowance.
     /// Emits `PoolRestocked` and returns how many it minted.
     pub fn restock(e: &Env, pool_id: u32) -> u32 {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let config = Self::get_config(e);
@@ -372,6 +376,7 @@ impl MarketplaceContract {
         buyer: Address,
         max_price: i128,
     ) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let config = Self::get_config(e);
@@ -434,6 +439,7 @@ impl MarketplaceContract {
     /// Treasury lowered the allowance meanwhile). Unsold stock stays here
     /// until `sweep_pool`. Emits `PoolClosed`.
     pub fn close_pool(e: &Env, pool_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         let mut pool = Self::load_pool(e, pool_id);
@@ -467,6 +473,7 @@ impl MarketplaceContract {
     /// until it returns 0 (pages left); `PoolOpen` before `close_pool`. Both
     /// holders are non-voting, so no votes move. Emits `PoolSwept`.
     pub fn sweep_pool(e: &Env, pool_id: u32) -> u32 {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         let pool = Self::load_pool(e, pool_id);
@@ -561,6 +568,7 @@ impl MarketplaceContract {
         max_fee_bps: u32,
         payment_asset: Address,
     ) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         // Setup-window listings could pin a custom asset/fee past launch.
         common::lifecycle::require_live(e);
@@ -620,6 +628,7 @@ impl MarketplaceContract {
     /// Treasury and the rest to the seller, in the asset captured at list
     /// time, and receives the token. Emits `ListingPurchased`.
     pub fn buy(e: &Env, token_id: u32, buyer: Address, max_price: i128) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let config = Self::get_config(e);
@@ -677,6 +686,7 @@ impl MarketplaceContract {
     /// the listing's seller, `NotSeller`). Works while paused and after
     /// expiry. Emits `ListingCancelled`.
     pub fn cancel(e: &Env, token_id: u32, seller: Address) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         seller.require_auth();
         let listing = Self::load_listing(e, token_id);
@@ -699,6 +709,7 @@ impl MarketplaceContract {
     /// `ListingActive` before the expiry). Works while paused. Emits
     /// `ListingExpired`.
     pub fn expire(e: &Env, token_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let listing = Self::load_listing(e, token_id);
         if e.ledger().timestamp() < listing.expires_at {
@@ -729,7 +740,14 @@ impl MarketplaceContract {
     /// before unregistering it, which the Token refuses while the Marketplace
     /// holds tokens. Without it, one listing with a distant expiry would keep
     /// the Marketplace registered.
+    ///
+    /// A `token_id` with no listing is skipped: nothing moves and no event is
+    /// emitted. A listing its seller cancelled, or anyone expired, after the
+    /// proposal was drafted therefore cannot make that proposal fail. Once
+    /// the market is paused no listing can be made, so a removal drafted
+    /// after the pause names every listing there will be.
     pub fn return_listing(e: &Env, token_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (config, _) = Self::require_admin(e);
         // Pausing first stops new listings and purchases, so the DAO cannot
@@ -737,7 +755,9 @@ impl MarketplaceContract {
         if !config.paused {
             panic_with_error!(e, MarketplaceError::NotPaused);
         }
-        let listing = Self::load_listing(e, token_id);
+        let Some(listing) = storage::get_listing(e, token_id) else {
+            return;
+        };
         storage::remove_listing(e, token_id);
         Self::token_transfer(
             e,
@@ -755,16 +775,17 @@ impl MarketplaceContract {
 
     /// Send `token_id`, a membership token this contract holds that no
     /// listing or pool records, to the Treasury (the admin, while paused,
-    /// `NotPaused`). For a token someone transferred here directly. A listed
-    /// token is refused (`ListingExists`: use `return_listing`), and so is
-    /// any token while a pool is not yet swept empty (`PoolOpen`), because
-    /// stock pages are not indexed by token. The Token's `Transfer` records
-    /// the move; no marketplace event is emitted.
+    /// `NotPaused`). A listed token is refused (`ListingExists`: use
+    /// `return_listing`), and so is any token while a pool is not yet swept
+    /// empty (`PoolOpen`), because stock pages are not indexed by token. The
+    /// Token's `Transfer` records the move; no marketplace event is emitted.
     ///
     /// The Token refuses to unregister the Marketplace while it holds
-    /// tokens, so without this anyone could keep it registered by sending it
-    /// one.
+    /// tokens. It also refuses a token sent here by anyone but this contract
+    /// (`ModuleCustodyClosed`), so such a token was sent before that rule;
+    /// without this call it would keep the Marketplace registered.
     pub fn recover_token(e: &Env, token_id: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (config, _) = Self::require_admin(e);
         if !config.paused {
@@ -790,6 +811,7 @@ impl MarketplaceContract {
     /// required, so the thread survives relisting. Anyone may comment, even
     /// while paused. Event-only: emits `ListingCommented`, writes no storage.
     pub fn comment_listing(e: &Env, token_id: u32, body: String, author: Address) {
+        Self::require_current_layout(e);
         author.require_auth();
         Self::check_comment(e, &body);
         ListingCommented {
@@ -803,6 +825,7 @@ impl MarketplaceContract {
     /// Pause new listings, purchases, and pools (the admin). Cancel, expire,
     /// restock, close, and sweep keep working. Emits `MarketplacePaused`.
     pub fn pause(e: &Env) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
         config.paused = true;
@@ -812,6 +835,7 @@ impl MarketplaceContract {
 
     /// Reopen the marketplace (the admin). Emits `MarketplaceUnpaused`.
     pub fn unpause(e: &Env) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
         config.paused = false;
@@ -823,6 +847,7 @@ impl MarketplaceContract {
     /// theirs). At most `common::MAX_FEE_BPS` (25%, `InvalidFee`). Emits
     /// `SecondaryFeeUpdated`.
     pub fn set_secondary_fee_bps(e: &Env, fee_bps: u32) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
         if fee_bps > MAX_FEE_BPS {
@@ -841,6 +866,7 @@ impl MarketplaceContract {
     /// theirs). It must be a Stellar Asset Contract (`NotStellarAsset`).
     /// Emits `PaymentAssetUpdated`.
     pub fn set_payment_asset(e: &Env, payment_asset: Address) {
+        Self::require_current_layout(e);
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
         Self::require_stellar_asset(e, &payment_asset);
@@ -863,13 +889,19 @@ impl MarketplaceContract {
     }
 
     /// Advance the storage layout after an upgrade (admin only;
-    /// `NothingToMigrate` when already current).
+    /// `NothingToMigrate` when already current). Until it runs, every entry
+    /// point that changes state fails `StorageVersionMismatch`. A governance
+    /// upgrade runs `upgrade` and `migrate` in one proposal; the Treasury does
+    /// not depend on this module, so a skipped migration can always be
+    /// completed by proposal.
     pub fn migrate(e: &Env) {
         Self::require_admin(e);
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
-    /// Storage-layout version of the data held by this contract.
+    /// Storage-layout version of the data held by this contract. While it
+    /// differs from the code's `STORAGE_VERSION`, every entry point that
+    /// changes state fails `StorageVersionMismatch`.
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
     }
@@ -888,6 +920,16 @@ impl MarketplaceContract {
     /// The running WASM hash (read-only).
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
+    }
+
+    /// Panics `StorageVersionMismatch` unless the stored data layout is the
+    /// one this code expects, so this code never writes data in a layout it
+    /// does not know. The first check of every entry point that changes
+    /// state; `upgrade`, `migrate` and the views stay outside it.
+    fn require_current_layout(e: &Env) {
+        if !common::upgrade::is_current_layout(e, STORAGE_VERSION) {
+            panic_with_error!(e, MarketplaceError::StorageVersionMismatch);
+        }
     }
 
     /// Refuse an asset that is not a Stellar Asset Contract

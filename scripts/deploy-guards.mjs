@@ -46,6 +46,20 @@ export function uncommittedBuildInputs(run = runQuiet) {
 }
 
 /**
+ * Whether a Manager deploy must upload the published build of a pushed release tag, checked for every
+ * crate with `assertUploadProvenance` (scripts/wasm-build.mjs) before any network call. A local network
+ * never needs it. Testnet does, unless the deploy is a throwaway rehearsal run with
+ * `--allow-unpublished`. Mainnet always does, and refuses the flag.
+ */
+export function publishedBuildRequired(network, allowUnpublished) {
+  if (network === 'local') return false;
+  if (allowUnpublished && network === 'mainnet') {
+    throw new Error('--allow-unpublished is for testnet rehearsals: a mainnet Manager uploads only the published build of a release tag.');
+  }
+  return !allowUnpublished;
+}
+
+/**
  * Refuses a mainnet deploy from uncommitted build inputs: the artifact records `sourceCommit`, and the
  * WASM must be what that commit builds. Elsewhere it returns a warning to print instead.
  */
